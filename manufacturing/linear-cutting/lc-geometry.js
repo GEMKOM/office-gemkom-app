@@ -17,6 +17,8 @@
  */
 
 export const ANGLE_TOL_DEG = 0.05;
+// Mirrors MAX_ANGLE_DEG in gemkom-backend/linear_cutting/geometry.py
+export const MAX_ANGLE_DEG = 85;
 
 const PALETTE = ['#0d6efd', '#198754', '#fd7e14', '#6f42c1', '#20c997', '#dc3545', '#0dcaf0', '#b58900'];
 
@@ -29,6 +31,27 @@ export function recessMm(angleDeg, heightMm) {
     const h = Number(heightMm) || 0;
     if (a < ANGLE_TOL_DEG || h <= 0) return 0;
     return h * Math.tan(a * Math.PI / 180);
+}
+
+/**
+ * Signed miter angle from the corner offset of an end face — the "köşe farkı"
+ * a drawing gives when it dimensions lengths instead of angles. Inverse of
+ * `setbackFromAngle`. Returns null when the profile dimension is unknown
+ * (the angle is then underdetermined).
+ * Mirrors angle_from_setback() in the backend geometry module.
+ */
+export function angleFromSetback(setbackMm, heightMm) {
+    const h = Number(heightMm) || 0;
+    if (h <= 0) return null;
+    const t = Number(setbackMm) || 0;
+    const a = Math.atan(Math.abs(t) / h) * 180 / Math.PI;
+    return t >= 0 ? a : -a;
+}
+
+/** Signed corner offset of a miter — inverse of `angleFromSetback`. */
+export function setbackFromAngle(angleDeg, heightMm) {
+    const t = recessMm(angleDeg, heightMm);
+    return (Number(angleDeg) || 0) >= 0 ? t : -t;
 }
 
 export function kerfAxialMm(kerfMm, angleDeg) {
@@ -104,38 +127,146 @@ function esc(v) {
 
 // ─────────────────────────── Piece pictogram (SVG) ───────────────────────────
 
+function round2(v) {
+    return Math.round((Number(v) || 0) * 100) / 100;
+}
+
 /**
- * Tiny SVG silhouette of a piece: shows how each end leans.
- * `spec` = {angle_left_deg, angle_right_deg, profile_height_mm} — length is
- * NOT to scale (fixed aspect), slants are capped for readability.
+ * Scale drawing of a piece, built from its real dimensions.
+ *
+ * `spec` = {nominal_length_mm, profile_height_mm, angle_left_deg, angle_right_deg}
+ * (`nominal_mm` is accepted as an alias, so placed cuts can be drawn too).
+ *
+ * Angles are ALWAYS exact: each slant is tan(a) × the drawn profile height, so
+ * the on-screen angle equals the real one at any scale. Length is to scale as
+ * well, until the piece is more slender than `maxAspect` — past that the length
+ * axis alone is compressed (angles untouched) so that a 6000 × 50 mm bar does
+ * not render as a hairline. Compression is stated in the tooltip.
+ *
+ * Impossible geometry (the two end faces crossing inside the profile — what
+ * validate_piece rejects on the backend) is drawn in red instead of silently
+ * folding the polygon inside out.
+ *
+ * opts: {width, height, pad, maxAspect, dimensions}
  */
 export function piecePictogramSVG(spec, opts = {}) {
-    const W = opts.width ?? 84;
-    const H = opts.height ?? 26;
-    const pad = 2;
-    const maxSlant = W * 0.30;
-    const h = Number(spec.profile_height_mm) || 0;
+    const W = opts.width ?? 96;
+    const H = opts.height ?? 34;
+    const withDims = !!opts.dimensions;
+    // Dimension lines live outside the shape — reserve room for them.
+    const padX = opts.pad ?? (withDims ? 46 : 3);
+    const padTop = opts.pad ?? (withDims ? 22 : 3);
+    const padBot = opts.pad ?? (withDims ? 26 : 3);
+    const maxAspect = opts.maxAspect ?? 7;
 
-    const slant = (deg) => {
+    const L = Number(spec.nominal_length_mm ?? spec.nominal_mm) || 0;
+    const h = Number(spec.profile_height_mm) || 0;
+    const aL = Number(spec.angle_left_deg) || 0;
+    const aR = Number(spec.angle_right_deg) || 0;
+
+    const boxW = Math.max(8, W - 2 * padX);
+    const boxH = Math.max(6, H - padTop - padBot);
+
+    const frame = (inner, title) =>
+        `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">
+            <title>${esc(title)}</title>${inner}
+        </svg>`;
+
+    if (!(L > 0)) {
+        return frame(
+            `<text x="${W / 2}" y="${H / 2}" text-anchor="middle" dominant-baseline="middle"
+                   font-size="10" fill="#adb5bd">boy girin</text>`,
+            'Uzunluk girilmedi'
+        );
+    }
+
+    // Without the profile dimension there is no miter triangle to scale from,
+    // so fall back to a plain bar at a readable aspect.
+    const known = h > 0;
+    const aspect = known ? L / h : maxAspect;
+    const drawnAspect = Math.min(aspect, maxAspect);
+    const compressed = known && aspect > drawnAspect * 1.001;
+
+    const hPx = Math.min(boxH, boxW / drawnAspect);
+    const wPx = Math.min(boxW, hPx * drawnAspect);
+    const x0 = padX + (boxW - wPx) / 2;
+    const x1 = x0 + wPx;
+    const yTop = padTop + (boxH - hPx) / 2;   // far edge (h = H, "üst")
+    const yBot = yTop + hPx;                  // near edge (h = 0, "alt")
+
+    const slantPx = (deg) => {
         const a = Math.abs(Number(deg) || 0);
-        if (a < ANGLE_TOL_DEG || h <= 0) return 0;
-        // exaggerate small angles a bit so 15° is visible, cap at maxSlant
-        return Math.min(maxSlant, Math.tan(a * Math.PI / 180) * (H - 2 * pad) * 1.2);
+        if (a < ANGLE_TOL_DEG || !known) return 0;
+        return Math.tan(a * Math.PI / 180) * hPx;
     };
-    const sl = slant(spec.angle_left_deg);
-    const sr = slant(spec.angle_right_deg);
-    const top = pad, bot = H - pad, x0 = pad, x1 = W - pad;
-    // angle > 0 → far/top corner recessed
-    const tlx = x0 + ((Number(spec.angle_left_deg) || 0) > 0 ? sl : 0);
-    const blx = x0 + ((Number(spec.angle_left_deg) || 0) < 0 ? sl : 0);
-    const trx = x1 - ((Number(spec.angle_right_deg) || 0) > 0 ? sr : 0);
-    const brx = x1 - ((Number(spec.angle_right_deg) || 0) < 0 ? sr : 0);
-    const title = `Sol: ${formatAngleTr(spec.angle_left_deg)} · Sağ: ${formatAngleTr(spec.angle_right_deg)}`;
-    return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(title)}">
-        <title>${esc(title)}</title>
-        <polygon points="${blx},${bot} ${tlx},${top} ${trx},${top} ${brx},${bot}"
-                 fill="#7aa5d8" fill-opacity=".45" stroke="#39587c" stroke-width="1"/>
-    </svg>`;
+    const sl = slantPx(aL);
+    const sr = slantPx(aR);
+
+    // angle > 0 → far/top corner cut back; angle < 0 → near/bottom corner
+    const tlx = x0 + (aL > 0 ? sl : 0);
+    const blx = x0 + (aL < 0 ? sl : 0);
+    const trx = x1 - (aR > 0 ? sr : 0);
+    const brx = x1 - (aR < 0 ? sr : 0);
+    const impossible = brx < blx || trx < tlx;
+
+    const fill = impossible ? '#e9a3a3' : '#7aa5d8';
+    const stroke = impossible ? '#b02a37' : '#39587c';
+
+    const tL = round2(Math.abs(setbackFromAngle(aL, h)));
+    const tR = round2(Math.abs(setbackFromAngle(aR, h)));
+    const titleParts = [
+        `Boy ${L} mm (uzun kenar)`,
+        known ? `Kesit ${h} mm` : 'Kesit girilmedi',
+        `Sol: ${formatAngleTr(aL)}${tL ? ` · köşe farkı ${tL} mm` : ''}`,
+        `Sağ: ${formatAngleTr(aR)}${tR ? ` · köşe farkı ${tR} mm` : ''}`,
+    ];
+    if (impossible) titleParts.push('⚠ Bu boy bu açılarla imkânsız — kesim yüzeyleri kesişiyor.');
+    else if (compressed) titleParts.push('Çizim: açılar birebir, boy sıkıştırılmış.');
+    else if (!known) titleParts.push('Çizim: kesit bilinmediği için ölçekli değil.');
+    const title = titleParts.join(' · ');
+
+    let inner = `<polygon points="${blx},${yBot} ${tlx},${yTop} ${trx},${yTop} ${brx},${yBot}"
+                 fill="${fill}" fill-opacity=".45" stroke="${stroke}" stroke-width="1"
+                 stroke-linejoin="round"/>`;
+
+    // A compressed drawing must not be mistaken for a scale one.
+    if (compressed && !withDims) {
+        inner += `<text x="${x1}" y="${yTop - 1.5}" text-anchor="end"
+                        font-size="8" fill="#adb5bd">≉</text>`;
+    }
+
+    if (withDims) {
+        const dim = (x1_, y1_, x2_, y2_) =>
+            `<line x1="${x1_}" y1="${y1_}" x2="${x2_}" y2="${y2_}"
+                   stroke="#adb5bd" stroke-width="1"/>`;
+        const label = (x, y, text, anchor = 'middle') =>
+            `<text x="${x}" y="${y}" text-anchor="${anchor}" font-size="10" fill="#6c757d">${esc(text)}</text>`;
+
+        // Must stay inside padBot even when the shape fills the full box height.
+        const dimY = yBot + 9;
+        inner += dim(x0, dimY, x1, dimY)
+            + dim(x0, dimY - 3, x0, dimY + 3)
+            + dim(x1, dimY - 3, x1, dimY + 3)
+            + label((x0 + x1) / 2, dimY + 11, `${L} mm${compressed ? ' (boy sıkıştırılmış)' : ''}`);
+
+        if (known) {
+            const dimX = x0 - 10;
+            inner += dim(dimX, yTop, dimX, yBot)
+                + dim(dimX - 3, yTop, dimX + 3, yTop)
+                + dim(dimX - 3, yBot, dimX + 3, yBot)
+                + label(dimX - 5, (yTop + yBot) / 2 + 3, `${h}`, 'end');
+        }
+
+        // Corner offsets: the drawing dimension the angle is derived from.
+        if (tL) inner += label((x0 + Math.max(tlx, blx)) / 2, yTop - 7, `Δ${tL}`);
+        if (tR) inner += label((x1 + Math.min(trx, brx)) / 2, yTop - 7, `Δ${tR}`);
+
+        // Which edge is which — the sign of every angle is read off these.
+        inner += label(x1 + 5, yTop + 3, 'üst', 'start')
+            + label(x1 + 5, yBot + 3, 'alt', 'start');
+    }
+
+    return frame(inner, title);
 }
 
 // ─────────────────────────── Tooltip ───────────────────────────

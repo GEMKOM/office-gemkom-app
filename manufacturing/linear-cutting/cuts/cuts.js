@@ -25,7 +25,10 @@ import {
     deleteLinearCuttingPart
 } from '../../../apis/linear_cutting/parts.js';
 import { getLinearCuttingTask } from '../../../apis/linear_cutting/tasks.js';
-import { drawBarCanvas, buildPassTableHtml, piecePictogramSVG, formatAngleTr } from '../lc-geometry.js';
+import {
+    drawBarCanvas, buildPassTableHtml, piecePictogramSVG, formatAngleTr,
+    angleFromSetback, setbackFromAngle, ANGLE_TOL_DEG, MAX_ANGLE_DEG
+} from '../lc-geometry.js';
 
 // ─────────────────────────── STATE ────────────────────────────
 let currentSessionKey = null;
@@ -44,6 +47,7 @@ let partItemDropdowns = new Map(); // rowId -> ModernDropdown
 let newRowSeq         = 0;
 let jobNoSyncHandle   = null;
 let stockColExpanded  = false; // Stok (mm) override column — rarely used, collapsed by default
+let expandedGeomRows  = new Set(); // rowIds whose "kenar ölçüsü" panel is open
 
 // ─────────────────────────── HELPERS ──────────────────────────
 const $ = id => document.getElementById(id);
@@ -208,11 +212,287 @@ function buildPartsTableRows(parts) {
             angle_left_deg: p.angle_left_deg ?? 0,
             angle_right_deg: p.angle_right_deg ?? 0,
             profile_height_mm: p.profile_height_mm ?? 0,
+            setback_left_mm: p.setback_left_mm != null ? Number(p.setback_left_mm) : null,
+            setback_right_mm: p.setback_right_mm != null ? Number(p.setback_right_mm) : null,
             allow_rotation: p.allow_rotation ?? true,
             requires_bending: p.requires_bending ?? false,
             job_no: p.job_no ?? '',
             order: p.order ?? null
         }));
+}
+
+// ───────────────── PART GEOMETRY (şekil + kenar ölçüsünden açı) ─────────────
+// The drawing must always show what is on screen right now, so every read goes
+// through the live input when the row is being edited and falls back to the
+// row model otherwise.
+
+const SIDES = [
+    { side: 'left',  label: 'Sol', angleField: 'angle_left_deg',  setbackField: 'setback_left_mm' },
+    { side: 'right', label: 'Sağ', angleField: 'angle_right_deg', setbackField: 'setback_right_mm' },
+];
+
+function rowInput(rowId, field) {
+    return document.querySelector(
+        `[data-lc-row="${CSS.escape(rowId)}"][data-lc-field="${CSS.escape(field)}"]`);
+}
+
+function liveValue(rowId, field, fallback = null) {
+    const el = rowInput(rowId, field);
+    if (!el) return fallback;
+    const t = `${el.value ?? ''}`.trim();
+    return t === '' ? null : castNumber(t, fallback);
+}
+
+function ownHeight(row) {
+    return Number(liveValue(row.__rowId, 'profile_height_mm', row?.profile_height_mm)) || 0;
+}
+
+/** Kesit is a material property — a row with none inherits it from a sibling
+ *  row of the same item, exactly as the backend does at optimize time. */
+function effectiveHeight(row) {
+    const own = ownHeight(row);
+    if (own > 0) return own;
+    if (row?.item == null) return 0;
+    const sibling = partsTableRows.find(
+        r => r !== row && Number(r.item) === Number(row.item) && ownHeight(r) > 0);
+    return sibling ? ownHeight(sibling) : 0;
+}
+
+function shapeSpec(row) {
+    return {
+        nominal_length_mm: liveValue(row.__rowId, 'nominal_length_mm', row.nominal_length_mm),
+        profile_height_mm: effectiveHeight(row),
+        angle_left_deg: liveValue(row.__rowId, 'angle_left_deg', row.angle_left_deg) ?? 0,
+        angle_right_deg: liveValue(row.__rowId, 'angle_right_deg', row.angle_right_deg) ?? 0,
+    };
+}
+
+function round2(v) {
+    return Math.round((Number(v) || 0) * 100) / 100;
+}
+
+function shapeCellHtml(row) {
+    const open = expandedGeomRows.has(row.__rowId);
+    const derived = row.setback_left_mm != null || row.setback_right_mm != null;
+    return `<div class="text-center">
+        <button type="button" class="lc-geom-toggle${open ? ' open' : ''}"
+                data-lc-geom-toggle="${escapeAttr(row.__rowId)}"
+                title="Ölçü panelini aç/kapat — resimde açı yerine köşe farkı verilmişse buradan girin">
+            <span class="lc-shape" data-lc-shape="${escapeAttr(row.__rowId)}"
+                  >${piecePictogramSVG(shapeSpec(row), { width: 116, height: 42 })}</span>
+            <i class="fas fa-chevron-down lc-geom-caret"></i>
+            ${derived ? '<i class="fas fa-ruler-combined lc-geom-flag" title="Açılar kenar ölçüsünden hesaplandı"></i>' : ''}
+        </button>
+    </div>`;
+}
+
+function geomReadoutHtml(row, side) {
+    const cfg = SIDES.find(s => s.side === side);
+    const h = effectiveHeight(row);
+    const angle = liveValue(row.__rowId, cfg.angleField, row[cfg.angleField]) ?? 0;
+    if (h <= 0) {
+        return `<span class="text-warning-emphasis"><i class="fas fa-triangle-exclamation me-1"></i>Kesit girin</span>`;
+    }
+    if (Math.abs(angle) > MAX_ANGLE_DEG) {
+        return `<span class="text-danger fw-semibold">${round2(angle)}° — en fazla ±${MAX_ANGLE_DEG}°</span>`;
+    }
+    return `<span class="fw-semibold">${formatAngleTr(angle)}</span>`;
+}
+
+function geomSideHtml(row, cfg, editable) {
+    const rowId = row.__rowId;
+    const h = effectiveHeight(row);
+    const stored = row[cfg.setbackField];
+    const hasStored = stored != null && `${stored}` !== '';
+    const angle = Number(liveValue(rowId, cfg.angleField, row[cfg.angleField]) ?? 0);
+    const magnitude = hasStored ? round2(Math.abs(Number(stored))) : '';
+    const sign = hasStored
+        ? (Number(stored) >= 0 ? 'near' : 'far')
+        : (angle >= 0 ? 'near' : 'far');
+    // With no stored measurement, show what the current angle works out to —
+    // as a placeholder, so nothing is persisted unless it is actually typed.
+    const equivalent = (!hasStored && h > 0 && Math.abs(angle) >= ANGLE_TOL_DEG)
+        ? `≈ ${round2(Math.abs(setbackFromAngle(angle, h)))}` : '—';
+
+    if (!editable) {
+        return `<div class="lc-geom-side">
+            <span class="lc-geom-side-label">${cfg.label} uç</span>
+            <span class="lc-geom-static">${hasStored ? `${magnitude} mm · ${sign === 'near' ? 'alt uzun' : 'üst uzun'}` : `<span class="text-muted">açı doğrudan girilmiş</span>`}</span>
+            <span class="lc-geom-arrow">→</span>
+            <span data-lc-geom-out="${cfg.side}">${geomReadoutHtml(row, cfg.side)}</span>
+        </div>`;
+    }
+
+    return `<div class="lc-geom-side">
+        <span class="lc-geom-side-label">${cfg.label} uç</span>
+        <input type="hidden" data-lc-row="${escapeAttr(rowId)}" data-lc-field="${cfg.setbackField}"
+               value="${hasStored ? escapeAttr(stored) : ''}">
+        <input class="form-control form-control-sm lc-geom-mag" type="number" min="0" step="0.01"
+               data-lc-geom-mag="${cfg.side}" value="${escapeAttr(magnitude)}"
+               placeholder="${escapeAttr(equivalent)}"
+               title="Uçtaki iki köşe arasındaki boy farkı (mm) — açı = atan(fark ÷ kesit)">
+        <select class="form-select form-select-sm lc-geom-sign" data-lc-geom-sign="${cfg.side}"
+                title="Hangi kenar daha uzun kalıyor?">
+            <option value="near"${sign === 'near' ? ' selected' : ''}>alt uzun</option>
+            <option value="far"${sign === 'far' ? ' selected' : ''}>üst uzun</option>
+        </select>
+        <span class="lc-geom-arrow">→</span>
+        <span data-lc-geom-out="${cfg.side}">${geomReadoutHtml(row, cfg.side)}</span>
+    </div>`;
+}
+
+function geomPanelHtml(row) {
+    const editable = isRowEditable(row);
+    const h = effectiveHeight(row);
+    const inherited = h > 0 && ownHeight(row) <= 0;
+    return `
+        <div class="lc-geom-panel">
+            <div class="lc-geom-drawing" data-lc-geom-drawing
+                >${piecePictogramSVG(shapeSpec(row), { width: 392, height: 136, dimensions: true })}</div>
+            <div class="lc-geom-form">
+                <div class="lc-geom-head">
+                    <i class="fas fa-ruler-combined me-1"></i>Kenar ölçüsünden açı
+                    <span class="lc-geom-kesit" data-lc-geom-height>${
+                        h > 0
+                            ? `Kesit: <strong>${round2(h)} mm</strong>${inherited ? ' <span class="text-muted">(malzemeden)</span>' : ''}`
+                            : '<span class="text-warning-emphasis">Kesit (mm) girilmedi</span>'
+                    }</span>
+                </div>
+                ${SIDES.map(cfg => geomSideHtml(row, cfg, editable)).join('')}
+                <div class="lc-geom-hint">
+                    Resimde açı yoksa, o uçtaki <strong>iki köşe arasındaki boy farkını</strong> girin —
+                    açı kesitten hesaplanır ve şekil anında güncellenir. Açıyı doğrudan yazarsanız
+                    buradaki ölçü temizlenir.
+                </div>
+            </div>
+        </div>`;
+}
+
+function geomPanelEl(rowId) {
+    return document.querySelector(`tr[data-lc-geom-row="${CSS.escape(rowId)}"]`);
+}
+
+/** Redraw everything derived from kesit / uzunluk / açılar for one row. */
+function refreshRowGeometry(rowId) {
+    const row = getRowModel(rowId);
+    if (!row) return;
+    const shapeEl = document.querySelector(`[data-lc-shape="${CSS.escape(rowId)}"]`);
+    if (shapeEl) shapeEl.innerHTML = piecePictogramSVG(shapeSpec(row), { width: 116, height: 42 });
+
+    const panel = geomPanelEl(rowId);
+    if (!panel) return;
+    const drawing = panel.querySelector('[data-lc-geom-drawing]');
+    if (drawing) {
+        drawing.innerHTML = piecePictogramSVG(shapeSpec(row), { width: 392, height: 136, dimensions: true });
+    }
+    SIDES.forEach(cfg => {
+        const out = panel.querySelector(`[data-lc-geom-out="${cfg.side}"]`);
+        if (out) out.innerHTML = geomReadoutHtml(row, cfg.side);
+    });
+    const hEl = panel.querySelector('[data-lc-geom-height]');
+    if (hEl) {
+        const h = effectiveHeight(row);
+        const inherited = h > 0 && ownHeight(row) <= 0;
+        hEl.innerHTML = h > 0
+            ? `Kesit: <strong>${round2(h)} mm</strong>${inherited ? ' <span class="text-muted">(malzemeden)</span>' : ''}`
+            : '<span class="text-warning-emphasis">Kesit (mm) girilmedi</span>';
+    }
+}
+
+/** Corner offset → angle for one end of one part. */
+function applyGeomSide(rowId, side) {
+    const row = getRowModel(rowId);
+    const cfg = SIDES.find(s => s.side === side);
+    if (!row || !cfg) return;
+    const panel = geomPanelEl(rowId);
+    const magEl = panel?.querySelector(`[data-lc-geom-mag="${side}"]`);
+    const signEl = panel?.querySelector(`[data-lc-geom-sign="${side}"]`);
+    const hidden = rowInput(rowId, cfg.setbackField);
+    const angleInput = rowInput(rowId, cfg.angleField);
+
+    const raw = `${magEl?.value ?? ''}`.trim();
+    if (raw === '') {
+        if (hidden) hidden.value = '';
+        row[cfg.setbackField] = null;
+        refreshRowGeometry(rowId);
+        return;
+    }
+
+    // Stored at 0.01 mm — round here so the angle shown is the one the
+    // backend re-derives from the saved measurement.
+    const signed = round2(Math.abs(castNumber(raw, 0)) * (signEl?.value === 'far' ? -1 : 1));
+    if (hidden) hidden.value = String(signed);
+    row[cfg.setbackField] = signed;
+
+    const angle = angleFromSetback(signed, effectiveHeight(row));
+    if (angle != null) {
+        const rounded = round2(angle);
+        row[cfg.angleField] = rounded;
+        if (angleInput) angleInput.value = rounded;
+    }
+    refreshRowGeometry(rowId);
+}
+
+/** A hand-typed angle drops the measurement it no longer matches. */
+function clearGeomSide(rowId, side) {
+    const row = getRowModel(rowId);
+    const cfg = SIDES.find(s => s.side === side);
+    if (!row || !cfg) return;
+    const hidden = rowInput(rowId, cfg.setbackField);
+    if (hidden) hidden.value = '';
+    row[cfg.setbackField] = null;
+    const magEl = geomPanelEl(rowId)?.querySelector(`[data-lc-geom-mag="${side}"]`);
+    if (magEl) magEl.value = '';
+}
+
+/** Kesit changed → every angle derived from a measurement on that row moves. */
+function reapplyGeomForRow(rowId) {
+    const row = getRowModel(rowId);
+    if (!row) return;
+    SIDES.forEach(cfg => {
+        if (row[cfg.setbackField] == null) return;
+        const angle = angleFromSetback(row[cfg.setbackField], effectiveHeight(row));
+        if (angle == null) return;
+        const rounded = round2(angle);
+        row[cfg.angleField] = rounded;
+        const angleInput = rowInput(rowId, cfg.angleField);
+        if (angleInput) angleInput.value = rounded;
+    });
+    refreshRowGeometry(rowId);
+    // Rows that borrow this material's kesit are drawn from it too.
+    if (row.item != null) {
+        partsTableRows
+            .filter(r => r !== row && Number(r.item) === Number(row.item) && ownHeight(r) <= 0)
+            .forEach(r => refreshRowGeometry(r.__rowId));
+    }
+}
+
+/** Keep the open panels attached under their row across table re-renders. */
+function syncGeomPanels() {
+    document.querySelectorAll('tr[data-lc-geom-row]').forEach(tr => {
+        const rowId = tr.getAttribute('data-lc-geom-row');
+        if (!expandedGeomRows.has(rowId) || !getRowModel(rowId)) tr.remove();
+    });
+
+    [...expandedGeomRows].forEach(rowId => {
+        const row = getRowModel(rowId);
+        if (!row) { expandedGeomRows.delete(rowId); return; }
+        const toggle = document.querySelector(`[data-lc-geom-toggle="${CSS.escape(rowId)}"]`);
+        const hostTr = toggle?.closest('tr');
+        if (!hostTr) return;
+
+        const existing = geomPanelEl(rowId);
+        // Already in place — leave it alone so in-progress typing survives.
+        if (existing && existing.previousElementSibling === hostTr) return;
+        existing?.remove();
+
+        const panelTr = document.createElement('tr');
+        panelTr.className = 'lc-geom-row';
+        panelTr.setAttribute('data-lc-geom-row', rowId);
+        panelTr.innerHTML =
+            `<td colspan="${hostTr.children.length}" class="lc-geom-cell">${geomPanelHtml(row)}</td>`;
+        hostTr.after(panelTr);
+    });
 }
 
 function renderPartsTable() {
@@ -317,12 +597,10 @@ function renderPartsTable() {
                 : `<div class="text-center">${formatAngleTr(row.angle_right_deg)}</div>`
         },
         {
-            key: 'shape', label: '<div class="text-center">Şekil</div>', sortable: false, width: '100px',
-            formatter: (v, row) => `<div class="text-center">${piecePictogramSVG({
-                angle_left_deg: row.angle_left_deg,
-                angle_right_deg: row.angle_right_deg,
-                profile_height_mm: row.profile_height_mm
-            })}</div>`
+            key: 'shape',
+            label: '<div class="text-center"><span title="Parçanın ölçekli görünümü — açılar birebir, boy kesite göre ölçekli. Tıklayınca kenar ölçüsü paneli açılır.">Şekil</span></div>',
+            sortable: false, width: '132px',
+            formatter: (v, row) => shapeCellHtml(row)
         },
         {
             key: 'allow_rotation',
@@ -424,6 +702,11 @@ function mergeRowFromDom(rowId) {
     if (raw.angle_left_deg != null) row.angle_left_deg = castNumber(raw.angle_left_deg, row.angle_left_deg);
     if (raw.angle_right_deg != null) row.angle_right_deg = castNumber(raw.angle_right_deg, row.angle_right_deg);
     if (raw.profile_height_mm != null) row.profile_height_mm = castNumber(raw.profile_height_mm, row.profile_height_mm);
+    SIDES.forEach(cfg => {
+        if (raw[cfg.setbackField] == null) return;
+        row[cfg.setbackField] = (`${raw[cfg.setbackField]}`.trim() === '')
+            ? null : castNumber(raw[cfg.setbackField], null);
+    });
     if (raw.allow_rotation != null) row.allow_rotation = !!raw.allow_rotation;
     if (raw.requires_bending != null) row.requires_bending = !!raw.requires_bending;
     if (raw.order != null) row.order = castNumber(raw.order, row.order);
@@ -449,7 +732,16 @@ function mergeAllEditableRowsFromDom() {
 
 function buildPartPayloadFromRowId(rowId) {
     const raw = readRowInputs(rowId);
+    const row = getRowModel(rowId) || {};
     const stockOverride = `${raw.stock_length_mm ?? ''}`.trim();
+    // The setback inputs only exist while the panel is open — fall back to the
+    // model so collapsing the panel never wipes a stored measurement. Sending
+    // an explicit null is what tells the backend the angle was typed by hand.
+    const setback = (field) => {
+        if (raw[field] == null) return row[field] ?? null;
+        const t = `${raw[field]}`.trim();
+        return t === '' ? null : castNumber(t, null);
+    };
     return {
         session: currentSessionKey,
         item: raw.item ? Number(raw.item) : null,
@@ -462,6 +754,8 @@ function buildPartPayloadFromRowId(rowId) {
         angle_left_deg: castNumber(raw.angle_left_deg, 0),
         angle_right_deg: castNumber(raw.angle_right_deg, 0),
         profile_height_mm: castNumber(raw.profile_height_mm, 0),
+        setback_left_mm: setback('setback_left_mm'),
+        setback_right_mm: setback('setback_right_mm'),
         allow_rotation: (raw.allow_rotation != null) ? !!raw.allow_rotation : true,
         requires_bending: (raw.requires_bending != null) ? !!raw.requires_bending : false,
         order: castNumber(raw.order, 1)
@@ -477,6 +771,17 @@ function validatePartPayload(payload, rowLabelForError = '') {
     if (!(payload.nominal_length_mm > 0) || !(payload.quantity > 0)) {
         showNotification(`${prefix}Uzunluk ve Adet sıfırdan büyük olmalı.`, 'warning');
         return false;
+    }
+    for (const cfg of SIDES) {
+        const ang = Number(payload[cfg.angleField]) || 0;
+        if (Math.abs(ang) > MAX_ANGLE_DEG) {
+            showNotification(
+                `${prefix}${cfg.label} açı ${round2(ang)}° — en fazla ±${MAX_ANGLE_DEG}° olabilir.`
+                + (payload[cfg.setbackField] != null
+                    ? ' Köşe farkı kesite göre çok büyük.' : ''),
+                'warning');
+            return false;
+        }
     }
     if ((payload.angle_left_deg || payload.angle_right_deg) && !(payload.profile_height_mm > 0)) {
         // Profile size is a material property: entering it once on ANY row of
@@ -591,6 +896,7 @@ function scheduleJobNoDropdownSync() {
             jobNoSyncHandle = null;
             syncJobNoDropdowns();
             syncPartItemDropdowns();
+            syncGeomPanels();
         });
     });
 }
@@ -701,7 +1007,10 @@ function cancelRow(rowId) {
     mergeAllEditableRowsFromDom();
     const row = partsTableRows.find(r => r.__rowId === rowId);
     if (!row) return;
-    if (!row.id) partsTableRows = partsTableRows.filter(r => r.__rowId !== rowId);
+    if (!row.id) {
+        expandedGeomRows.delete(rowId);
+        partsTableRows = partsTableRows.filter(r => r.__rowId !== rowId);
+    }
     inlineEditRowId = null;
     renderPartsTable();
 }
@@ -726,6 +1035,8 @@ function addNewPartRow() {
         angle_left_deg: 0,
         angle_right_deg: 0,
         profile_height_mm: 0,
+        setback_left_mm: null,
+        setback_right_mm: null,
         allow_rotation: true,
         requires_bending: false,
         job_no: '',
@@ -761,6 +1072,8 @@ function duplicateRow(rowId) {
         angle_left_deg: row.angle_left_deg ?? 0,
         angle_right_deg: row.angle_right_deg ?? 0,
         profile_height_mm: row.profile_height_mm ?? 0,
+        setback_left_mm: row.setback_left_mm ?? null,
+        setback_right_mm: row.setback_right_mm ?? null,
         allow_rotation: row.allow_rotation ?? true,
         requires_bending: row.requires_bending ?? false,
         job_no: row.job_no ?? '',
@@ -1517,8 +1830,55 @@ function wireEvents() {
     $('lc-bulk-save-parts-btn')?.addEventListener('click', bulkSaveNewParts);
     $('lc-add-part-btn').addEventListener('click', addNewPartRow);
 
+    // Live geometry: the şekil must always match kesit / uzunluk / açılar.
+    document.body.addEventListener('input', e => {
+        const el = e.target;
+        const magSide = el?.getAttribute?.('data-lc-geom-mag');
+        if (magSide) {
+            applyGeomSide(el.closest('tr[data-lc-geom-row]')?.getAttribute('data-lc-geom-row'), magSide);
+            return;
+        }
+        const rowId = el?.getAttribute?.('data-lc-row');
+        const field = el?.getAttribute?.('data-lc-field');
+        if (!rowId || !field || !getRowModel(rowId)) return;
+
+        const angleSide = SIDES.find(s => s.angleField === field);
+        if (angleSide) {
+            clearGeomSide(rowId, angleSide.side);
+            mergeRowFromDom(rowId);
+            refreshRowGeometry(rowId);
+            return;
+        }
+        if (field === 'profile_height_mm') {
+            mergeRowFromDom(rowId);
+            reapplyGeomForRow(rowId);
+            return;
+        }
+        if (field === 'nominal_length_mm') {
+            mergeRowFromDom(rowId);
+            refreshRowGeometry(rowId);
+        }
+    });
+
+    document.body.addEventListener('change', e => {
+        const signSide = e.target?.getAttribute?.('data-lc-geom-sign');
+        if (!signSide) return;
+        applyGeomSide(e.target.closest('tr[data-lc-geom-row]')?.getAttribute('data-lc-geom-row'), signSide);
+    });
+
     // Delegated: parts table actions
     document.body.addEventListener('click', async e => {
+        // Kenar ölçüsü panel toggle
+        const geomToggle = e.target.closest('[data-lc-geom-toggle]');
+        if (geomToggle) {
+            const rowId = geomToggle.getAttribute('data-lc-geom-toggle');
+            mergeAllEditableRowsFromDom();
+            if (expandedGeomRows.has(rowId)) expandedGeomRows.delete(rowId);
+            else expandedGeomRows.add(rowId);
+            geomToggle.classList.toggle('open', expandedGeomRows.has(rowId));
+            syncGeomPanels();
+            return;
+        }
         // Stok (mm) column collapse/expand toggle
         const stockToggle = e.target.closest('[data-lc-toggle-stock]');
         if (stockToggle) {
@@ -1555,6 +1915,7 @@ function wireEvents() {
             mergeAllEditableRowsFromDom();
             destroyJobNoDropdown(rowId);
             destroyPartItemDropdown(rowId);
+            expandedGeomRows.delete(rowId);
             partsTableRows = partsTableRows.filter(r => r.__rowId !== rowId);
             renderPartsTable();
             return;

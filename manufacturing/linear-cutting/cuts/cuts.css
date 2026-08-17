@@ -258,7 +258,123 @@
 
 /* (removed) usage progress bar: diagram should communicate efficiency */
 
+/* ── Şekil cell: scale drawing doubles as the panel toggle ── */
+.lc-geom-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background .15s ease, border-color .15s ease;
+}
+
+.lc-geom-toggle:hover { background: #f1f4f9; border-color: #dbe3ee; }
+.lc-geom-toggle.open  { background: #eef4ff; border-color: #b6cdf3; }
+
+.lc-geom-toggle .lc-shape { display: block; line-height: 0; }
+
+.lc-geom-caret {
+    font-size: .62rem;
+    color: #8a94a3;
+    transition: transform .15s ease;
+}
+
+.lc-geom-toggle.open .lc-geom-caret { transform: rotate(180deg); }
+
+.lc-geom-flag {
+    position: absolute;
+    top: 1px;
+    left: 3px;
+    font-size: .6rem;
+    color: #0d6efd;
+    opacity: .75;
+}
+
+/* ── Expanded per-part measurement panel ── */
+tr.lc-geom-row > td.lc-geom-cell {
+    background: #f7f9fc;
+    border-top: 0;
+    padding: 10px 14px 12px;
+}
+
+.lc-geom-panel {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 18px;
+}
+
+.lc-geom-drawing {
+    flex: 0 0 auto;
+    line-height: 0;
+    background: #fff;
+    border: 1px solid #e3e9f2;
+    border-radius: 10px;
+    padding: 4px;
+}
+
+.lc-geom-form {
+    flex: 1 1 320px;
+    min-width: 300px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.lc-geom-head {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: .84rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.lc-geom-kesit { font-weight: 400; font-size: .8rem; color: #6c757d; }
+
+.lc-geom-side {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .82rem;
+}
+
+.lc-geom-side-label {
+    flex: 0 0 58px;
+    font-weight: 600;
+    color: #495057;
+}
+
+/* The table's compact inputs, not the page-wide 0.75rem padded ones. */
+.lc-geom-side .lc-geom-mag {
+    flex: 0 0 104px;
+    padding: .25rem .5rem;
+    border-radius: 6px;
+}
+
+.lc-geom-side .lc-geom-sign {
+    flex: 0 0 106px;
+    padding: .25rem 1.5rem .25rem .5rem;
+    border-radius: 6px;
+}
+
+.lc-geom-arrow { color: #adb5bd; }
+.lc-geom-static { flex: 0 0 210px; color: #495057; }
+
+.lc-geom-hint {
+    font-size: .75rem;
+    color: #6c757d;
+    line-height: 1.5;
+    margin-top: 2px;
+}
+
 @media (max-width: 992px) {
     .lc-opt-summary { grid-template-columns: 1fr; }
+    .lc-geom-panel { gap: 12px; }
+    .lc-geom-drawing { flex: 1 1 100%; overflow-x: auto; }
 }
 
