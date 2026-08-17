@@ -121,11 +121,15 @@ function updateStockBarsButton(session) {
 }
 
 // ─────────────────────────── PARTS TABLE ──────────────────────
-function inputHtml({ rowId, field, type = 'text', value = '', placeholder = '', min = null }) {
+function inputHtml({ rowId, field, type = 'text', value = '', placeholder = '', min = null, step = null }) {
     const minAttr = min !== null ? ` min="${min}"` : '';
+    // Whole-millimetre fields carry step="1" so the browser rejects a decimal
+    // before the request goes out (see INTEGER_MM_FIELDS).
+    const stepAttr = step !== null ? ` step="${step}"`
+        : (type === 'number' && INTEGER_MM_FIELDS.some(([f]) => f === field) ? ' step="1"' : '');
     return `<input class="form-control form-control-sm" style="min-width:60px"
         data-lc-row="${escapeAttr(rowId)}" data-lc-field="${escapeAttr(field)}"
-        type="${type}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}"${minAttr}>`;
+        type="${type}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}"${minAttr}${stepAttr}>`;
 }
 
 function checkboxHtml({ rowId, field, checked = false, title = '' }) {
@@ -229,6 +233,14 @@ function buildPartsTableRows(parts) {
 const SIDES = [
     { side: 'left',  label: 'Sol', angleField: 'angle_left_deg',  setbackField: 'setback_left_mm' },
     { side: 'right', label: 'Sağ', angleField: 'angle_right_deg', setbackField: 'setback_right_mm' },
+];
+
+// Stored as IntegerField on LinearCuttingPart — a decimal here 400s.
+// (nominal_length_mm is NOT one of these: cut lengths are fractional.)
+const INTEGER_MM_FIELDS = [
+    ['profile_height_mm', 'Kesit'],
+    ['stock_length_mm', 'Stok boyu'],
+    ['quantity', 'Adet'],
 ];
 
 function rowInput(rowId, field) {
@@ -420,11 +432,12 @@ function applyGeomSide(rowId, side) {
 
     // Stored at 0.01 mm — round here so the angle shown is the one the
     // backend re-derives from the saved measurement.
+    const h = effectiveHeight(row);
     const signed = round2(Math.abs(castNumber(raw, 0)) * (signEl?.value === 'far' ? -1 : 1));
     if (hidden) hidden.value = String(signed);
     row[cfg.setbackField] = signed;
 
-    const angle = angleFromSetback(signed, effectiveHeight(row));
+    const angle = angleFromSetback(signed, h);
     if (angle != null) {
         const rounded = round2(angle);
         row[cfg.angleField] = rounded;
@@ -575,7 +588,7 @@ function renderPartsTable() {
         {
             key: 'nominal_length_mm', label: '<div class="text-center">Uzunluk (mm)</div>', sortable: false, width: '120px',
             formatter: (v, row) => isRowEditable(row)
-                ? inputHtml({ rowId: row.__rowId, field: 'nominal_length_mm', type: 'number', value: row.nominal_length_mm ?? '', min: 0 })
+                ? inputHtml({ rowId: row.__rowId, field: 'nominal_length_mm', type: 'number', value: row.nominal_length_mm ?? '', min: 0, step: '0.01' })
                 : (row.nominal_length_mm != null ? `<div class="text-center fw-bold">${row.nominal_length_mm}</div>` : '<div class="text-center">—</div>')
         },
         {
@@ -771,6 +784,34 @@ function validatePartPayload(payload, rowLabelForError = '') {
     if (!(payload.nominal_length_mm > 0) || !(payload.quantity > 0)) {
         showNotification(`${prefix}Uzunluk ve Adet sıfırdan büyük olmalı.`, 'warning');
         return false;
+    }
+    // These are whole millimetres in the model; catch it here rather than
+    // letting DRF answer with "A valid integer is required."
+    for (const [field, label] of INTEGER_MM_FIELDS) {
+        const v = payload[field];
+        if (v == null || Number.isInteger(v)) continue;
+        showNotification(
+            `${prefix}${label} tam sayı (mm) olmalı — ${v} yerine ${Math.round(v)} girin.`,
+            'warning');
+        return false;
+    }
+    // Geometry that cannot be cut is rejected by the optimizer anyway; say so
+    // at save time, while the drawing that shows it is still on screen.
+    if (payload.profile_height_mm > 0) {
+        const h = payload.profile_height_mm;
+        const tL = Math.abs(setbackFromAngle(payload.angle_left_deg, h));
+        const tR = Math.abs(setbackFromAngle(payload.angle_right_deg, h));
+        const needed = Math.max(
+            (payload.angle_left_deg < 0 ? tL : 0) + (payload.angle_right_deg < 0 ? tR : 0),
+            (payload.angle_left_deg > 0 ? tL : 0) + (payload.angle_right_deg > 0 ? tR : 0),
+        );
+        if (payload.nominal_length_mm < needed) {
+            showNotification(
+                `${prefix}Açılar bu boya sığmıyor — ${h} mm kesitte bu açılar için `
+                + `en az ${round2(needed)} mm gerekir (girilen: ${payload.nominal_length_mm} mm).`,
+                'warning');
+            return false;
+        }
     }
     for (const cfg of SIDES) {
         const ang = Number(payload[cfg.angleField]) || 0;
@@ -975,6 +1016,9 @@ function syncPartItemDropdowns() {
                         }
                     }
                 }
+                // Kesit was set programmatically, so no input event fires —
+                // redraw here or the şekil keeps the old (or missing) kesit.
+                reapplyGeomForRow(rowId);
             }
         });
 

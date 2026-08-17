@@ -209,30 +209,48 @@ export function piecePictogramSVG(spec, opts = {}) {
     const brx = x1 - (aR < 0 ? sr : 0);
     const impossible = brx < blx || trx < tlx;
 
-    const fill = impossible ? '#e9a3a3' : '#7aa5d8';
-    const stroke = impossible ? '#b02a37' : '#39587c';
-
     const tL = round2(Math.abs(setbackFromAngle(aL, h)));
     const tR = round2(Math.abs(setbackFromAngle(aR, h)));
+    // Shortest length that still leaves both edges non-negative — the number
+    // the operator actually needs when the angles will not fit.
+    const minLengthMm = round2(Math.max(
+        (aL < 0 ? tL : 0) + (aR < 0 ? tR : 0),
+        (aL > 0 ? tL : 0) + (aR > 0 ? tR : 0),
+    ));
+
     const titleParts = [
         `Boy ${L} mm (uzun kenar)`,
         known ? `Kesit ${h} mm` : 'Kesit girilmedi',
         `Sol: ${formatAngleTr(aL)}${tL ? ` · köşe farkı ${tL} mm` : ''}`,
         `Sağ: ${formatAngleTr(aR)}${tR ? ` · köşe farkı ${tR} mm` : ''}`,
     ];
-    if (impossible) titleParts.push('⚠ Bu boy bu açılarla imkânsız — kesim yüzeyleri kesişiyor.');
-    else if (compressed) titleParts.push('Çizim: açılar birebir, boy sıkıştırılmış.');
+    if (impossible) {
+        titleParts.push(
+            `⚠ Bu boy bu açılara yetmiyor — kesim yüzeyleri kesişiyor. `
+            + `Bu açılarla en az ${minLengthMm} mm gerekir.`);
+    } else if (compressed) titleParts.push('Çizim: açılar birebir, boy sıkıştırılmış.');
     else if (!known) titleParts.push('Çizim: kesit bilinmediği için ölçekli değil.');
     const title = titleParts.join(' · ');
 
-    let inner = `<polygon points="${blx},${yBot} ${tlx},${yTop} ${trx},${yTop} ${brx},${yBot}"
-                 fill="${fill}" fill-opacity=".45" stroke="${stroke}" stroke-width="1"
-                 stroke-linejoin="round"/>`;
-
-    // A compressed drawing must not be mistaken for a scale one.
-    if (compressed && !withDims) {
-        inner += `<text x="${x1}" y="${yTop - 1.5}" text-anchor="end"
-                        font-size="8" fill="#adb5bd">≉</text>`;
+    let inner;
+    if (impossible) {
+        // Drawing the polygon would fold it inside out into a bow tie, which
+        // reads as a broken renderer rather than as bad data. Show the
+        // bounding box struck through instead, and say what is wrong.
+        inner = `<rect x="${x0}" y="${yTop}" width="${wPx}" height="${hPx}"
+                    fill="#f8d7da" fill-opacity=".55" stroke="#b02a37"
+                    stroke-width="1" stroke-dasharray="4 3"/>
+                 <line x1="${x0}" y1="${yTop}" x2="${x1}" y2="${yBot}" stroke="#b02a37" stroke-width="1"/>
+                 <line x1="${x0}" y1="${yBot}" x2="${x1}" y2="${yTop}" stroke="#b02a37" stroke-width="1"/>`;
+    } else {
+        inner = `<polygon points="${blx},${yBot} ${tlx},${yTop} ${trx},${yTop} ${brx},${yBot}"
+                     fill="#7aa5d8" fill-opacity=".45" stroke="#39587c" stroke-width="1"
+                     stroke-linejoin="round"/>`;
+        // A compressed drawing must not be mistaken for a scale one.
+        if (compressed && !withDims) {
+            inner += `<text x="${x1}" y="${yTop - 1.5}" text-anchor="end"
+                            font-size="8" fill="#adb5bd">≉</text>`;
+        }
     }
 
     if (withDims) {
@@ -257,9 +275,17 @@ export function piecePictogramSVG(spec, opts = {}) {
                 + label(dimX - 5, (yTop + yBot) / 2 + 3, `${h}`, 'end');
         }
 
-        // Corner offsets: the drawing dimension the angle is derived from.
-        if (tL) inner += label((x0 + Math.max(tlx, blx)) / 2, yTop - 7, `Δ${tL}`);
-        if (tR) inner += label((x1 + Math.min(trx, brx)) / 2, yTop - 7, `Δ${tR}`);
+        if (impossible) {
+            // The corner offsets have nowhere sensible to sit on a shape that
+            // cannot exist — say what would make it exist instead.
+            inner += `<text x="${(x0 + x1) / 2}" y="${yTop - 7}" text-anchor="middle"
+                            font-size="10" fill="#b02a37" font-weight="600"
+                            >Açılar bu boya sığmıyor — en az ${minLengthMm} mm</text>`;
+        } else {
+            // Corner offsets: the drawing dimension the angle is derived from.
+            if (tL) inner += label((x0 + Math.max(tlx, blx)) / 2, yTop - 7, `Δ${tL}`);
+            if (tR) inner += label((x1 + Math.min(trx, brx)) / 2, yTop - 7, `Δ${tR}`);
+        }
 
         // Which edge is which — the sign of every angle is read off these.
         inner += label(x1 + 5, yTop + 3, 'üst', 'start')
