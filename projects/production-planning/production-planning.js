@@ -1758,6 +1758,13 @@ function meetingHeroHtml(item) {
     const statusChip = item.status && item.status !== 'active'
         ? `<span class="status-badge status-grey">${escapeHtml(item.status_display || item.status)}</span>`
         : '';
+    const startLine = item.created_date
+        ? `<div class="pp-fig-xl-start" title="İş emrinin açıldığı tarih">Başlangıç · ${fmtShortDate(item.created_date)}</div>`
+        : '';
+    // Phased heroes have no Hedef Bitiş figure to anchor the opening date to,
+    // and their card row already fills the height budget — so the line rides
+    // in the empty right zone of the header instead of adding a row.
+    const phased = !!(forecast.phases && forecast.phases.length);
 
     return `
         <div class="dashboard-card pp-hero pp-verdict-card pp-verdict-${meta.theme}"
@@ -1773,11 +1780,12 @@ function meetingHeroHtml(item) {
                         <div class="pp-hero-title" title="${escapeHtml(item.title || '')}">${escapeHtml(item.title || '')}</div>
                         ${item.customer_name ? `<div class="pp-hero-customer">${escapeHtml(item.customer_name)}</div>` : ''}
                     </div>
-                    <div class="pp-hero-pills"></div>
+                    <div class="pp-hero-pills">${phased ? startLine : ''}</div>
                 </div>
-                ${(forecast.phases && forecast.phases.length) ? phaseCardsHtml(forecast, true) : `
+                ${phased ? phaseCardsHtml(forecast, true) : `
                 <div class="pp-hero-figures-xl">
                     <div class="pp-fig-xl">
+                        ${startLine}
                         <label>Hedef Bitiş</label>
                         <span class="pp-fig-xl-value">${formatDateLong(forecast.target_completion_date)}</span>
                     </div>

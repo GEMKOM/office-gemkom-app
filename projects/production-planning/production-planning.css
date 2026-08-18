@@ -548,7 +548,7 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 
 .pp-hero {
     margin-bottom: 0;
-    max-height: 224px;
+    max-height: 234px;
     overflow: hidden;
     border-radius: 14px;
     border: 1px solid #e2e6ec;
@@ -661,6 +661,25 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 
 .pp-fig-xl-value.pp-fig-late { color: #dc2626; }
 .pp-fig-xl-value.pp-fig-early { color: #059669; }
+
+/* Opening-date context line above Hedef Bitiş — label-sized and muted so it
+   reads as context for the target, never competing with the date headline.
+   Single line on purpose: the hero row is height-capped on short screens. */
+.pp-fig-xl-start {
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #8a919c;
+    margin-bottom: 8px;
+    white-space: nowrap;
+}
+
+/* Phased heroes have no Hedef Bitiş figure and no height to spare — the line
+   rides in the header's empty right zone instead of adding a row */
+.pp-hero-pills .pp-fig-xl-start {
+    margin-bottom: 0;
+}
 
 /* Full-width total-progress bar (replaces the timeline strip) */
 .pp-hero-progress {
@@ -1680,25 +1699,63 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
 
 /* Hero-sized variant: fills the figure row on the meeting slide */
 .pp-phase-card-xl {
-    padding: 10px 14px;
+    padding: 6px 12px;
 }
 
 .pp-phase-card-xl .pp-phase-line {
-    font-size: 0.95rem;
+    font-size: 0.88rem;
 }
 
 .pp-phase-card-xl .pp-phase-status {
-    font-size: 1.15rem;
+    font-size: 1.05rem;
 }
 
+/* Phased heroes: the card row is a line taller than the figures row it
+   replaces, so the header and card spacing give a step back at every
+   height — otherwise the İlerleme bar falls out of the hero's overflow
+   clip on projector screens. */
+.pp-hero .pp-phase-cards {
+    margin: 2px 0 6px;
+    gap: 8px;
+}
+
+.pp-hero:has(.pp-phase-cards) .pp-hero-title { font-size: 1.5rem; }
+.pp-hero:has(.pp-phase-cards) .pp-hero-customer { font-size: 0.9rem; }
+.pp-hero:has(.pp-phase-cards) .pp-verdict-jobno { font-size: 1.4rem; }
+.pp-hero:has(.pp-phase-cards) .pp-hero-top { margin-bottom: 6px; }
+
+/* Laptop heights: the phased hero's card row alone fills the 184px budget,
+   so every part of it shrinks one step further than the standard hero —
+   without this the İlerleme bar is cropped by the hero's overflow:hidden. */
 @media (max-height: 860px) {
     .pp-phase-card-xl {
-        padding: 6px 10px;
+        padding: 4px 10px;
+    }
+
+    .pp-phase-card-xl .pp-phase-name {
+        font-size: 0.62rem;
+        margin-bottom: 1px;
+    }
+
+    .pp-phase-card-xl .pp-phase-line {
+        font-size: 0.82rem;
     }
 
     .pp-phase-card-xl .pp-phase-status {
-        font-size: 1rem;
+        font-size: 0.95rem;
+        margin-top: 1px;
     }
+
+    .pp-hero .pp-phase-cards {
+        margin: 2px 0;
+        gap: 8px;
+    }
+
+    .pp-hero:has(.pp-phase-cards) .card-body { padding-bottom: 2px; }
+    .pp-hero:has(.pp-phase-cards) .pp-hero-title { font-size: 1.25rem; }
+    .pp-hero:has(.pp-phase-cards) .pp-hero-customer { font-size: 0.8rem; }
+    .pp-hero:has(.pp-phase-cards) .pp-verdict-jobno { font-size: 1.3rem; }
+    .pp-hero:has(.pp-phase-cards) .pp-hero-top { margin-bottom: 2px; }
 }
 
 /* Short screens (1366×768 laptops): shrink one step, caps shrink in JS via
@@ -1739,6 +1796,10 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
 
     .pp-fig-xl-primary .pp-fig-xl-value {
         font-size: 1.7rem;
+    }
+
+    .pp-fig-xl-start {
+        margin-bottom: 4px;
     }
 
     .pp-hero-progress-bar {
