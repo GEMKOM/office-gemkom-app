@@ -1,7 +1,7 @@
 import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, updateMachine as apiUpdateMachine } from '../../../apis/machines.js';
-import { authFetchUsers } from '../../../apis/users.js';
+import { fetchUsersDropdown } from '../../../apis/users.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -309,11 +309,11 @@ async function loadMetadata() {
     try {
         const [typesResponse, usersResponse] = await Promise.all([
             fetchMachineTypes(),
-            authFetchUsers(1, 1000, {is_active: true})
+            fetchUsersDropdown({ is_active: true })
         ]);
 
         machineTypes = typesResponse.results || typesResponse || [];
-        users = usersResponse.results || usersResponse || [];
+        users = usersResponse || [];
 
         // Populate filters and dropdowns
         updateFilterOptions();

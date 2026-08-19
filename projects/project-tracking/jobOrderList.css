@@ -1,0 +1,401 @@
+/*
+ * Job order list row styling.
+ *
+ * These rules exist to keep inline `style="..."` attributes out of the row
+ * markup. The table re-renders by assigning a single HTML string to
+ * `tbody.innerHTML`, so every byte in a row template is re-serialised and
+ * re-parsed on each sort / filter / page / expand. Repeating the same style
+ * text on every row made the row template ~10 KB; the measured tbody payload
+ * was 1.1 MB for 100 rows, of which 489 KB was duplicated `style=` text.
+ *
+ * Layout-mode values (compact / tight / ultra) used to be baked into each
+ * row via ternaries on IS_COMPACT_13_INCH. They are global to the table, not
+ * per-row, so they live here as custom properties on the container and are
+ * switched by the `.jo-tight` / `.jo-ultra` modifier classes. Only genuinely
+ * per-row values (hierarchy depth, button slot, progress width) are still
+ * passed inline, as short custom properties.
+ */
+
+#job-orders-table-container {
+    --jo-level-w: 20px;
+    --jo-line-th: 2px;
+    --jo-line-color: #cbd5e0;
+    --jo-btn-size: 24px;
+    --jo-btn-gap: 4px;
+    --jo-btn-radius: 4px;
+    --jo-btn-border: 1.5px;
+    --jo-icon-size: 10px;
+    --jo-row-h: 40px;
+
+    --jo-font-date: 0.875rem;
+    --jo-font-jobno: 1rem;
+    --jo-font-jobno-muted: 0.9rem;
+    --jo-font-title: 0.9rem;
+    --jo-font-title-root: 0.95rem;
+    --jo-font-sub: 0.82rem;
+    --jo-font-qty: 0.86rem;
+    --jo-font-dept: 0.85rem;
+    --jo-jobno-pad: 0.25rem 0.5rem;
+    --jo-jobno-maxw: none;
+    --jo-jobno-muted-maxw: none;
+    --jo-customer-maxw: 180px;
+    --jo-customer-color: #334155;
+    --jo-customer-font: 0.83rem;
+    --jo-customer-lh: 1.25;
+    --jo-qty-minw: 36px;
+    --jo-progress-h: 28px;
+    --jo-progress-font: 0.8rem;
+}
+
+#job-orders-table-container.jo-tight {
+    --jo-level-w: 9px;
+    --jo-line-th: 1px;
+    --jo-btn-size: 13px;
+    --jo-btn-gap: 2px;
+    --jo-btn-radius: 2px;
+    --jo-btn-border: 1.2px;
+    --jo-icon-size: 7px;
+    --jo-row-h: 24px;
+
+    --jo-font-date: 0.78rem;
+    --jo-font-jobno: 0.78rem;
+    --jo-font-jobno-muted: 0.74rem;
+    --jo-font-title: 0.82rem;
+    --jo-font-title-root: 0.86rem;
+    --jo-font-sub: 0.74rem;
+    --jo-font-qty: 0.76rem;
+    --jo-font-dept: 0.72rem;
+    --jo-jobno-pad: 0.12rem 0.34rem;
+    --jo-jobno-maxw: 112px;
+    --jo-jobno-muted-maxw: 106px;
+    --jo-customer-maxw: 74px;
+    --jo-customer-color: #475569;
+    --jo-customer-font: 0.67rem;
+    --jo-customer-lh: 1.2;
+    --jo-qty-minw: 28px;
+    --jo-progress-h: 20px;
+    --jo-progress-font: 0.72rem;
+}
+
+#job-orders-table-container.jo-ultra {
+    --jo-font-date: 0.72rem;
+}
+
+/* ---------------------------------------------------------------- expand /
+   hierarchy column                                                          */
+
+.jo-expand-cell {
+    position: relative;
+    width: 100%;
+    height: var(--jo-row-h);
+    min-height: var(--jo-row-h);
+}
+
+/* Tree connector lines. `--i` is the zero-based hierarchy level the line sits
+   at; everything else derives from it so the row only carries the index. */
+.jo-tree-line {
+    position: absolute;
+    left: calc(var(--i) * var(--jo-level-w) + var(--jo-level-w) / 2 - var(--jo-line-th) / 2);
+    width: var(--jo-line-th);
+    background: var(--jo-line-color);
+}
+
+.jo-tree-line--through {
+    top: 0;
+    bottom: 0;
+}
+
+.jo-tree-line--half {
+    top: 0;
+    height: 50%;
+}
+
+.jo-tree-line--elbow {
+    top: 50%;
+    width: calc(var(--jo-level-w) / 2);
+    height: var(--jo-line-th);
+    transform: translateY(-50%);
+}
+
+/* Expand buttons. `--lvl` is the hierarchy level, `--slot` the button's
+   position within the row (0, 1, 2 …). */
+.jo-expand-btn {
+    position: absolute;
+    left: calc(
+        var(--lvl) * var(--jo-level-w) +
+        var(--slot) * (var(--jo-btn-size) + var(--jo-btn-gap))
+    );
+    top: 50%;
+    transform: translateY(-50%);
+    width: var(--jo-btn-size);
+    height: var(--jo-btn-size);
+    padding: 0;
+    border-radius: var(--jo-btn-radius);
+    border: var(--jo-btn-border) solid var(--jo-accent, #0d6efd);
+    background: #ffffff;
+    color: var(--jo-accent, #0d6efd);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    cursor: pointer;
+    z-index: 1;
+}
+
+.jo-expand-btn.expanded {
+    background: var(--jo-accent, #0d6efd);
+    color: #ffffff;
+}
+
+.jo-expand-btn i {
+    font-size: var(--jo-icon-size);
+}
+
+/* Accent colours, previously inlined per button. */
+.jo-accent-blue  { --jo-accent: #0d6efd; }
+.jo-accent-green { --jo-accent: #198754; }
+
+/* ------------------------------------------------------------------ job no,
+   title, customer, quantity                                                 */
+
+.jo-jobno {
+    font-weight: 700;
+    color: #0d6efd;
+    font-family: 'Courier New', monospace;
+    font-size: var(--jo-font-jobno);
+    background: rgba(13, 110, 253, 0.1);
+    padding: var(--jo-jobno-pad);
+    border-radius: 4px;
+    border: 1px solid rgba(13, 110, 253, 0.2);
+    max-width: var(--jo-jobno-maxw);
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Department-task rows render the same chip in a muted grey. */
+.jo-jobno--muted {
+    font-weight: 600;
+    color: #6c757d;
+    font-size: var(--jo-font-jobno-muted);
+    max-width: var(--jo-jobno-muted-maxw);
+    background: rgba(108, 117, 125, 0.1);
+    border-color: rgba(108, 117, 125, 0.2);
+}
+
+.jo-title-wrap {
+    line-height: 1.3;
+}
+
+/* Root job orders render heavier than their children. */
+.jo-title-root {
+    color: #212529;
+    font-weight: 600;
+    font-size: var(--jo-font-title-root);
+    line-height: 1.5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.jo-title-child {
+    color: #495057;
+    font-weight: 500;
+    font-size: var(--jo-font-title);
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Pill showing the superseded target date. `direction: rtl` keeps the date
+   visible when the label is clipped. */
+.jo-prev-target {
+    display: inline-block;
+    max-width: 100%;
+    padding: 1px 6px;
+    border: 1px solid rgba(108, 117, 125, 0.35);
+    border-radius: 999px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    direction: rtl;
+    text-align: left;
+}
+
+.jo-title {
+    color: #495057;
+    font-weight: 500;
+    font-size: var(--jo-font-title);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.jo-title-sub {
+    color: #6c757d;
+    font-size: var(--jo-font-sub);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.jo-customer {
+    max-width: var(--jo-customer-maxw);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--jo-customer-color);
+    font-weight: 600;
+    font-size: var(--jo-customer-font);
+    line-height: var(--jo-customer-lh);
+}
+
+.jo-qty {
+    display: inline-block;
+    min-width: var(--jo-qty-minw);
+    text-align: center;
+    font-weight: 600;
+    font-size: var(--jo-font-qty);
+}
+
+.jo-dept-label {
+    font-weight: 600;
+    font-size: var(--jo-font-dept);
+}
+
+.jo-dept-label--muted { color: #6c757d; }
+.jo-dept-label--done  { color: #198754; }
+
+/* ------------------------------------------------------------------- dates,
+   projections                                                               */
+
+.jo-date {
+    font-size: var(--jo-font-date);
+    font-weight: 500;
+}
+
+.jo-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    text-align: center;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.jo-stack-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.jo-proj-note {
+    font-size: 0.72rem;
+    line-height: 1.15;
+    margin-top: 3px;
+    text-align: center;
+    width: 100%;
+}
+
+.jo-proj-late {
+    color: #92400e;
+}
+
+/* Date text inside the projection stacks; weight varies by urgency so it is
+   still passed inline as --fw. */
+.jo-stack-date {
+    font-size: var(--jo-font-date);
+    font-weight: var(--fw, 500);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+/* Status badge sizing in tight layouts. */
+.jo-tight .jo-status-badge {
+    font-size: 0.64rem;
+    padding: 0.14rem 0.34rem;
+    letter-spacing: 0;
+}
+
+.jo-ultra .jo-status-badge {
+    font-size: 0.58rem;
+    padding: 0.1rem 0.24rem;
+}
+
+.jo-status-badge {
+    max-width: 100%;
+    display: inline-block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------- progress
+   bar                                                                       */
+
+.jo-progress-wrap {
+    position: relative;
+    width: 100%;
+    padding: 4px 0;
+}
+
+.jo-progress {
+    height: var(--jo-progress-h);
+    border-radius: 6px;
+    background-color: #e5e7eb;
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+/* `--pct` is the only per-row value; the colour comes from a state class. */
+.jo-progress-bar {
+    width: var(--pct);
+    background: linear-gradient(90deg, var(--jo-bar) 0%, var(--jo-bar-soft) 100%);
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    position: relative;
+    overflow: hidden;
+}
+
+.jo-progress-bar--zero { --jo-bar: #6b7280; --jo-bar-soft: #6b7280dd; }
+.jo-progress-bar--low  { --jo-bar: #ef4444; --jo-bar-soft: #ef4444dd; }
+.jo-progress-bar--mid  { --jo-bar: #f59e0b; --jo-bar-soft: #f59e0bdd; }
+.jo-progress-bar--high { --jo-bar: #3b82f6; --jo-bar-soft: #3b82f6dd; }
+.jo-progress-bar--near { --jo-bar: #10b981; --jo-bar-soft: #10b981dd; }
+.jo-progress-bar--full { --jo-bar: #059669; --jo-bar-soft: #059669dd; }
+
+/* Static highlight. This used to be `animation: shimmer 3s infinite` on a
+   child <div> of every bar, i.e. 100+ permanently running animations forcing
+   continuous repaints. The gradient is kept, the animation is not. */
+.jo-progress-bar::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(255, 255, 255, 0.25) 50%,
+        transparent 100%
+    );
+    pointer-events: none;
+}
+
+.jo-progress-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-weight: 600;
+    font-size: var(--jo-progress-font);
+    color: #000000;
+    pointer-events: none;
+    white-space: nowrap;
+    z-index: 2;
+}

@@ -37,6 +37,11 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-cogs',
                         children: {}
                     },
+                    '/general/overtime/welding-report': {
+                        label: 'Kaynaklı İmalat Mesai Raporu',
+                        icon: 'fas fa-fire',
+                        children: {}
+                    },
                     '/general/overtime/cost-report': {
                         label: 'Mesai Maliyet Raporu',
                         icon: 'fas fa-coins',
@@ -106,11 +111,6 @@ export const NAVIGATION_STRUCTURE = {
             '/projects/project-tracking': {
                 label: 'Proje Takibi',
                 icon: 'fas fa-tasks',
-                children: {}
-            },
-            '/projects/production-planning': {
-                label: 'Üretim Planlama',
-                icon: 'fas fa-calendar-check',
                 children: {}
             }
         }

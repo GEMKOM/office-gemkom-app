@@ -25,6 +25,9 @@ import {
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { showNotification } from '../../../components/notification/notification.js';
+/** UserGroup slug whose members make up the satın alma team (organization.UserGroup.slug) */
+const PROCUREMENT_TEAM_GROUP = 'satn-alma';
+
 // State management
 let currentPage = 1;
 let itemsPerPage = 20;
@@ -314,10 +317,8 @@ async function initializeFiltersComponent() {
     // Fetch users for requestor filter
     let users = [];
     try {
-        const { authFetchUsers } = await import('../../../apis/users.js');
-        const usersResponse = await authFetchUsers(1, 1000, { group: 'procurement_team' });
-        users = usersResponse.results || [];
-        console.log(users);
+        const { fetchUsersDropdown } = await import('../../../apis/users.js');
+        users = await fetchUsersDropdown({ group: PROCUREMENT_TEAM_GROUP });
     } catch (error) {
         console.error('Error fetching users:', error);
     }
@@ -374,16 +375,22 @@ async function initializeFiltersComponent() {
     });
 
     // Add Requestor filter with current user as default
+    const userLabel = (user) =>
+        `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || `Kullanıcı #${user.id}`;
+    const requestorOptions = users.map(user => ({ value: user.id, label: userLabel(user) }));
+    // The list is scoped to the satın alma group, but the filter defaults to the
+    // current user — someone outside the group would otherwise get a silently
+    // applied filter with nothing selected in the dropdown.
+    if (currentUser && !requestorOptions.some(o => String(o.value) === String(currentUser.id))) {
+        requestorOptions.unshift({ value: currentUser.id, label: userLabel(currentUser) });
+    }
     requestFilters.addDropdownFilter({
         id: 'requestor-filter',
         label: 'Talep Eden',
         placeholder: 'Talep eden seçin...',
         options: [
             { value: '', label: 'Tüm Kullanıcılar' },
-            ...users.map(user => ({
-                value: user.id,
-                label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || user.email
-            }))
+            ...requestorOptions
         ],
         value: currentUser ? currentUser.id : '', // Default to current user if available
         colSize: 2

@@ -109,6 +109,7 @@ export async function initDepartmentTasksPage(config) {
         pageTitle,
         subtitle,
         userTeam = department,
+        canCreateTasks = false,
         containerIds: containerIdsOverride = {},
         customFilters = [],
         customTableColumns,
@@ -158,6 +159,7 @@ export async function initDepartmentTasksPage(config) {
     let editTaskModal = null;
     let addSubtaskModal = null;
     let bulkSubtaskModal = null;
+    let createTaskModal = null;
     let createReleaseModal = null;
     let completeRevisionModal = null;
     let releaseApprovalRejectModal = null;
@@ -304,9 +306,11 @@ function normalizeStatusColors(statusOptions) {
         subtitle: subtitle,
         icon: 'project-diagram',
         showBackButton: 'block',
-        showCreateButton: 'none',
+        showCreateButton: canCreateTasks ? 'block' : 'none',
+        createButtonText: 'Yeni Görev',
         showRefreshButton: 'block',
         onBackClick: () => { window.location.href = backUrl; },
+        onCreateClick: () => { showCreateTaskModal(); },
         onRefreshClick: async () => {
             currentPage = 1;
             updateUrlParams({ page: 1 });
@@ -783,9 +787,14 @@ function initializeTableComponent() {
                         return `<div style="padding-left: ${indent}px;">${prefix}${jobOrderLink}</div>`;
                     }
                     
-                    // No job order: display plain, non-clickable id
-                    const idText = row.id != null ? String(row.id) : '-';
-                    return `<div style="padding-left: ${indent}px;">${prefix}<strong>${idText}</strong></div>`;
+                    // Consultation tasks hang off a sales offer, shown in the title column.
+                    if (row.is_consultation) {
+                        const idText = row.id != null ? String(row.id) : '-';
+                        return `<div style="padding-left: ${indent}px;">${prefix}<strong>${idText}</strong></div>`;
+                    }
+
+                    // Standalone task raised by the department itself — no job order.
+                    return `<div style="padding-left: ${indent}px;">${prefix}<span class="status-badge status-grey" title="İş emrine bağlı olmayan görev"><i class="fas fa-inbox me-1"></i>Bağımsız</span></div>`;
                 }
             },
             {
@@ -794,6 +803,9 @@ function initializeTableComponent() {
                 sortable: true,
                 formatter: (value, row) => {
                     const isSubtask = !!row.parent;
+                    // Standalone tasks have no job order title to mirror, so their
+                    // own title is the only identity — keep it editable.
+                    const isTitleEditable = isSubtask || !row.job_order;
                     const indent = isSubtask ? 30 : 0;
                     const fullText = isSubtask ? (value || '-') : (row.job_order_title || value || '-');
                     const maxLen = 50;
@@ -807,7 +819,7 @@ function initializeTableComponent() {
                         ? `<br><small class="text-muted">${escapeHtml(row.offer_summary.offer_no || '')}</small>` : '';
                     const tooltip = escapeHtml(fullText);
                     
-                    if (isSubtask) {
+                    if (isTitleEditable) {
                         const taskId = row.id;
                         return `
                             <div class="editable-title" data-task-id="${taskId}" data-title-value="${escapeHtml(value || '')}" style="padding-left: ${indent}px; cursor: pointer;" title="${tooltip}">
@@ -1596,13 +1608,13 @@ function initializeModalComponents() {
         try {
             // Get the task to check if it's a subtask
             const task = await getDepartmentTaskById(taskId);
-            const isSubtask = !!task.parent;
+            const isTitleEditable = !!task.parent || !task.job_order;
             
             // Prepare update data
             const updateData = {};
 
-            // Title can only be changed for subtasks
-            if (isSubtask && formData.title !== undefined) {
+            // Title can only be changed for subtasks and standalone tasks
+            if (isTitleEditable && formData.title !== undefined) {
                 const trimmedTitle = formData.title.trim();
                 if (!trimmedTitle) {
                     showNotification('Başlık boş olamaz', 'error');
@@ -1733,6 +1745,70 @@ function initializeModalComponents() {
             size: 'xl',
             showEditButton: false,
             saveButtonText: 'Oluştur'
+        });
+    }
+
+    // Create task modal — departments that may raise their own main tasks
+    if (canCreateTasks && document.getElementById('create-task-modal-container')) {
+        createTaskModal = new EditModal('create-task-modal-container', {
+            title: 'Yeni Görev Oluştur',
+            icon: 'fas fa-plus',
+            size: 'lg',
+            showEditButton: false,
+            saveButtonText: 'Oluştur'
+        });
+
+        createTaskModal.onSaveCallback(async (formData) => {
+            const title = (formData.title || '').trim();
+            if (!title) {
+                showNotification('Başlık zorunludur', 'error');
+                return;
+            }
+
+            const taskData = { department, title };
+
+            // Job order is optional — a department can raise its own standalone work.
+            if (formData.job_order) taskData.job_order = formData.job_order;
+            if (formData.description && formData.description.trim()) {
+                taskData.description = formData.description.trim();
+            }
+            if (formData.assigned_to) taskData.assigned_to = parseInt(formData.assigned_to);
+            if (formData.target_start_date) taskData.target_start_date = formData.target_start_date;
+            if (formData.target_completion_date) taskData.target_completion_date = formData.target_completion_date;
+            if (formData.estimated_duration_wd !== undefined && formData.estimated_duration_wd !== null && formData.estimated_duration_wd !== '') {
+                const duration = parseFloat(formData.estimated_duration_wd);
+                if (!isNaN(duration)) taskData.estimated_duration_wd = duration;
+            }
+            if (formData.weight !== undefined && formData.weight !== null && formData.weight !== '') {
+                const weightValue = parseInt(formData.weight);
+                if (!isNaN(weightValue)) taskData.weight = weightValue;
+            }
+
+            try {
+                await createDepartmentTask(taskData);
+                showNotification('Görev oluşturuldu', 'success');
+                createTaskModal.hide();
+                currentPage = 1;
+                updateUrlParams({ page: 1 });
+                await loadTasks();
+            } catch (error) {
+                console.error('Error creating department task:', error);
+                let errorMessage = 'Görev oluşturulurken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+            }
         });
     }
 }
@@ -3896,15 +3972,16 @@ async function renderEditActionForm(task) {
     ];
     
     const isSubtask = !!task.parent;
+    const isTitleEditable = isSubtask || !task.job_order;
     
     return `
         <h5 class="mb-4"><i class="fas fa-edit me-2"></i>Görevi Düzenle</h5>
         <form id="edit-action-form">
             <div class="row g-3">
                 <div class="col-md-12">
-                    <label class="form-label">Başlık ${isSubtask ? '' : '<span class="text-muted">(Değiştirilemez)</span>'}</label>
-                    <input type="text" class="form-control" id="edit-title" value="${task.title || ''}" ${!isSubtask ? 'readonly' : ''}>
-                    ${isSubtask ? '<small class="form-text text-muted">Alt görev başlığı düzenlenebilir</small>' : ''}
+                    <label class="form-label">Başlık ${isTitleEditable ? '' : '<span class="text-muted">(Değiştirilemez)</span>'}</label>
+                    <input type="text" class="form-control" id="edit-title" value="${task.title || ''}" ${!isTitleEditable ? 'readonly' : ''}>
+                    ${isTitleEditable ? '<small class="form-text text-muted">Görev başlığı düzenlenebilir</small>' : ''}
                 </div>
                 <div class="col-md-12">
                     <label class="form-label">Açıklama</label>
@@ -6052,10 +6129,10 @@ async function renderDeleteTaskActionForm(task) {
 // Handle edit action form submission
 async function handleEditActionSubmit(task) {
     const updateData = {};
-    const isSubtask = !!task.parent;
+    const isTitleEditable = !!task.parent || !task.job_order;
     
-    // Title can only be changed for subtasks
-    if (isSubtask) {
+    // Title can only be changed for subtasks and standalone tasks
+    if (isTitleEditable) {
         const titleInput = taskDetailsModal.container.querySelector('#edit-title');
         if (titleInput && titleInput.value.trim()) {
             updateData.title = titleInput.value.trim();
@@ -6717,6 +6794,9 @@ async function showEditTaskModal(taskId) {
 
         // Check if this is a subtask (has a parent)
         const isSubtask = !!task.parent;
+        // Main tasks mirror their job order's title, so it is fixed there — but a
+        // standalone task has no job order to inherit from.
+        const isTitleEditable = isSubtask || !task.job_order;
         
         editTaskModal.addField({
             id: 'edit-title',
@@ -6725,10 +6805,10 @@ async function showEditTaskModal(taskId) {
             type: 'text',
             value: task.title || '',
             required: true,
-            readonly: !isSubtask, // Only editable for subtasks
+            readonly: !isTitleEditable,
             icon: 'fas fa-heading',
             colSize: 6,
-            helpText: isSubtask ? 'Alt görev başlığı (düzenlenebilir)' : 'Görev başlığı (değiştirilemez)'
+            helpText: isTitleEditable ? 'Görev başlığı (düzenlenebilir)' : 'Görev başlığı (değiştirilemez)'
         });
 
         editTaskModal.addField({
@@ -6838,6 +6918,144 @@ async function showEditTaskModal(taskId) {
         console.error('Error loading task for edit:', error);
         showNotification('Görev bilgileri yüklenirken hata oluştu', 'error');
     }
+}
+
+function showCreateTaskModal() {
+    if (!createTaskModal) {
+        showNotification('Görev oluşturma penceresi kullanılamıyor', 'error');
+        return;
+    }
+
+    createTaskModal.clearAll();
+
+    createTaskModal.addSection({
+        title: 'Görev Bilgileri',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+
+    // Optional: a task raised by the department need not belong to a job order.
+    createTaskModal.addField({
+        id: 'create-task-job-order',
+        name: 'job_order',
+        label: 'İş Emri',
+        type: 'dropdown',
+        placeholder: 'İş emri ara (en az 2 karakter)',
+        icon: 'fas fa-barcode',
+        colSize: 6,
+        searchable: true,
+        minSearchLength: 2,
+        remoteSearchPlaceholder: 'En az 2 karakter yazın',
+        helpText: 'İsteğe bağlı — boş bırakılırsa görev bir iş emrine bağlanmaz',
+        options: [],
+        remoteSearch: async (term) => {
+            if (!term || term.trim().length < 2) return [];
+            const data = await listJobOrders({
+                search: term.trim(),
+                page_size: 30,
+                ordering: '-created_at',
+                status__in: 'active,draft,on_hold'
+            });
+            const list = data.results || [];
+            return list.map((job) => ({
+                value: job.job_no,
+                text: [job.job_no, job.title].filter(Boolean).join(' - ')
+            }));
+        }
+    });
+
+    createTaskModal.addField({
+        id: 'create-task-assigned-to',
+        name: 'assigned_to',
+        label: 'Atanan Kişi',
+        type: 'dropdown',
+        placeholder: 'Kişi seçin...',
+        icon: 'fas fa-user',
+        colSize: 6,
+        searchable: true,
+        options: [
+            { value: '', label: 'Atanmamış' },
+            ...users.map(u => ({ value: u.id.toString(), label: u.name || u.username }))
+        ],
+        helpText: 'İsteğe bağlı'
+    });
+
+    createTaskModal.addField({
+        id: 'create-task-title',
+        name: 'title',
+        label: 'Başlık',
+        type: 'text',
+        placeholder: 'Görev başlığını girin',
+        required: true,
+        icon: 'fas fa-heading',
+        colSize: 12,
+        helpText: 'Görev başlığı'
+    });
+
+    createTaskModal.addField({
+        id: 'create-task-description',
+        name: 'description',
+        label: 'Açıklama',
+        type: 'textarea',
+        placeholder: 'Görev açıklaması',
+        icon: 'fas fa-align-left',
+        colSize: 12,
+        helpText: 'İsteğe bağlı açıklama'
+    });
+
+    createTaskModal.addSection({
+        title: 'Planlama',
+        icon: 'fas fa-calendar',
+        iconColor: 'text-success'
+    });
+
+    createTaskModal.addField({
+        id: 'create-task-target-start-date',
+        name: 'target_start_date',
+        label: 'Hedef Başlangıç Tarihi',
+        type: 'date',
+        icon: 'fas fa-calendar-alt',
+        colSize: 6,
+        helpText: 'İsteğe bağlı'
+    });
+
+    createTaskModal.addField({
+        id: 'create-task-target-completion-date',
+        name: 'target_completion_date',
+        label: 'Hedef Bitiş Tarihi',
+        type: 'date',
+        icon: 'fas fa-calendar-check',
+        colSize: 6,
+        helpText: 'İsteğe bağlı'
+    });
+
+    createTaskModal.addField({
+        id: 'create-task-duration',
+        name: 'estimated_duration_wd',
+        label: 'Tahmini Süre (iş günü)',
+        type: 'number',
+        icon: 'fas fa-stopwatch',
+        colSize: 6,
+        min: 0.5,
+        step: 0.5,
+        helpText: 'Kaç iş günü sürecek — üretim planı öngörüsünü besler'
+    });
+
+    createTaskModal.addField({
+        id: 'create-task-weight',
+        name: 'weight',
+        label: 'Ağırlık',
+        type: 'number',
+        value: '10',
+        min: 1,
+        step: 1,
+        icon: 'fas fa-weight',
+        colSize: 6,
+        helpText: 'İş emri ilerleme hesabındaki ağırlığı'
+    });
+
+    createTaskModal.render();
+    createTaskModal.show();
 }
 
 async function showAddSubtaskModal(parentTaskId) {
@@ -7184,6 +7402,10 @@ async function handleCompleteTask(taskId, taskRow = null) {
         
         if (isSubtask) {
             await showSubtaskCompleteModal(taskId);
+        } else if (!task.job_order) {
+            // Standalone design task — no job order means there is no technical
+            // drawing to release, so complete it like any ordinary task.
+            confirmStandardCompletion(taskId);
         } else if (task.pending_approval_release_id) {
             const state = task.pending_release_approval_state;
             const progress = state
@@ -7210,43 +7432,51 @@ async function handleCompleteTask(taskId, taskRow = null) {
         }
 
         // For other departments, use the standard completion flow
-        confirmationModal.show({
-            message: 'Bu görevi tamamlamak istediğinize emin misiniz?',
-            confirmText: 'Evet, Tamamla',
-            onConfirm: async () => {
-                try {
-                    const response = await completeDepartmentTask(taskId);
-                    showNotification('Görev tamamlandı', 'success');
-                    confirmationModal.hide();
-                    
-                    // Update the task in the local data without reloading all tasks
-                    if (response && response.task) {
-                        const updatedTask = response.task;
-                        if (updateTaskInLocalData(taskId, updatedTask)) {
-                            updateTableDataOnly();
-                        }
-                    }
-                } catch (error) {
-                    console.error('Error completing task:', error);
-                    let errorMessage = 'Görev tamamlanırken hata oluştu';
-                    try {
-                        if (error.message) {
-                            const errorData = JSON.parse(error.message);
-                            if (typeof errorData === 'object') {
-                                const errors = Object.values(errorData).flat();
-                                errorMessage = errors.join(', ') || errorMessage;
-                            } else {
-                                errorMessage = error.message;
-                            }
-                        }
-                    } catch (e) {
-                        // If parsing fails, use default message
-                    }
-                    showNotification(errorMessage, 'error');
-                }
-            }
-        });
+        confirmStandardCompletion(taskId);
     }
+}
+
+/**
+ * Plain "are you sure?" completion — used by every department that has no
+ * extra gate (design release, ERP entry, QC) standing in front of it.
+ */
+function confirmStandardCompletion(taskId) {
+    confirmationModal.show({
+        message: 'Bu görevi tamamlamak istediğinize emin misiniz?',
+        confirmText: 'Evet, Tamamla',
+        onConfirm: async () => {
+            try {
+                const response = await completeDepartmentTask(taskId);
+                showNotification('Görev tamamlandı', 'success');
+                confirmationModal.hide();
+
+                // Update the task in the local data without reloading all tasks
+                if (response && response.task) {
+                    const updatedTask = response.task;
+                    if (updateTaskInLocalData(taskId, updatedTask)) {
+                        updateTableDataOnly();
+                    }
+                }
+            } catch (error) {
+                console.error('Error completing task:', error);
+                let errorMessage = 'Görev tamamlanırken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+            }
+        }
+    });
 }
 
 /**

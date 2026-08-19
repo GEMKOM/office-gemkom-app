@@ -52,7 +52,7 @@ import { listCustomers } from '../../apis/projects/customers.js';
 import { initCustomerEditModal, openCustomerEditModal, getMissingCustomerFieldsForConversion } from '../customers/customerEditModal.js';
 import { getPaymentTerms } from '../../apis/procurement.js';
 import { createComment, getTopicComments } from '../../apis/projects/topics.js';
-import { authFetchUsers } from '../../apis/users.js';
+import { fetchUsersDropdown } from '../../apis/users.js';
 import { getUser } from '../../authService.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../components/file-attachments/file-attachments.js';
@@ -106,8 +106,9 @@ const TAB_LABELS = {
 };
 
 // Statuses for which the "Teklif Sunumu için Son Tarih" deadline is no longer
-// actionable, so we don't highlight the row by remaining days.
-const DEADLINE_INACTIVE_STATUSES = ['won', 'lost', 'cancelled', 'converted'];
+// actionable — the offer has already been presented to the customer or the
+// offer is closed — so we don't highlight the row by remaining days.
+const DEADLINE_INACTIVE_STATUSES = ['submitted_customer', 'won', 'converted', 'lost', 'cancelled'];
 
 // Whole days from today until the given date string (negative if overdue).
 function daysUntilDate(dateStr) {
@@ -133,7 +134,8 @@ function offerDeadlineUrgency(row) {
 }
 
 let currentPage = 1;
-let currentSortField = '-created_at';
+// Bare field name; the direction sign is applied from currentSortDirection.
+let currentSortField = 'created_at';
 let currentSortDirection = 'desc';
 let offers = [];
 let totalOffers = 0;
@@ -157,16 +159,12 @@ let selectedTemplate = null;
 let users = [];
 let currentUser = null;
 
-/** Backend user group name for satış (matches /users/?group=...) */
-const SALES_TEAM_GROUP = 'sales_team';
+/** UserGroup slug whose members make up the satış team (organization.UserGroup.slug) */
+const SALES_TEAM_GROUP = 'proje-taahhut';
 
 async function loadSalesUsers() {
     try {
-        const usersResponse = await authFetchUsers(1, 1000, {
-            group: SALES_TEAM_GROUP,
-            ordering: 'full_name'
-        });
-        users = usersResponse.results || [];
+        users = await fetchUsersDropdown({ group: SALES_TEAM_GROUP });
     } catch (e) {
         console.error('Error loading sales users for filter:', e);
         users = [];
@@ -385,6 +383,13 @@ function initFilters() {
             const list = res.results || [];
             return list.map(c => ({ value: String(c.id), text: c.name || c.code || `#${c.id}` }));
         }
+    });
+
+    offersFilters.addTextFilter({
+        id: 'customer-ref-filter',
+        label: 'Müşteri Referansı',
+        placeholder: 'Müşteri referansı...',
+        colSize: 2
     });
 }
 
@@ -6841,6 +6846,7 @@ async function loadOffers() {
             opts.status = statusVal;
         }
         if (fv['customer-filter']) opts.customer = fv['customer-filter'];
+        if (fv['customer-ref-filter']) opts.customer_inquiry_ref = fv['customer-ref-filter'];
         if (fv['created-by-filter']) opts.created_by = fv['created-by-filter'];
 
         const data = await listOffers(opts);

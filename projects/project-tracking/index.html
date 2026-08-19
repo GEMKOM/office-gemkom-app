@@ -23,6 +23,8 @@
     <link rel="stylesheet" href="../../components/file-attachments/file-attachments.css">
     <link rel="stylesheet" href="../../components/file-viewer/file-viewer.css">
     <link rel="stylesheet" href="../../components/confirmation-modal/confirmation-modal.css">
+    <link rel="stylesheet" href="meetingView.css">
+    <link rel="stylesheet" href="jobOrderList.css">
     <style>
         /* Jira-style Comments */
         .comment-item {
@@ -211,6 +213,57 @@
             background-color: rgba(13, 110, 253, 0.03);
         }
 
+        /* Sections inside the consolidated detail-modal tabs. A tab can now
+           hold several blocks (Genel: bilgiler + alt işler + fazlar + hedef
+           tarih geçmişi), so each needs a visible heading and separation. */
+        .jo-section {
+            padding: 20px;
+        }
+
+        .jo-section + .jo-section {
+            border-top: 1px solid #e5e7eb;
+        }
+
+        .jo-section-title {
+            font-size: 0.92rem;
+            font-weight: 700;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            margin-bottom: 14px;
+        }
+
+        .jo-section-title i {
+            color: #6b7280;
+        }
+
+        /* Two sections side by side. Files are one-line rows and need little
+           room; discussions carry threads, so they get the larger share. The
+           divider between them is vertical here, not the horizontal rule the
+           stacked layout uses. */
+        .jo-split {
+            display: grid;
+            grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+        }
+
+        .jo-split > .jo-section + .jo-section {
+            border-top: 0;
+            border-left: 1px solid #e5e7eb;
+        }
+
+        /* Below this the two columns are too narrow to read — stack them and
+           restore the horizontal divider. */
+        @media (max-width: 991px) {
+            .jo-split {
+                grid-template-columns: minmax(0, 1fr);
+            }
+
+            .jo-split > .jo-section + .jo-section {
+                border-left: 0;
+                border-top: 1px solid #e5e7eb;
+            }
+        }
+
         /* Compact layout (enabled dynamically when table overflows) */
         #job-orders-table-container.job-orders-table-compact .table {
             font-size: 0.82rem;
@@ -257,6 +310,10 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Sunum Modu (meeting view): one job order per full-page slide.
+                 Everything above is hidden while this is on screen. -->
+            <div id="pp-meeting-container" style="display: none;"></div>
         </div>
     </section>
 

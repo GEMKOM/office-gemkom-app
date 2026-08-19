@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         backUrl: '/design/',
         pageTitle: 'Dizayn Departmanı Görevleri',
         subtitle: 'Görevleri görüntüleyin, başlatın ve yönetin',
-        userTeam: 'design'
+        userTeam: 'design',
+        canCreateTasks: true
     });
 });

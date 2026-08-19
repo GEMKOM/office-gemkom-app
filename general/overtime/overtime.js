@@ -49,6 +49,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/general/overtime/machining-report'
             },
             {
+                title: 'Kaynaklı İmalat Mesai Raporu',
+                description: 'Onaylı mesai saatleri ile kaynak zaman kayıtlarının karşılaştırması ve sapmalar.',
+                icon: 'fas fa-fire',
+                iconColor: 'danger',
+                link: '/general/overtime/welding-report'
+            },
+            {
                 title: 'Mesai Maliyet Raporu',
                 description: 'Seçilen dönemdeki toplam mesai maliyeti; ekip, kişi ve iş bazında dağılım.',
                 icon: 'fas fa-coins',

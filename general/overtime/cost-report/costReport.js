@@ -1,4 +1,5 @@
 import { guardRoute } from '../../../authService.js';
+import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
@@ -84,8 +85,27 @@ const toInputDate = (d) => {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// Job numbers are hierarchical: 272-01 is the parent of 272-01-01, 272-01-02, ...
+// The breakdown rolls everything up to the first two segments so a project shows
+// as one line, with its sub-jobs underneath.
+const JOB_PARENT_SEGMENTS = 2;
+
+function jobParentKey(jobNo) {
+    const parts = String(jobNo || '').trim().split('-');
+    return parts.slice(0, JOB_PARENT_SEGMENTS).join('-');
+}
+
+const NO_JOB_LABEL = 'İş No Yok';
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
+        return;
+    }
+
+    // guardRoute() only proves you are logged in. These reports expose wage and
+    // per-person performance data, so the page permission is enforced here too
+    // — without this a direct URL renders for anyone the menu hides it from.
+    if (!initRouteProtection()) {
         return;
     }
 
@@ -183,6 +203,66 @@ document.addEventListener('DOMContentLoaded', async () => {
         emptyMessage: 'Veri yok',
         exportable: true,
     });
+
+    // Job-order breakdown, rolled up two levels: 272-01 with 272-01-01 beneath it.
+    const expandedJobs = new Set();
+    let jobTree = [];
+
+    const jobTreeTable = new TableComponent('job-tree-placeholder', {
+        title: 'İş Emri Numarasına Göre Dağılım',
+        icon: 'fas fa-sitemap',
+        iconColor: 'text-success',
+        columns: [
+            { field: 'job_no', label: 'İş No', sortable: false, formatter: (v, row) => jobCellHtml(row) },
+            { field: 'request_count', label: 'Talep', sortable: false, type: 'number', formatter: (v) => v ?? 0 },
+            { field: 'entry_count', label: 'Kayıt', sortable: false, type: 'number', formatter: (v) => v ?? 0 },
+            { field: 'hours', label: 'Saat', sortable: false, type: 'number', formatter: (v) => fmtHours(v) },
+            { field: 'cost_eur', label: 'Maliyet', sortable: false, type: 'number',
+              formatter: (v, row) => window.isExporting ? num(v)
+                  : (row.level === 0 ? `<strong>${fmtEur(v)}</strong>` : fmtEur(v)) },
+            { field: 'share', label: 'Pay', sortable: false, type: 'number',
+              formatter: (v) => {
+                  const pct = num(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + '%';
+                  if (window.isExporting) return pct;
+                  return `<div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height:6px;min-width:60px;">
+                              <div class="progress-bar bg-success" style="width:${Math.min(100, num(v))}%"></div>
+                            </div>
+                            <span class="small text-muted">${pct}</span>
+                          </div>`;
+              } },
+        ],
+        data: [],
+        pagination: false,
+        sortable: false,
+        small: true,
+        exportable: true,
+        emptyMessage: 'Seçilen dönemde iş emrine bağlı mesai kaydı bulunamadı',
+        emptyIcon: 'fas fa-inbox',
+        rowAttributes: (row) => row.level === 0
+            ? { class: 'job-tree-parent', style: 'background-color:#f8f9fa;' }
+            : { class: 'job-tree-child' },
+    });
+
+    function jobCellHtml(row) {
+        const label = row.job_no || NO_JOB_LABEL;
+        if (window.isExporting) return (row.level === 1 ? '    ' : '') + label;
+
+        // Parents own the expand toggle; both levels open the detail modal.
+        const toggle = row.level === 0 && row.expandable
+            ? `<i class="fas ${row.expanded ? 'fa-chevron-down' : 'fa-chevron-right'} text-muted me-2 job-tree-toggle"
+                  role="button" data-job-toggle="${esc(row.key)}" title="Alt iş emirleri"></i>`
+            : '<span class="d-inline-block me-2" style="width:1em;"></span>';
+        const indent = row.level === 1 ? 'ps-4' : '';
+        // The no-job bucket is clickable too — seeing which entries were filed
+        // without a job number is exactly why you would open it.
+        const inner = row.job_no ? formatJobNumber(row.job_no) : `<span class="text-muted">${NO_JOB_LABEL}</span>`;
+        const name = `<a href="javascript:void(0)" class="text-decoration-none" data-job-detail="${esc(row.key)}">${inner}</a>`;
+        const badge = row.level === 0 && row.expandable
+            ? ` <span class="badge bg-light text-dark ms-2">${row.child_count} alt iş</span>`
+            : '';
+        return `<span class="${indent}">${toggle}${row.level === 0 ? `<strong>${name}</strong>` : name}${badge}</span>`;
+    }
 
     const breakdownTable = new TableComponent('breakdown-placeholder', {
         title: 'Dağılım',
@@ -337,6 +417,90 @@ document.addEventListener('DOMContentLoaded', async () => {
         breakdownTable.updateData(rows, rows.length, 1);
     }
 
+    function buildJobTree(data) {
+        // A request touching two sub-jobs must count once at the parent level,
+        // so gather request ids per job rather than summing child counts.
+        const requestIdsByJob = new Map();
+        (data.requests || []).forEach(req => {
+            (req.entries || []).forEach(e => {
+                const job = (e.job_no || '').trim();
+                if (!requestIdsByJob.has(job)) requestIdsByJob.set(job, new Set());
+                requestIdsByJob.get(job).add(req.id);
+            });
+        });
+
+        const parents = new Map();
+        (data.by_job || []).forEach(r => {
+            const job = (r.job_no || '').trim();
+            const key = job ? jobParentKey(job) : '';
+            let p = parents.get(key);
+            if (!p) {
+                p = { key, job_no: key, level: 0, hours: 0, cost_eur: 0,
+                      entry_count: 0, requestIds: new Set(), children: [] };
+                parents.set(key, p);
+            }
+            p.children.push({
+                key: job, job_no: job, level: 1,
+                hours: num(r.hours), cost_eur: num(r.cost_eur),
+                entry_count: r.entry_count ?? 0,
+                request_count: r.request_count ?? 0,
+            });
+            p.hours += num(r.hours);
+            p.cost_eur += num(r.cost_eur);
+            p.entry_count += r.entry_count ?? 0;
+            (requestIdsByJob.get(job) || new Set()).forEach(id => p.requestIds.add(id));
+        });
+
+        const total = num(data.summary.total_cost_eur);
+        const share = (cost) => (total > 0 ? (cost / total) * 100 : 0);
+
+        return [...parents.values()]
+            .map(p => ({
+                ...p,
+                request_count: p.requestIds.size,
+                share: share(p.cost_eur),
+                child_count: p.children.length,
+                // A lone child identical to its parent adds no information.
+                expandable: !(p.children.length === 1 && p.children[0].job_no === p.key),
+                children: p.children
+                    .map(c => ({ ...c, share: share(c.cost_eur) }))
+                    .sort((a, b) => b.cost_eur - a.cost_eur),
+            }))
+            .sort((a, b) => b.cost_eur - a.cost_eur);
+    }
+
+    function flattenJobTree() {
+        const rows = [];
+        jobTree.forEach(p => {
+            const expanded = expandedJobs.has(p.key);
+            rows.push({ ...p, expanded });
+            if (expanded && p.expandable) rows.push(...p.children);
+        });
+        return rows;
+    }
+
+    function renderJobTree() {
+        jobTreeTable.updateData(flattenJobTree());
+    }
+
+    // Delegated because TableComponent replaces its container's contents (and
+    // the container node itself) on every re-render.
+    document.addEventListener('click', (ev) => {
+        const toggle = ev.target.closest('[data-job-toggle]');
+        if (toggle) {
+            const key = toggle.getAttribute('data-job-toggle');
+            if (expandedJobs.has(key)) expandedJobs.delete(key);
+            else expandedJobs.add(key);
+            renderJobTree();
+            return;
+        }
+        const detail = ev.target.closest('[data-job-detail]');
+        if (detail) {
+            ev.preventDefault();
+            showJobDetail(detail.getAttribute('data-job-detail'));
+        }
+    });
+
     function renderRequests(data) {
         const rows = (data.requests || []).map(r => ({
             ...r,
@@ -344,6 +508,123 @@ document.addEventListener('DOMContentLoaded', async () => {
             cost_eur: num(r.cost_eur),
         }));
         table.updateData(rows, rows.length, 1);
+    }
+
+    function showJobDetail(jobKey) {
+        if (!report) return;
+
+        const parent = jobTree.find(p => p.key === jobKey);
+        const isParent = !!parent;
+        // A parent covers itself and every sub-job beneath it; a child is exact.
+        const matches = isParent
+            ? new Set(parent.children.map(c => c.job_no))
+            : new Set([jobKey]);
+
+        const rows = [];
+        (report.requests || []).forEach(req => {
+            (req.entries || []).forEach(e => {
+                if (!matches.has((e.job_no || '').trim())) return;
+                rows.push({
+                    request_id: req.id,
+                    date: req.counted_start_at,
+                    team: req.team,
+                    job_no: e.job_no,
+                    full_name: e.full_name || e.username,
+                    description: e.description,
+                    hours: num(e.hours),
+                    cost_eur: num(e.cost_eur),
+                });
+            });
+        });
+        rows.sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.cost_eur - a.cost_eur);
+
+        const totalHours = rows.reduce((s2, r) => s2 + r.hours, 0);
+        const totalCost = rows.reduce((s2, r) => s2 + r.cost_eur, 0);
+
+        const modal = new DisplayModal('job-detail-modal-container', {
+            title: `İş Emri ${jobKey || NO_JOB_LABEL} — Mesai Detayı`,
+            icon: 'fas fa-sitemap',
+            size: 'xl',
+            showEditButton: false,
+        });
+
+        modal.addSection({ title: 'Özet', icon: 'fas fa-info-circle' });
+        modal.addField({ label: 'İş No', value: jobKey || NO_JOB_LABEL, icon: 'fas fa-hashtag', colSize: 3 });
+        modal.addField({ label: 'Toplam Saat', value: fmtHours(totalHours), icon: 'fas fa-hourglass-half', colSize: 3 });
+        modal.addField({ label: 'Toplam Maliyet', value: fmtEur(totalCost), icon: 'fas fa-coins', colSize: 3 });
+        modal.addField({ label: 'Mesai Kaydı', value: String(rows.length), icon: 'fas fa-list', colSize: 3 });
+
+        if (isParent && parent.expandable) {
+            modal.addCustomSection({
+                title: 'Alt İş Emirleri',
+                icon: 'fas fa-code-branch',
+                iconColor: 'text-success',
+                customContent: buildSimpleTableHtml(
+                    ['İş No', 'Kayıt', 'Saat', 'Maliyet'],
+                    parent.children.map(c => [
+                        formatJobNumber(c.job_no), String(c.entry_count),
+                        fmtHours(c.hours), `<strong>${fmtEur(c.cost_eur)}</strong>`,
+                    ]),
+                    [false, true, true, true],
+                ),
+            });
+        }
+
+        const byPerson = new Map();
+        rows.forEach(r => {
+            const cur = byPerson.get(r.full_name) || { hours: 0, cost_eur: 0, count: 0 };
+            cur.hours += r.hours; cur.cost_eur += r.cost_eur; cur.count += 1;
+            byPerson.set(r.full_name, cur);
+        });
+        modal.addCustomSection({
+            title: 'Kişi Bazında',
+            icon: 'fas fa-user-tag',
+            iconColor: 'text-primary',
+            customContent: buildSimpleTableHtml(
+                ['Personel', 'Kayıt', 'Saat', 'Maliyet'],
+                [...byPerson.entries()]
+                    .sort((a, b) => b[1].cost_eur - a[1].cost_eur)
+                    .map(([name, v]) => [esc(name), String(v.count), fmtHours(v.hours), `<strong>${fmtEur(v.cost_eur)}</strong>`]),
+                [false, true, true, true],
+            ),
+        });
+
+        modal.addCustomSection({
+            title: 'Mesai Kayıtları',
+            icon: 'fas fa-clock',
+            iconColor: 'text-warning',
+            customContent: buildSimpleTableHtml(
+                ['Tarih', 'Talep', 'Personel', 'İş No', 'Açıklama', 'Saat', 'Maliyet'],
+                rows.map(r => [
+                    fmtDate(r.date),
+                    `<span class="badge bg-primary">#${r.request_id}</span>`,
+                    esc(r.full_name),
+                    formatJobNumber(r.job_no),
+                    `<span class="text-muted small">${esc(r.description || '-')}</span>`,
+                    fmtHours(r.hours),
+                    `<strong>${fmtEur(r.cost_eur)}</strong>`,
+                ]),
+                [false, false, false, false, false, true, true],
+            ),
+        });
+
+        modal.render().show();
+    }
+
+    // Small read-only table used by the job detail modal. `alignEnd` marks the
+    // numeric columns.
+    function buildSimpleTableHtml(headers, rows, alignEnd = []) {
+        const th = headers.map((h, i) => `<th${alignEnd[i] ? ' class="text-end"' : ''}>${h}</th>`).join('');
+        const body = rows.map(cells =>
+            `<tr>${cells.map((c, i) => `<td${alignEnd[i] ? ' class="text-end"' : ''}>${c}</td>`).join('')}</tr>`
+        ).join('');
+        return `
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle mb-0">
+                    <thead class="table-light"><tr>${th}</tr></thead>
+                    <tbody>${body || `<tr><td colspan="${headers.length}" class="text-center text-muted py-3">Kayıt yok</td></tr>`}</tbody>
+                </table>
+            </div>`;
     }
 
     function showRequestDetail(row) {
@@ -496,6 +777,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     function clearAll(message) {
         stats.setCards([]);
         bucketTable.updateData([]);
+        jobTree = [];
+        expandedJobs.clear();
+        jobTreeTable.updateData([]);
         breakdownTable.updateData([]);
         table.updateData([]);
         renderNotice(message || '');
@@ -506,6 +790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             table.setLoading(true);
             breakdownTable.setLoading(true);
             bucketTable.setLoading(true);
+            jobTreeTable.setLoading(true);
 
             const data = await getOvertimeCostReport(currentFilters);
 
@@ -523,6 +808,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             renderNotice(buildDataQualityNotice(data));
             renderStats(data);
             renderBuckets(data);
+            jobTree = buildJobTree(data);
+            // Filtered views are small enough to read at a glance; a broad
+            // period would be a wall of sub-jobs, so start collapsed there.
+            expandedJobs.clear();
+            if (jobTree.length <= 5) jobTree.forEach(p => expandedJobs.add(p.key));
+            renderJobTree();
             renderBreakdown(data);
             renderRequests(data);
         } catch (error) {
@@ -533,6 +824,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             table.setLoading(false);
             breakdownTable.setLoading(false);
             bucketTable.setLoading(false);
+            jobTreeTable.setLoading(false);
         }
     }
 

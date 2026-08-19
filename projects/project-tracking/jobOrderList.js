@@ -3,7 +3,6 @@ import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import { 
     listJobOrders, 
     getJobOrderByJobNo, 
-    getJobOrderProgressHistory,
     createJobOrder as createJobOrderAPI, 
     updateJobOrder as updateJobOrderAPI,
     reviseTargetCompletionDate,
@@ -16,13 +15,12 @@ import {
     applyTemplateToJobOrder,
     getChildJobOrders,
     getJobOrderDepartmentTasks,
-    getJobOrderChildren,
     getJobOrderFiles,
     uploadJobOrderFile,
     getJobOrderPhases,
     createJobOrderPhases,
     activateJobOrderPhase,
-    getJobOrderProductionPlan,
+    getProductionPlanOverview,
     JOB_ORDER_FILE_TYPE_OPTIONS,
     STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
@@ -58,6 +56,15 @@ import { isAdmin, hasPerm, getUser } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
 import { fetchAllUsers, fetchTeams } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
+import {
+    initMeetingView,
+    enterMeetingView,
+    isMeetingUrl,
+    getCachedProductionPlan,
+    verdictBadge,
+    formatWorkDays,
+    CLASSIFICATION_BADGES
+} from './meetingView.js';
 import { 
     fetchPriceTiers, 
     createPriceTier, 
@@ -65,7 +72,6 @@ import {
     deletePriceTier 
 } from '../../apis/subcontracting/priceTiers.js';
 import { listNCRs } from '../../apis/qualityControl.js';
-import { getJobCostSummary, getEstimatedMaterialBreakdown } from '../../apis/projects/cost.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -199,6 +205,7 @@ function formatDepartmentTaskDepartmentCell(row) {
 let compactModeCheckTimeout = null;
 let lastAppliedFitSignature = '';
 let currentFitLevel = 0; // 0 = normal widths, 1 = minimum widths
+const FIT_LEVEL_STEPS = 8; // discrete fit levels between normal and minimum
 const isTightLayout = () => currentFitLevel > 0.22;
 const isUltraTightLayout = () => currentFitLevel > 0.55;
 
@@ -234,10 +241,7 @@ function applyAdaptiveCompactColumnConfig() {
         status_display: { normal: 90, min: 58 },
         target_completion_date: { normal: 118, min: 82 },
         completion_percentage: { normal: 240, min: 108 },
-        daily_avg_progress: { normal: 150, min: 86 },
-        last_week_progress: { normal: 150, min: 86 },
-        ncr_count: { normal: 76, min: 38 },
-        revision_count: { normal: 94, min: 44 },
+        _projected_completion: { normal: 190, min: 104 },
         created_at: { normal: 100, min: 68 }
     };
 
@@ -251,7 +255,13 @@ function applyAdaptiveCompactColumnConfig() {
     const reservedPx = 36; // card paddings + scrollbar + safety margin
     const targetPx = Math.max(320, viewportWidth - reservedPx);
     const denominator = Math.max(1, totalNormal - totalMin);
-    const nextFitLevel = Math.max(0, Math.min(1, (totalNormal - targetPx) / denominator));
+    const rawFitLevel = Math.max(0, Math.min(1, (totalNormal - targetPx) / denominator));
+    // Snap to discrete steps. The raw value is a continuous function of the
+    // viewport width, so every pixel of resize used to produce a new layout
+    // signature and a full table re-render (~130 ms for 100 rows). Quantising
+    // means only a real step change re-renders, and it also breaks the
+    // render -> scrollbar appears -> width changes -> render feedback loop.
+    const nextFitLevel = Math.round(rawFitLevel * FIT_LEVEL_STEPS) / FIT_LEVEL_STEPS;
 
     currentFitLevel = nextFitLevel;
     IS_COMPACT_13_INCH = isTightLayout();
@@ -271,10 +281,7 @@ function applyAdaptiveCompactColumnConfig() {
     setCol('status_display', { width: widthFor('status_display') });
     setCol('target_completion_date', { label: isTightLayout() ? 'Hedef' : 'Hedef Tamamlanma', width: widthFor('target_completion_date') });
     setCol('completion_percentage', { label: IS_COMPACT_13_INCH ? 'Tam.' : 'Tamamlanma', width: widthFor('completion_percentage') });
-    setCol('daily_avg_progress', { label: IS_COMPACT_13_INCH ? 'Gnl. Ort.' : 'Günlük Ort.', width: widthFor('daily_avg_progress') });
-    setCol('last_week_progress', { label: IS_COMPACT_13_INCH ? 'Son Hf.' : 'Son Hafta', width: widthFor('last_week_progress') });
-    setCol('ncr_count', { width: widthFor('ncr_count') });
-    setCol('revision_count', { label: IS_COMPACT_13_INCH ? 'Rev.' : 'Revizyon', width: widthFor('revision_count') });
+    setCol('_projected_completion', { label: IS_COMPACT_13_INCH ? 'Öngörü' : 'Öngörülen Bitiş', width: widthFor('_projected_completion') });
     setCol('created_at', { label: IS_COMPACT_13_INCH ? 'Oluş.' : 'Oluşturulma', width: widthFor('created_at') });
     if (actionsVisible) {
         jobOrdersTable.options.actionColumnWidth = `${Math.max(actionProfile.min, actionWidth)}px`;
@@ -288,6 +295,10 @@ function evaluateAdaptiveCompactMode() {
     const container = document.getElementById('job-orders-table-container');
     if (container) {
         container.classList.toggle('job-orders-table-compact', IS_COMPACT_13_INCH);
+        // Row-level sizing now comes from these two classes via jobOrderList.css
+        // instead of being inlined into every cell.
+        container.classList.toggle('jo-tight', IS_COMPACT_13_INCH);
+        container.classList.toggle('jo-ultra', isUltraTightLayout());
     }
 
     const signature = `${IS_COMPACT_13_INCH ? '1' : '0'}|${currentFitLevel.toFixed(3)}|${jobOrdersTable.options.actionColumnWidth || ''}|${(jobOrdersTable.options.columns || []).map(c => `${c.field}:${c.width || ''}:${c.label || ''}`).join(',')}`;
@@ -363,10 +374,6 @@ function canEditJobOrders() {
     }
 }
 
-function canViewJobCosts() {
-    return isAdmin() || hasPerm('view_job_costs');
-}
-
 // Helper function to check if user has planning or management access
 function canViewSubcontracting() {
     try {
@@ -414,6 +421,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         onBackClick: () => window.location.href = '/projects/',
         onCreateClick: () => showCreateJobOrderModal()
     });
+
+    // Sunum Modu sits in the header next to the page actions. The deck takes
+    // over the whole viewport from there (meetingView.js); the page stays
+    // mounted underneath and comes back on exit.
+    const meetingButton = document.createElement('button');
+    meetingButton.type = 'button';
+    meetingButton.id = 'pp-enter-meeting';
+    meetingButton.className = 'btn btn-sm btn-outline-primary me-2';
+    meetingButton.innerHTML = '<i class="fas fa-tv me-1"></i>Sunum Modu';
+    meetingButton.addEventListener('click', () => enterMeetingView());
+    const headerControls = document.querySelector('#header-placeholder .dashboard-controls');
+    if (headerControls) {
+        headerControls.insertBefore(meetingButton, document.getElementById('create-btn'));
+    }
+    initMeetingView();
+
     
     // Initialize Statistics Cards component
     jobOrdersStats = new StatisticsCards('job-orders-statistics', {
@@ -429,6 +452,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await initializeJobOrders();
     setupEventListeners();
+    // Background: the portfolio forecast is a multi-second batch, so the table
+    // paints first and the Öngörülen Bitiş column fills in when it lands.
+    loadRootForecasts();
 });
 
 async function initializeJobOrders() {
@@ -453,7 +479,9 @@ async function initializeJobOrders() {
         // yüklenirken hata oluştu" — fall through to the topic-only path instead.
         const isTaskPseudoJobNo = !!jobNo && /^Task-\d+$/i.test(jobNo);
 
-        if (jobNo && !isTaskPseudoJobNo) {
+        // In Sunum Modu the job_no param names the current SLIDE, not a modal
+        // to open — the deck writes it on every slide change.
+        if (jobNo && !isTaskPseudoJobNo && !isMeetingUrl()) {
             // Open job order modal directly without loading other data first
             await viewJobOrder(jobNo);
 
@@ -604,193 +632,73 @@ function initializeTableComponent() {
                 sortable: false,
                 width: IS_COMPACT_13_INCH ? '44px' : '96px',
                 formatter: (value, row) => {
-                    // Calculate hierarchy level (0 = root, 1 = child, 2 = grandchild, etc.)
+                    // Hierarchy depth and button slot are the only per-row
+                    // values; sizing/colour live in jobOrderList.css so the
+                    // row template stays short. See that file for why.
                     const hierarchyLevel = row.hierarchy_level || 0;
-                    
-                    // Constants for consistent spacing
-                    const LEVEL_WIDTH = IS_COMPACT_13_INCH ? 9 : 20; // Width per hierarchy level
-                    const LINE_THICKNESS = IS_COMPACT_13_INCH ? 1 : 2; // Thickness of tree lines
-                    const LINE_COLOR = '#cbd5e0';
-                    const BUTTON_SIZE = IS_COMPACT_13_INCH ? 13 : 24;
-                    const ROW_HEIGHT = IS_COMPACT_13_INCH ? 24 : 40;
-                    
-                    // Calculate positions
-                    const buttonLeftPosition = hierarchyLevel * LEVEL_WIDTH;
-                    
-                    // Generate tree lines with absolute positioning for consistency
+
                     let treeLinesHtml = '';
-                    if (hierarchyLevel > 0) {
-                        for (let i = 0; i < hierarchyLevel; i++) {
-                            const isLastLevel = i === hierarchyLevel - 1;
-                            const lineLeft = i * LEVEL_WIDTH + (LEVEL_WIDTH / 2) - (LINE_THICKNESS / 2);
-                            
-                            if (!isLastLevel) {
-                                // Vertical line through the level
-                                treeLinesHtml += `
-                                    <div style="
-                                        position: absolute;
-                                        left: ${lineLeft}px;
-                                        top: 0;
-                                        bottom: 0;
-                                        width: ${LINE_THICKNESS}px;
-                                        background: ${LINE_COLOR};
-                                    "></div>
-                                `;
-                            } else {
-                                // Last level: L-shaped connector
-                                // Vertical line (top half)
-                                treeLinesHtml += `
-                                    <div style="
-                                        position: absolute;
-                                        left: ${lineLeft}px;
-                                        top: 0;
-                                        height: 50%;
-                                        width: ${LINE_THICKNESS}px;
-                                        background: ${LINE_COLOR};
-                                    "></div>
-                                `;
-                                // Horizontal line
-                                treeLinesHtml += `
-                                    <div style="
-                                        position: absolute;
-                                        left: ${lineLeft}px;
-                                        top: 50%;
-                                        width: ${LEVEL_WIDTH / 2}px;
-                                        height: ${LINE_THICKNESS}px;
-                                        background: ${LINE_COLOR};
-                                        transform: translateY(-50%);
-                                    "></div>
-                                `;
-                            }
+                    for (let i = 0; i < hierarchyLevel; i++) {
+                        if (i < hierarchyLevel - 1) {
+                            treeLinesHtml += `<div class="jo-tree-line jo-tree-line--through" style="--i:${i}"></div>`;
+                        } else {
+                            treeLinesHtml += `<div class="jo-tree-line jo-tree-line--half" style="--i:${i}"></div>`
+                                + `<div class="jo-tree-line jo-tree-line--elbow" style="--i:${i}"></div>`;
                         }
                     }
-                    
+
+                    const expandButton = (btnClass, accentClass, isExpanded, slot, dataAttr, title, icon) =>
+                        `<button type="button" class="btn btn-sm jo-expand-btn ${btnClass} ${accentClass} ${isExpanded ? 'expanded' : 'collapsed'}" ${dataAttr} style="--lvl:${hierarchyLevel};--slot:${slot}" title="${title}"><i class="fas ${icon}"></i></button>`;
+
                     if (isDepartmentTaskRow(row)) {
-                        const hasSubtasks = row.subtasks_count && row.subtasks_count > 0;
-                        const isSubtasksExpanded = isDepartmentTaskExpanded(row.id);
                         let subtaskExpandButton = '';
-                        if (hasSubtasks) {
-                            const expandIcon = isSubtasksExpanded ? 'fa-minus' : 'fa-plus';
-                            const buttonClass = isSubtasksExpanded ? 'expanded' : 'collapsed';
-                            subtaskExpandButton = `
-                                <button type="button"
-                                        class="btn btn-sm expand-dept-subtasks-btn ${buttonClass}"
-                                        data-task-id="${row.id}"
-                                        style="
-                                            position: absolute;
-                                            left: ${buttonLeftPosition}px;
-                                            top: 50%;
-                                            transform: translateY(-50%);
-                                            width: ${BUTTON_SIZE}px;
-                                            height: ${BUTTON_SIZE}px;
-                                            padding: 0;
-                                            border-radius: ${IS_COMPACT_13_INCH ? 2 : 4}px;
-                                            border: ${IS_COMPACT_13_INCH ? 1.2 : 1.5}px solid #0d6efd;
-                                            background: ${isSubtasksExpanded ? '#0d6efd' : '#ffffff'};
-                                            color: ${isSubtasksExpanded ? '#ffffff' : '#0d6efd'};
-                                            display: inline-flex;
-                                            align-items: center;
-                                            justify-content: center;
-                                            transition: all 0.2s ease;
-                                            cursor: pointer;
-                                            z-index: 1;
-                                        "
-                                        title="${isSubtasksExpanded ? 'Alt görevleri gizle' : 'Alt görevleri göster'}">
-                                    <i class="fas ${expandIcon}" style="font-size: ${IS_COMPACT_13_INCH ? '7px' : '10px'};"></i>
-                                </button>
-                            `;
+                        if (row.subtasks_count && row.subtasks_count > 0) {
+                            const isSubtasksExpanded = isDepartmentTaskExpanded(row.id);
+                            subtaskExpandButton = expandButton(
+                                'expand-dept-subtasks-btn',
+                                'jo-accent-blue',
+                                isSubtasksExpanded,
+                                0,
+                                `data-task-id="${row.id}"`,
+                                isSubtasksExpanded ? 'Alt görevleri gizle' : 'Alt görevleri göster',
+                                isSubtasksExpanded ? 'fa-minus' : 'fa-plus'
+                            );
                         }
-                        return `
-                            <div style="
-                                position: relative;
-                                width: 100%;
-                                height: ${ROW_HEIGHT}px;
-                                min-height: ${ROW_HEIGHT}px;
-                            ">
-                                ${treeLinesHtml}
-                                ${subtaskExpandButton}
-                            </div>
-                        `;
+                        return `<div class="jo-expand-cell">${treeLinesHtml}${subtaskExpandButton}</div>`;
                     }
 
                     const hasChildren = row.children_count && row.children_count > 0;
                     const hasDepartmentTasks = row.department_task_count && row.department_task_count > 0;
                     const isChildrenExpanded = expandedRows.has(row.job_no);
                     const isDeptTasksExpanded = expandedDepartmentTasksRows.has(row.job_no);
-                    const GAP = IS_COMPACT_13_INCH ? 2 : 4;
-                    let buttonOffset = 0;
+                    const jobNoAttr = `data-job-no="${row.job_no}"`;
+                    let slot = 0;
                     let expandButtons = '';
 
-                    const buildExpandButton = (btnClass, isExpanded, borderColor, iconClass, titleExpand, titleCollapse, iconExpanded, iconCollapsed) => {
-                        const expandIcon = isExpanded ? iconExpanded : iconCollapsed;
-                        const buttonClass = isExpanded ? 'expanded' : 'collapsed';
-                        const left = buttonLeftPosition + buttonOffset;
-                        buttonOffset += BUTTON_SIZE + GAP;
-                        return `
-                            <button type="button"
-                                    class="btn btn-sm ${btnClass} ${buttonClass}"
-                                    data-job-no="${row.job_no}"
-                                    style="
-                                        position: absolute;
-                                        left: ${left}px;
-                                        top: 50%;
-                                        transform: translateY(-50%);
-                                        width: ${BUTTON_SIZE}px;
-                                        height: ${BUTTON_SIZE}px;
-                                        padding: 0;
-                                        border-radius: ${IS_COMPACT_13_INCH ? 2 : 4}px;
-                                        border: ${IS_COMPACT_13_INCH ? 1.2 : 1.5}px solid ${borderColor};
-                                        background: ${isExpanded ? borderColor : '#ffffff'};
-                                        color: ${isExpanded ? '#ffffff' : borderColor};
-                                        display: inline-flex;
-                                        align-items: center;
-                                        justify-content: center;
-                                        transition: all 0.2s ease;
-                                        cursor: pointer;
-                                        z-index: 1;
-                                    "
-                                    title="${isExpanded ? titleCollapse : titleExpand}">
-                                <i class="fas ${expandIcon}" style="font-size: ${IS_COMPACT_13_INCH ? '7px' : '10px'};"></i>
-                            </button>
-                        `;
-                    };
-
                     if (hasChildren) {
-                        expandButtons += buildExpandButton(
+                        expandButtons += expandButton(
                             'expand-toggle-btn',
+                            'jo-accent-blue',
                             isChildrenExpanded,
-                            '#0d6efd',
-                            '',
-                            'Alt işleri göster',
-                            'Alt işleri gizle',
-                            'fa-minus',
-                            'fa-plus'
+                            slot++,
+                            jobNoAttr,
+                            isChildrenExpanded ? 'Alt işleri gizle' : 'Alt işleri göster',
+                            isChildrenExpanded ? 'fa-minus' : 'fa-plus'
                         );
                     }
                     if (hasDepartmentTasks) {
-                        expandButtons += buildExpandButton(
+                        expandButtons += expandButton(
                             'expand-dept-tasks-btn',
+                            'jo-accent-green',
                             isDeptTasksExpanded,
-                            '#198754',
-                            '',
-                            'Departman görevlerini göster',
-                            'Departman görevlerini gizle',
-                            'fa-minus',
-                            'fa-tasks'
+                            slot++,
+                            jobNoAttr,
+                            isDeptTasksExpanded ? 'Departman görevlerini gizle' : 'Departman görevlerini göster',
+                            isDeptTasksExpanded ? 'fa-minus' : 'fa-tasks'
                         );
                     }
-                    
-                    return `
-                        <div style="
-                            position: relative;
-                            width: 100%;
-                            height: ${ROW_HEIGHT}px;
-                            min-height: ${ROW_HEIGHT}px;
-                        ">
-                            ${treeLinesHtml}
-                            ${expandButtons}
-                        </div>
-                    `;
+
+                    return `<div class="jo-expand-cell">${treeLinesHtml}${expandButtons}</div>`;
                 }
             },
             {
@@ -801,9 +709,9 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     if (isDepartmentTaskRow(row)) {
                         if (row.parent) {
-                            return `<span style="font-weight: 600; color: #6c757d; font-size: ${IS_COMPACT_13_INCH ? '0.72rem' : '0.85rem'};"><i class="fas fa-level-down-alt me-1"></i>Alt Görev</span>`;
+                            return '<span class="jo-dept-label jo-dept-label--muted"><i class="fas fa-level-down-alt me-1"></i>Alt Görev</span>';
                         }
-                        return `<span style="font-weight: 600; color: #198754; font-size: ${IS_COMPACT_13_INCH ? '0.72rem' : '0.85rem'};"><i class="fas fa-tasks me-1"></i>Görev</span>`;
+                        return '<span class="jo-dept-label jo-dept-label--done"><i class="fas fa-tasks me-1"></i>Görev</span>';
                     }
                     
                     const isChild = !!row.parent;
@@ -814,10 +722,10 @@ function initializeTableComponent() {
                     // Badge-style styling for job number (similar to talep_no in purchase requests)
                     if (hierarchyLevel > 0) {
                         // Child jobs - subtle badge styling
-                        return `<span title="${value}" style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace; font-size: ${IS_COMPACT_13_INCH ? '0.74rem' : '0.9rem'}; background: rgba(108, 117, 125, 0.1); padding: ${IS_COMPACT_13_INCH ? '0.12rem 0.34rem' : '0.25rem 0.5rem'}; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2); max-width:${IS_COMPACT_13_INCH ? '106px' : 'unset'}; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${value}</span>`;
+                        return `<span title="${value}" class="jo-jobno jo-jobno--muted">${value}</span>`;
                     } else {
                         // Root jobs - prominent badge styling
-                        return `<span title="${value}" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: ${IS_COMPACT_13_INCH ? '0.78rem' : '1rem'}; background: rgba(13, 110, 253, 0.1); padding: ${IS_COMPACT_13_INCH ? '0.12rem 0.34rem' : '0.25rem 0.5rem'}; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); max-width:${IS_COMPACT_13_INCH ? '112px' : 'unset'}; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${value}</span>`;
+                        return `<span title="${value}" class="jo-jobno">${value}</span>`;
                     }
                 }
             },
@@ -830,14 +738,14 @@ function initializeTableComponent() {
                     if (isDepartmentTaskRow(row)) {
                         if (row.parent) {
                             const taskTitle = row.title || row.description || '-';
-                            return `<div style="color:#495057; font-weight:500; font-size:${IS_COMPACT_13_INCH ? '0.82rem' : '0.9rem'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${taskTitle}</div>`;
+                            return `<div class="jo-title">${taskTitle}</div>`;
                         }
                         const deptLabel = formatDepartmentTaskDepartmentCell(row);
                         const taskTitle = row.title || row.description || '';
                         const titleHtml = taskTitle
-                            ? `<div style="color:#6c757d; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.82rem'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${taskTitle}</div>`
+                            ? `<div class="jo-title-sub">${taskTitle}</div>`
                             : '';
-                        return `<div style="line-height:1.3;">${deptLabel}${titleHtml}</div>`;
+                        return `<div class="jo-title-wrap">${deptLabel}${titleHtml}</div>`;
                     }
                     if (!value) return '-';
                     
@@ -845,28 +753,9 @@ function initializeTableComponent() {
                     
                     // Enhanced title display with hierarchy awareness
                     if (hierarchyLevel > 0) {
-                        return `
-                            <div style="
-                                color: #495057;
-                                font-weight: 500;
-                                font-size: ${IS_COMPACT_13_INCH ? '0.82rem' : '0.9rem'};
-                                line-height: 1.4;
-                                white-space: nowrap;
-                                overflow: hidden;
-                                text-overflow: ellipsis;
-                            ">${value}</div>
-                        `;
+                        return `<div class="jo-title-child">${value}</div>`;
                     } else {
-                        return `
-                            <div style="
-                                color: #212529;
-                                font-weight: 600;
-                                font-size: ${IS_COMPACT_13_INCH ? '0.86rem' : '0.95rem'};
-                                line-height: 1.5;
-                                white-space: nowrap;
-                                overflow: hidden;
-                                text-overflow: ellipsis;
-                            ">${value}</div>
+                        return `<div class="jo-title-root">${value}</div>
                         `;
                     }
                 }
@@ -891,14 +780,14 @@ function initializeTableComponent() {
 
                     if (IS_COMPACT_13_INCH) {
                         return `
-                            <div title="${safeCustomerTitle}" style="max-width:74px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#475569; font-weight:600; font-size:0.67rem; line-height:1.2;">
+                            <div title="${safeCustomerTitle}" class="jo-customer">
                                 ${safeCustomerTitle}
                             </div>
                         `;
                     }
 
                     return `
-                        <div title="${safeCustomerTitle}" style="max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#334155; font-weight:600; font-size:0.83rem; line-height:1.25;">
+                        <div title="${safeCustomerTitle}" class="jo-customer">
                             ${safeCustomerTitle}
                         </div>
                     `;
@@ -913,10 +802,10 @@ function initializeTableComponent() {
                     if (isDepartmentTaskRow(row)) {
                         const weight = row.weight;
                         if (weight === null || weight === undefined || weight === '') return '-';
-                        return `<span style="display:inline-block; min-width:${IS_COMPACT_13_INCH ? '28px' : '36px'}; text-align:center; font-weight:600; font-size:${IS_COMPACT_13_INCH ? '0.76rem' : '0.86rem'};">${parseFloat(weight).toFixed(2)}</span>`;
+                        return `<span class="jo-qty">${parseFloat(weight).toFixed(2)}</span>`;
                     }
                     if (!(value || value === 0)) return '-';
-                    return `<span style="display:inline-block; min-width:${IS_COMPACT_13_INCH ? '28px' : '36px'}; text-align:center; font-weight:600; font-size:${IS_COMPACT_13_INCH ? '0.76rem' : '0.86rem'};">${value}</span>`;
+                    return `<span class="jo-qty">${value}</span>`;
                 }
             },
             {
@@ -928,8 +817,8 @@ function initializeTableComponent() {
                     const tight = isTightLayout();
                     const ultra = isUltraTightLayout();
                     const compactBadgeStyle = tight
-                        ? `style="font-size:${ultra ? '0.58rem' : '0.64rem'}; padding:${ultra ? '0.1rem 0.24rem' : '0.14rem 0.34rem'}; letter-spacing:0; max-width:100%; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"`
-                        : 'style="max-width:100%; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"';
+                        ? 'class="jo-status-badge"'
+                        : 'class="jo-status-badge"';
                     if (isDepartmentTaskRow(row)) {
                         const status = row.status;
                         const badgeClass = getDepartmentTaskStatusBadgeClass(status);
@@ -967,7 +856,7 @@ function initializeTableComponent() {
                             month: tight ? '2-digit' : 'short',
                             day: tight ? '2-digit' : 'numeric'
                         });
-                        return `<span class="text-dark" style="font-size: ${ultra ? '0.72rem' : (tight ? '0.78rem' : '0.875rem')}; font-weight: 500;">${formattedDate}</span>`;
+                        return `<span class="text-dark jo-date">${formattedDate}</span>`;
                     }
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
@@ -995,22 +884,8 @@ function initializeTableComponent() {
                                 day: 'numeric'
                             });
                             previousHtml = `
-                                <div class="text-muted" style="font-size: 0.72rem; line-height: 1.15; margin-top: 3px; text-align:center; width:100%; white-space:nowrap;">
-                                    <span
-                                        title="Önceki hedef ${prevFormatted}"
-                                        style="
-                                            display:inline-block;
-                                            max-width:100%;
-                                            padding: 1px 6px;
-                                            border: 1px solid rgba(108,117,125,0.35);
-                                            border-radius: 999px;
-                                            overflow:hidden;
-                                            text-overflow:ellipsis;
-                                            white-space:nowrap;
-                                            direction: rtl;
-                                            text-align: left;
-                                        "
-                                    >Önceki hedef ${prevFormatted}</span>
+                                <div class="text-muted jo-proj-note">
+                                    <span class="jo-prev-target" title="Önceki hedef ${prevFormatted}">Önceki hedef ${prevFormatted}</span>
                                 </div>
                             `.trim();
                         }
@@ -1040,9 +915,9 @@ function initializeTableComponent() {
                                     <i class="fas fa-pen-to-square"></i>
                                </button>`
                             : '';
-                        return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; max-width:100%; overflow:hidden;">
-                            <div style="display:flex; align-items:center; justify-content:center; gap:6px; width:100%;">
-                                <span style="color: #92400e; font-size: ${ultra ? '0.72rem' : (tight ? '0.78rem' : '0.875rem')}; font-weight: ${fontWeight}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">${formattedDate}</span>
+                        return `<div class="jo-stack">
+                            <div class="jo-stack-row">
+                                <span class="jo-stack-date jo-proj-late" style="--fw:${fontWeight}">${formattedDate}</span>
                                 ${reviseBtnHtml}
                             </div>
                             ${previousHtml}
@@ -1060,9 +935,9 @@ function initializeTableComponent() {
                                 <i class="fas fa-pen-to-square"></i>
                            </button>`
                         : '';
-                    return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; max-width:100%; overflow:hidden;">
-                        <div style="display:flex; align-items:center; justify-content:center; gap:6px; width:100%;">
-                            <span class="${dateClass}" style="font-size: ${ultra ? '0.72rem' : (tight ? '0.78rem' : '0.875rem')}; font-weight: ${fontWeight}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">${formattedDate}</span>
+                    return `<div class="jo-stack">
+                        <div class="jo-stack-row">
+                            <span class="${dateClass} jo-stack-date" style="--fw:${fontWeight}">${formattedDate}</span>
                             ${reviseBtnHtml}
                         </div>
                         ${previousHtml}
@@ -1079,236 +954,35 @@ function initializeTableComponent() {
                     if (!value && value !== 0) return '-';
                     const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
                     
-                    // Determine color based on percentage
-                    let colorClass = 'bg-success';
-                    let barColor = '#10b981'; // green
-                    if (percentage === 0) {
-                        colorClass = 'bg-secondary';
-                        barColor = '#6b7280'; // grey
-                    } else if (percentage < 25) {
-                        colorClass = 'bg-danger';
-                        barColor = '#ef4444'; // red
-                    } else if (percentage < 50) {
-                        colorClass = 'bg-warning';
-                        barColor = '#f59e0b'; // yellow/orange
-                    } else if (percentage < 75) {
-                        colorClass = 'bg-info';
-                        barColor = '#3b82f6'; // blue
-                    } else if (percentage < 100) {
-                        colorClass = 'bg-success';
-                        barColor = '#10b981'; // green
-                    } else {
-                        colorClass = 'bg-success';
-                        barColor = '#059669'; // darker green for 100%
-                    }
-                    
-                    // Text color always black for visibility
-                    const textColor = '#000000';
-                    
-                    return `
-                        <div style="position: relative; width: 100%; padding: 4px 0;">
-                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '20px' : '28px'}; border-radius: 6px; background-color: #e5e7eb; 
-                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden;">
-                                <div class="progress-bar ${colorClass}" 
-                                     role="progressbar" 
-                                     style="width: ${percentage}%; 
-                                            background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
-                                            border-radius: 6px;
-                                            transition: width 0.6s ease;
-                                            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-                                            position: relative;
-                                            overflow: hidden;" 
-                                     aria-valuenow="${percentage}" 
-                                     aria-valuemin="0" 
-                                     aria-valuemax="100">
-                                    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
-                                                animation: shimmer 3s infinite;
-                                                pointer-events: none;"></div>
-                                </div>
-                            </div>
-                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-                                        font-weight: 600; font-size: ${IS_COMPACT_13_INCH ? '0.72rem' : '0.8rem'}; color: ${textColor}; 
-                                        pointer-events: none; white-space: nowrap; z-index: 2;">
-                                ${percentage.toFixed(1)}%
-                            </div>
-                        </div>
-                    `;
+                    // The bar colour is one of six discrete tones, so emit a
+                    // class rather than inlining a gradient on every row. Only
+                    // the width is genuinely per-row and rides along as --pct.
+                    let toneClass;
+                    if (percentage === 0) toneClass = 'jo-progress-bar--zero';
+                    else if (percentage < 25) toneClass = 'jo-progress-bar--low';
+                    else if (percentage < 50) toneClass = 'jo-progress-bar--mid';
+                    else if (percentage < 75) toneClass = 'jo-progress-bar--high';
+                    else if (percentage < 100) toneClass = 'jo-progress-bar--near';
+                    else toneClass = 'jo-progress-bar--full';
+
+                    return `<div class="jo-progress-wrap">`
+                        + `<div class="progress jo-progress">`
+                        + `<div class="progress-bar jo-progress-bar ${toneClass}" role="progressbar" style="--pct:${percentage}%" aria-valuenow="${percentage}" aria-valuemin="0" aria-valuemax="100"></div>`
+                        + `</div>`
+                        + `<div class="jo-progress-label">${percentage.toFixed(1)}%</div>`
+                        + `</div>`;
                 }
             },
             {
-                field: 'daily_avg_progress',
-                label: IS_COMPACT_13_INCH ? 'Gnl. Ort.' : 'Günlük Ort.',
-                sortable: true,
-                width: IS_COMPACT_13_INCH ? '96px' : '170px',
-                formatter: (value, row) => {
-                    if (isDepartmentTaskRow(row)) return '-';
-                    if (value === null || value === undefined || value === '') return '-';
-
-                    const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
-                    const showEta = row?.status !== 'completed';
-                    const etaStr = showEta ? row?.estimated_completion_by_avg : null;
-                    const eta = etaStr ? new Date(etaStr) : null;
-                    const etaDisplay = eta && !Number.isNaN(eta.getTime())
-                        ? eta.toLocaleDateString('tr-TR', {
-                            year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
-                            month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
-                            day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
-                        })
-                        : null;
-                    const targetStr = row?.target_completion_date;
-                    const target = targetStr ? new Date(targetStr) : null;
-                    const isLateVsTarget = !!(showEta && eta && target && !Number.isNaN(eta.getTime()) && !Number.isNaN(target.getTime()) && eta > target);
-
-                    return `
-                        <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
-                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                <span style="font-weight:700; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.8rem'}; color:#111827; white-space:nowrap;">
-                                    ${percentage.toFixed(1)}%
-                                </span>
-                                ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ort.</span>'}
-                            </div>
-                            ${showEta ? `
-                                <div style="font-size:${IS_COMPACT_13_INCH ? '0.62rem' : '0.72rem'}; ${isLateVsTarget ? 'color:#7c2d12;' : 'color:#6b7280;'} max-width:100%; overflow:hidden; text-overflow:ellipsis; ${IS_COMPACT_13_INCH ? 'white-space:nowrap;' : 'white-space:normal; line-height:1.15;'}">
-                                    ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>' : ''}
-                                    ${IS_COMPACT_13_INCH ? '' : 'Tahmini bitiş: '}
-                                    <span style="font-weight:800; color:${isLateVsTarget ? '#7c2d12' : '#111827'};">
-                                        ${etaDisplay || '-'}
-                                    </span>
-                                    ${!IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:6px; font-weight:700;">(Hedefi aşıyor)</span>' : (IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:4px; font-weight:700;">Geç</span>' : '')}
-                                </div>
-                            ` : ''}
-                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
-                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
-                                <div class="progress-bar"
-                                     role="progressbar"
-                                     style="width:${percentage}%;
-                                            background: linear-gradient(90deg, #a78bfa 0%, #7c3aed 100%);
-                                            border-radius: 999px;
-                                            transition: width 0.6s ease;
-                                            position: relative;
-                                            overflow: hidden;"
-                                     aria-valuenow="${percentage}"
-                                     aria-valuemin="0"
-                                     aria-valuemax="100">
-                                    <div style="position:absolute; inset:0;
-                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
-                                                animation: shimmer 3s infinite;
-                                                pointer-events:none;"></div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            },
-            {
-                field: 'last_week_progress',
-                label: IS_COMPACT_13_INCH ? 'Son Hf.' : 'Son Hafta',
-                sortable: true,
-                width: IS_COMPACT_13_INCH ? '96px' : '170px',
-                formatter: (value, row) => {
-                    if (isDepartmentTaskRow(row)) return '-';
-                    if (row?.status === 'completed') return '-';
-                    if (value === null || value === undefined || value === '') return '-';
-
-                    // last_week_progress is the total gain over the rolling 7-day window;
-                    // show it as an average per day so it's comparable to "Günlük Ort."
-                    const percentage = Math.min(100, Math.max(0, (parseFloat(value) || 0) / 7));
-                    const etaStr = row?.estimated_completion_by_last_week;
-                    const eta = etaStr ? new Date(etaStr) : null;
-                    const etaDisplay = eta && !Number.isNaN(eta.getTime())
-                        ? eta.toLocaleDateString('tr-TR', {
-                            year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
-                            month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
-                            day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
-                        })
-                        : null;
-                    const targetStr = row?.target_completion_date;
-                    const target = targetStr ? new Date(targetStr) : null;
-                    const isLateVsTarget = !!(eta && target && !Number.isNaN(eta.getTime()) && !Number.isNaN(target.getTime()) && eta > target);
-
-                    // Compact progress bar (same visual language as "Tamamlanma", smaller footprint)
-                    return `
-                        <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
-                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                <span style="font-weight:700; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.8rem'}; color:#111827; white-space:nowrap;">
-                                    ${percentage.toFixed(1)}%
-                                </span>
-                                ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ort./gün</span>'}
-                            </div>
-                            <div style="font-size:${IS_COMPACT_13_INCH ? '0.62rem' : '0.72rem'}; ${isLateVsTarget ? 'color:#b91c1c;' : 'color:#6b7280;'} max-width:100%; overflow:hidden; text-overflow:ellipsis; ${IS_COMPACT_13_INCH ? 'white-space:nowrap;' : 'white-space:normal; line-height:1.15;'}">
-                                ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>' : ''}
-                                ${IS_COMPACT_13_INCH ? '' : 'Tahmini bitiş: '}
-                                <span style="font-weight:800; color:${isLateVsTarget ? '#b91c1c' : '#111827'};">
-                                    ${etaDisplay || '-'}
-                                </span>
-                                ${!IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:6px; font-weight:700;">(Hedefi aşıyor)</span>' : (IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:4px; font-weight:700;">Geç</span>' : '')}
-                            </div>
-                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
-                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
-                                <div class="progress-bar"
-                                     role="progressbar"
-                                     style="width:${percentage}%;
-                                            background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
-                                            border-radius: 999px;
-                                            transition: width 0.6s ease;
-                                            position: relative;
-                                            overflow: hidden;"
-                                     aria-valuenow="${percentage}"
-                                     aria-valuemin="0"
-                                     aria-valuemax="100">
-                                    <div style="position:absolute; inset:0;
-                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
-                                                animation: shimmer 3s infinite;
-                                                pointer-events:none;"></div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            },
-            {
-                field: 'ncr_count',
-                label: 'NCR',
+                field: '_projected_completion',
+                label: IS_COMPACT_13_INCH ? 'Öngörü' : 'Öngörülen Bitiş',
+                // The value lives in the forecast maps, not on the row, so the
+                // table's own sorter has nothing to sort by.
                 sortable: false,
-                width: IS_COMPACT_13_INCH ? '46px' : '90px',
-                formatter: (value, row) => {
-                    if (isDepartmentTaskRow(row)) return '-';
-                    const count = parseInt(value) || 0;
-                    if (count <= 0) return '-';
-                    const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
-                    const compactBadgeStyle = IS_COMPACT_13_INCH
-                        ? 'font-size:0.62rem; padding:0.1rem 0.28rem; min-width:20px; text-align:center;'
-                        : '';
-
-                    return `
-                        <a href="#" class="joborder-ncr-count-link text-decoration-none" data-job-no="${row.job_no}"
-                           title="Kalite Kontrol sekmesine git">
-                            <span class="status-badge ${badgeClass}" style="${compactBadgeStyle}">${count}</span>
-                        </a>
-                    `;
-                }
-            },
-            {
-                field: 'revision_count',
-                label: IS_COMPACT_13_INCH ? 'Rev.' : 'Revizyon',
-                sortable: false,
-                width: IS_COMPACT_13_INCH ? '50px' : '110px',
-                formatter: (value, row) => {
-                    if (isDepartmentTaskRow(row)) return '-';
-                    const count = parseInt(value) || 0;
-                    if (count <= 0) return '-';
-                    const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
-                    const compactBadgeStyle = IS_COMPACT_13_INCH
-                        ? 'font-size:0.62rem; padding:0.1rem 0.28rem; min-width:20px; text-align:center;'
-                        : '';
-                    return `
-                        <a href="#" class="joborder-revision-count-link text-decoration-none" data-job-no="${row.job_no}"
-                           title="Teknik Çizimler sekmesine git">
-                            <span class="status-badge ${badgeClass}" style="${compactBadgeStyle}">${count}</span>
-                        </a>
-                    `;
-                }
+                width: IS_COMPACT_13_INCH ? '110px' : '190px',
+                formatter: (value, row) => (isDepartmentTaskRow(row)
+                    ? departmentTaskProjectionHtml(row)
+                    : jobOrderProjectionHtml(row))
             },
             {
                 field: 'created_at',
@@ -1325,7 +999,7 @@ function initializeTableComponent() {
                         month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
                         day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
                     });
-                    return `<span class="text-dark" style="font-size: 0.875rem; font-weight: 500;">${formattedDate}</span>`;
+                    return `<span class="text-dark jo-date">${formattedDate}</span>`;
                 }
             }
         ],
@@ -1817,9 +1491,6 @@ function initializeModalComponents() {
             currentRelease: null,
             drawingReleasesJobNo: null,
             ncrs: null,
-            costSummary: null,
-            progressHistory: null,
-            productionPlan: null
         };
         
         // Remove deep-link parameters from URL
@@ -2138,9 +1809,157 @@ function updateTableDataOnly() {
 // Setup event listeners for expand/collapse buttons using event delegation
 // Use a persistent container that doesn't get recreated
 let expandButtonHandler = null;
-let ncrCountClickHandler = null;
-let revisionCountClickHandler = null;
 let targetDateReviseRowClickHandler = null;
+let departmentLinkClickHandler = null;
+
+// ---------------------------------------------------------------------------
+// Öngörülen Bitiş — the forecast Sunum Modu shows, in the table
+// ---------------------------------------------------------------------------
+// Nothing here is computed on the client. Root job orders read the production
+// plan OVERVIEW (one batched call for the whole portfolio, fetched in the
+// background after first paint because it takes several seconds); child job
+// orders and department tasks read that job order's production plan, fetched
+// lazily the first time somebody expands the row and shared with Plan Detayı.
+// This replaced two rate-extrapolation columns ("Günlük Ort." / "Son Hafta")
+// whose ETAs ignored dependencies, entered durations and delivery gates.
+const rootForecasts = new Map();        // job_no -> forecast (overview item)
+let rootForecastState = 'idle';         // idle | loading | ready | failed
+const planTaskSchedules = new Map();    // department task id -> task.schedule
+const planNodeProjections = new Map();  // job_no -> {projected, target}
+const planProjectionFetches = new Map();// job_no -> in-flight stamping promise
+
+async function loadRootForecasts() {
+    if (rootForecastState === 'loading' || rootForecastState === 'ready') return;
+    rootForecastState = 'loading';
+    try {
+        // "all", not the table's status filter: the column must hold a value
+        // for whatever the user filters to, and the batch costs the same.
+        const overview = await getProductionPlanOverview('all');
+        (overview.items || []).forEach(item => rootForecasts.set(item.job_no, item.forecast));
+        rootForecastState = 'ready';
+    } catch (error) {
+        console.error('Öngörülen bitiş verisi yüklenemedi:', error);
+        rootForecastState = 'failed';
+    }
+    if (jobOrdersTable) updateTableDataOnly();
+}
+
+// `nodes` is DFS-ordered with a depth field, so a sub-job's projection is the
+// latest date in its own contiguous subtree run — its own tasks alone would
+// under-report a parent whose late work sits in a child job order.
+function ensurePlanProjections(jobNo) {
+    if (planProjectionFetches.has(jobNo)) return planProjectionFetches.get(jobNo);
+    const promise = getCachedProductionPlan(jobNo)
+        .then((plan) => {
+            (plan.tasks || []).forEach(task => planTaskSchedules.set(task.id, task.schedule));
+            const nodes = plan.nodes || [];
+            nodes.forEach((node, i) => {
+                let latest = (node.summary || {}).projected_completion || null;
+                for (let j = i + 1; j < nodes.length && nodes[j].depth > node.depth; j++) {
+                    const date = (nodes[j].summary || {}).projected_completion;
+                    if (date && (!latest || date > latest)) latest = date;
+                }
+                planNodeProjections.set(node.job_no, {
+                    projected: latest,
+                    target: node.target_completion_date
+                });
+            });
+            return plan;
+        })
+        .catch((error) => {
+            console.error(`Öngörü verisi alınamadı (${jobNo}):`, error);
+            return null;
+        })
+        .finally(() => planProjectionFetches.delete(jobNo));
+    planProjectionFetches.set(jobNo, promise);
+    return promise;
+}
+
+function formatProjectionDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString('tr-TR', {
+        year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
+        month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
+        day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
+    });
+}
+
+function projectionCellShell(dateHtml, badgeHtml) {
+    return `
+        <div style="display:flex; flex-direction:column; gap:3px; align-items:center; text-align:center; width:100%;">
+            <span style="font-weight:800; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.82rem'}; color:#111827; white-space:nowrap;">${dateHtml}</span>
+            ${badgeHtml}
+        </div>`;
+}
+
+const PROJECTION_PENDING_HTML =
+    '<span class="text-muted" title="Öngörü verisi yükleniyor">…</span>';
+
+// Department task rows carry the engine's own per-task numbers (kind, gates and
+// pushes all folded into projected_end_date) — the same values Plan Detayı
+// narrates in its "Neden bu tarih?" column.
+function departmentTaskProjectionHtml(row) {
+    const schedule = planTaskSchedules.get(row.id);
+    if (!schedule) {
+        return planProjectionFetches.size ? PROJECTION_PENDING_HTML : '-';
+    }
+    const completed = row.status === 'completed';
+    const end = schedule.projected_end_date || schedule.actual_end_date;
+    const dateText = formatProjectionDate(end);
+    if (!dateText) return '-';
+    const variance = schedule.projected_variance_wd ?? schedule.end_variance_wd ?? schedule.overdue_wd;
+    const badge = completed && schedule.classification === 'unplanned'
+        ? { label: 'Bitti', badgeClass: 'status-green' }
+        : (CLASSIFICATION_BADGES[schedule.classification] || CLASSIFICATION_BADGES.not_started);
+    let varianceHtml = '';
+    if (variance !== null && variance !== undefined && variance !== 0) {
+        const late = variance > 0;
+        varianceHtml = `<span style="font-size:0.7rem; font-weight:700; color:${late ? '#b91c1c' : '#047857'}; white-space:nowrap;">${late ? '+' : ''}${formatWorkDays(variance)} iş günü${late ? ' geç' : ' erken'}</span>`;
+    }
+    const prefix = completed || schedule.actual_end_date ? '' : '~';
+    return projectionCellShell(
+        `${prefix}${dateText}`,
+        `<span style="display:flex; align-items:center; justify-content:center; gap:4px; flex-wrap:wrap;">
+            <span class="status-badge ${badge.badgeClass}">${badge.label}</span>${varianceHtml}
+         </span>`);
+}
+
+// Root job orders get the full verdict; sub-jobs only have dates to compare, so
+// they say "Hedefi aşıyor" rather than inventing a working-day count.
+function jobOrderProjectionHtml(row) {
+    const forecast = rootForecasts.get(row.job_no);
+    if (forecast) {
+        const dateText = formatProjectionDate(forecast.projected_completion_date);
+        const badge = verdictBadge(forecast);
+        if (!dateText) {
+            return projectionCellShell('-', `<span class="status-badge ${badge.badgeClass}">${badge.label}</span>`);
+        }
+        const phased = !!(forecast.phases && forecast.phases.length);
+        const phaseNote = phased && forecast.worst_phase !== null && forecast.worst_phase !== undefined
+            ? `<span style="font-size:0.68rem; color:#6b7280; white-space:nowrap;">Faz ${forecast.worst_phase}</span>` : '';
+        return projectionCellShell(dateText,
+            `<span style="display:flex; align-items:center; justify-content:center; gap:4px; flex-wrap:wrap;">
+                <span class="status-badge ${badge.badgeClass}">${badge.label}</span>${phaseNote}
+             </span>`);
+    }
+
+    const node = planNodeProjections.get(row.job_no);
+    if (node && node.projected) {
+        const dateText = formatProjectionDate(node.projected);
+        const late = !!(node.target && node.projected > node.target);
+        return projectionCellShell(dateText || '-', late
+            ? '<span class="status-badge status-red">Hedefi aşıyor</span>'
+            : (node.target ? '<span class="status-badge status-green">Hedef içinde</span>' : ''));
+    }
+
+    if (rootForecastState === 'loading' || planProjectionFetches.size) return PROJECTION_PENDING_HTML;
+    if (rootForecastState === 'failed') {
+        return '<span class="text-muted" title="Öngörü verisi yüklenemedi">-</span>';
+    }
+    return '-';
+}
 
 function setupExpandButtonListeners() {
     if (!jobOrdersTable || !jobOrdersTable.container) {
@@ -2177,6 +1996,8 @@ function setupExpandButtonListeners() {
                 try {
                     const icon = deptSubtasksButton.querySelector('i');
                     if (icon) icon.className = 'fas fa-spinner fa-spin text-primary';
+                    // Subtasks come from the same plan as their parent task —
+                    // already stamped when the department tasks were expanded.
                     await fetchDepartmentTaskSubtasks(taskId);
                     addDepartmentTaskExpanded(taskId);
                     preserveScrollDuringUpdate(deptSubtasksButton, () => updateTableDataOnly());
@@ -2211,7 +2032,12 @@ function setupExpandButtonListeners() {
                 try {
                     const icon = deptTasksButton.querySelector('i');
                     if (icon) icon.className = 'fas fa-spinner fa-spin';
-                    await fetchDepartmentTasksForJobOrder(jobNo);
+                    // The plan carries the per-task Öngörülen Bitiş values for
+                    // the rows that are about to appear.
+                    await Promise.all([
+                        fetchDepartmentTasksForJobOrder(jobNo),
+                        ensurePlanProjections(jobNo)
+                    ]);
                     expandedDepartmentTasksRows.add(jobNo);
                     preserveScrollDuringUpdate(deptTasksButton, () => updateTableDataOnly());
                 } catch (error) {
@@ -2234,7 +2060,11 @@ function setupExpandButtonListeners() {
                 const icon = expandButton.querySelector('i');
                 if (icon) icon.className = 'fas fa-spinner fa-spin text-primary';
 
-                await fetchJobOrderChildren(jobNo);
+                // Sub-job rows read their projection from the same plan.
+                await Promise.all([
+                    fetchJobOrderChildren(jobNo),
+                    ensurePlanProjections(jobNo)
+                ]);
 
                 expandedRows.add(jobNo);
                 preserveScrollDuringUpdate(expandButton, () => updateTableDataOnly());
@@ -2250,71 +2080,6 @@ function setupExpandButtonListeners() {
     // Attach the event listener to the container (which persists across renders)
     jobOrdersTable.container.addEventListener('click', expandButtonHandler);
 
-    // NCR count badge click -> open details modal on Kalite Kontrol tab
-    if (ncrCountClickHandler) {
-        jobOrdersTable.container.removeEventListener('click', ncrCountClickHandler);
-    }
-    ncrCountClickHandler = async (e) => {
-        const link = e.target.closest?.('.joborder-ncr-count-link');
-        if (!link) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const jobNo = link.getAttribute('data-job-no');
-        if (!jobNo) return;
-
-        await viewJobOrder(jobNo);
-
-        // Switch to Kalite Kontrol tab and trigger its request
-        setTimeout(async () => {
-            const modal = viewJobOrderModal?.modal;
-            if (!modal) return;
-
-            const tabBtn = modal.querySelector('[data-bs-target="#tab-kalite-kontrol-pane"]');
-            if (tabBtn) tabBtn.click();
-
-            // Ensure data is fetched for this tab (even if already active)
-            try {
-                await loadNCRsTab(jobNo);
-            } catch (err) {
-                console.error('Error loading NCRs tab:', err);
-            }
-        }, 0);
-    };
-    jobOrdersTable.container.addEventListener('click', ncrCountClickHandler);
-
-    // Revision count badge click -> open details modal on Teknik Çizimler tab
-    if (revisionCountClickHandler) {
-        jobOrdersTable.container.removeEventListener('click', revisionCountClickHandler);
-    }
-    revisionCountClickHandler = async (e) => {
-        const link = e.target.closest?.('.joborder-revision-count-link');
-        if (!link) return;
-        e.preventDefault();
-        e.stopPropagation();
-
-        const jobNo = link.getAttribute('data-job-no');
-        if (!jobNo) return;
-
-        await viewJobOrder(jobNo);
-
-        // Switch to Teknik Çizimler tab and trigger its request
-        setTimeout(async () => {
-            const modal = viewJobOrderModal?.modal;
-            if (!modal) return;
-
-            const tabBtn = modal.querySelector('[data-bs-target="#tab-teknik-cizimler-pane"]');
-            if (tabBtn) tabBtn.click();
-
-            // Ensure data is fetched for this tab (even if already active)
-            try {
-                await loadDrawingReleasesTab(jobNo);
-            } catch (err) {
-                console.error('Error loading drawing releases tab:', err);
-            }
-        }, 0);
-    };
-    jobOrdersTable.container.addEventListener('click', revisionCountClickHandler);
 
     // Target completion date revise button (inline in table cell)
     if (targetDateReviseRowClickHandler) {
@@ -2334,15 +2099,22 @@ function setupExpandButtonListeners() {
     };
     jobOrdersTable.container.addEventListener('click', targetDateReviseRowClickHandler);
 
-    // Department task links in inline child rows
-    jobOrdersTable.container.addEventListener('click', (e) => {
+    // Department task links in inline child rows.
+    // Named + removed first, like the handlers above: the table container is no
+    // longer replaced on each render, so an anonymous listener here would be
+    // re-added on every render and never dropped.
+    if (departmentLinkClickHandler) {
+        jobOrdersTable.container.removeEventListener('click', departmentLinkClickHandler);
+    }
+    departmentLinkClickHandler = (e) => {
         const departmentLink = e.target.closest('.department-link');
         if (!departmentLink || !jobOrdersTable.container.contains(departmentLink)) return;
         e.preventDefault();
         e.stopPropagation();
         const url = departmentLink.getAttribute('data-href');
         if (url) window.location.href = url;
-    });
+    };
+    jobOrdersTable.container.addEventListener('click', departmentLinkClickHandler);
 }
 
 // Fetch department tasks for a specific job order (main tasks only; subtasks expand separately)
@@ -2670,10 +2442,7 @@ let jobOrderTabCache = {
     currentRelease: null,
     drawingReleasesJobNo: null,
     ncrs: null,
-    costSummary: null,
-    progressHistory: null,
     phases: null,
-    productionPlan: null
 };
 
 window.viewJobOrder = async function(jobNo) {
@@ -2690,10 +2459,7 @@ window.viewJobOrder = async function(jobNo) {
             currentRelease: null,
             drawingReleasesJobNo: null,
             ncrs: null,
-            costSummary: null,
-            progressHistory: null,
             phases: null,
-            productionPlan: null
         };
         
         // Fetch only basic job order data
@@ -2944,31 +2710,6 @@ window.viewJobOrder = async function(jobNo) {
                     </div>
                 </div>
                 
-                ${jobOrder.total_cost ? `
-                <!-- Maliyet Bilgileri Section -->
-                <div class="mb-4">
-                    <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
-                        <i class="fas fa-money-bill-wave me-2"></i>
-                        Maliyet Bilgileri
-                    </h6>
-                    <div class="field-list">
-                        <div class="field-row d-flex align-items-center py-2 border-bottom">
-                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
-                                <i class="fas fa-money-bill-wave me-1"></i>Toplam Maliyet
-                            </div>
-                            <div class="field-value flex-grow-1">${formatCurrency(jobOrder.total_cost, jobOrder.cost_currency)}</div>
-                        </div>
-                        ${jobOrder.general_expenses_rate ? `
-                        <div class="field-row d-flex align-items-center py-2 border-bottom">
-                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
-                                <i class="fas fa-percent me-1"></i>Genel Gider Oranı
-                            </div>
-                            <div class="field-value flex-grow-1">${(parseFloat(jobOrder.general_expenses_rate) * 100).toFixed(2)}%</div>
-                        </div>
-                        ` : ''}
-                    </div>
-                </div>
-                ` : ''}
                 
                 <!-- Sistem Bilgileri Section -->
                 <div class="mb-4">
@@ -3009,127 +2750,88 @@ window.viewJobOrder = async function(jobNo) {
         `;
         
         // Add tabs to modal
+        // Six tabs, grouped by the question they answer: what is this job,
+        // where do its tasks stand, design, quality, paperwork, money. Each
+        // section below keeps its original container id and loader — only the
+        // grouping changed. (Was thirteen tabs wrapping onto two rows.)
+        const section = (title, icon, body) => `
+            <div class="jo-section">
+                <h6 class="jo-section-title"><i class="fas fa-${icon} me-2"></i>${title}</h6>
+                ${body}
+            </div>`;
+
+        const genelSections = [temelBilgilerHtml];
+        if (jobOrder.children_count && jobOrder.children_count > 0) {
+            genelSections.push(section('Alt İş Emirleri', 'sitemap',
+                '<div id="children-table-container"></div>'));
+        }
+        if (!jobOrder.is_phase_job) {
+            genelSections.push(section('Üretim Fazları', 'layer-group',
+                '<div id="phases-container"></div>'));
+        }
+        genelSections.push(section('Hedef Tarih Revizyonları', 'history',
+            buildTargetDateRevisionsHtml(jobOrder.target_date_revisions)));
+
         viewJobOrderModal.addTab({
-            id: 'temel-bilgiler',
-            label: 'Temel Bilgiler',
+            id: 'genel',
+            label: 'Genel',
             icon: 'fas fa-info-circle',
             iconColor: 'text-primary',
-            customContent: temelBilgilerHtml,
+            customContent: genelSections.join(''),
             active: true
         });
 
+        // Just the department task table. The schedule summary that used to
+        // sit on top of it was dropped (user, 2026-08-19) — the table's own
+        // Öngörülen Bitiş column and Sunum Modu's Plan Detayı already answer
+        // "when does this finish", in more detail and without the duplication.
         viewJobOrderModal.addTab({
-            id: 'hedef-tarih-revizyonlari',
-            label: 'Hedef Tarih Revizyonları',
-            icon: 'fas fa-history',
-            iconColor: 'text-primary',
-            customContent: buildTargetDateRevisionsHtml(jobOrder.target_date_revisions)
-        });
-        
-        // Add Departman Görevleri tab
-        viewJobOrderModal.addTab({
-            id: 'departman-gorevleri',
-            label: 'Departman Görevleri',
+            id: 'gorevler',
+            label: 'Görevler',
             icon: 'fas fa-tasks',
             iconColor: 'text-primary',
-            customContent: '<div id="department-tasks-table-container"></div>'
+            customContent: '<div id="department-tasks-table-container" style="padding: 20px;"></div>'
         });
 
-        // Add Üretim Planı tab (full-subtree schedule summary)
         viewJobOrderModal.addTab({
-            id: 'uretim-plani',
-            label: 'Üretim Planı',
-            icon: 'fas fa-calendar-check',
-            iconColor: 'text-primary',
-            customContent: '<div id="production-plan-summary-container" style="padding: 20px;"></div>'
-        });
-        
-        // Add Alt Görevler tab (only if count > 0)
-        if (jobOrder.children_count && jobOrder.children_count > 0) {
-            viewJobOrderModal.addTab({
-                id: 'alt-gorevler',
-                label: 'Alt Görevler',
-                icon: 'fas fa-sitemap',
-                iconColor: 'text-primary',
-                customContent: '<div id="children-table-container"></div>'
-            });
-        }
-
-        // Add Fazlar (production phases) tab for engineering jobs (not for phase mirrors themselves)
-        if (!jobOrder.is_phase_job) {
-            viewJobOrderModal.addTab({
-                id: 'fazlar',
-                label: 'Fazlar',
-                icon: 'fas fa-layer-group',
-                iconColor: 'text-primary',
-                customContent: '<div id="phases-container" style="padding: 20px;"></div>'
-            });
-        }
-        
-        // Add Files tab
-        viewJobOrderModal.addTab({
-            id: 'dosyalar',
-            label: 'Dosyalar',
-            icon: 'fas fa-paperclip',
-            iconColor: 'text-primary',
-            customContent: '<div id="files-container"></div>'
-        });
-        
-        // Add Topics tab
-        viewJobOrderModal.addTab({
-            id: 'topics',
-            label: 'Tartışmalar',
-            icon: 'fas fa-comments',
-            iconColor: 'text-primary',
-            customContent: '<div id="topics-container" style="padding: 20px;"></div>'
-        });
-        
-        // Add Teknik Çizimler tab (for all job orders including child job orders)
-        viewJobOrderModal.addTab({
-            id: 'teknik-cizimler',
-            label: 'Teknik Çizimler',
+            id: 'dizayn',
+            label: 'Dizayn',
             icon: 'fas fa-drafting-compass',
             iconColor: 'text-primary',
             customContent: '<div id="drawing-releases-container" style="padding: 20px;"></div>'
         });
-        
-        // Add Taşeronluk tab (only for planning and management)
-        if (canViewSubcontracting()) {
-            viewJobOrderModal.addTab({
-                id: 'taseronluk',
-                label: 'Taşeron',
-                icon: 'fas fa-handshake',
-                iconColor: 'text-primary',
-                customContent: '<div id="price-tiers-container" style="padding: 20px;"></div>'
-            });
-        }
-        
-        // Add Kalite Kontrol tab (show NCRs for this job order)
+
         viewJobOrderModal.addTab({
-            id: 'kalite-kontrol',
-            label: 'Kalite Kontrol',
+            id: 'kalite',
+            label: 'Kalite',
             icon: 'fas fa-clipboard-check',
             iconColor: 'text-primary',
             customContent: '<div id="ncrs-container" style="padding: 20px;"></div>'
         });
 
-        // Add İlerleme Günlüğü tab (weekly progress history)
         viewJobOrderModal.addTab({
-            id: 'ilerleme-gunlugu',
-            label: 'İlerleme Günlüğü',
-            icon: 'fas fa-chart-line',
+            id: 'dosyalar-tartismalar',
+            label: 'Dosyalar & Tartışmalar',
+            icon: 'fas fa-paperclip',
             iconColor: 'text-primary',
-            customContent: '<div id="progress-history-container" style="padding: 20px;"></div>'
+            customContent: `
+                <div class="jo-split">
+                    ${section('Dosyalar', 'paperclip', '<div id="files-container"></div>')}
+                    ${section('Tartışmalar', 'comments', '<div id="topics-container"></div>')}
+                </div>`
         });
-        
-        // Add Maliyet (Cost) tab — requires view_job_costs (matches backend IsCostAuthorized)
-        if (canViewJobCosts()) {
+
+        // Cost is deliberately NOT shown in this modal (user, 2026-08-19) —
+        // job costing has its own reporting and Sunum Modu's Finans medallion
+        // carries the verdict. Taşeron is pricing configuration, not costing,
+        // so it keeps its tab.
+        if (canViewSubcontracting()) {
             viewJobOrderModal.addTab({
-                id: 'maliyet',
-                label: 'Maliyet',
-                icon: 'fas fa-calculator',
+                id: 'taseron',
+                label: 'Taşeron',
+                icon: 'fas fa-handshake',
                 iconColor: 'text-primary',
-                customContent: '<div id="cost-summary-container" style="padding: 20px;"></div>'
+                customContent: '<div id="price-tiers-container" style="padding: 20px;"></div>'
             });
         }
         
@@ -3168,6 +2870,14 @@ window.viewJobOrder = async function(jobNo) {
         // Set up tab click handlers for lazy loading
         setTimeout(() => {
             setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCurrency);
+            // Genel opens active, so it never fires shown.bs.tab for itself.
+            const content = viewJobOrderModal.content;
+            if (content?.querySelector('#children-table-container')) {
+                loadChildrenTab(jobNo, getStatusBadgeClass);
+            }
+            if (content?.querySelector('#phases-container')) {
+                loadPhasesTab(jobNo, getStatusBadgeClass);
+            }
         }, 100);
         
         // Data will be loaded on tab click (lazy loading)
@@ -3207,204 +2917,36 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCur
             
             const tabName = match[1];
             
+            // A tab can hold several sections, so each one loads everything
+            // it shows. The individual loaders are unchanged and still cache
+            // their own payload, so re-entering a tab costs nothing.
             switch (tabName) {
-                case 'departman-gorevleri':
+                case 'genel':
+                    await Promise.all([
+                        modal.querySelector('#children-table-container')
+                            ? loadChildrenTab(jobNo, getStatusBadgeClass) : null,
+                        modal.querySelector('#phases-container')
+                            ? loadPhasesTab(jobNo, getStatusBadgeClass) : null
+                    ].filter(Boolean));
+                    break;
+                case 'gorevler':
                     await loadDepartmentTasksTab(jobNo, getStatusBadgeClass, formatDate);
                     break;
-                case 'uretim-plani':
-                    await loadProductionPlanTab(jobNo);
-                    break;
-                case 'alt-gorevler':
-                    await loadChildrenTab(jobNo, getStatusBadgeClass);
-                    break;
-                case 'fazlar':
-                    await loadPhasesTab(jobNo, getStatusBadgeClass);
-                    break;
-                case 'dosyalar':
-                    await loadFilesTab(jobNo);
-                    break;
-                case 'topics':
-                    await loadTopicsTab(jobNo);
-                    break;
-                case 'teknik-cizimler':
+                case 'dizayn':
                     await loadDrawingReleasesTab(jobNo);
                     break;
-                case 'taseronluk':
-                    await loadPriceTiersTab(jobNo);
-                    break;
-                case 'kalite-kontrol':
+                case 'kalite':
                     await loadNCRsTab(jobNo);
                     break;
-                case 'ilerleme-gunlugu':
-                    if (typeof window.loadProgressHistoryTab === 'function') {
-                        await window.loadProgressHistoryTab(jobNo);
-                    } else {
-                        console.error('loadProgressHistoryTab is not available on window');
-                    }
+                case 'dosyalar-tartismalar':
+                    await Promise.all([loadFilesTab(jobNo), loadTopicsTab(jobNo)]);
                     break;
-                case 'maliyet':
-                    await loadCostSummaryTab(jobNo, formatCurrency);
+                case 'taseron':
+                    await loadPriceTiersTab(jobNo);
                     break;
             }
         });
     });
-}
-
-// Load Üretim Planı Tab (full-subtree schedule summary)
-async function loadProductionPlanTab(jobNo) {
-    // Check cache first
-    if (jobOrderTabCache.productionPlan !== null) {
-        renderProductionPlanSummary(jobOrderTabCache.productionPlan, jobNo);
-        return;
-    }
-
-    const container = viewJobOrderModal.content.querySelector('#production-plan-summary-container');
-    if (!container) return;
-
-    // Show loading state
-    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
-
-    try {
-        const plan = await getJobOrderProductionPlan(jobNo);
-
-        // Cache the data
-        jobOrderTabCache.productionPlan = plan;
-
-        renderProductionPlanSummary(plan, jobNo);
-    } catch (error) {
-        console.error('Error loading production plan:', error);
-        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Üretim planı yüklenirken hata oluştu.</div>';
-    }
-}
-
-// Render Üretim Planı summary (chips + problem tasks + link to full page)
-function renderProductionPlanSummary(plan, jobNo) {
-    const container = viewJobOrderModal.content.querySelector('#production-plan-summary-container');
-    if (!container) return;
-
-    const esc = (text) => {
-        const div = document.createElement('div');
-        div.textContent = text ?? '';
-        return div.innerHTML;
-    };
-    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('tr-TR') : '-';
-    const fmtWd = (v) => {
-        const abs = Math.abs(v);
-        return (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1)).replace('.', ',');
-    };
-
-    const s = plan.summary;
-    const chips = [
-        { label: 'Toplam', value: s.total, cls: 'status-blue' },
-        { label: 'Zamanında', value: s.completed_on_time, cls: 'status-green' },
-        { label: 'Geç Bitti', value: s.completed_late, cls: 'status-red' },
-        { label: 'Gecikmede', value: s.overdue, cls: 'status-red' },
-        { label: 'Riskte', value: s.at_risk ?? 0, cls: 'status-purple' },
-        { label: 'Plansız', value: s.unplanned, cls: 'status-orange' }
-    ].map(c => `<span class="status-badge ${c.cls} me-2 mb-2">${c.label}: ${c.value}</span>`).join('');
-
-    // Problem tasks: completed late, currently overdue, or projected to be
-    // late (at risk) — worst first.
-    const severity = (t) => (t.schedule.end_variance_wd ?? t.schedule.overdue_wd
-                             ?? t.schedule.projected_variance_wd) || 0;
-    const problemTasks = plan.tasks
-        .filter(t => ['completed_late', 'overdue', 'at_risk'].includes(t.schedule.classification))
-        .sort((a, b) => severity(b) - severity(a))
-        .slice(0, 10);
-
-    let problemsHtml;
-    if (problemTasks.length === 0) {
-        problemsHtml = `
-            <div class="text-center text-success py-3">
-                <i class="fas fa-check-circle fa-2x mb-2"></i>
-                <p class="mb-0">Geciken veya riskli görev yok.</p>
-            </div>`;
-    } else {
-        const rows = problemTasks.map(t => {
-            const cls = t.schedule.classification;
-            const isRisk = cls === 'at_risk';
-            const variance = isRisk
-                ? t.schedule.projected_variance_wd
-                : (t.schedule.end_variance_wd ?? t.schedule.overdue_wd);
-            const stateBadge = isRisk
-                ? '<span class="status-badge status-purple">Riskte</span>'
-                : (cls === 'overdue'
-                    ? '<span class="status-badge status-red">Gecikmede</span>'
-                    : '<span class="status-badge status-red">Geç Bitti</span>');
-            const endCell = isRisk
-                ? `<span class="text-muted">öngörü: ${fmtDate(t.schedule.projected_end_date)}</span>`
-                : fmtDate(t.schedule.actual_end_date);
-            const varianceCell = isRisk
-                ? `<span class="fw-bold text-nowrap" style="color: #5b21b6;">+${fmtWd(variance || 0)} iş günü</span>`
-                : `<span class="text-danger fw-bold text-nowrap">+${fmtWd(variance || 0)} iş günü</span>`;
-            return `
-                <tr>
-                    <td class="text-nowrap"><small>${esc(t.job_no)}</small></td>
-                    <td>${esc(t.department_display)}</td>
-                    <td>${esc(t.title)}</td>
-                    <td class="text-nowrap">${fmtDate(t.target_completion_date)}</td>
-                    <td class="text-nowrap">${endCell}</td>
-                    <td>${varianceCell}</td>
-                    <td>${stateBadge}</td>
-                </tr>`;
-        }).join('');
-        const problemCount = plan.tasks.filter(
-            t => ['completed_late', 'overdue', 'at_risk'].includes(t.schedule.classification)).length;
-        problemsHtml = `
-            <div class="table-responsive">
-                <table class="table table-sm table-hover align-middle">
-                    <thead>
-                        <tr>
-                            <th>İş Emri</th><th>Departman</th><th>Görev</th>
-                            <th>Hedef Bitiş</th><th>Gerçek / Öngörülen Bitiş</th><th>Sapma</th><th></th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>
-            ${problemCount > 10
-                ? '<p class="text-muted small mb-0">İlk 10 görev gösteriliyor — tamamı için tüm planı açın.</p>' : ''}`;
-    }
-
-    // Job-level finish verdict (Hedef vs Öngörülen Bitiş)
-    const forecast = plan.job_order?.forecast;
-    let verdictHtml = '';
-    if (forecast) {
-        const badge = (() => {
-            switch (forecast.verdict) {
-                case 'on_track': return '<span class="status-badge status-green">Zamanında Bitecek</span>';
-                case 'late_risk': return `<span class="status-badge status-red">Gecikecek · +${fmtWd(forecast.variance_wd || 0)} İş Günü</span>`;
-                case 'finished_on_time': return '<span class="status-badge status-green">Tamamlandı · Zamanında</span>';
-                case 'finished_late': return `<span class="status-badge status-red">Tamamlandı · +${fmtWd(forecast.variance_wd || 0)} İş Günü Geç</span>`;
-                case 'no_target': return '<span class="status-badge status-orange">Hedef Tarih Girilmemiş</span>';
-                default: return '<span class="status-badge status-grey">Öngörü Yok</span>';
-            }
-        })();
-        verdictHtml = `
-            <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
-                <span>Hedef Bitiş: <strong>${fmtDate(forecast.target_completion_date)}</strong></span>
-                <span>Öngörülen Bitiş: <strong>${fmtDate(forecast.projected_completion_date)}</strong></span>
-                ${badge}
-                ${forecast.unplanned_open_tasks > 0
-                    ? `<span class="text-muted small">${forecast.unplanned_open_tasks} açık görev plansız — öngörü eksik olabilir</span>`
-                    : ''}
-            </div>`;
-    }
-
-    container.innerHTML = `
-        <div class="d-flex align-items-center justify-content-between flex-wrap mb-2">
-            <div>${chips}</div>
-            <a class="btn btn-outline-primary btn-sm mb-2"
-               href="/projects/production-planning/?job_no=${encodeURIComponent(jobNo)}" target="_blank">
-                <i class="fas fa-external-link-alt me-1"></i>Tüm planı görüntüle
-            </a>
-        </div>
-        ${verdictHtml}
-        <p class="text-muted small mb-3">
-            ${s.node_count} iş emri (alt işler dahil) · ${s.total} görev · Sapmalar iş günü cinsindendir.
-        </p>
-        <h6 class="mb-2"><i class="fas fa-exclamation-triangle text-danger me-1"></i>Geciken ve Riskli Görevler</h6>
-        ${problemsHtml}`;
 }
 
 // Load Department Tasks Tab
@@ -3763,7 +3305,14 @@ async function loadChildrenTab(jobNo, getStatusBadgeClass, getPriorityBadgeClass
     container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
     
     try {
-        const children = await getJobOrderChildren(jobNo);
+        // The job-order detail payload already carries `children`, and the
+        // modal has it cached — there is no /job-orders/<no>/children/ route
+        // (it 404s), which is why this tab only ever showed an error.
+        let children = jobOrderTabCache.jobOrder?.children;
+        if (!Array.isArray(children)) {
+            const fresh = await getJobOrderByJobNo(jobNo);
+            children = Array.isArray(fresh?.children) ? fresh.children : [];
+        }
         
         // Cache the data
         jobOrderTabCache.children = children;
@@ -5133,63 +4682,6 @@ async function loadNCRsTab(jobNo) {
 }
 
 // Load Cost Summary Tab
-async function loadCostSummaryTab(jobNo, formatCurrency) {
-    if (jobOrderTabCache.costSummary !== null) {
-        renderCostSummaryTab(jobOrderTabCache.costSummary, jobNo, formatCurrency);
-        return;
-    }
-    const container = viewJobOrderModal.content.querySelector('#cost-summary-container');
-    if (!container) return;
-    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
-    try {
-        const data = await getJobCostSummary(jobNo);
-        jobOrderTabCache.costSummary = data;
-        renderCostSummaryTab(data, jobNo, formatCurrency);
-    } catch (error) {
-        console.error('Error loading cost summary:', error);
-        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Maliyet özeti yüklenirken hata oluştu.</div>';
-    }
-}
-
-// Load Progress History Tab
-async function loadProgressHistoryTab(jobNo) {
-    if (jobOrderTabCache.progressHistory !== null) {
-        renderProgressHistoryTab(jobOrderTabCache.progressHistory, jobNo);
-        return;
-    }
-
-    const container = viewJobOrderModal.content.querySelector('#progress-history-container');
-    if (!container) return;
-
-    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
-
-    try {
-        const data = await getJobOrderProgressHistory(jobNo);
-        jobOrderTabCache.progressHistory = data;
-        renderProgressHistoryTab(data, jobNo);
-    } catch (error) {
-        console.error('Error loading progress history:', error);
-        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>İlerleme günlüğü yüklenirken hata oluştu.</div>';
-    }
-}
-
-// Expose for Bootstrap tab handler (avoid scope issues)
-window.loadProgressHistoryTab = loadProgressHistoryTab;
-
-// Render Cost Summary Tab
-const COST_COMPONENT_ORDER = [
-    'subcontractor_cost',
-    'labor_cost',
-    'material_cost',
-    'paint_cost',
-    'paint_material_cost',
-    'employee_overhead_cost',
-    'qc_cost',
-    'shipping_cost',
-    'machine_rental_cost',
-    'general_expenses_cost',
-    'other_cost',
-];
 
 const COST_COMPONENT_LABELS = {
     subcontractor_cost: 'Taşeron',
@@ -5239,587 +4731,6 @@ function ensureCostModalContainer(containerId) {
         document.body.appendChild(container);
     }
     return container;
-}
-
-async function showEstimatedMaterialBreakdownModal(jobNo, formatCurrency) {
-    if (!jobNo) {
-        showNotification('İş emri numarası bulunamadı', 'error');
-        return;
-    }
-
-    ensureCostModalContainer('estimated-material-breakdown-modal-container');
-
-    const loadingModal = new DisplayModal('estimated-material-breakdown-modal-container', {
-        title: `${jobNo} - Tahmini Malzeme Detayı`,
-        icon: 'fas fa-boxes',
-        size: 'xl',
-        showEditButton: false,
-    });
-    loadingModal.addCustomSection({
-        title: null,
-        customContent: '<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-3 text-muted">Yükleniyor...</p></div>',
-    });
-    loadingModal.render().show();
-
-    try {
-        const data = await getEstimatedMaterialBreakdown(jobNo);
-        const items = Array.isArray(data?.items) ? data.items : [];
-        const hasChildJobs = items.some((line) => line.job_order && line.job_order !== jobNo);
-        const fmtMoney = (v) => formatCurrency(v ?? '0', data.currency || 'EUR');
-
-        const fmtQty = (v) => {
-            const n = parseFloat(v);
-            if (Number.isNaN(n)) return '–';
-            return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        };
-
-        const fmtDateShort = (v) => {
-            if (v == null || v === '') return '–';
-            try {
-                const d = new Date(v);
-                if (Number.isNaN(d.getTime())) return String(v);
-                return d.toLocaleDateString('tr-TR');
-            } catch {
-                return String(v);
-            }
-        };
-
-        const fmtOriginalPrice = (line) => {
-            if (line.original_currency && line.original_currency !== 'EUR' && line.original_unit_price != null) {
-                return `${formatCurrency(line.original_unit_price, line.original_currency)}`;
-            }
-            return '–';
-        };
-
-        const floorNote = data.material_cost_floored_to_actual && parseFloat(data.floor_adjustment_eur) > 0
-            ? `<div class="alert alert-info py-2 mb-3" style="font-size:0.88rem;">
-                <i class="fas fa-info-circle me-2"></i>
-                Satır toplamı (${fmtMoney(data.lines_total)}) mevcut maliyetin altında kaldığı için
-                tahmin ${fmtMoney(data.floor_adjustment_eur)} ile ${fmtMoney(data.estimated_material_cost)} seviyesine yükseltildi.
-               </div>`
-            : '';
-
-        const tableHtml = items.length ? `
-            <div class="table-responsive" style="max-height:480px; overflow-y:auto;">
-                <table class="table table-sm table-bordered table-hover mb-0" style="font-size:0.85rem;">
-                    <thead class="table-light" style="position:sticky; top:0; z-index:1;">
-                        <tr>
-                            ${hasChildJobs ? '<th>İş Emri</th>' : ''}
-                            <th>Kod</th>
-                            <th>Malzeme</th>
-                            <th>Birim</th>
-                            <th class="text-end">Miktar</th>
-                            <th class="text-end">Birim Fiyat (€)</th>
-                            <th class="text-end">Orijinal Fiyat</th>
-                            <th class="text-end">Tutar (€)</th>
-                            <th>Fiyat Kaynağı</th>
-                            <th>Tarih</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${items.map((line) => `
-                            <tr>
-                                ${hasChildJobs ? `<td class="text-nowrap small fw-semibold">${escapeHtml(line.job_order || '–')}</td>` : ''}
-                                <td class="text-nowrap"><code style="font-size:0.78rem;">${escapeHtml(line.item_code || '–')}</code></td>
-                                <td>${escapeHtml(line.item_name || '–')}</td>
-                                <td class="text-muted small">${escapeHtml(line.item_unit || '–')}</td>
-                                <td class="text-end">${fmtQty(line.quantity)}</td>
-                                <td class="text-end">${fmtMoney(line.unit_price_eur)}</td>
-                                <td class="text-end text-muted small">${fmtOriginalPrice(line)}</td>
-                                <td class="text-end fw-semibold">${fmtMoney(line.amount_eur)}</td>
-                                <td class="text-muted small">${escapeHtml(COST_PRICE_SOURCE_LABELS[line.price_source] || line.price_source || '–')}</td>
-                                <td class="text-muted small">${fmtDateShort(line.price_date)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                    <tfoot class="table-light">
-                        <tr>
-                            <td colspan="${hasChildJobs ? 7 : 6}" class="text-end"><strong>Satır Toplamı</strong></td>
-                            <td class="text-end"><strong>${fmtMoney(data.lines_total)}</strong></td>
-                            <td colspan="2"></td>
-                        </tr>
-                        ${data.material_cost_floored_to_actual ? `
-                        <tr>
-                            <td colspan="${hasChildJobs ? 7 : 6}" class="text-end text-muted">Tahmin Düzeltmesi</td>
-                            <td class="text-end text-muted">+${fmtMoney(data.floor_adjustment_eur)}</td>
-                            <td colspan="2"></td>
-                        </tr>
-                        <tr>
-                            <td colspan="${hasChildJobs ? 7 : 6}" class="text-end"><strong>Tahmini Malzeme</strong></td>
-                            <td class="text-end"><strong>${fmtMoney(data.estimated_material_cost)}</strong></td>
-                            <td colspan="2"></td>
-                        </tr>
-                        ` : ''}
-                    </tfoot>
-                </table>
-            </div>
-        ` : '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Malzeme satırı bulunamadı.</div>';
-
-        const modal = new DisplayModal('estimated-material-breakdown-modal-container', {
-            title: `${jobNo} - Tahmini Malzeme Detayı`,
-            icon: 'fas fa-boxes',
-            size: 'xl',
-            showEditButton: false,
-        });
-
-        modal.addSection({
-            title: 'Özet',
-            icon: 'fas fa-chart-pie',
-            iconColor: 'text-primary',
-            fields: [
-                {
-                    id: 'items_count',
-                    label: 'Satır Sayısı',
-                    value: data.items_count ?? items.length,
-                    type: 'number',
-                    icon: 'fas fa-list',
-                    colSize: 3,
-                },
-                {
-                    id: 'lines_total',
-                    label: 'Satır Toplamı',
-                    value: data.lines_total,
-                    type: 'text',
-                    icon: 'fas fa-calculator',
-                    format: () => fmtMoney(data.lines_total),
-                    colSize: 3,
-                },
-                {
-                    id: 'estimated_material_cost',
-                    label: 'Tahmini Malzeme',
-                    value: data.estimated_material_cost,
-                    type: 'text',
-                    icon: 'fas fa-chart-line',
-                    format: () => fmtMoney(data.estimated_material_cost),
-                    colSize: 3,
-                },
-                {
-                    id: 'actual_material_cost',
-                    label: 'Mevcut Malzeme',
-                    value: data.actual_material_cost,
-                    type: 'text',
-                    icon: 'fas fa-money-bill-wave',
-                    format: () => fmtMoney(data.actual_material_cost),
-                    colSize: 3,
-                },
-            ],
-        });
-
-        modal.addCustomSection({
-            title: 'Kalemler',
-            icon: 'fas fa-table',
-            iconColor: 'text-primary',
-            customContent: `${floorNote}${tableHtml}`,
-        });
-
-        modal.render().show();
-    } catch (error) {
-        console.error('Error loading estimated material breakdown:', error);
-        const errorModal = new DisplayModal('estimated-material-breakdown-modal-container', {
-            title: `${jobNo} - Tahmini Malzeme Detayı`,
-            icon: 'fas fa-boxes',
-            size: 'md',
-            showEditButton: false,
-        });
-        errorModal.addCustomSection({
-            title: null,
-            customContent: '<div class="alert alert-danger mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Tahmini malzeme detayı yüklenirken hata oluştu.</div>',
-        });
-        errorModal.render().show();
-    }
-}
-
-function renderCostSummaryTab(data, jobNo, formatCurrency) {
-    const container = viewJobOrderModal.content.querySelector('#cost-summary-container');
-    if (!container) return;
-
-    const currency = data.currency || 'EUR';
-    const actual = data.actual || {};
-    const estimated = data.estimated || {};
-    const editable = data.editable || {};
-    const assumptions = estimated.assumptions || {};
-    const actualComponents = actual.components || {};
-    const estimatedComponents = estimated.components || {};
-
-    const toNum = (v) => {
-        const n = parseFloat(v);
-        return Number.isNaN(n) ? 0 : n;
-    };
-
-    const fmt = (v, emptyDash = false) => {
-        if (v == null || v === '') return emptyDash ? '<span class="text-muted">–</span>' : formatCurrency('0', currency);
-        return formatCurrency(v, currency);
-    };
-
-    const fmtPct = (v) => {
-        if (v == null || v === '') return '<span class="text-muted">–</span>';
-        const n = parseFloat(v);
-        if (Number.isNaN(n)) return '<span class="text-muted">–</span>';
-        return `${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
-    };
-
-    const fmtWeight = (v) => {
-        if (v == null || v === '') return '<span class="text-muted">–</span>';
-        const n = parseFloat(v);
-        if (Number.isNaN(n)) return '<span class="text-muted">–</span>';
-        return `${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`;
-    };
-
-    const fmtDate = (v) => {
-        if (v == null || v === '') return '–';
-        try {
-            const d = new Date(v);
-            if (Number.isNaN(d.getTime())) return String(v);
-            return d.toLocaleDateString('tr-TR');
-        } catch {
-            return String(v);
-        }
-    };
-
-    const fmtDateTime = (v) => {
-        if (v == null || v === '') return '–';
-        try {
-            const d = new Date(v);
-            if (Number.isNaN(d.getTime())) return String(v);
-            return d.toLocaleString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-        } catch {
-            return String(v);
-        }
-    };
-
-    const rateSuffix = (rate) => {
-        if (rate == null || rate === '') return '';
-        const n = parseFloat(rate);
-        if (Number.isNaN(n)) return '';
-        return ` <span class="text-muted" style="font-size:0.82rem;">(${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })})</span>`;
-    };
-
-    const paintMaterialRate = editable.paint_material_rate ?? data.paint_material_rate;
-    const employeeOverheadRate = editable.employee_overhead_rate ?? assumptions.employee_overhead_rate ?? data.employee_overhead_rate;
-
-    const componentLabel = (key) => {
-        let label = COST_COMPONENT_LABELS[key] || key;
-        if (key === 'paint_material_cost') label += rateSuffix(paintMaterialRate);
-        if (key === 'employee_overhead_cost') label += rateSuffix(employeeOverheadRate);
-        return label;
-    };
-
-    const sellingPriceEur = toNum(data.selling_price_eur ?? data.selling_price);
-    const actualTotal = toNum(actual.total_cost ?? data.actual_total_cost);
-    const estimatedTotal = toNum(estimated.total_cost);
-    const actualMargin = sellingPriceEur - actualTotal;
-    const estimatedMargin = sellingPriceEur - estimatedTotal;
-    const actualMarginPct = sellingPriceEur > 0 ? (actualMargin / sellingPriceEur) * 100 : null;
-    const estimatedMarginPct = sellingPriceEur > 0 ? (estimatedMargin / sellingPriceEur) * 100 : null;
-
-    const marginColor = (margin) => {
-        if (margin > 0) return '#059669';
-        if (margin < 0) return '#dc2626';
-        return '#6b7280';
-    };
-
-    const sellingEffective = data.selling_price_effective || {};
-    const sellingSource = SELLING_PRICE_SOURCE_LABELS[sellingEffective.source] || sellingEffective.source || '';
-    const sellingOriginalNote = (sellingEffective.original_currency && sellingEffective.original_currency !== 'EUR')
-        ? ` <small class="text-muted">(${formatCurrency(sellingEffective.original_amount, sellingEffective.original_currency)})</small>`
-        : '';
-
-    const summaryCard = (label, value, sub = '') => `
-        <div style="flex:1; min-width:200px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: linear-gradient(180deg, rgba(99,102,241,0.04) 0%, rgba(99,102,241,0.01) 100%);">
-            <div class="text-muted" style="font-size:0.8rem;">${label}</div>
-            <div style="font-size:1.25rem; font-weight:800; color:#111827; margin-top:4px;">${value}</div>
-            ${sub ? `<div class="text-muted" style="font-size:0.78rem; margin-top:4px;">${sub}</div>` : ''}
-        </div>
-    `;
-
-    const costRows = COST_COMPONENT_ORDER.map((key) => {
-        const actualVal = actualComponents[key];
-        const estimatedVal = estimatedComponents[key];
-        const hasActual = actualVal != null && actualVal !== '';
-        const hasEstimated = estimatedVal != null && estimatedVal !== '';
-        if (!hasActual && !hasEstimated) return null;
-        return {
-            key,
-            label: componentLabel(key),
-            actual: hasActual ? actualVal : null,
-            estimated: hasEstimated ? estimatedVal : null,
-        };
-    }).filter(Boolean);
-
-    const childEstimates = Array.isArray(estimated.children) ? estimated.children : [];
-
-    const assumptionsItems = [];
-    if (assumptions.labor_projected_from_completion_pct != null) {
-        assumptionsItems.push(`İşçilik tahmini, mevcut ilerleme (%${parseFloat(assumptions.labor_projected_from_completion_pct).toFixed(2)}) üzerinden %100'e ölçeklenmiştir.`);
-    }
-    if (employeeOverheadRate != null) {
-        assumptionsItems.push(`Personel genel gider oranı: ${parseFloat(employeeOverheadRate).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`);
-    }
-    if (assumptions.paint_cost_source) {
-        const paintLabel = PAINT_COST_SOURCE_LABELS[assumptions.paint_cost_source] || assumptions.paint_cost_source;
-        let paintNote = `Boya maliyeti kaynağı: ${paintLabel}`;
-        if (assumptions.historical_paint_rate_eur_per_kg != null) {
-            paintNote += ` (${formatCurrency(assumptions.historical_paint_rate_eur_per_kg, 'EUR')}/kg)`;
-        }
-        assumptionsItems.push(paintNote);
-    }
-    if (paintMaterialRate != null) {
-        assumptionsItems.push(`Boya malzemesi oranı: ${formatCurrency(paintMaterialRate, 'TRY')}/kg`);
-    }
-    if (assumptions.material_cost_floored_to_actual === true) {
-        assumptionsItems.push('Malzeme tahmini, mevcut kayıtlı maliyetin altına düşmeyecek şekilde ayarlandı.');
-    }
-
-    container.innerHTML = `
-        ${editable.cost_not_applicable ? `
-        <div class="alert alert-warning mb-4">
-            <i class="fas fa-info-circle me-2"></i>Bu iş emri için maliyet takibi uygulanmıyor olarak işaretlenmiş.
-        </div>
-        ` : ''}
-
-        <div class="mb-4" style="display:flex; gap:12px; flex-wrap:wrap;">
-            ${summaryCard('Tamamlanma', fmtPct(data.completion_pct))}
-            ${summaryCard('Toplam Ağırlık', fmtWeight(data.total_weight_kg))}
-            ${summaryCard(
-                'Satış Fiyatı',
-                sellingPriceEur > 0 ? fmt(data.selling_price_eur ?? data.selling_price) : '<span class="text-muted">–</span>',
-                sellingSource ? escapeHtml(sellingSource) + sellingOriginalNote : ''
-            )}
-            ${summaryCard('Mevcut Maliyet', fmt(actual.total_cost ?? data.actual_total_cost))}
-            ${summaryCard('Tahmini Maliyet', estimated.total_cost ? fmt(estimated.total_cost) : '<span class="text-muted">–</span>')}
-            ${summaryCard(
-                'Marj (Mevcut)',
-                sellingPriceEur > 0
-                    ? `<span style="color:${marginColor(actualMargin)}">${fmt(String(actualMargin.toFixed(2)))}</span>`
-                    : '<span class="text-muted">–</span>',
-                actualMarginPct != null ? `%${actualMarginPct.toFixed(2)}` : ''
-            )}
-            ${summaryCard(
-                'Marj (Tahmini)',
-                sellingPriceEur > 0 && estimated.total_cost
-                    ? `<span style="color:${marginColor(estimatedMargin)}">${fmt(String(estimatedMargin.toFixed(2)))}</span>`
-                    : '<span class="text-muted">–</span>',
-                estimatedMarginPct != null ? `%${estimatedMarginPct.toFixed(2)}` : ''
-            )}
-        </div>
-
-        <div class="card mb-4">
-            <div class="card-header"><h6 class="mb-0"><i class="fas fa-list me-2"></i>Maliyet Dağılımı</h6></div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th class="text-muted">Kalem</th>
-                                <th class="text-end" style="width:140px;">Mevcut</th>
-                                <th class="text-end" style="width:140px;">Tahmini</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${costRows.map((r) => `
-                                <tr>
-                                    <td class="text-muted">
-                                        ${r.label}
-                                        ${r.key === 'material_cost' ? `
-                                            <button type="button"
-                                                class="btn btn-link btn-sm p-0 ms-1 align-baseline estimated-material-info-btn"
-                                                title="Tahmini malzeme kalemleri"
-                                                aria-label="Tahmini malzeme kalemleri">
-                                                <i class="fas fa-info-circle text-primary"></i>
-                                            </button>
-                                        ` : ''}
-                                    </td>
-                                    <td class="text-end">${r.actual != null ? fmt(r.actual) : '<span class="text-muted">–</span>'}</td>
-                                    <td class="text-end">${r.estimated != null ? fmt(r.estimated) : '<span class="text-muted">–</span>'}</td>
-                                </tr>
-                            `).join('')}
-                            <tr class="table-light">
-                                <td><strong>Toplam Maliyet</strong></td>
-                                <td class="text-end"><strong>${fmt(actual.total_cost ?? data.actual_total_cost)}</strong></td>
-                                <td class="text-end"><strong>${estimated.total_cost ? fmt(estimated.total_cost) : '<span class="text-muted">–</span>'}</strong></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        ${assumptionsItems.length ? `
-        <div class="card mb-4">
-            <div class="card-header"><h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Tahmin Varsayımları</h6></div>
-            <div class="card-body py-3">
-                <ul class="mb-0 ps-3" style="font-size:0.9rem;">
-                    ${assumptionsItems.map((item) => `<li class="text-muted">${item}</li>`).join('')}
-                </ul>
-            </div>
-        </div>
-        ` : ''}
-
-        ${childEstimates.length ? `
-        <div class="card mb-4">
-            <div class="card-header"><h6 class="mb-0"><i class="fas fa-sitemap me-2"></i>Alt İş Emirleri</h6></div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm table-bordered mb-0">
-                        <thead class="table-light">
-                            <tr>
-                                <th>İş Emri</th>
-                                <th class="text-end">Mevcut Maliyet</th>
-                                <th class="text-end">Tahmini Maliyet</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${childEstimates.map((c) => `
-                                <tr>
-                                    <td><span class="fw-semibold">${escapeHtml(c.job_order || '–')}</span></td>
-                                    <td class="text-end">${fmt(c.actual_total_cost)}</td>
-                                    <td class="text-end">${fmt(c.estimated_total_cost)}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        ` : ''}
-
-        ${data.last_updated ? `
-        <div class="text-muted text-end" style="font-size:0.8rem;">
-            <i class="fas fa-clock me-1"></i>Son güncelleme: ${fmtDateTime(data.last_updated)}
-        </div>
-        ` : ''}
-    `;
-
-    const materialInfoBtn = container.querySelector('.estimated-material-info-btn');
-    if (materialInfoBtn) {
-        materialInfoBtn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            showEstimatedMaterialBreakdownModal(jobNo, formatCurrency);
-        });
-    }
-}
-
-function renderProgressHistoryTab(data, jobNo) {
-    const container = viewJobOrderModal.content.querySelector('#progress-history-container');
-    if (!container) return;
-
-    const days = Array.isArray(data?.days) ? data.days : [];
-    const dailyAvg = (data?.daily_avg !== null && data?.daily_avg !== undefined && data?.daily_avg !== '')
-        ? (parseFloat(data.daily_avg) || 0)
-        : null;
-
-    const formatDate = (dateStr) => {
-        if (!dateStr) return '-';
-        const d = new Date(dateStr);
-        if (Number.isNaN(d.getTime())) return String(dateStr);
-        return d.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
-    };
-
-    const deltaBadge = (deltaValue) => {
-        const delta = parseFloat(deltaValue);
-        if (Number.isNaN(delta)) return '<span class="text-muted">-</span>';
-
-        const isZero = Math.abs(delta) < 0.000001;
-        const isPositive = delta > 0;
-        const badgeClass = isZero ? 'status-grey' : (isPositive ? 'status-green' : 'status-red');
-        const icon = isZero ? 'fas fa-minus' : (isPositive ? 'fas fa-arrow-up' : 'fas fa-arrow-down');
-        const sign = isPositive ? '+' : '';
-
-        return `<span class="status-badge ${badgeClass}" style="font-weight:700;">
-            <i class="${icon}" style="font-size:10px; margin-right:6px;"></i>${sign}${delta.toFixed(2)}%
-        </span>`;
-    };
-
-    const renderDayRow = (d, idx) => {
-        const completion = Math.min(100, Math.max(0, parseFloat(d?.completion_pct) || 0));
-        const delta = parseFloat(d?.delta);
-        const deltaAbs = Number.isNaN(delta) ? 0 : Math.min(100, Math.max(0, Math.abs(delta)));
-
-        return `
-            <tr>
-                <td style="width:56px;" class="text-muted">${idx + 1}</td>
-                <td>
-                    <div style="display:flex; flex-direction:column; line-height:1.2;">
-                        <div class="fw-semibold">${formatDate(d?.date)}</div>
-                        <div class="text-muted" style="font-size:0.78rem;">Gün</div>
-                    </div>
-                </td>
-                <td style="width:220px;">
-                    <div style="display:flex; flex-direction:column; gap:6px;">
-                        <div style="display:flex; align-items:center; justify-content:space-between;">
-                            <span class="fw-bold">${completion.toFixed(2)}%</span>
-                            <span class="text-muted" style="font-size:0.78rem;">toplam</span>
-                        </div>
-                        <div class="progress" style="height:10px; border-radius:999px; background-color:#e5e7eb; overflow:hidden;">
-                            <div class="progress-bar" role="progressbar"
-                                 style="width:${completion}%; background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%); border-radius:999px;"
-                                 aria-valuenow="${completion}" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                    </div>
-                </td>
-                <td style="width:220px;">
-                    <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
-                        ${deltaBadge(d?.delta)}
-                        <div class="progress" style="height:8px; border-radius:999px; background-color:#f3f4f6; overflow:hidden; width:100%;">
-                            <div class="progress-bar" role="progressbar"
-                                 style="width:${deltaAbs}%; background:${(Number.isNaN(delta) || delta >= 0) ? 'linear-gradient(90deg, #34d399 0%, #059669 100%)' : 'linear-gradient(90deg, #fb7185 0%, #e11d48 100%)'}; border-radius:999px;"
-                                 aria-valuenow="${deltaAbs}" aria-valuemin="0" aria-valuemax="100"></div>
-                        </div>
-                    </div>
-                </td>
-            </tr>
-        `;
-    };
-
-    const emptyState = `
-        <div class="text-center py-5">
-            <div style="font-size:2.2rem; color:#cbd5e1;"><i class="fas fa-chart-line"></i></div>
-            <div class="mt-2 fw-semibold">İlerleme verisi bulunamadı</div>
-            <div class="text-muted" style="font-size:0.9rem;">İş Emri: <span class="fw-semibold">${jobNo}</span></div>
-        </div>
-    `;
-
-    const summaryHtml = `
-        <div class="mb-3" style="display:flex; gap:12px; flex-wrap:wrap;">
-            <div style="flex:1; min-width:260px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: linear-gradient(180deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%);">
-                <div class="text-muted" style="font-size:0.8rem;">Günlük Ortalama İlerleme</div>
-                <div style="display:flex; align-items:baseline; gap:8px; margin-top:4px;">
-                    <div style="font-size:1.4rem; font-weight:800; color:#111827;">
-                        ${dailyAvg === null ? '-' : `${dailyAvg.toFixed(2)}%`}
-                    </div>
-                    <div class="text-muted" style="font-size:0.85rem;">(tüm günler)</div>
-                </div>
-            </div>
-            <div style="flex:1; min-width:260px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: #fff;">
-                <div class="text-muted" style="font-size:0.8rem;">Kayıtlı Gün Sayısı</div>
-                <div style="font-size:1.4rem; font-weight:800; color:#111827; margin-top:4px;">${days.length}</div>
-            </div>
-        </div>
-    `;
-
-    const tableHtml = `
-        <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle">
-                <thead>
-                    <tr>
-                        <th style="width:56px;">#</th>
-                        <th>Gün</th>
-                        <th style="width:220px;">Tamamlanma</th>
-                        <th style="width:220px;">Günlük Değişim</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${days.slice().reverse().map(renderDayRow).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-
-    container.innerHTML = `
-        ${summaryHtml}
-        ${days.length === 0 ? emptyState : tableHtml}
-    `;
 }
 
 // Render NCRs Tab

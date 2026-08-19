@@ -1,4 +1,4 @@
-import { guardRoute, isSuperuser } from '../../../authService.js';
+import { guardRoute, getUser } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { TableComponent } from '../../../components/table/table.js';
@@ -24,10 +24,38 @@ import {
     getDepartmentRequestDetailsModal
 } from './modals.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
-import { fetchAllUsers } from '../../../apis/users.js';
+import { fetchAllUsers, fetchUsersDropdown } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
+
+/** UserGroup slug whose members make up the planlama team (organization.UserGroup.slug) */
+const PLANNING_TEAM_GROUP = 'planlama';
+
+/**
+ * Options for the "Oluşturan" dropdowns, scoped to the planlama group. The
+ * current user is appended when they aren't a member so they can still filter
+ * to their own requests (the list itself is unscoped for everyone).
+ */
+async function buildCreatedByOptions() {
+    const label = (user) => user.full_name
+        ? `${user.full_name} (${user.username})`
+        : (user.first_name && user.last_name)
+            ? `${user.first_name} ${user.last_name} (${user.username})`
+            : user.username;
+    const users = await fetchUsersDropdown({ group: PLANNING_TEAM_GROUP });
+    const options = users.map(user => ({
+        value: user.id ? user.id.toString() : user.username,
+        label: label(user)
+    }));
+    try {
+        const me = await getUser();
+        if (me && !options.some(o => String(o.value) === String(me.id))) {
+            options.unshift({ value: String(me.id), label: label(me) });
+        }
+    } catch (_) { /* filter still works without the self entry */ }
+    return options;
+}
 
 // State management
 let currentPage = 1;
@@ -505,6 +533,8 @@ async function initializeFiltersComponents() {
     });
 
     // Requestor filter - load users and create dropdown
+    // Not group-scoped: department requests come from every department, so the
+    // "Talep Eden" list legitimately spans all users.
     try {
         const users = await fetchAllUsers();
         const userOptions = users.map(user => ({
@@ -584,37 +614,27 @@ async function initializeFiltersComponents() {
         colSize: 2
     });
 
-    // Created by filter for planning requests — only meaningful for superusers,
-    // the backend scopes everyone else's list to their own requests.
-    if (isSuperuser()) {
-        try {
-            const users = await fetchAllUsers();
-            const userOptions = users.map(user => ({
-                value: user.id ? user.id.toString() : user.username,
-                label: user.full_name ? `${user.full_name} (${user.username})` :
-                       (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
-                       user.username
-            }));
-
-            planningRequestsFilters.addDropdownFilter({
-                id: 'created-by-filter',
-                label: 'Oluşturan',
-                options: userOptions,
-                placeholder: 'Kullanıcı seçin',
-                colSize: 2,
-                searchable: true
-            });
-        } catch (error) {
-            console.error('Error loading users for filter:', error);
-            planningRequestsFilters.addDropdownFilter({
-                id: 'created-by-filter',
-                label: 'Oluşturan',
-                options: [],
-                placeholder: 'Kullanıcı yüklenemedi',
-                colSize: 2,
-                searchable: true
-            });
-        }
+    // Created by filter for planning requests. Shown to everyone: the backend
+    // list is not scoped by creator, so every user sees every team's requests.
+    try {
+        planningRequestsFilters.addDropdownFilter({
+            id: 'created-by-filter',
+            label: 'Oluşturan',
+            options: await buildCreatedByOptions(),
+            placeholder: 'Kullanıcı seçin',
+            colSize: 2,
+            searchable: true
+        });
+    } catch (error) {
+        console.error('Error loading users for filter:', error);
+        planningRequestsFilters.addDropdownFilter({
+            id: 'created-by-filter',
+            label: 'Oluşturan',
+            options: [],
+            placeholder: 'Kullanıcı yüklenemedi',
+            colSize: 2,
+            searchable: true
+        });
     }
 
     // Department request filter for planning requests (text input for ID)
@@ -655,37 +675,27 @@ async function initializeFiltersComponents() {
         colSize: 2
     });
 
-    // Created by filter for pending ERP entry requests — superusers only,
-    // the backend scopes everyone else's list to their own requests.
-    if (isSuperuser()) {
-        try {
-            const users = await fetchAllUsers();
-            const userOptions = users.map(user => ({
-                value: user.id ? user.id.toString() : user.username,
-                label: user.full_name ? `${user.full_name} (${user.username})` :
-                       (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
-                       user.username
-            }));
-
-            pendingErpEntryFilters.addDropdownFilter({
-                id: 'pending-erp-created-by-filter',
-                label: 'Oluşturan',
-                options: userOptions,
-                placeholder: 'Kullanıcı seçin',
-                colSize: 2,
-                searchable: true
-            });
-        } catch (error) {
-            console.error('Error loading users for filter:', error);
-            pendingErpEntryFilters.addDropdownFilter({
-                id: 'pending-erp-created-by-filter',
-                label: 'Oluşturan',
-                options: [],
-                placeholder: 'Kullanıcı yüklenemedi',
-                colSize: 2,
-                searchable: true
-            });
-        }
+    // Created by filter for pending ERP entry requests. Shown to everyone for
+    // the same reason as the planning requests table above.
+    try {
+        pendingErpEntryFilters.addDropdownFilter({
+            id: 'pending-erp-created-by-filter',
+            label: 'Oluşturan',
+            options: await buildCreatedByOptions(),
+            placeholder: 'Kullanıcı seçin',
+            colSize: 2,
+            searchable: true
+        });
+    } catch (error) {
+        console.error('Error loading users for filter:', error);
+        pendingErpEntryFilters.addDropdownFilter({
+            id: 'pending-erp-created-by-filter',
+            label: 'Oluşturan',
+            options: [],
+            placeholder: 'Kullanıcı yüklenemedi',
+            colSize: 2,
+            searchable: true
+        });
     }
 
     // Department request filter for pending ERP entry requests (text input for ID)

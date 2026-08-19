@@ -1,142 +1,13 @@
-/* Üretim Planlama page */
-
-/* Toolbar: picker + view toggle + filters in one horizontal row */
-.pp-toolbar {
-    gap: 10px;
-    row-gap: 8px;
-}
-
-.pp-toolbar-label {
-    font-weight: 600;
-    color: #59616d;
-    font-size: 0.85rem;
-    white-space: nowrap;
-}
-
-#job-order-picker {
-    width: 300px;
-}
-
-.pp-filter {
-    width: 170px;
-}
-
-.pp-toolbar .vr {
-    align-self: stretch;
-    opacity: 0.15;
-}
-
-/* Job-order group headers in the table */
-#production-plan-table-host .group-header-cell {
-    background: #f1f3f6;
-    border-top: 2px solid #d8dde3;
-}
-
-#production-plan-table-host .group-header .pp-node-title {
-    font-weight: 400;
-    color: #444;
-}
-
-/* Main task cell: department is the label, custom title as second line.
-   Left-aligned as blocks — the table centers cell content, which made the
-   subtask indents ragged (indent measured from a centered position). */
-#production-plan-table-host .pp-main-task {
-    text-align: left;
-}
-
-#production-plan-table-host .pp-main-task-dept {
-    font-weight: 600;
-    color: #2c3345;
-}
-
-#production-plan-table-host .pp-task-subtitle {
-    font-size: 0.8rem;
-    color: #6c757d;
-    margin-top: 1px;
-}
-
-/* Child rows stand in for their hidden parent: "Parent - Child" */
-#production-plan-table-host .pp-child-sep {
-    color: #a5adb8;
-    font-weight: 600;
-}
-
-#production-plan-table-host .pp-child-name {
-    color: #3a4150;
-}
-
-/* Working-day variance */
-.pp-variance-late {
-    color: #dc3545;
-    font-weight: 600;
-}
-
-.pp-variance-early {
-    color: #198754;
-    font-weight: 600;
-}
-
-.pp-variance-zero {
-    color: #6c757d;
-}
+/* Sunum Modu (meeting view) — fullscreen slide deck on Proje Takibi.
+   Loaded by every visit to the page but inert until meetingView.js sets
+   body.pp-meeting-fullscreen, which hides the page and hands the viewport
+   to #pp-meeting-container. Was production-planning.css before the two
+   pages merged; the table/gantt/toolbar rules went with the retired views. */
 
 /* Orange accent text (matches .status-orange in badges.css) */
 .pp-text-orange {
     color: #9a3412;
     font-weight: 500;
-}
-
-/* Projected lateness (matches .status-purple in badges.css) */
-.pp-variance-risk {
-    color: #5b21b6;
-    font-weight: 600;
-}
-
-.pp-push-icon {
-    color: #8b5cf6;
-    cursor: help;
-    font-size: 0.8em;
-}
-
-/* Compact progress bar in table cells */
-.pp-progress {
-    min-width: 90px;
-}
-
-.pp-progress .progress {
-    height: 14px;
-    background-color: #e9ecef;
-    position: relative;
-}
-
-/* Percentage label floats over the whole track so it stays readable at any
-   bar width (a 5% bar is too narrow to hold its own text) */
-.pp-progress .pp-progress-label {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 14px;
-    pointer-events: none;
-}
-
-.pp-progress .pp-progress-label-dark {
-    color: #2c3345;
-}
-
-.pp-progress .pp-progress-label-light {
-    color: #fff;
-}
-
-/* Gantt card: let the gantt's own header sit flush inside the card */
-#production-plan-gantt-card .card-body {
-    padding: 12px;
 }
 
 /* ==========================================================================
@@ -403,10 +274,11 @@ body.pp-meeting-fullscreen {
     background: #eef1f5;
 }
 
+/* The slide is the only child of .container-fluid left standing — naming the
+   siblings individually would break the moment the page grows a section. */
 body.pp-meeting-fullscreen #navbar-container,
-body.pp-meeting-fullscreen #header-placeholder,
-body.pp-meeting-fullscreen #job-order-picker-container,
-body.pp-meeting-fullscreen .floating-element {
+body.pp-meeting-fullscreen .floating-element,
+body.pp-meeting-fullscreen .modules-section > .container-fluid > *:not(#pp-meeting-container) {
     display: none !important;
 }
 

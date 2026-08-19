@@ -21,6 +21,9 @@ export async function fetchUsersDropdown(options = {}) {
     if (options.department_code) {
         params.set('department_code', String(options.department_code));
     }
+    if (options.group) {
+        params.set('group', String(options.group));
+    }
     const query = params.toString();
     const resp = await authedFetch(`${backendBase}/users/dropdown/${query ? `?${query}` : ''}`);
     if (!resp.ok) return [];

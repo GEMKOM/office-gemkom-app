@@ -70,6 +70,9 @@ export async function listOffers(options = {}) {
     if (options.status) params.append('status', options.status);
     if (options.status__in) params.append('status__in', options.status__in);
     if (options.customer) params.append('customer', options.customer);
+    if (options.customer_inquiry_ref) {
+        params.append('customer_inquiry_ref__icontains', options.customer_inquiry_ref);
+    }
     if (options.created_by != null && options.created_by !== '') {
         params.append('created_by', String(options.created_by));
     }

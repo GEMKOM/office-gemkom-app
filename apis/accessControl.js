@@ -14,8 +14,6 @@ const ALWAYS_ALLOWED_ROUTES = new Set(['/', '/login', '/login/']);
 // base page can also open the derived page. The derived page can still be
 // granted independently via its own "Page:" permission — this is an OR.
 const ROUTE_ACCESS_INHERITS = {
-    // Üretim Planlama is a companion view of Proje Takibi
-    '/projects/production-planning': ['/projects/project-tracking'],
     // Kritik Malzemeler is a companion view of Malzeme Takibi and the PR
     // create flow — whoever marks or buys critical items can monitor them.
     '/procurement/critical-items': [

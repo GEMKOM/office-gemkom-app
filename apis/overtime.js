@@ -411,6 +411,43 @@ export async function getOvertimeCostReport(filters = {}) {
  * it correctly reflects positions/groups (there is no `machining` department).
  * @returns {Promise<Array<{id:number, username:string, full_name:string}>>}
  */
+/**
+ * Fetch the welding overtime reconciliation report.
+ *
+ * One row per (welder, day) comparing approved overtime hours against the
+ * overtime hours the welder logged in welding time entries, with outlier flags.
+ *
+ * @param {Object} filters - { start_date, end_date, user, job_no, only_outliers, tolerance }
+ * @returns {Promise<Array>}
+ */
+export async function getOvertimeWeldingReport(filters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+            params.append(key, value);
+        }
+    });
+    const url = `${backendBase}/overtime/requests/welding_report/${params.toString() ? '?' + params.toString() : ''}`;
+    const resp = await authedFetch(url);
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Kaynak mesai raporu yüklenirken hata oluştu');
+    }
+    return await resp.json();
+}
+
+/**
+ * Fetch active welders (users who have logged welding time entries).
+ *
+ * @returns {Promise<Array<{id:number, username:string, full_name:string}>>}
+ */
+export async function getWeldingOperators() {
+    const url = `${backendBase}/overtime/requests/welding_operators/`;
+    const resp = await authedFetch(url);
+    if (!resp.ok) return [];
+    return await resp.json();
+}
+
 export async function getMachiningOperators() {
     const url = `${backendBase}/overtime/requests/machining_operators/`;
     const resp = await authedFetch(url);
