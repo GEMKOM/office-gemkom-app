@@ -12,6 +12,7 @@ import { FileAttachments } from '../../../../components/file-attachments/file-at
 import { FileViewer } from '../../../../components/file-viewer/file-viewer.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
+import { escapeHtml } from '../../../../utils/text.js';
 
 // State management
 let currentPage = 1;
@@ -1487,18 +1488,6 @@ function createOperationRow(operation, isNew = false) {
     }
     
     // Escape HTML for text values to prevent XSS
-    const escapeHtml = (text) => {
-        if (text === null || text === undefined) return '';
-        const map = {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        };
-        return String(text).replace(/[&<>"']/g, m => map[m]);
-    };
-    
     const nameValue = escapeHtml(operation.name || '');
     const descValue = escapeHtml(operation.description || '');
     const orderValue = operation.order || '';

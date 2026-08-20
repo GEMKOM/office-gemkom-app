@@ -473,9 +473,14 @@ export async function getOperationsForJob(jobNo) {
     if (!resp.ok) return [];
     const data = await resp.json();
     const rows = Array.isArray(data) ? data : (data.results || []);
+    // Group by part so operations of the same PT number stay together
+    rows.sort((a, b) =>
+        (a.part_key || '').localeCompare(b.part_key || '') ||
+        ((a.order ?? 0) - (b.order ?? 0))
+    );
     return rows.map(op => ({
         value: op.key,
-        text: `${op.name || op.key}${op.order != null ? ' (#' + op.order + ')' : ''}`,
+        text: `${op.part_key ? op.part_key + ' - ' : ''}${op.name || op.key}${op.order != null ? ' (#' + op.order + ')' : ''}`,
     }));
 }
 

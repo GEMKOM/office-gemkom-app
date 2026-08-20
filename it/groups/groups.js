@@ -16,6 +16,7 @@ import {
 } from '../../apis/human_resources/organization.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
+import { escapeHtml } from '../../utils/text.js';
 
 let groups = [];
 let positionsCatalog = [];
@@ -26,15 +27,6 @@ let editingId = null;
 let currentDetailId = null;
 let currentGroupDetail = null;
 let addPositionsDropdown = null;
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 function listFromResponse(data) {
     if (Array.isArray(data)) return data;

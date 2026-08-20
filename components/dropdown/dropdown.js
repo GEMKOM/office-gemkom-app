@@ -255,7 +255,11 @@ export class ModernDropdown {
         this.portalWrapper.className = 'modern-dropdown-portal';
         this.portalWrapper.style.position = 'fixed';
         this.portalWrapper.style.zIndex = this.currentZIndex;
-        // Don't set pointer-events: none - it prevents children from receiving events
+        // The wrapper is sized to the full available viewport space, which is
+        // usually taller than the menu itself. Let clicks pass through the empty
+        // area so outside clicks close the dropdown; the menu re-enables
+        // pointer-events for itself and its children.
+        this.portalWrapper.style.pointerEvents = 'none';
         document.body.appendChild(this.portalWrapper);
         
         // Prevent Bootstrap modal focus trap from stealing focus from the portal.

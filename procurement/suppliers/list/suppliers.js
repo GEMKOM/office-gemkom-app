@@ -20,11 +20,11 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { hasPerm, isSuperuser } from '../../../authService.js';
+import { escapeHtml } from '../../../utils/text.js';
 import {
     renderSupplierStatusBadge,
     renderStarRating,
     renderOnTimePct,
-    escapeHtml,
     SUPPLIER_STATUS_META,
 } from '../../../components/supplier-badges/supplier-badges.js';
 

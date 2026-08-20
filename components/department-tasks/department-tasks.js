@@ -7,6 +7,8 @@ import { ConfirmationModal } from '../confirmation-modal/confirmation-modal.js';
 import { EditModal } from '../edit-modal/edit-modal.js';
 import { DisplayModal } from '../display-modal/display-modal.js';
 import { showNotification } from '../notification/notification.js';
+import { downloadFilesAsZip } from '../../utils/zipDownload.js';
+import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { getUser } from '../../authService.js';
 import {
@@ -62,30 +64,12 @@ import {
 import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
 import { createComment, updateComment, uploadCommentAttachment, deleteAttachment } from '../../apis/projects/topics.js';
 import { initializeMentionFunctionality } from '../topic-discussion/topic-discussion.js';
+import { escapeHtml } from '../../utils/text.js';
 
-function escapeHtml(value) {
-    const str = value === null || value === undefined ? '' : String(value);
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-// Render comment content with @mentions turned into styled badges (matches the
-// project-tracking / topic-discussion display). Escapes first, then swaps the
-// @username tokens — usernames are word chars, so they survive escaping intact.
+// Comment bodies are user text: escaped, then formatted, by
+// utils/richText.js (markdown-lite + @mention badges).
 function formatCommentWithMentions(content, mentionedUsers = []) {
-    const userMap = {};
-    (mentionedUsers || []).forEach((user) => {
-        if (user && user.username) userMap[user.username] = user;
-    });
-    return escapeHtml(content).replace(/@(\w+)/g, (match, username) => {
-        const user = userMap[username];
-        const displayName = user ? (user.full_name || user.username) : username;
-        return `<span class="mention-badge">@${escapeHtml(displayName)}</span>`;
-    });
+    return renderRichText(content, { mentionedUsers });
 }
 
 /**
@@ -5222,11 +5206,12 @@ async function showEditInternalTeamAssignmentModal(task, assignment) {
                 if (formData.notes !== undefined) {
                     updateData.notes = formData.notes ? formData.notes.trim() : '';
                 }
+                // Backend reads manual_progress/task_status (welding update-assignment).
                 if (formData.progress !== undefined && formData.progress !== null && formData.progress !== '') {
-                    updateData.progress = parseFloat(formData.progress);
+                    updateData.manual_progress = parseFloat(formData.progress);
                 }
                 if (formData.status !== undefined && formData.status !== null && formData.status !== '') {
-                    updateData.status = formData.status;
+                    updateData.task_status = formData.status;
                 }
 
                 if (Object.keys(updateData).length === 0) {
@@ -5439,11 +5424,6 @@ async function renderConsultationTab(task) {
         currentUsername = user?.username || null;
     } catch { /* proceed without edit buttons */ }
 
-    const escapeHtml = (value) => String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
     const formatCommentDate = (value) => {
         if (!value) return '-';
         const date = new Date(value);
@@ -5502,7 +5482,12 @@ async function renderConsultationTab(task) {
     if (sharedFiles.length > 0) {
         html += `
             <div class="card mb-3">
-                <div class="card-header bg-light"><i class="fas fa-folder-open me-2"></i>Paylaşılan Dosyalar</div>
+                <div class="card-header bg-light d-flex align-items-center justify-content-between">
+                    <span><i class="fas fa-folder-open me-2"></i>Paylaşılan Dosyalar (${sharedFiles.length})</span>
+                    <button type="button" class="btn btn-sm btn-outline-success consultation-download-all-btn" data-file-scope="shared">
+                        <i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)
+                    </button>
+                </div>
                 <div class="card-body">
                     ${sharedFiles.map(f => `
                         <div class="d-flex align-items-center gap-2 mb-2">
@@ -5549,7 +5534,14 @@ async function renderConsultationTab(task) {
     // Completion files uploaded by this department
     html += `
         <div class="card mb-3">
-            <div class="card-header bg-light"><i class="fas fa-upload me-2"></i>Yanıt Dosyaları</div>
+            <div class="card-header bg-light d-flex align-items-center justify-content-between">
+                <span><i class="fas fa-upload me-2"></i>Yanıt Dosyaları (${completionFiles.length})</span>
+                ${completionFiles.length > 0 ? `
+                    <button type="button" class="btn btn-sm btn-outline-success consultation-download-all-btn" data-file-scope="completion">
+                        <i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)
+                    </button>
+                ` : ''}
+            </div>
             <div class="card-body">
                 ${completionFiles.length > 0 ? completionFiles.map(f => `
                     <div class="d-flex align-items-center gap-2 mb-2">
@@ -5630,7 +5622,7 @@ async function renderConsultationTab(task) {
                                         ${comment.is_edited ? '<small class="text-muted"><i class="fas fa-edit me-1"></i>Düzenlendi</small>' : ''}
                                         ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                                     </div>
-                                    <div class="consultation-comment-content" style="white-space: pre-wrap;">${formatCommentWithMentions(comment.content, comment.mentioned_users_data)}</div>
+                                    <div class="consultation-comment-content rich-text">${formatCommentWithMentions(comment.content, comment.mentioned_users_data)}</div>
                                 </div>
                                 `;
                             }).join('')}
@@ -5641,6 +5633,7 @@ async function renderConsultationTab(task) {
                             <textarea class="form-control" id="consultation-comment-input" rows="3" placeholder="Yorum yazın... (@ile kullanıcı etiketleyin)"></textarea>
                             <div class="mention-suggestions" id="consultation-mention-suggestions" style="display: none;"></div>
                         </div>
+                        <div class="rich-text-hint mt-1">${RICH_TEXT_HINT_HTML}</div>
                         <button class="btn btn-primary btn-sm" id="consultation-comment-add-btn" data-topic-id="${discussionTopic.id}">
                             <i class="fas fa-paper-plane me-1"></i>Yorum Ekle
                         </button>
@@ -5701,7 +5694,14 @@ function buildSiblingConsultationOverlayBody(sibling) {
     }
     body += `
         <div class="card mb-3">
-            <div class="card-header bg-light"><i class="fas fa-upload me-2"></i>Yanıt Dosyaları</div>
+            <div class="card-header bg-light d-flex align-items-center justify-content-between">
+                <span><i class="fas fa-upload me-2"></i>Yanıt Dosyaları (${files.length})</span>
+                ${files.length > 0 ? `
+                    <button type="button" class="btn btn-sm btn-outline-success" id="sibling-download-all-btn">
+                        <i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)
+                    </button>
+                ` : ''}
+            </div>
             <div class="card-body">
                 ${files.length > 0 ? files.map((file) => `
                     <div class="d-flex align-items-center gap-2 mb-2">
@@ -5763,6 +5763,20 @@ async function showSiblingConsultationDetail(taskId) {
         const bodyEl = overlay.querySelector('#sibling-overlay-body');
         if (bodyEl) {
             bodyEl.innerHTML = overlayContent.body;
+            const downloadAllBtn = bodyEl.querySelector('#sibling-download-all-btn');
+            downloadAllBtn?.addEventListener('click', async (event) => {
+                event.preventDefault();
+                const offerLabel = sibling.offer_summary?.offer_no || 'Teklif';
+                downloadAllBtn.disabled = true;
+                try {
+                    await downloadFilesAsZip(
+                        sibling.completion_files || [],
+                        `${offerLabel} - ${overlayContent.departmentLabel} Yanıt Dosyaları`
+                    );
+                } finally {
+                    downloadAllBtn.disabled = false;
+                }
+            });
         }
     } catch (error) {
         console.error('Error loading sibling consultation task:', error);
@@ -5788,6 +5802,25 @@ function setupConsultationTabListeners(task) {
             const siblingTaskId = parseInt(row.dataset.siblingTaskId, 10);
             if (!siblingTaskId) return;
             await showSiblingConsultationDetail(siblingTaskId);
+        });
+    });
+
+    contentContainer.querySelectorAll('.consultation-download-all-btn').forEach((btn) => {
+        btn.addEventListener('click', async (event) => {
+            event.preventDefault();
+            const scope = btn.dataset.fileScope;
+            const isShared = scope === 'shared';
+            const files = (isShared ? task.shared_files : task.completion_files) || [];
+            const offerLabel = task.offer_summary?.offer_no || 'Teklif';
+            const zipName = isShared
+                ? `${offerLabel} - Paylaşılan Dosyalar`
+                : `${offerLabel} - ${task.department_display || 'Yanıt'} Yanıt Dosyaları`;
+            btn.disabled = true;
+            try {
+                await downloadFilesAsZip(files, zipName);
+            } finally {
+                btn.disabled = false;
+            }
         });
     });
 
@@ -7526,10 +7559,6 @@ async function showErpEntryCompletionModal(taskId, taskRow) {
     }
     codes = (codes || '').trim();
     const hasCodes = codes.length > 0;
-
-    const escapeHtml = (s) => String(s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
     const codesBlockHtml = hasCodes
         ? `<pre id="erp-codes-text" style="white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto;background:rgba(0,0,0,0.06);padding:8px;border-radius:4px;margin:0 0 8px 0;">${escapeHtml(codes)}</pre>`

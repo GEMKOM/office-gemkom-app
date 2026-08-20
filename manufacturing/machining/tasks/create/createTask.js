@@ -7,6 +7,7 @@ import { getUser } from '../../../../authService.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { ModernDropdown } from '../../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
+import { escapeHtml } from '../../../../utils/text.js';
 
 // State management
 let currentPage = 1;
@@ -44,15 +45,6 @@ let jobOrderDropdownOptions = []; // Array of { job_no, title }
 
 function createEmptyRow() {
     return { ...Object.fromEntries(columns.map(c => [c.key, ''])), _files: [] };
-}
-
-function escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
 }
 
 function renderRowFilesCell(row, rowIndex) {

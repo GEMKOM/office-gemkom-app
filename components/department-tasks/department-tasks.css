@@ -63,13 +63,4 @@
     background-color: #e3fcef !important;
 }
 
-.mention-badge {
-    display: inline-block;
-    background-color: #e3fcef;
-    color: #006644;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-weight: 500;
-    font-size: 13px;
-    margin: 0 2px;
-}
+/* .mention-badge lives in the global style.css */

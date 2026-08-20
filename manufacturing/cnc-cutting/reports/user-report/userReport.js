@@ -7,6 +7,7 @@ import { DisplayModal } from '../../../../components/display-modal/display-modal
 import { fetchUserReport, fetchUserTaskDetail } from '../../../../apis/cnc-cutting/userReport.js';
 import { buildUserReportSummaryFooterRow } from '../../../../components/table/userReportSummaryFooter.js';
 import { showNotification } from '../../../../components/notification/notification.js';
+import { escapeHtml } from '../../../../utils/text.js';
 
 let reportData = null;
 let reportFilters = null;
@@ -869,12 +870,6 @@ function formatDurationFromMinutes(minutes) {
     } else {
         return `${m}dk`;
     }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 window.showComment = function(comment) {

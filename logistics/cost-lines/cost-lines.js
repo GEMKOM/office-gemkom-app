@@ -11,6 +11,7 @@ import {
     submitShippingCostLines
 } from '../../../apis/projects/cost.js';
 import { extractResultsFromResponse } from '../../../apis/paginationHelper.js';
+import { escapeHtml } from '../../utils/text.js';
 
 let pendingJobOrders = [];
 let totalCount = 0;
@@ -318,13 +319,6 @@ function renderLinesTable() {
             removeLineRow(parseInt(btn.dataset.removeIndex, 10));
         });
     });
-}
-
-function escapeHtml(s) {
-    if (s == null) return '';
-    const div = document.createElement('div');
-    div.textContent = s;
-    return div.innerHTML;
 }
 
 function syncLinesFromDom() {

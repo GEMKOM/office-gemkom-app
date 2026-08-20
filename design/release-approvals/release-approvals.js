@@ -16,6 +16,7 @@ import {
 } from '../../../apis/projects/design.js';
 import { fetchAllUsers } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { escapeHtml } from '../../utils/text.js';
 
 const COMPLETED_REVIEW_STATUS_CHOICES = [
     { value: 'released', label: 'Yayınlandı' },
@@ -51,15 +52,6 @@ let pendingReleases = [];
 let currentRelease = null;
 let discussionPanel = null;
 let folderPathCopyListenerAttached = false;
-
-function escapeHtml(text) {
-    if (!text) return '';
-    return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
 
 function copyTextToClipboard(text) {
     if (!text) {

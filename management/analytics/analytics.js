@@ -14,6 +14,7 @@ import { fetchSubcontractorCostBreakdown } from '../../apis/subcontracting/subco
 import { listCustomers } from '../../apis/projects/customers.js';
 import { formatDerivedPrice } from '../../apis/formatters.js';
 import { CatalogTreePicker } from '../../components/catalog-tree-picker/catalog-tree-picker.js';
+import { escapeHtml } from '../../utils/text.js';
 
 /* ── state ─────────────────────────────────────────────────────────── */
 let chart = null;
@@ -1166,13 +1167,6 @@ const ESTIMATED_MATERIAL_PRICE_SOURCE_LABELS = {
     procurement_line: 'Kayıtlı malzeme satırı',
     none: 'Fiyat yok',
 };
-
-function escapeHtml(s) {
-    if (s == null) return '';
-    const div = document.createElement('div');
-    div.textContent = String(s);
-    return div.innerHTML;
-}
 
 function formatCostDiff(estimated, actual) {
     const est = toNumber(estimated);

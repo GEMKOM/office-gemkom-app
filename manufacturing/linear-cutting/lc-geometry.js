@@ -20,6 +20,16 @@ export const ANGLE_TOL_DEG = 0.05;
 // Mirrors MAX_ANGLE_DEG in gemkom-backend/linear_cutting/geometry.py
 export const MAX_ANGLE_DEG = 85;
 
+// Shown wherever a piece is marked flipped (web ↻, PDF "d"). `flipped` is a
+// statement about WHERE ON THE BAR the miter falls, not an instruction to the
+// operator: the cut list already produces the right piece. It only changes the
+// part itself when the cross-section is chiral (unequal angle, channel) — for a
+// pipe or a flat bar the mirrored piece is the same piece.
+export const FLIPPED_TITLE =
+    'Açılı uç, resimdekinin ters ucunda kesilir. Kesimde ek bir işlem yoktur — '
+    + 'simetrik profilde (boru, lama) parça birebir aynıdır, asimetrik profilde '
+    + 'ayna görüntüsü olur.';
+
 const PALETTE = ['#0d6efd', '#198754', '#fd7e14', '#6f42c1', '#20c997', '#dc3545', '#0dcaf0', '#b58900'];
 
 export function colorForIndex(i) {
@@ -299,7 +309,7 @@ export function piecePictogramSVG(spec, opts = {}) {
 
 export function buildCutTooltipHtml(cut) {
     const rows = [];
-    rows.push(`<div style="font-weight:700;margin-bottom:4px;">${esc(cut.label || '—')}${cut.flipped ? ' <span title="Parça 180° döndürülerek yerleştirildi">↻</span>' : ''}</div>`);
+    rows.push(`<div style="font-weight:700;margin-bottom:4px;">${esc(cut.label || '—')}${cut.flipped ? ` <span title="${FLIPPED_TITLE}">↻</span>` : ''}</div>`);
     rows.push(`<div><span style="opacity:.7">Boy (uzun kenar):</span> ${cut.nominal_mm ?? cut.effective_mm ?? '—'} mm</div>`);
     rows.push(`<div><span style="opacity:.7">Sol açı:</span> ${formatAngleTr(cut.angle_left_deg)}</div>`);
     rows.push(`<div><span style="opacity:.7">Sağ açı:</span> ${formatAngleTr(cut.angle_right_deg)}</div>`);

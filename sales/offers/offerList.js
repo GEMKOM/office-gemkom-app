@@ -57,6 +57,8 @@ import { getUser } from '../../authService.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../components/file-attachments/file-attachments.js';
 
+import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
+import { escapeHtml } from '../../utils/text.js';
 const CLOSED_STATUSES = ['cancelled']; // Only cancelled status prevents editing
 const EDITABLE_STATUSES = ['draft', 'consultation', 'pricing'];
 
@@ -3785,14 +3787,14 @@ async function showConsultationCommentsModal(taskId) {
                 const author = escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı');
                 const date = comment.created_at ? new Date(comment.created_at) : null;
                 const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleString('tr-TR') : '-';
-                const content = escapeHtml(comment.content || '').replace(/\n/g, '<br>');
+                const content = renderRichText(comment.content, { mentionedUsers: comment.mentioned_users_data });
                 return `
                     <div class="comment-item mb-3 pb-3 border-bottom">
                         <div class="d-flex align-items-center gap-2 mb-1">
                             <span class="fw-semibold">${author}</span>
                             <small class="text-muted">${dateText}</small>
                         </div>
-                        <div style="line-height: 1.5;">${content}</div>
+                        <div class="rich-text">${content}</div>
                     </div>
                 `;
             }).join('');
@@ -5727,13 +5729,6 @@ function flattenCatalogTreeToRows(nodes, level, templateId) {
         rows.push(...flattenCatalogTreeToRows(node.children || [], level + 1, templateId));
     });
     return rows;
-}
-
-function escapeHtml(str) {
-    if (str == null) return '';
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
 }
 
 function buildTreeFromFlatNodes(flatNodes) {

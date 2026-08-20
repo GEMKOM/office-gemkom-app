@@ -1,4 +1,5 @@
 import { initNavbar } from '../../components/navbar.js';
+import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import { 
     listJobOrders, 
@@ -72,6 +73,7 @@ import {
     deletePriceTier 
 } from '../../apis/subcontracting/priceTiers.js';
 import { listNCRs } from '../../apis/qualityControl.js';
+import { escapeHtml } from '../../utils/text.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -5450,32 +5452,10 @@ async function viewTopicDetail(topicId, jobNo) {
         };
         
         // Format content with @mentions - enhanced version
-        const formatContent = (content, mentionedUsers = []) => {
-            if (!content) return '';
-            let formatted = content;
-            
-            // Create a map of username to user data for quick lookup
-            const userMap = {};
-            if (mentionedUsers && Array.isArray(mentionedUsers)) {
-                mentionedUsers.forEach(user => {
-                    if (user.username) {
-                        userMap[user.username] = user;
-                    }
-                });
-            }
-            
-            // Replace @mentions with styled badges
-            formatted = formatted.replace(/@(\w+)/g, (match, username) => {
-                const user = userMap[username];
-                const displayName = user ? (user.full_name || user.username) : username;
-                return `<span class="mention-badge" data-username="${username}">@${displayName}</span>`;
-            });
-            
-            // Preserve line breaks
-            formatted = formatted.replace(/\n/g, '<br>');
-            
-            return formatted;
-        };
+        // User text: escaped, then formatted, by utils/richText.js. This used to
+        // go straight into innerHTML unescaped.
+        const formatContent = (content, mentionedUsers = []) =>
+            renderRichText(content, { mentionedUsers });
 
         const buildCommentHtml = (comment) => {
             const initials = getUserInitials(comment.created_by_name);
@@ -5494,7 +5474,7 @@ async function viewTopicDetail(topicId, jobNo) {
                             ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
                             ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                         </div>
-                        <div class="comment-content" style="color: #172b4d; line-height: 1.6; margin-bottom: 8px;">
+                        <div class="comment-content rich-text" style="color: #172b4d; margin-bottom: 8px;">
                             ${formatContent(comment.content, comment.mentioned_users_data || [])}
                         </div>
                         ${comment.attachments_data && comment.attachments_data.length > 0 ? `
@@ -5619,7 +5599,7 @@ async function viewTopicDetail(topicId, jobNo) {
             customContent: `
                 <div class="mb-3">
                     <h6 class="mb-2"><i class="fas fa-align-left me-2"></i>İçerik</h6>
-                    <div class="p-3 bg-light rounded" style="line-height: 1.6;">${formatContent(topic.content, topic.mentioned_users_data || [])}</div>
+                    <div class="p-3 bg-light rounded rich-text">${formatContent(topic.content, topic.mentioned_users_data || [])}</div>
                 </div>
             `
         });
@@ -5657,6 +5637,7 @@ async function viewTopicDetail(topicId, jobNo) {
                                     <textarea id="new-comment-text" class="form-control mb-2" rows="3" placeholder="Yorum yazın... (@ile kullanıcı etiketleyin)" style="resize: vertical;"></textarea>
                                     <div id="mention-suggestions" class="mention-suggestions" style="display: none;"></div>
                                 </div>
+                                <div class="rich-text-hint mt-1">${RICH_TEXT_HINT_HTML}</div>
                                 <div class="mb-2">
                                     <label class="form-label small">
                                         <i class="fas fa-paperclip me-1"></i>Dosyalar (Opsiyonel)
@@ -8143,12 +8124,6 @@ function addNewTask() {
 }
 
 // Helper function to escape HTML
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
 // Show manual department task creation modal
 window.showCreateDepartmentTaskModal = async function(jobNo) {
     try {

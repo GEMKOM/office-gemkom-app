@@ -67,6 +67,7 @@ import { ConfirmationModal } from '../../components/confirmation-modal/confirmat
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { backendBase } from '../../base.js';
+import { escapeHtml } from '../../utils/text.js';
 
 // Global variables
 let currentPurchaseOrders = [];
@@ -3572,14 +3573,6 @@ function confirmMarkLoanInstallmentPaid(loanId, installmentId, sequence) {
             }
         }
     });
-}
-
-function escapeHtml(str) {
-    return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
 }
 
 function parseMoneyNumber(val) {

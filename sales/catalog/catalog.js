@@ -4,6 +4,7 @@ import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
+import { escapeHtml } from '../../utils/text.js';
 import {
     listOfferTemplates, getOfferTemplate, getOfferTemplateNodeChildren,
     createOfferTemplate, patchOfferTemplate,
@@ -18,14 +19,6 @@ let actionConfirmModal = null;
 const childrenCache = new Map();
 const expandedNodes = new Set();
 const loadingNodes = new Set();
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
 
 function extractNodeList(data) {
     if (Array.isArray(data)) return data;

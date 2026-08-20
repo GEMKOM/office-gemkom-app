@@ -10,6 +10,7 @@ import { DisplayModal } from '../../../../components/display-modal/display-modal
 import { showNotification } from '../../../../components/notification/notification.js';
 import { fetchAllUsers } from '../../../../apis/users.js';
 import { fetchTeams, createTeam, updateTeam, deleteTeam } from '../../../../apis/welding/teams.js';
+import { escapeHtml } from '../../../utils/text.js';
 
 let teamsStats = null;
 let teamsFilters = null;
@@ -625,15 +626,6 @@ function formatMembers(row) {
             </button>
         </div>
     `;
-}
-
-function escapeHtml(text) {
-    if (text === null || text === undefined) return '';
-    return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
 }
 
 let membersCopyListenerAttached = false;

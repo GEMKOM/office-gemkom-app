@@ -16,6 +16,7 @@ import {
 import { fetchAllUsers, updateUser as updateUserAPI } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
+import { escapeHtml } from '../../../utils/text.js';
 
 const LEVEL_OPTIONS = [1, 2, 3, 4, 5, 6];
 
@@ -53,15 +54,6 @@ let currentDetailId = null;
 let currentPosition = null;
 let currentHolders = [];
 let assignDropdown = null;
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 function listFromResponse(data) {
     if (Array.isArray(data)) return data;

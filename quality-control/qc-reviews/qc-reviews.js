@@ -19,6 +19,8 @@ import {
 } from '../../../apis/qualityControl.js';
 import { createComment } from '../../../apis/projects/topics.js';
 
+import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
+import { escapeHtml } from '../../utils/text.js';
 // State management
 const urlParams = new URLSearchParams(window.location.search);
 let currentPage = parseInt(urlParams.get('page')) || 1;
@@ -572,11 +574,6 @@ async function initializeTableComponent() {
  * @param {object|null} discussionTopic - From API as discussion_topic_data or discussion_topic
  */
 function renderDiscussionTopicCustomHtml(discussionTopic) {
-    const escapeHtml = (value) => String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-
     const formatCommentDate = (value) => {
         if (!value) return '-';
         const date = new Date(value);
@@ -614,7 +611,7 @@ function renderDiscussionTopicCustomHtml(discussionTopic) {
     `;
 
     if (discussionTopic.content) {
-        html += `<div class="mb-3" style="white-space: pre-wrap;">${escapeHtml(discussionTopic.content)}</div>`;
+        html += `<div class="mb-3 rich-text">${renderRichText(discussionTopic.content)}</div>`;
     }
 
     if (attachments.length > 0) {
@@ -645,7 +642,7 @@ function renderDiscussionTopicCustomHtml(discussionTopic) {
                                     <strong>${escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı')}</strong>
                                     <small class="text-muted">${formatCommentDate(comment.created_at)}</small>
                                 </div>
-                                <div style="white-space: pre-wrap;">${escapeHtml(comment.content)}</div>
+                                <div class="rich-text">${renderRichText(comment.content, { mentionedUsers: comment.mentioned_users_data })}</div>
                             </div>
                         `).join('')}
                 </div>

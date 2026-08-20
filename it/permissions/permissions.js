@@ -5,6 +5,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
+import { escapeHtml } from '../../utils/text.js';
 import {
     fetchPermissionsMatrix,
     fetchUserPermissionsDetail,
@@ -72,15 +73,6 @@ let permsTabLoaded = false;
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
 function listFromResponse(data) {
     if (Array.isArray(data)) return data;
     return Array.isArray(data?.results) ? data.results : [];

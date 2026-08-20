@@ -8,9 +8,9 @@ import { DisplayModal } from '../../../components/display-modal/display-modal.js
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
+import { escapeHtml } from '../../../utils/text.js';
 import {
     renderSupplierStatusBadge,
-    escapeHtml,
 } from '../../../components/supplier-badges/supplier-badges.js';
 
 import { FiltersComponent } from '../../../components/filters/filters.js';

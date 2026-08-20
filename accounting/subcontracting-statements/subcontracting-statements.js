@@ -5,6 +5,7 @@ import { TableComponent } from '../../components/table/table.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { backendBase } from '../../base.js';
 import { authedFetch } from '../../authService.js';
+import { escapeHtml } from '../../utils/text.js';
 
 let table = null;
 let lastMappedRows = [];
@@ -191,15 +192,6 @@ function buildColumnsFromSchema(rows) {
             }
         };
     });
-}
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
 }
 
 function loadXLSXLibrary() {

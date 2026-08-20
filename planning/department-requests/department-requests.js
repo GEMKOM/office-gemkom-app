@@ -28,6 +28,11 @@ import { fetchAllUsers, fetchUsersDropdown } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
+import { escapeHtml } from '../../utils/text.js';
+
+// Same strict pass as escapeHtml (all five entities); the name documents
+// that the value lands in an attribute.
+const escapeHtmlAttribute = escapeHtml;
 
 /** UserGroup slug whose members make up the planlama team (organization.UserGroup.slug) */
 const PLANNING_TEAM_GROUP = 'planlama';
@@ -3063,22 +3068,6 @@ function prefillFilesFromPlanningRequest(request) {
 }
 
 // Helper function to escape HTML
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function escapeHtmlAttribute(text) {
-    if (!text) return '';
-    return String(text)
-        .replace(/&/g, '&amp;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
-}
 
 // Pre-fill items from department request
 function prefillItemsFromDepartmentRequest(departmentRequest) {

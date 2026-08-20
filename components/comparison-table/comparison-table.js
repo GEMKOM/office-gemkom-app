@@ -1,8 +1,8 @@
 // Comparison Table Component
+import { escapeHtml } from '../../utils/text.js';
 import {
     renderSupplierStatusBadge,
     renderStarRating,
-    escapeHtml,
 } from '../supplier-badges/supplier-badges.js';
 
 export class ComparisonTable {

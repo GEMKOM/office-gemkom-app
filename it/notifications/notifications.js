@@ -13,6 +13,7 @@ import {
 } from '../../../apis/notification/notifications.js';
 import { fetchAllUsers, fetchGroupsWithPermissions } from '../../../apis/users.js';
 import { fetchOrganizationGroups } from '../../../apis/human_resources/organization.js';
+import { escapeHtml } from '../../utils/text.js';
 
 // State management
 let notificationConfigs = [];
@@ -92,12 +93,6 @@ async function loadOrganizationUserGroupsCatalog() {
         console.warn('Error loading organization groups catalog:', error);
         cachedOrgUserGroupOptions = [];
     }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text ?? '';
-    return div.innerHTML;
 }
 
 function formatDate(dateString) {

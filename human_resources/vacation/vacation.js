@@ -6,6 +6,7 @@ import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
+import { escapeHtml } from '../../utils/text.js';
 import {
     LEAVE_TYPES,
     fetchVacationBalances,
@@ -109,15 +110,6 @@ function getBalanceFilters() {
     if (userIdRaw) filters.user_id = Number(userIdRaw);
     if (yearRaw) filters.year = Number(yearRaw);
     return filters;
-}
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
 }
 
 function resolveRequestKind(request, contextRow) {

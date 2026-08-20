@@ -11,6 +11,7 @@
  * pages were merged; the portfolio/table/gantt views around it were dropped.
  */
 import { showNotification } from '../../components/notification/notification.js';
+import { escapeHtml } from '../../utils/text.js';
 import {
     getJobOrderProductionPlan,
     getProductionPlanOverview,
@@ -1651,12 +1652,6 @@ function visibleOf(tasks) {
 // ---------------------------------------------------------------------------
 // Formatting helpers
 // ---------------------------------------------------------------------------
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text ?? '';
-    return div.innerHTML;
-}
 
 function formatDateCell(value) {
     if (!value) return '-';

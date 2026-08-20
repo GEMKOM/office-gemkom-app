@@ -4,13 +4,8 @@
 //
 // SECURITY: supplier.name is user-controlled. Badge/star markup here is fully
 // app-generated and safe to inject via innerHTML, but any supplier NAME printed
-// alongside must be passed through escapeHtml() at the call site.
-
-export function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-    }[c]));
-}
+// alongside must be escaped at the call site — import escapeHtml from
+// utils/text.js (this module used to re-export its own copy).
 
 export const SUPPLIER_STATUS_META = {
     approved:    { label: 'Onaylı',     cls: 'status-green',  icon: 'fa-circle-check' },

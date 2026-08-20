@@ -14,6 +14,7 @@ import {
     patchJobCostSummary
 } from '../../../apis/projects/cost.js';
 import { extractResultsFromResponse } from '../../../apis/paginationHelper.js';
+import { escapeHtml } from '../../utils/text.js';
 
 // State
 let pendingJobOrders = [];
@@ -990,13 +991,6 @@ function renderLinesTable() {
             revertLine(index);
         });
     });
-}
-
-function escapeHtml(s) {
-    if (s == null) return '';
-    const div = document.createElement('div');
-    div.textContent = s;
-    return div.innerHTML;
 }
 
 /** Turkish labels for price_source (read-only info in modal) */

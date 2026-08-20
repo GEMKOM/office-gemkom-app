@@ -24,6 +24,7 @@ import {
 } from '../../../apis/projects/taskTemplates.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { escapeHtml } from '../../utils/text.js';
 
 // State management
 let currentPage = 1;
@@ -1477,10 +1478,3 @@ function removeItem(itemId) {
 }
 
 // Utility functions
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-

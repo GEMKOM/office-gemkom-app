@@ -233,7 +233,7 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     },
                     '/manufacturing/welding/capacity-planning': {
-                        label: 'Kapasite Planlama',
+                        label: 'Kaynak Planlama',
                         icon: 'fas fa-calendar-alt',
                         children: {}
                     },

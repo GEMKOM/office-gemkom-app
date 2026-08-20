@@ -21,6 +21,9 @@ class GanttChart {
             onPeriodChange: null,
             onTaskClick: null,
             onTaskDrag: null,
+            // (dateStr 'YYYY-MM-DD') => boolean — shades weekend/holiday columns
+            // in week/month views without needing a machineCalendar.
+            isNonWorkingDay: null,
             showIssueKeysInBars: true, // Show issue keys in task bars
             // Progress customization options
             progressColors: {
@@ -1805,7 +1808,9 @@ class GanttChart {
 
     generateWorkingHoursBackground() {
         if (!this.machineCalendar) {
-            return '';
+            // Without a machine calendar the isNonWorkingDay callback can still
+            // shade weekend/holiday columns (welding planning's Excel-grid look).
+            return this.generateNonWorkingDayShading();
         }
 
         // For year view, we don't show working hours background since we only display months
@@ -1956,6 +1961,39 @@ class GanttChart {
         }
         
         return workingHoursHTML.join('');
+    }
+
+    generateNonWorkingDayShading() {
+        if (typeof this.options.isNonWorkingDay !== 'function') {
+            return '';
+        }
+        if (this.currentPeriod !== 'week' && this.currentPeriod !== 'month') {
+            return '';
+        }
+
+        const cellWidth = this.calculateCellWidth();
+        const headerHeight = this.calculateCellHeight();
+        const taskRowHeight = 60; // matches the machine-calendar branch
+        const totalHeight = headerHeight + (this.tasks.length * taskRowHeight);
+        const totalDays = Math.ceil((this.viewEnd - this.viewStart) / (1000 * 60 * 60 * 24));
+
+        const blocks = [];
+        for (let dayOffset = 0; dayOffset < totalDays; dayOffset++) {
+            const currentDate = new Date(this.viewStart);
+            currentDate.setDate(currentDate.getDate() + dayOffset);
+            const dateStr = `${currentDate.getFullYear()}-` +
+                `${String(currentDate.getMonth() + 1).padStart(2, '0')}-` +
+                `${String(currentDate.getDate()).padStart(2, '0')}`;
+            if (this.options.isNonWorkingDay(dateStr)) {
+                blocks.push(`
+                    <div class="gantt-non-working-day-block"
+                         style="left: ${dayOffset * cellWidth}px; width: ${cellWidth}px; height: ${totalHeight}px;"
+                         title="Tatil / hafta sonu">
+                    </div>
+                `);
+            }
+        }
+        return blocks.join('');
     }
 
     parseTimeToMinutes(timeString) {

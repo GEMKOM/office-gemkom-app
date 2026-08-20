@@ -1,10 +1,10 @@
 import { getSuppliers, getPaymentTerms } from '../../../apis/procurement.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { escapeHtml } from '../../../utils/text.js';
 import {
     renderSupplierStatusBadge,
     renderStarRating,
-    escapeHtml,
 } from '../../../components/supplier-badges/supplier-badges.js';
 
 // Suppliers Manager Module

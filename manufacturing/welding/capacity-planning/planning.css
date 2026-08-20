@@ -1,0 +1,272 @@
+/* Kaynak Planlama — Excel-style multi-project tracking */
+
+.planning-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+/* Custom tab strip — intentionally NOT Bootstrap .nav-tabs/.nav-link:
+   navbar.css styles the global .nav-link with !important white text.
+   Pill tabs that WRAP (no horizontal scrollbar); labels use the
+   subcontractor short_name from the backend. */
+.planning-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    max-width: 100%;
+    gap: 6px;
+    padding: 2px 0;
+}
+
+.planning-tab {
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    background: #fff;
+    color: #374151;
+    font-size: .82rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color .15s ease, color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.planning-tab > .fas {
+    font-size: .72rem;
+    color: #9ca3af;
+}
+
+.planning-tab .tab-label {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.planning-tab:hover {
+    border-color: #8b0000;
+    color: #8b0000;
+    box-shadow: 0 1px 4px rgba(139, 0, 0, .12);
+}
+
+.planning-tab:hover > .fas { color: #8b0000; }
+
+.planning-tab.active {
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #8b0000 0%, #660000 100%);
+    border-color: #8b0000;
+    box-shadow: 0 2px 6px rgba(139, 0, 0, .3);
+}
+
+.planning-tab.active > .fas { color: rgba(255, 255, 255, .85); }
+
+.planning-tab .resource-kg {
+    font-size: .7rem;
+    font-weight: 600;
+    color: #6b7280;
+    background: #f3f4f6;
+    border-radius: 10px;
+    padding: 1px 7px;
+}
+
+.planning-tab.active .resource-kg {
+    color: #fff;
+    background: rgba(255, 255, 255, .2);
+}
+
+.planning-tab.empty {
+    color: #9ca3af;
+    background: #f9fafb;
+}
+
+.planning-tab.empty:hover { color: #8b0000; background: #fff; }
+
+.planning-tab.more-toggle {
+    color: #6b7280;
+    background: transparent;
+    border-style: dashed;
+    font-size: .76rem;
+}
+
+.planning-tab.more-toggle:hover {
+    color: #8b0000;
+    border-color: #8b0000;
+    box-shadow: none;
+}
+
+.planning-tab .dirty-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #dc3545;
+    display: inline-block;
+    flex: none;
+}
+
+.planning-tab.active .dirty-dot {
+    background: #fff;
+    outline: 2px solid #dc3545;
+}
+
+/* ---- block header (group header row) ---- */
+.block-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 2px 0;
+}
+
+.block-header .block-toggle-ico {
+    color: #8b0000;
+    font-size: .8rem;
+    width: 14px;
+    text-align: center;
+    cursor: pointer;
+}
+
+.block-header .block-job {
+    font-weight: 700;
+    color: #1f2937;
+}
+
+.block-header .block-title {
+    color: #374151;
+    max-width: 260px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.block-header .block-meta {
+    color: #6b7280;
+    font-size: .78rem;
+}
+
+.block-header .block-weight-chip {
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 1px 10px;
+    font-size: .78rem;
+    font-weight: 600;
+    color: #1f2937;
+    cursor: pointer;
+}
+
+.block-header .block-weight-chip:hover { background: #e5e7eb; }
+.block-header .block-weight-chip.locked { cursor: not-allowed; opacity: .75; }
+
+.block-header .block-progress {
+    min-width: 110px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.block-header .block-progress .progress {
+    flex: 1;
+    height: 8px;
+    min-width: 60px;
+}
+
+.block-header .block-actions {
+    margin-left: auto;
+    display: flex;
+    gap: 4px;
+}
+
+.block-header .block-actions .btn { padding: 1px 7px; font-size: .72rem; }
+
+/* ---- row states ---- */
+tr.info-row td {
+    background: #f9fafb !important;
+    color: #6b7280;
+    font-size: .82rem;
+}
+
+tr.info-row td:first-child { font-style: italic; }
+
+tr.row-cancelled td {
+    background: #f8f9fa !important;
+    color: #9ca3af;
+}
+
+tr.row-cancelled td:first-child { text-decoration: line-through; }
+
+tr.painting-row td {
+    background: #f5f3ff !important;
+}
+
+tr.row-flash td {
+    animation: planning-row-flash 1.6s ease-out;
+}
+
+@keyframes planning-row-flash {
+    0% { background-color: #fde2e2; }
+    100% { background-color: transparent; }
+}
+
+.stage-title .default-ico { color: #8b0000; margin-right: 6px; }
+.stage-title .custom-ico { color: #6b7280; margin-right: 6px; }
+.stage-note { color: #6b7280; font-size: .78rem; }
+
+.mini-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.mini-progress .progress {
+    flex: 1;
+    height: 7px;
+    min-width: 46px;
+}
+
+/* ---- offcanvas job cards (carried over from the old page) ---- */
+.welding-jobs-list { overflow-y: auto; }
+
+.welding-job-card {
+    border: 1px solid #e5e7eb;
+    border-left: 3px solid #8b0000;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin-bottom: 8px;
+    cursor: grab;
+    background: #fff;
+    transition: box-shadow .15s ease, transform .05s ease;
+}
+
+.welding-job-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
+.welding-job-card:active { cursor: grabbing; }
+.welding-job-card.dragging { opacity: .5; }
+
+.welding-job-card.no-weight {
+    cursor: not-allowed;
+    opacity: .6;
+    border-left-color: #9ca3af;
+    background: #f9fafb;
+}
+
+.welding-job-card.no-weight:hover { box-shadow: none; }
+.welding-job-card .job-no { font-weight: 700; color: #1f2937; font-size: .85rem; }
+.welding-job-card .job-title { color: #374151; font-size: .8rem; }
+.welding-job-card .job-meta { color: #6b7280; font-size: .72rem; margin-top: 2px; }
+.welding-job-card .job-alloc.over { color: #b91c1c; font-weight: 600; }
+
+#sheet-container.drop-active {
+    outline: 2px dashed #8b0000;
+    outline-offset: -4px;
+    background: rgba(139, 0, 0, .03);
+}
+
+#sheet-container .empty-sheet {
+    padding: 48px 16px;
+    text-align: center;
+    color: #6b7280;
+}

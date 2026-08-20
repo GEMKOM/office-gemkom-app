@@ -304,3 +304,74 @@ body::after {
     position: relative;
     z-index: 1;
 }
+/* ── Rich text (comments & discussion) ─────────────────────────────────────
+   Rendered by utils/richText.js. Colours come from the house badge palette
+   in components/badges/badges.css so a comment matches the rest of the UI. */
+
+.rich-text {
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+.rich-text strong { font-weight: 600; }
+
+.rich-text code {
+    background-color: #f1f3f5;
+    border: 1px solid #e3e6ea;
+    border-radius: 3px;
+    padding: 0.05em 0.35em;
+    font-size: 0.9em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* The only two colours. Red = problem/blocker, green = resolved/approved —
+   the pair a reader can still interpret from the !! / ++ markers alone when
+   the same text is read as plain text in an e-mail or an export. */
+.rich-text .rt-critical {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border-radius: 3px;
+    padding: 0.05em 0.3em;
+    font-weight: 500;
+}
+
+.rich-text .rt-positive {
+    background-color: #d1fae5;
+    color: #065f46;
+    border-radius: 3px;
+    padding: 0.05em 0.3em;
+    font-weight: 500;
+}
+
+.rich-text ul,
+.rich-text ol {
+    margin: 0.35rem 0;
+    padding-left: 1.35rem;
+}
+
+.rich-text li { margin-bottom: 0.15rem; }
+
+.rich-text a { color: #0b5ed7; text-decoration: underline; }
+
+.rich-text s { opacity: 0.75; }
+
+/* Mention badge — was duplicated verbatim in department-tasks.css and
+   topic-discussion.css; defined once here now that every rich-text surface
+   can render one. */
+.mention-badge {
+    display: inline-block;
+    background-color: #e3fcef;
+    color: #006644;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+    font-size: 13px;
+    margin: 0 2px;
+}
+
+/* Syntax hint shown under comment inputs. */
+.rich-text-hint {
+    font-size: 11px;
+    color: #6c757d;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

@@ -6,9 +6,10 @@ import { DisplayModal } from '../../../components/display-modal/display-modal.js
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
-import { drawBarCanvas, buildPassTableHtml, formatAngleTr } from '../lc-geometry.js';
+import { drawBarCanvas, buildPassTableHtml, formatAngleTr, FLIPPED_TITLE } from '../lc-geometry.js';
 
 import { fetchMachinesDropdown } from '../../../apis/machines.js';
+import { escapeHtml } from '../../../utils/text.js';
 import {
     listLinearCuttingTasks,
     getLinearCuttingTask,
@@ -36,15 +37,6 @@ function normalizePaginated(data) {
     if (Array.isArray(data)) return { results: data, count: data.length };
     if (data && Array.isArray(data.results)) return { results: data.results, count: data.count ?? data.results.length };
     return { results: [], count: 0 };
-}
-
-function escapeHtml(v) {
-    return String(v ?? '')
-        .replaceAll('&', '&amp;')
-        .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;')
-        .replaceAll('"', '&quot;')
-        .replaceAll("'", '&#039;');
 }
 
 function escapeAttr(v) {
@@ -259,7 +251,7 @@ async function showTaskDetails(taskKey) {
                         formatter: (v, row) => {
                             let html = escapeHtml(v || '-');
                             if (row.flipped) {
-                                html += ' <span title="Parça 180° döndürülerek yerleştirildi">↻</span>';
+                                html += ` <span title="${FLIPPED_TITLE}">↻</span>`;
                             }
                             if (row.requires_bending) {
                                 html += ' <span class="badge bg-warning text-dark" title="Boy açınım boyudur — kesimden sonra bükülür">Büküm</span>';

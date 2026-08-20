@@ -1,17 +1,10 @@
+import { escapeHtml } from '../../utils/text.js';
 import {
     listOfferTemplates,
     getOfferTemplate,
     getOfferTemplateNodeChildren,
     searchOfferTemplateNodes
 } from '../../apis/sales/offerTemplates.js';
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}
 
 function extractList(data) {
     if (Array.isArray(data)) return data;

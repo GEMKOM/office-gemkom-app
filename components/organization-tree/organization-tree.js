@@ -1,3 +1,4 @@
+import { escapeHtml } from '../../utils/text.js';
 /**
  * OrganizationTree
  * A clean centered hierarchical org-chart component.
@@ -11,15 +12,6 @@
  *  - Department color accents
  *  - onNodeClick(nodeId) callback + selectNode(id) imperative API
  */
-
-function escapeHtml(value) {
-    return String(value ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
 
 function stringHash(input) {
     let hash = 0;
