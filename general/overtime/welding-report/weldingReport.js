@@ -250,6 +250,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         },
         emptyMessage: 'Seçilen kriterlerde kaynak mesai kaydı bulunamadı',
         emptyIcon: 'fas fa-inbox',
+        // Long report; keep the column headers in view while scrolling.
+        stickyHeader: true,
         footer: ({ allData, columns, hasActions }) => buildTotalsRow(allData, columns, hasActions),
         rowAttributes: (row) => row.flags.length
             ? { class: 'welding-outlier-row', style: 'background-color:#fffaf5;' }
