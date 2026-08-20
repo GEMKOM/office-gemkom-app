@@ -270,7 +270,10 @@ async function showOvertimeDetailsModal(request = null) {
             };
             const opsCell = (ops) => {
                 if (!ops || !ops.length) return '<span class="text-muted">-</span>';
-                return ops.map(o => `<span class="badge bg-light text-dark border me-1">${o.name || o.key}</span>`).join('');
+                return ops.map(o => {
+                    const label = `${o.part_key ? o.part_key + ' - ' : ''}${o.name || o.key}${o.order != null ? ' (#' + o.order + ')' : ''}`;
+                    return `<span class="badge bg-light text-dark border me-1">${label}</span>`;
+                }).join('');
             };
 
             // Header: checkbox column while decidable (submitted) or while an

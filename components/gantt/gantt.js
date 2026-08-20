@@ -574,7 +574,10 @@ class GanttChart {
                         <div class="gantt-task-name">${taskTitle}</div>
                     </div>`;
                 }
-                return `<div class="gantt-task-label">
+                // data-task-id makes the label clickable: on a long timeline a
+                // task's bar is often scrolled out of sight, and its label is
+                // the only way to reach it.
+                return `<div class="gantt-task-label" data-task-id="${task.id ?? ''}" title="${taskTitle}">
                     <div class="gantt-task-ti-number">${tiNumber}</div>
                     <div class="gantt-task-name">${taskTitle}</div>
                 </div>`;
@@ -1841,9 +1844,50 @@ class GanttChart {
         scrollingColumn.appendChild(indicator);
     }
 
+    /**
+     * Bring a task's bar into view horizontally (and flash it), so clicking a
+     * task that is scrolled off the timeline takes you to its bar.
+     */
+    scrollToTask(taskId) {
+        const column = this.container.querySelector('.gantt-scrolling-column');
+        const bar = this.container.querySelector(`.gantt-task-bar[data-task-id="${CSS.escape(String(taskId))}"]`);
+        if (!column || !bar) return false;
+
+        const barLeft = bar.offsetLeft;
+        const barWidth = bar.offsetWidth;
+        const viewport = column.clientWidth;
+        // Centre the bar when it fits, otherwise align its start with a margin.
+        const target = barWidth < viewport
+            ? barLeft - (viewport - barWidth) / 2
+            : barLeft - 40;
+        const left = Math.max(0, Math.min(target, column.scrollWidth - viewport));
+        // Instant, not smooth: the jump can span months, and a plain scrollLeft
+        // assignment is swallowed by the column's own scroll behaviour.
+        column.scrollTo({ left, behavior: 'instant' });
+
+        bar.classList.remove('gantt-bar-flash');
+        void bar.offsetWidth;   // restart the animation
+        bar.classList.add('gantt-bar-flash');
+        return true;
+    }
+
     bindTaskEvents() {
         const taskBars = this.container.querySelectorAll('.gantt-task-bar');
-        
+
+        // Clicking a task's label scrolls the timeline to its bar.
+        this.container.querySelectorAll('.gantt-task-label[data-task-id]').forEach(label => {
+            const taskId = label.dataset.taskId;
+            if (!taskId) return;
+            label.classList.add('gantt-task-label-clickable');
+            label.addEventListener('click', (e) => {
+                this.scrollToTask(taskId);
+                if (this.options.onTaskClick) {
+                    const task = this.tasks.find(t => t.id == taskId);
+                    if (task) this.options.onTaskClick(task, e);
+                }
+            });
+        });
+
         taskBars.forEach(bar => {
             bar.addEventListener('click', (e) => {
                 const taskId = e.currentTarget.dataset.taskId;
@@ -1865,6 +1909,10 @@ class GanttChart {
                     }
                 }
                 
+                // Keep the clicked bar comfortably in view (it may be clipped
+                // at the edge of the viewport).
+                if (taskId) this.scrollToTask(taskId);
+
                 if (this.options.onTaskClick) {
                     this.options.onTaskClick(task, e);
                 }

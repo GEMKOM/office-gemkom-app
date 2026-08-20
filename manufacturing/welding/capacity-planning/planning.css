@@ -271,6 +271,50 @@
 .forecast-cell.actual { color: #157347; font-weight: 600; }
 .forecast-cell.late { color: #b02a37; font-weight: 600; }
 
+/* ---- "İş Ekle" job allocation summary ---- */
+.job-alloc-info {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: #f8f9fa;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+}
+
+.alloc-summary {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: .8rem;
+    color: #374151;
+}
+
+.alloc-summary .lbl {
+    color: #6b7280;
+    margin-right: 5px;
+}
+
+.alloc-summary .is-free strong { color: #157347; }
+.alloc-summary .is-empty strong { color: #b02a37; }
+
+.alloc-holders {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 7px;
+}
+
+.alloc-holder {
+    background: #fff;
+    border: 1px solid #d1d5db;
+    border-radius: 12px;
+    padding: 1px 9px;
+    font-size: .75rem;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.alloc-holder .fas { font-size: .68rem; margin-right: 4px; color: #9ca3af; }
+
 /* ---- over-allocation warning ---- */
 .warn-list { padding-left: 1.1rem; }
 .warn-list li { margin-bottom: .35rem; }
@@ -313,15 +357,6 @@ tr.row-cancelled td:first-child { text-decoration: line-through; }
 
 tr.painting-row td {
     background: #f5f3ff !important;
-}
-
-tr.row-flash td {
-    animation: planning-row-flash 1.6s ease-out;
-}
-
-@keyframes planning-row-flash {
-    0% { background-color: #fde2e2; }
-    100% { background-color: transparent; }
 }
 
 .stage-title .default-ico { color: #8b0000; margin-right: 6px; }

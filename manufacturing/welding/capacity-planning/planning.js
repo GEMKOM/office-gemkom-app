@@ -84,6 +84,12 @@ function esc(value) {
 
 function resourceKeyOf(res) { return `${res.resource_type}-${res.id}`; }
 
+// Summing kg in floats leaves noise (…0.2999999999999545), which then lands in
+// the weight input; every kg figure is rounded to 2 decimals.
+function round2(n) {
+    return Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+}
+
 function fmtKg(n) {
     if (n === null || n === undefined || n === '') return '—';
     return Number(n).toLocaleString('tr-TR');
@@ -271,7 +277,7 @@ function allocatedForTask(weldingTaskId) {
             total += Number(b.allocated_weight_kg || 0);
         }
     }));
-    return total;
+    return round2(total);
 }
 
 // ---- rendering: tabs, warnings, jobs list --------------------------------
@@ -1152,16 +1158,64 @@ function onDeleteBlock(blockRef) {
 
 // ---- add job / edit weight modals ---------------------------------------
 
+function remainingForTask(weldingTaskId, totalWeightKg) {
+    if (totalWeightKg == null) return null;
+    return round2(Number(totalWeightKg) - allocatedForTask(weldingTaskId));
+}
+
+/** Who currently holds kg on a welding task, from the working copy. */
+function holdersForTask(weldingTaskId) {
+    const holders = [];
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (b.deleted || b.welding_task_id !== Number(weldingTaskId)) return;
+        holders.push({
+            name: res.display_name || res.name,
+            type: res.resource_type,
+            kg: Number(b.allocated_weight_kg || 0),
+        });
+    }));
+    return holders.sort((a, b) => b.kg - a.kg);
+}
+
+// Only jobs with capacity left are offerable: a job whose welding weight is
+// fully assigned has nothing to hand out.
 function weldingTaskOptions() {
     return weldingTasks
         .filter(t => t.total_weight_kg != null)
-        .map(t => {
-            const remaining = Number(t.total_weight_kg) - allocatedForTask(t.welding_task_id);
-            return {
-                value: String(t.welding_task_id),
-                label: `${t.job_no} — ${t.job_order_title || ''} (kalan ~${fmtKg(remaining)} kg)`,
-            };
-        });
+        .map(t => ({ task: t, remaining: remainingForTask(t.welding_task_id, t.total_weight_kg) }))
+        .filter(({ remaining }) => remaining > 0)
+        .sort((a, b) => String(a.task.job_no).localeCompare(String(b.task.job_no), 'tr'))
+        .map(({ task, remaining }) => ({
+            value: String(task.welding_task_id),
+            label: `${task.job_no} — ${task.job_order_title || ''} (kalan ${fmtKg(remaining)} kg)`,
+        }));
+}
+
+function jobAllocInfoHTML(weldingTaskId) {
+    const task = weldingTasks.find(t => String(t.welding_task_id) === String(weldingTaskId));
+    if (!task) return '';
+    const total = task.total_weight_kg != null ? Number(task.total_weight_kg) : null;
+    const assigned = allocatedForTask(task.welding_task_id);
+    const remaining = total != null ? total - assigned : null;
+    const holders = holdersForTask(task.welding_task_id);
+
+    return `
+        <div class="alloc-summary">
+            <span><span class="lbl">Toplam</span><strong>${fmtKg(total)} kg</strong></span>
+            <span><span class="lbl">Atanmış</span><strong>${fmtKg(assigned)} kg</strong></span>
+            <span class="${remaining != null && remaining <= 0 ? 'is-empty' : 'is-free'}">
+                <span class="lbl">Kalan</span><strong>${fmtKg(remaining)} kg</strong>
+            </span>
+        </div>
+        <div class="alloc-holders">
+            ${holders.length
+                ? holders.map(h => `
+                    <span class="alloc-holder">
+                        <i class="fas ${h.type === 'team' ? 'fa-users' : 'fa-industry'}"></i>
+                        ${esc(h.name)} <strong>${fmtKg(h.kg)} kg</strong>
+                    </span>`).join('')
+                : '<span class="text-muted small">Bu işe henüz atama yapılmamış.</span>'}
+        </div>`;
 }
 
 function openAddJobModal(prefillTaskId = null) {
@@ -1171,16 +1225,20 @@ function openAddJobModal(prefillTaskId = null) {
 
     const options = weldingTaskOptions();
     if (!options.length) {
-        showNotification('Atanabilir kaynak işi bulunamadı (işlerin toplam ağırlığı tanımlı olmalı).', 'error');
+        showNotification(
+            'Atanabilir kaynak işi yok: işlerin toplam ağırlığı tanımlı ve atanmamış ağırlığı kalmış olmalı.',
+            'error');
         return;
     }
     const isSub = res.resource_type === 'subcontractor';
     const prefillTask = prefillTaskId != null
         ? weldingTasks.find(t => t.welding_task_id === Number(prefillTaskId)) : null;
-    const defaultTaskId = prefillTask ? String(prefillTask.welding_task_id) : options[0].value;
+    const prefillIsOfferable = prefillTask
+        && options.some(o => o.value === String(prefillTask.welding_task_id));
+    const defaultTaskId = prefillIsOfferable ? String(prefillTask.welding_task_id) : options[0].value;
     const defaultTask = weldingTasks.find(t => String(t.welding_task_id) === defaultTaskId);
     const defaultRemaining = defaultTask
-        ? Number(defaultTask.total_weight_kg) - allocatedForTask(defaultTask.welding_task_id) : '';
+        ? remainingForTask(defaultTask.welding_task_id, defaultTask.total_weight_kg) : '';
 
     blockModal.clearAll();
     blockModal.setTitle(`İş Ekle — ${res.display_name || res.name}`);
@@ -1212,7 +1270,43 @@ function openAddJobModal(prefillTaskId = null) {
     });
     blockModal.onSaveCallback(onBlockModalSave);
     blockModal.render();
+    bindJobAllocInfo(defaultTaskId);
     blockModal.show();
+}
+
+/**
+ * Live "who holds what" panel under the job picker: total / assigned /
+ * remaining for the selected job plus a chip per team and subcontractor,
+ * refreshed whenever the selection changes.
+ */
+function bindJobAllocInfo(initialTaskId) {
+    // The EditModal builds its ModernDropdown on a 100ms timer.
+    setTimeout(() => {
+        const dropdownEl = blockModal.container.querySelector('#dropdown-welding_task_id');
+        const fieldWrap = dropdownEl?.closest('.dropdown-field-container') || dropdownEl;
+        if (!fieldWrap) return;
+
+        let panel = blockModal.container.querySelector('#job-alloc-info');
+        if (!panel) {
+            panel = document.createElement('div');
+            panel.id = 'job-alloc-info';
+            panel.className = 'job-alloc-info';
+            fieldWrap.parentElement.appendChild(panel);
+        }
+
+        const weightInput = blockModal.container.querySelector('#allocated_weight_kg');
+        const refresh = (taskId) => {
+            panel.innerHTML = jobAllocInfoHTML(taskId);
+            const task = weldingTasks.find(t => String(t.welding_task_id) === String(taskId));
+            if (task && weightInput) {
+                const remaining = remainingForTask(task.welding_task_id, task.total_weight_kg);
+                if (remaining != null && remaining > 0) weightInput.value = remaining;
+            }
+        };
+
+        refresh(initialTaskId);
+        dropdownEl.addEventListener('dropdown:select', (e) => refresh(e.detail?.value));
+    }, 150);
 }
 
 function onEditWeight(blockRef) {
@@ -1244,10 +1338,11 @@ function onEditWeight(blockRef) {
                 value: block.allocated_weight_kg,
                 help: assignable != null ? `Atanabilir üst sınır: ~${fmtKg(assignable)} kg` : '',
             },
-            ...(block.assignment_type === 'internal_team' ? [{
+            {
                 id: 'notes', name: 'notes', label: 'Not', type: 'textarea',
                 rows: 2, colSize: 12, value: block.notes || '',
-            }] : []),
+                help: 'Kaynak alt görevinin notuna kaydedilir.',
+            },
         ],
     });
     blockModal.onSaveCallback(onBlockModalSave);
@@ -1440,7 +1535,6 @@ function renderGantt() {
                         progress_percentage: Number(s.progress || 0),
                         status: ganttStatus(s.status, overdue),
                         is_overdue: overdue,
-                        _rowRef: `${b.key}-stage-${s.cid}`,
                     });
                 });
             } else if (b.subtask.start_date || b.subtask.end_date) {
@@ -1456,7 +1550,6 @@ function renderGantt() {
                     progress_percentage: Number(b.subtask.progress || 0),
                     status: ganttStatus(b.subtask.status, overdue),
                     is_overdue: overdue,
-                    _rowRef: `${b.key}-subtask`,
                 });
             }
             const painting = paintingByJob[b.job_no];
@@ -1473,7 +1566,6 @@ function renderGantt() {
                     progress_percentage: Number(painting.progress || 0),
                     status: ganttStatus(painting.status, overdue),
                     is_overdue: overdue,
-                    _rowRef: `${b.key}-painting`,
                 });
             }
         });
@@ -1490,9 +1582,9 @@ function renderGantt() {
             // touches and scrolls, instead of one month at a time.
             monthsPerView: 'auto',
             isNonWorkingDay: (dateStr) => calendar.isNonWorkingDay(dateStr),
-            onTaskClick: (task) => {
-                if (task && task._rowRef) scrollToSheetRow(task._rowRef);
-            },
+            // No onTaskClick: a Gantt click stays on the Gantt (the component
+            // scrolls to the bar itself); it must not yank the page back to
+            // the table.
         });
         // Columns are measured from .gantt-scrolling-column, which only exists
         // after the first render — re-render once on the next frame.
@@ -1502,14 +1594,6 @@ function renderGantt() {
     ganttChart.setTasks(rows);
 }
 
-function scrollToSheetRow(rowRef) {
-    const tr = document.querySelector(`#sheet-container tr[data-row-ref="${CSS.escape(rowRef)}"]`);
-    if (!tr) return;
-    tr.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    tr.classList.remove('row-flash');
-    void tr.offsetWidth;
-    tr.classList.add('row-flash');
-}
 
 // ---- save ----------------------------------------------------------------
 
@@ -1557,7 +1641,8 @@ function buildPayload() {
         if (Number(snap.allocated_weight_kg) !== Number(b.allocated_weight_kg)) {
             item.allocated_weight_kg = b.allocated_weight_kg;
         }
-        if ((snap.notes || '') !== (b.notes || '') && b.assignment_type === 'internal_team') {
+        // Notes are stored for both assignment kinds (on the subtask).
+        if ((snap.notes || '') !== (b.notes || '')) {
             item.notes = b.notes || '';
         }
         if (b.createDefaultStages) item.create_default_stages = true;

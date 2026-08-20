@@ -313,6 +313,25 @@
     background-color: rgba(139, 0, 0, 0.05);
 }
 
+/* Task labels double as "jump to this bar" targets. */
+.gantt-task-label-clickable {
+    cursor: pointer;
+}
+
+.gantt-task-label-clickable:hover {
+    background-color: rgba(139, 0, 0, 0.06);
+}
+
+/* Brief highlight on the bar we just scrolled to. */
+@keyframes gantt-bar-flash {
+    0%, 100% { box-shadow: none; }
+    25%, 75% { box-shadow: 0 0 0 3px rgba(139, 0, 0, 0.55); }
+}
+
+.gantt-task-bar.gantt-bar-flash {
+    animation: gantt-bar-flash 1.2s ease-out;
+}
+
 /* First day of a month on a continuous multi-month strip. */
 .gantt-header-cell.gantt-month-start {
     border-left: 2px solid #94a3b8;
