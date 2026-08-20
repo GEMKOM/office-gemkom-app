@@ -385,6 +385,14 @@ function statusBadge(status, overdue) {
     return html;
 }
 
+// A planned date reads plain; a real (started_at/completed_at) date that stands
+// in for a missing plan is marked so the two are never confused.
+function dateCell(value, isActual) {
+    if (!value) return '<span class="text-muted">—</span>';
+    if (!isActual) return fmtDate(value);
+    return `<span class="date-actual" title="Gerçekleşen tarih (planlanmış tarih girilmemiş)">${fmtDate(value)}</span>`;
+}
+
 // Actual completion date for finished rows, projected finish for open ones.
 function forecastCell(row) {
     if (!row.forecast_date) return '<span class="text-muted">—</span>';
@@ -434,9 +442,13 @@ function buildSheetRows(res) {
                 start_date: item.start_date,
                 end_date: item.end_date,
                 duration_wd: item.duration_wd,
-                weight: null,
+                weight: item.weight ?? null,
                 progress: item.progress,
                 status: item.status,
+                // These tasks rarely carry planned dates; the backend falls
+                // back to the real started_at/completed_at and flags it.
+                start_is_actual: !!item.start_is_actual,
+                end_is_actual: !!item.end_is_actual,
                 completed_at: item.completed_at || null,
                 forecast_date: item.forecast_date || null,
                 forecast_kind: item.forecast_kind || null,
@@ -700,7 +712,8 @@ function renderSheet() {
     if (!sheetTable) {
         container.innerHTML = '';
         sheetTable = new TableComponent('sheet-container', {
-            title: '',
+            // The page card already supplies the title and toolbar.
+            showHeader: false,
             data: sheetRows,
             sortable: false,
             pagination: false,
@@ -734,12 +747,12 @@ function renderSheet() {
                 {
                     field: 'start_date', label: 'Başlangıç', type: 'date', width: '110px',
                     headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v) => fmtDate(v),
+                    formatter: (v, row) => dateCell(v, row.start_is_actual),
                 },
                 {
                     field: 'end_date', label: 'Bitiş', type: 'date', width: '110px',
                     headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v) => fmtDate(v),
+                    formatter: (v, row) => dateCell(v, row.end_is_actual),
                 },
                 {
                     field: 'duration_wd', label: 'Süre (iş g.)', type: 'number',
@@ -750,8 +763,11 @@ function renderSheet() {
                 {
                     field: 'weight', label: 'Ağırlık', type: 'number', min: 1, step: 1, width: '82px',
                     headerClass: 'col-center', cellClass: 'col-center col-num',
-                    formatter: (v, row) => row.kind === 'stage'
-                        ? String(v ?? '') : '<span class="text-muted">—</span>',
+                    // Info rows carry a real rollup weight too — it just isn't
+                    // editable from this page.
+                    formatter: (v, row) => v == null
+                        ? '<span class="text-muted">—</span>'
+                        : (row.kind === 'stage' ? String(v) : `<span class="weight-readonly">${v}</span>`),
                 },
                 {
                     field: 'progress', label: 'İlerleme', type: 'number', min: 0, max: 100, step: 1,
@@ -921,6 +937,12 @@ function onCellEdit(row, field, newValue) {
         }
         target.progress = progress;
         row.progress = progress;
+        // A pending row's progress counts as 0 in every rollup — entering
+        // progress is itself the signal that the row has started.
+        if (progress > 0 && ['pending', 'blocked'].includes(target.status)) {
+            target.status = 'in_progress';
+            row.status = 'in_progress';
+        }
     } else if (field === 'status') {
         const status = String(newValue);
         if (!STATUS_META[status]) throw new Error('Geçersiz durum.');
@@ -1464,6 +1486,9 @@ function renderGantt() {
             availableViews: ['week', 'month', 'year'],
             filterByWorkingDays: false,
             showCurrentTime: true,
+            // Continuous timeline: the month view spans every month the plan
+            // touches and scrolls, instead of one month at a time.
+            monthsPerView: 'auto',
             isNonWorkingDay: (dateStr) => calendar.isNonWorkingDay(dateStr),
             onTaskClick: (task) => {
                 if (task && task._rowRef) scrollToSheetRow(task._rowRef);

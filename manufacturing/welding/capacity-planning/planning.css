@@ -248,6 +248,14 @@
     padding-left: 2.1rem !important;
 }
 
+/* A real date standing in for a missing planned one. */
+.date-actual {
+    color: #157347;
+    font-style: italic;
+}
+
+.weight-readonly { color: #6b7280; }
+
 /* Actual vs projected completion. */
 .forecast-cell {
     display: inline-flex;

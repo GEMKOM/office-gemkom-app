@@ -287,9 +287,11 @@
 }
 
 .gantt-header-cell {
+    box-sizing: border-box;
+    overflow: hidden;
     border-right: 1px solid #cbd5e1;
     border-bottom: 1px solid #cbd5e1;
-    padding: 12px 8px;
+    padding: 12px 4px;
     text-align: center;
     font-size: 0.8rem;
     font-weight: 600;
@@ -309,6 +311,16 @@
 
 .gantt-header-cell:hover {
     background-color: rgba(139, 0, 0, 0.05);
+}
+
+/* First day of a month on a continuous multi-month strip. */
+.gantt-header-cell.gantt-month-start {
+    border-left: 2px solid #94a3b8;
+}
+
+.gantt-header-cell.gantt-month-start .gantt-month {
+    color: #8b0000;
+    font-weight: 700;
 }
 
 .gantt-header-cell:last-child {

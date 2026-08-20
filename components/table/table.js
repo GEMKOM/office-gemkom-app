@@ -133,8 +133,9 @@ export class TableComponent {
 
         const tableClass = this.buildTableClass();
         
-        this.container.innerHTML = `
-            <div class="dashboard-card ${this.options.stickyHeader ? 'has-sticky-header' : ''}">
+        // showHeader:false drops the card header entirely — for tables embedded
+        // in a page that already provides its own title and toolbar.
+        const header = this.options.showHeader === false ? '' : `
                 <div class="card-header">
                     <h5 class="card-title">
                         <i class="${this.options.icon || 'fas fa-table'} me-2 ${this.options.iconColor || 'text-primary'}"></i>
@@ -152,7 +153,11 @@ export class TableComponent {
                             </button>
                         ` : ''}
                     </div>
-                </div>
+                </div>`;
+
+        this.container.innerHTML = `
+            <div class="dashboard-card ${this.options.stickyHeader ? 'has-sticky-header' : ''}">
+                ${header}
                 <div class="card-body">
                     ${this.options.responsive ? `<div class="table-responsive ${this.options.stickyHeader ? 'table-sticky-header' : ''}">` : ''}
                         <table class="${tableClass} ${this.options.stickyHeader ? 'table-sticky-header' : ''}" id="${this.containerId}-table">

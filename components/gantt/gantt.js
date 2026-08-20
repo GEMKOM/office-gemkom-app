@@ -24,6 +24,14 @@ class GanttChart {
             // (dateStr 'YYYY-MM-DD') => boolean — shades weekend/holiday columns
             // in week/month views without needing a machineCalendar.
             isNonWorkingDay: null,
+            // Month view span. 1 (default) keeps the classic one-month window.
+            // A number shows that many consecutive months; 'auto' spans the
+            // loaded tasks. Anything >1 makes the timeline scroll horizontally
+            // at a fixed day width instead of squeezing into the container.
+            monthsPerView: 1,
+            monthDayWidth: 38,      // px per day when the month view scrolls
+            maxAutoMonths: 18,
+            trailingMonths: 3,      // empty months kept past the last bar ('auto')
             showIssueKeysInBars: true, // Show issue keys in task bars
             // Progress customization options
             progressColors: {
@@ -194,8 +202,9 @@ class GanttChart {
         }
         
         this.currentDate = date;
+        this._userNavigated = true;   // stop 'auto' re-anchoring on the next setTasks
         this.updateCurrentPeriodIndicator();
-        
+
         // Show skeleton loading immediately
         this.showSkeletonLoading();
         
@@ -257,9 +266,21 @@ class GanttChart {
                 periodLabel = `${startOfWeek.getDate()}-${endOfWeek.getDate()} ${date.toLocaleDateString('tr-TR', { month: 'short' })}`;
                 break;
                 
-            case 'month':
-                periodLabel = date.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+            case 'month': {
+                const span = this._monthsPerView();
+                if (span > 1) {
+                    // Continuous strip: label the whole range, e.g. "Ağu – Ara 2026".
+                    const last = new Date(date.getFullYear(), date.getMonth() + span - 1, 1);
+                    const from = date.toLocaleDateString('tr-TR', { month: 'short' });
+                    const to = last.toLocaleDateString('tr-TR', { month: 'short', year: 'numeric' });
+                    periodLabel = date.getFullYear() === last.getFullYear()
+                        ? `${from} – ${to}`
+                        : `${date.toLocaleDateString('tr-TR', { month: 'short', year: 'numeric' })} – ${to}`;
+                } else {
+                    periodLabel = date.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' });
+                }
                 break;
+            }
                 
             case 'year':
                 periodLabel = date.getFullYear().toString();
@@ -274,10 +295,30 @@ class GanttChart {
 
     setTasks(tasks) {
         this.allTasks = tasks || [];
+
+        // 'auto' month span: anchor the strip at the first month that has work,
+        // so the whole plan is reachable by scrolling. Manual navigation wins.
+        if (
+            this.options.monthsPerView === 'auto' &&
+            this.currentPeriod === 'month' &&
+            !this._userNavigated
+        ) {
+            const range = this._taskMonthRange();
+            if (range) {
+                this.currentDate = new Date(range.start);
+                this.updateCurrentPeriodIndicator();
+            }
+        }
+
         this.filterTasksForCurrentView();
-        
+
         this.renderChart();
-        
+
+        // A long strip opens at today rather than at its far-left edge.
+        if (this.currentPeriod === 'month' && this._monthsPerView() > 1) {
+            this._scrollMonthViewToToday();
+        }
+
         // For day view, scroll to show working hours (7-17) when data is loaded
         if (this.currentPeriod === 'day') {
             // Use requestAnimationFrame to ensure DOM is fully rendered before scrolling
@@ -588,8 +629,9 @@ class GanttChart {
                     totalWidth = 7 * cellWidth; // 7 days
                     break;
                 case 'month':
-                    const totalDaysInMonth = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 0).getDate();
-                    totalWidth = totalDaysInMonth * cellWidth; // Exact number of days
+                    // Every day in the view range — one month, or a continuous
+                    // multi-month strip that scrolls.
+                    totalWidth = this._monthViewDayCount() * cellWidth;
                     break;
                 case 'year':
                     totalWidth = 12 * cellWidth; // 12 months
@@ -645,8 +687,11 @@ class GanttChart {
                 return Math.max(60, containerWidth / totalDaysInWeek);
                 
             case 'month':
-                // Fill available width on large screens, but keep a minimum
-                // so month view can still scroll on narrow containers.
+                // Multi-month spans use a fixed day width and scroll; a single
+                // month still fills the available width (with a minimum).
+                if (this._monthsPerView() > 1) {
+                    return this.options.monthDayWidth;
+                }
                 const daysInMonth = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 0).getDate();
                 return Math.max(40, containerWidth / daysInMonth);
                 
@@ -707,6 +752,65 @@ class GanttChart {
         const date = new Date(this.currentDate);
         this.calculateViewRangeForDate(date);
     }
+
+    /** How many months the month view spans (>= 1). */
+    _monthsPerView() {
+        const opt = this.options.monthsPerView;
+        if (opt === 'auto') {
+            const range = this._taskMonthRange();
+            if (!range) return 1;
+            return Math.min(Math.max(range.months, 1), this.options.maxAutoMonths);
+        }
+        const n = parseInt(opt, 10);
+        return Number.isFinite(n) && n > 0 ? n : 1;
+    }
+
+    /** Put today (or the strip's start) near the left edge of the viewport. */
+    _scrollMonthViewToToday() {
+        const scroll = () => {
+            const column = this.container.querySelector('.gantt-scrolling-column');
+            if (!column) return;
+            const dayMs = 1000 * 60 * 60 * 24;
+            const offsetDays = Math.floor((Date.now() - this.viewStart.getTime()) / dayMs);
+            if (offsetDays <= 0) return;                       // strip starts in the future
+            const cellWidth = this.calculateCellWidth();
+            const target = Math.max(0, (offsetDays - 2) * cellWidth);
+            const left = Math.min(target, Math.max(0, column.scrollWidth - column.clientWidth));
+            // scrollTo(instant): the column animates a plain scrollLeft
+            // assignment, and the next render lands before it settles.
+            column.scrollTo({ left, behavior: 'instant' });
+        };
+        // The scrolling column only exists after the render settles.
+        requestAnimationFrame(scroll);
+        setTimeout(scroll, 0);
+    }
+
+    /** Calendar days between viewStart and viewEnd (month view). */
+    _monthViewDayCount() {
+        const dayMs = 1000 * 60 * 60 * 24;
+        return Math.max(1, Math.round((this.viewEnd - this.viewStart) / dayMs));
+    }
+
+    /** Month range the auto strip covers: every month the tasks touch, always
+     *  including today, plus a trailing buffer so future work can be scheduled
+     *  by scrolling past the last bar. */
+    _taskMonthRange() {
+        const times = [];
+        (this.allTasks || []).forEach(t => {
+            if (t.planned_start_ms) times.push(t.planned_start_ms);
+            if (t.planned_end_ms) times.push(t.planned_end_ms);
+        });
+        if (!times.length) return null;
+        const now = new Date();
+        const first = new Date(Math.min(...times, now.getTime()));
+        const last = new Date(Math.max(...times, now.getTime()));
+        const start = new Date(first.getFullYear(), first.getMonth(), 1);
+        const months =
+            (last.getFullYear() - start.getFullYear()) * 12 +
+            (last.getMonth() - start.getMonth()) + 1 +
+            (this.options.trailingMonths ?? 3);
+        return { start, months };
+    }
     
     calculateViewRangeForDate(date) {
         switch (this.currentPeriod) {
@@ -730,11 +834,14 @@ class GanttChart {
                 this.viewEnd.setHours(23, 59, 59, 999);
                 break;
                 
-            case 'month':
-                // Show only current month (1st to last day)
+            case 'month': {
+                // One month by default; monthsPerView >1 (or 'auto') makes the
+                // timeline continue across months and scroll horizontally.
+                const span = this._monthsPerView();
                 this.viewStart = new Date(date.getFullYear(), date.getMonth(), 1, 0, 0, 0, 0);
-                this.viewEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+                this.viewEnd = new Date(date.getFullYear(), date.getMonth() + span, 0, 23, 59, 59, 999);
                 break;
+            }
                 
             case 'year':
                 // Show only current year (January to December)
@@ -799,24 +906,33 @@ class GanttChart {
                 }
                 break;
                 
-            case 'month':
-                // Daily view for current month - fit in visible area
-                const totalDaysInMonth = new Date(this.viewStart.getFullYear(), this.viewStart.getMonth() + 1, 0).getDate();
+            case 'month': {
+                // Daily cells across the whole view range — one month by
+                // default, or a continuous multi-month strip.
+                const totalDaysInView = this._monthViewDayCount();
                 const monthDayWidth = this.calculateCellWidth();
-                for (let i = 0; i < totalDaysInMonth; i++) {
-                    const currentDate = new Date(this.viewStart.getFullYear(), this.viewStart.getMonth(), i + 1);
-                    
+                for (let i = 0; i < totalDaysInView; i++) {
+                    const currentDate = new Date(
+                        this.viewStart.getFullYear(), this.viewStart.getMonth(), this.viewStart.getDate() + i);
+
                     const day = currentDate.getDate();
                     const month = currentDate.toLocaleDateString('tr-TR', { month: 'short' });
-                    
+                    // Mark where a new month begins so a long strip stays readable.
+                    const isMonthStart = day === 1 && i > 0;
+
+                    // Exact width (not just min-width): bars are positioned by
+                    // cellWidth arithmetic, so a cell that grows to fit its
+                    // label would drift the columns away from the bars and
+                    // push the header past the grid-painted content width.
                     headerCells += `
-                        <div class="gantt-header-cell" style="min-width: ${monthDayWidth}px;">
+                        <div class="gantt-header-cell${isMonthStart ? ' gantt-month-start' : ''}" style="width: ${monthDayWidth}px; min-width: ${monthDayWidth}px; max-width: ${monthDayWidth}px;">
                             <div class="gantt-date">${day}</div>
                             <div class="gantt-month">${month}</div>
                         </div>
                     `;
                 }
                 break;
+            }
                 
             case 'year':
                 // Monthly view for current year (12 months) - fit in visible area
