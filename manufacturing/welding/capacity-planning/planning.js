@@ -57,7 +57,6 @@ let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKe
 
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
 let expandedByBlockKey = {};      // block.key -> bool
-let jobsSearchTerm = '';
 let showCompleted = false;
 let showEmptyResources = false;   // empty-resource tabs tucked behind a toggle
 let newCounter = 0;
@@ -141,6 +140,9 @@ function stageVM(s) {
         duration_wd: s.duration_wd,
         start_date: s.start_date,
         end_date: s.end_date,
+        completed_at: s.completed_at || null,
+        forecast_date: s.forecast_date || null,
+        forecast_kind: s.forecast_kind || null,
         note: s.note || '',
         deleted: false,
     };
@@ -167,6 +169,9 @@ function blockVM(b, res) {
             start_date: b.subtask.start_date,
             end_date: b.subtask.end_date,
             duration_wd: b.subtask.duration_wd,
+            completed_at: b.subtask.completed_at || null,
+            forecast_date: b.subtask.forecast_date || null,
+            forecast_kind: b.subtask.forecast_kind || null,
         },
         stages: (b.stages || []).map(stageVM),
         createDefaultStages: false,
@@ -195,6 +200,9 @@ function hydrate(boardData) {
                 duration_wd: p.duration_wd,
                 start_date: p.start_date,
                 end_date: p.end_date,
+                completed_at: p.completed_at || null,
+                forecast_date: p.forecast_date || null,
+                forecast_kind: p.forecast_kind || null,
                 has_subtasks: !!p.has_subtasks,
             };
             snapPainting.set(jobNo, JSON.stringify(paintingByJob[jobNo]));
@@ -320,80 +328,50 @@ function renderTabs() {
 function renderWarnings() {
     const banner = document.getElementById('warnings-banner');
     if (!banner) return;
+
+    // Who holds the kg on each welding task, from the working copy (so the
+    // banner reflects unsaved edits too).
+    const holdersByTask = {};
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (b.deleted) return;
+        (holdersByTask[b.welding_task_id] ||= []).push({
+            name: res.display_name || res.name,
+            type: res.resource_type,
+            kg: Number(b.allocated_weight_kg || 0),
+        });
+    }));
+
     const lines = [];
     weldingTasks.forEach(t => {
         if (t.total_weight_kg == null) return;
         const allocated = allocatedForTask(t.welding_task_id);
-        if (allocated > Number(t.total_weight_kg)) {
-            lines.push(`<li>${esc(t.job_no)}: atanan <strong>${fmtKg(allocated)} kg</strong> &gt; iş ağırlığı ${fmtKg(t.total_weight_kg)} kg</li>`);
-        }
+        const total = Number(t.total_weight_kg);
+        if (allocated <= total) return;
+        const holders = (holdersByTask[t.welding_task_id] || [])
+            .sort((a, b) => b.kg - a.kg)
+            .map(h => `
+                <span class="warn-holder">
+                    <i class="fas ${h.type === 'team' ? 'fa-users' : 'fa-industry'}"></i>
+                    ${esc(h.name)} <strong>${fmtKg(h.kg)} kg</strong>
+                </span>`).join('');
+        lines.push(`
+            <li>
+                <strong>${esc(t.job_no)}</strong>${t.job_order_title ? ` — ${esc(t.job_order_title)}` : ''}:
+                atanan <strong>${fmtKg(allocated)} kg</strong> &gt; iş ağırlığı ${fmtKg(total)} kg
+                <span class="warn-over">(+${fmtKg(allocated - total)} kg)</span>
+                <div class="warn-holders">${holders || '<span class="text-muted">atama bulunamadı</span>'}</div>
+            </li>`);
     });
+
     if (!lines.length) {
         banner.classList.add('d-none');
         banner.innerHTML = '';
         return;
     }
-    banner.innerHTML = `<i class="fas fa-exclamation-triangle me-1"></i>Aşırı tahsis:<ul class="mb-0">${lines.join('')}</ul>`;
+    banner.innerHTML = `
+        <div class="fw-semibold mb-1"><i class="fas fa-exclamation-triangle me-1"></i>Aşırı tahsis</div>
+        <ul class="warn-list mb-0">${lines.join('')}</ul>`;
     banner.classList.remove('d-none');
-}
-
-function renderJobsList() {
-    const container = document.getElementById('jobs-list-container');
-    if (!container) return;
-
-    const term = jobsSearchTerm.trim().toLocaleLowerCase('tr');
-    const tasks = weldingTasks.filter(t => {
-        if (!term) return true;
-        return [t.job_no, t.job_order_title, t.customer_name]
-            .some(v => (v || '').toString().toLocaleLowerCase('tr').includes(term));
-    });
-
-    if (!tasks.length) {
-        container.innerHTML = `<div class="text-muted text-center py-4">Kaynak işi bulunamadı.</div>`;
-        return;
-    }
-
-    container.innerHTML = tasks.map(t => {
-        const hasWeight = t.total_weight_kg != null;
-        const allocated = allocatedForTask(t.welding_task_id);
-        const remaining = hasWeight ? Number(t.total_weight_kg) - allocated : null;
-        const over = hasWeight && remaining < 0;
-        const meta = `
-            <div class="job-meta">
-                <i class="fas fa-user me-1"></i>${esc(t.customer_name || '—')}
-                ${hasWeight ? `&nbsp;·&nbsp;<i class="fas fa-weight-hanging me-1"></i>${fmtKg(t.total_weight_kg)} kg` : ''}
-                &nbsp;·&nbsp;<i class="fas fa-flag-checkered me-1"></i>${fmtDate(t.target_completion_date)}
-            </div>`;
-        if (!hasWeight) {
-            return `
-                <div class="welding-job-card no-weight" draggable="false">
-                    <div class="job-no">${esc(t.job_no || '')}</div>
-                    <div class="job-title">${esc(t.job_order_title || '')}</div>
-                    ${meta}
-                    <div class="job-meta text-danger">
-                        <i class="fas fa-exclamation-triangle me-1"></i>Ağırlık tanımlı değil — atama yapılamaz
-                    </div>
-                </div>`;
-        }
-        return `
-            <div class="welding-job-card" draggable="true" data-task-id="${t.welding_task_id}">
-                <div class="job-no">${esc(t.job_no || '')}</div>
-                <div class="job-title">${esc(t.job_order_title || '')}</div>
-                ${meta}
-                <div class="job-meta ${over ? 'job-alloc over' : 'job-alloc'}">
-                    <i class="fas fa-industry me-1"></i>Atanmış: ${fmtKg(allocated)} kg · Kalan: ${fmtKg(remaining)} kg
-                </div>
-            </div>`;
-    }).join('');
-
-    container.querySelectorAll('.welding-job-card:not(.no-weight)').forEach(card => {
-        card.addEventListener('dragstart', (e) => {
-            card.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'copy';
-            e.dataTransfer.setData('text/plain', card.dataset.taskId);
-        });
-        card.addEventListener('dragend', () => card.classList.remove('dragging'));
-    });
 }
 
 // ---- rendering: the sheet (grouped table) --------------------------------
@@ -407,13 +385,32 @@ function statusBadge(status, overdue) {
     return html;
 }
 
+// Actual completion date for finished rows, projected finish for open ones.
+function forecastCell(row) {
+    if (!row.forecast_date) return '<span class="text-muted">—</span>';
+    const isActual = row.forecast_kind === 'actual';
+    const late = !isActual && row.end_date && row.forecast_date > row.end_date;
+    const cls = ['forecast-cell'];
+    if (isActual) cls.push('actual');
+    if (late) cls.push('late');
+    const title = isActual
+        ? 'Gerçekleşen tamamlanma tarihi'
+        : (row.forecast_kind === 'rate'
+            ? 'Tahmini bitiş — mevcut ilerleme hızına göre'
+            : 'Tahmini bitiş — planlanan tarihe göre');
+    return `
+        <span class="${cls.join(' ')}" title="${title}${late ? ' (hedefin gerisinde)' : ''}">
+            <i class="fas ${isActual ? 'fa-circle-check' : 'fa-clock'}"></i>${fmtDate(row.forecast_date)}
+        </span>`;
+}
+
 function progressBar(value) {
     const pct = Math.max(0, Math.min(100, Number(value ?? 0)));
     const color = pct >= 100 ? 'bg-success' : (pct > 0 ? 'bg-primary' : 'bg-secondary');
     return `
         <div class="mini-progress">
             <div class="progress"><div class="progress-bar ${color}" style="width:${pct}%"></div></div>
-            <span class="small">${pct % 1 === 0 ? pct : pct.toFixed(1)}%</span>
+            <span class="progress-label">${pct % 1 === 0 ? pct : pct.toFixed(1)}%</span>
         </div>`;
 }
 
@@ -440,6 +437,9 @@ function buildSheetRows(res) {
                 weight: null,
                 progress: item.progress,
                 status: item.status,
+                completed_at: item.completed_at || null,
+                forecast_date: item.forecast_date || null,
+                forecast_kind: item.forecast_kind || null,
                 note: '',
             });
         };
@@ -467,6 +467,9 @@ function buildSheetRows(res) {
                     weight: s.weight,
                     progress: s.progress,
                     status: s.status,
+                    completed_at: s.completed_at,
+                    forecast_date: s.forecast_date,
+                    forecast_kind: s.forecast_kind,
                     note: s.note,
                 });
             });
@@ -483,6 +486,9 @@ function buildSheetRows(res) {
                 weight: null,
                 progress: b.subtask.progress,
                 status: b.subtask.status,
+                completed_at: b.subtask.completed_at,
+                forecast_date: b.subtask.forecast_date,
+                forecast_kind: b.subtask.forecast_kind,
                 note: b.notes,
             });
         }
@@ -501,6 +507,9 @@ function buildSheetRows(res) {
                 weight: null,
                 progress: painting.progress,
                 status: painting.status,
+                completed_at: painting.completed_at,
+                forecast_date: painting.forecast_date,
+                forecast_kind: painting.forecast_kind,
                 note: '',
             });
         }
@@ -555,51 +564,87 @@ function blockRollup(b) {
     }
 
     const overdue = !!(windowEnd && windowEnd < todayStr() && derived !== 'completed');
-    return { progress, windowStart, windowEnd, totalDays, derived, overdue };
+
+    // The block finishes when its last row does.
+    const forecastRows = hasStages
+        ? b.stages.filter(s => !s.deleted && s.status !== 'cancelled')
+        : [b.subtask];
+    const forecastDates = forecastRows.map(s => s.forecast_date).filter(Boolean).sort();
+    const forecastDate = forecastDates[forecastDates.length - 1] || null;
+    const allActual = forecastRows.length > 0
+        && forecastRows.every(s => s.forecast_kind === 'actual');
+
+    return {
+        progress, windowStart, windowEnd, totalDays, derived, overdue,
+        forecastDate,
+        forecastKind: forecastDate ? (allActual ? 'actual' : 'rate') : null,
+    };
 }
 
-function blockHeaderHTML(b, groupValue) {
+// Returns an object keyed by column field: the table renders it as real cells,
+// so a block's summary row lines up with the stage rows beneath it.
+function blockHeaderCells(b, groupValue) {
     const rollup = blockRollup(b);
     const hasStages = b.stages.some(s => !s.deleted);
     const weightLocked = b.is_billed;
     const pct = Math.round(rollup.progress);
-    // The table's default group header draws the collapse chevron, but a
-    // custom formatter must render its own; the row's own onclick toggles.
-    const expanded = sheetTable?.groupExpandedState?.[groupValue] !== false;
-    return `
-        <div class="block-header" data-block-ref="${esc(b.key)}">
-            <i class="fas ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'} block-toggle-ico"
-               title="${expanded ? 'Daralt' : 'Genişlet'}"></i>
-            <span class="block-job">${esc(b.job_no || '')}${b.isNew ? ' <span class="badge bg-info">yeni</span>' : ''}</span>
-            <span class="block-title" title="${esc(b.job_order_title || '')}">${esc(b.job_order_title || '')}</span>
-            <span class="block-meta"><i class="fas fa-user me-1"></i>${esc(b.customer_name || '—')}</span>
+    // The table's default group header draws the collapse chevron; a custom
+    // formatter must render its own. The row's own onclick does the toggling.
+    const expanded = sheetTable?.groupExpandedState?.[groupValue] === true;
+
+    return {
+        title: `
+            <div class="block-id" data-block-ref="${esc(b.key)}">
+                <i class="fas ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'} block-toggle-ico"></i>
+                <div class="block-id-text">
+                    <div class="block-id-line">
+                        <span class="block-job">${esc(b.job_no || '')}</span>
+                        ${b.isNew ? '<span class="badge bg-info ms-1">yeni</span>' : ''}
+                        <span class="block-title" title="${esc(b.job_order_title || '')}">${esc(b.job_order_title || '')}</span>
+                    </div>
+                    <div class="block-customer" title="${esc(b.customer_name || '')}">
+                        <i class="fas fa-user"></i>${esc(b.customer_name || '—')}
+                    </div>
+                </div>
+            </div>`,
+        start_date: `<span class="block-cell-value">${fmtDate(rollup.windowStart)}</span>`,
+        end_date: `<span class="block-cell-value">${fmtDate(rollup.windowEnd)}</span>`,
+        duration_wd: `<span class="block-cell-value">${fmtDuration(rollup.totalDays)}</span>`,
+        weight: `
             <span class="block-weight-chip ${weightLocked ? 'locked' : ''}" data-action="edit-weight"
                   title="${weightLocked ? 'Hakediş kesilmiş — ağırlık kilitli' : 'Ağırlığı düzenle'}">
-                <i class="fas fa-weight-hanging me-1"></i>${fmtKg(b.allocated_weight_kg)} kg${weightLocked ? ' <i class="fas fa-lock ms-1"></i>' : ''}
-            </span>
-            <span class="block-meta">
-                <i class="fas fa-calendar me-1"></i>${fmtDate(rollup.windowStart)} – ${fmtDate(rollup.windowEnd)}
-                ${rollup.totalDays != null ? ` · ${fmtDuration(rollup.totalDays)}` : ''}
-            </span>
-            <span class="block-progress">
+                ${fmtKg(b.allocated_weight_kg)} kg${weightLocked ? ' <i class="fas fa-lock"></i>' : ''}
+            </span>`,
+        progress: `
+            <div class="mini-progress">
                 <div class="progress"><div class="progress-bar ${pct >= 100 ? 'bg-success' : 'bg-primary'}" style="width:${Math.min(pct, 100)}%"></div></div>
-                <span class="small">${pct}%</span>
-            </span>
-            ${statusBadge(rollup.derived, rollup.overdue)}
-            <span class="block-actions">
+                <span class="progress-label">${pct}%</span>
+            </div>`,
+        status: statusBadge(rollup.derived, rollup.overdue),
+        forecast_date: forecastCell({
+            forecast_date: rollup.forecastDate,
+            forecast_kind: rollup.forecastKind,
+            end_date: rollup.windowEnd,
+        }),
+        note: b.notes
+            ? `<span class="stage-note">${esc(b.notes)}</span>`
+            : `<span class="block-stage-count">${hasStages ? `${b.stages.filter(s => !s.deleted).length} aşama` : 'aşama yok'}</span>`,
+        _actions: `
+            <div class="block-actions" data-block-ref="${esc(b.key)}">
                 ${!hasStages ? `
-                    <button class="btn btn-outline-primary" data-action="create-stages" title="Varsayılan aşamaları (Montaj, Kaynak ve Taşlama) oluştur">
-                        <i class="fas fa-layer-group me-1"></i>Aşamaları oluştur
+                    <button class="btn btn-sm btn-outline-primary" data-action="create-stages"
+                            title="Varsayılan aşamaları (Montaj, Kaynak ve Taşlama) oluştur">
+                        <i class="fas fa-layer-group"></i>
                     </button>` : `
-                    <button class="btn btn-outline-secondary" data-action="add-custom" title="Özel aşama ekle">
+                    <button class="btn btn-sm btn-outline-secondary" data-action="add-custom" title="Özel aşama ekle">
                         <i class="fas fa-plus"></i>
                     </button>`}
-                <button class="btn btn-outline-danger" data-action="delete-block"
+                <button class="btn btn-sm btn-outline-danger" data-action="delete-block"
                         ${b.is_billed ? 'disabled title="Hakediş kesilmiş — silinemez"' : 'title="Atamayı sil"'}>
                     <i class="fas fa-trash"></i>
                 </button>
-            </span>
-        </div>`;
+            </div>`,
+    };
 }
 
 function titleCell(value, row) {
@@ -628,6 +673,7 @@ function renderSheet() {
         container.innerHTML = `<div class="empty-sheet">Kaynak (taşeron/ekip) bulunamadı.</div>`;
         if (totalKgEl) totalKgEl.textContent = '';
         sheetTable = null;
+        updateToggleAllBtn();
         return;
     }
 
@@ -644,6 +690,7 @@ function renderSheet() {
                 Bu kaynağa atanmış iş yok. "İş Ekle" ile başlayın veya işler listesinden sürükleyin.
             </div>`;
         sheetTable = null;
+        updateToggleAllBtn();
         return;
     }
 
@@ -661,10 +708,11 @@ function renderSheet() {
             stickyHeader: true,
             groupBy: 'blockKey',
             groupCollapsible: true,
+            defaultGroupExpanded: false,
             groupHeaderFormatter: (groupValue) => {
                 const blockRef = String(groupValue).split('|').slice(1).join('|');
                 const block = findBlock(blockRef);
-                return block ? blockHeaderHTML(block, String(groupValue)) : esc(groupValue);
+                return block ? blockHeaderCells(block, String(groupValue)) : esc(groupValue);
             },
             editable: true,
             editableColumns: ['title', 'start_date', 'end_date', 'duration_wd', 'weight', 'progress', 'status', 'note'],
@@ -677,26 +725,49 @@ function renderSheet() {
                 if (row.status === 'cancelled') classes.push('row-cancelled');
                 return { class: classes.join(' '), 'data-row-ref': row.key };
             },
+            actionColumnWidth: '88px',
             columns: [
-                { field: 'title', label: 'Aşama', formatter: (v, row) => titleCell(v, row) },
-                { field: 'start_date', label: 'Başlangıç', type: 'date', width: '120px', formatter: (v) => fmtDate(v) },
-                { field: 'end_date', label: 'Bitiş', type: 'date', width: '120px', formatter: (v) => fmtDate(v) },
                 {
-                    field: 'duration_wd', label: 'Süre (iş g.)', type: 'number',
-                    min: 0, step: 0.5, width: '100px', formatter: (v) => fmtDuration(v),
+                    field: 'title', label: 'Aşama', width: '240px',
+                    formatter: (v, row) => titleCell(v, row),
                 },
                 {
-                    field: 'weight', label: 'Ağırlık', type: 'number', min: 1, step: 1, width: '90px',
-                    formatter: (v, row) => row.kind === 'stage' ? String(v ?? '') : '—',
+                    field: 'start_date', label: 'Başlangıç', type: 'date', width: '110px',
+                    headerClass: 'col-center', cellClass: 'col-center col-date',
+                    formatter: (v) => fmtDate(v),
+                },
+                {
+                    field: 'end_date', label: 'Bitiş', type: 'date', width: '110px',
+                    headerClass: 'col-center', cellClass: 'col-center col-date',
+                    formatter: (v) => fmtDate(v),
+                },
+                {
+                    field: 'duration_wd', label: 'Süre (iş g.)', type: 'number',
+                    min: 0, step: 0.5, width: '92px',
+                    headerClass: 'col-center', cellClass: 'col-center col-num',
+                    formatter: (v) => fmtDuration(v),
+                },
+                {
+                    field: 'weight', label: 'Ağırlık', type: 'number', min: 1, step: 1, width: '82px',
+                    headerClass: 'col-center', cellClass: 'col-center col-num',
+                    formatter: (v, row) => row.kind === 'stage'
+                        ? String(v ?? '') : '<span class="text-muted">—</span>',
                 },
                 {
                     field: 'progress', label: 'İlerleme', type: 'number', min: 0, max: 100, step: 1,
-                    width: '140px', formatter: (v) => progressBar(v),
+                    width: '138px', headerClass: 'col-center', cellClass: 'col-progress',
+                    formatter: (v) => progressBar(v),
                 },
                 {
-                    field: 'status', label: 'Durum', type: 'select', width: '150px',
+                    field: 'status', label: 'Durum', type: 'select', width: '140px',
+                    headerClass: 'col-center', cellClass: 'col-center',
                     options: EDITABLE_STATUS_OPTIONS,
                     formatter: (v, row) => statusBadge(v, isRowOverdue(row)),
+                },
+                {
+                    field: 'forecast_date', label: 'Gerçek./Tahmini', width: '132px',
+                    headerClass: 'col-center', cellClass: 'col-center col-date',
+                    formatter: (v, row) => forecastCell(row),
                 },
                 {
                     field: 'note', label: 'Not', type: 'text',
@@ -717,16 +788,44 @@ function renderSheet() {
     }
 
     // Re-seed collapse state (keys carry a position prefix that can shift).
+    // Blocks start COLLAPSED — a sheet holds many jobs and the header row
+    // already carries the rollup; only explicitly opened blocks expand.
     const expandedState = {};
     const seen = new Set();
     sheetRows.forEach(row => {
         if (seen.has(row.blockKey)) return;
         seen.add(row.blockKey);
-        const blockRef = row.blockRef;
-        expandedState[row.blockKey] = expandedByBlockKey[blockRef] !== false;
+        expandedState[row.blockKey] = expandedByBlockKey[row.blockRef] === true;
     });
     sheetTable.groupExpandedState = expandedState;
     sheetTable.updateData(sheetRows);
+    updateToggleAllBtn();
+}
+
+function expandedBlockCount() {
+    const res = activeResource();
+    if (!res) return 0;
+    return res.blocks.filter(b => !b.deleted && expandedByBlockKey[b.key] === true).length;
+}
+
+function updateToggleAllBtn() {
+    const btn = document.getElementById('toggle-all-btn');
+    if (!btn) return;
+    const res = activeResource();
+    const blockCount = res ? res.blocks.filter(b => !b.deleted).length : 0;
+    btn.disabled = blockCount === 0;
+    const anyOpen = expandedBlockCount() > 0;
+    btn.innerHTML = anyOpen
+        ? '<i class="fas fa-angles-up me-1"></i>Tümünü Kapat'
+        : '<i class="fas fa-angles-down me-1"></i>Tümünü Aç';
+}
+
+function onToggleAll() {
+    const res = activeResource();
+    if (!res) return;
+    const expand = expandedBlockCount() === 0;
+    res.blocks.filter(b => !b.deleted).forEach(b => { expandedByBlockKey[b.key] = expand; });
+    renderSheet();
 }
 
 function bindSheetHeaderActions(container) {
@@ -737,11 +836,12 @@ function bindSheetHeaderActions(container) {
     container.addEventListener('click', (e) => {
         const actionEl = e.target.closest('[data-action]');
         if (!actionEl || actionEl.disabled) return;
-        const header = actionEl.closest('.block-header');
-        if (!header) return;
+        // The block's identity lives on the group row: "<order>|<blockRef>".
+        const row = actionEl.closest('tr.group-header');
+        if (!row) return;
         e.preventDefault();
         e.stopPropagation();
-        const blockRef = header.dataset.blockRef;
+        const blockRef = String(row.dataset.groupKey || '').split('|').slice(1).join('|');
         const action = actionEl.dataset.action;
         if (action === 'edit-weight') onEditWeight(blockRef);
         else if (action === 'create-stages') onCreateStages(blockRef);
@@ -757,6 +857,7 @@ function bindSheetHeaderActions(container) {
         // The table flips state after this event; mirror it.
         setTimeout(() => {
             if (sheetTable) expandedByBlockKey[blockRef] = !!sheetTable.groupExpandedState[groupKey];
+            updateToggleAllBtn();
         }, 0);
     });
 }
@@ -768,7 +869,6 @@ function scheduleRefresh() {
         renderSheet();
         renderWarnings();
         renderGantt();
-        renderJobsList();
     }, 0);
 }
 
@@ -916,6 +1016,7 @@ function onCreateStages(blockRef) {
         });
     });
     block.createDefaultStages = true;
+    expandedByBlockKey[block.key] = true;   // show what was just created
     markBlockDirty(block.key);
     scheduleRefresh();
 }
@@ -964,6 +1065,7 @@ function onAddCustomStage(blockRef) {
             note: '',
             deleted: false,
         });
+        expandedByBlockKey[block.key] = true;   // show what was just created
         markBlockDirty(block.key);
         customStageModal.hide();
         scheduleRefresh();
@@ -1499,7 +1601,6 @@ function renderAll() {
     renderWarnings();
     renderSheet();
     renderGantt();
-    renderJobsList();
     updateSaveState();
 }
 
@@ -1514,30 +1615,6 @@ function switchResource(key) {
     renderTabs();
     renderSheet();
     renderGantt();
-}
-
-function setupDropZone() {
-    const zone = document.getElementById('sheet-container');
-    if (!zone || zone.dataset.dropBound) return;
-    zone.dataset.dropBound = '1';
-    zone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'copy';
-        zone.classList.add('drop-active');
-    });
-    zone.addEventListener('dragleave', (e) => {
-        if (e.target === zone || !zone.contains(e.relatedTarget)) zone.classList.remove('drop-active');
-    });
-    zone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        zone.classList.remove('drop-active');
-        const taskId = Number(e.dataTransfer.getData('text/plain'));
-        if (!taskId) return;
-        const offcanvasEl = document.getElementById('jobs-offcanvas');
-        const offcanvas = offcanvasEl ? bootstrap.Offcanvas.getInstance(offcanvasEl) : null;
-        if (offcanvas) offcanvas.hide();
-        openAddJobModal(taskId);
-    });
 }
 
 function init() {
@@ -1588,18 +1665,8 @@ function init() {
     });
     document.getElementById('save-btn').addEventListener('click', onSave);
     document.getElementById('add-job-btn').addEventListener('click', () => openAddJobModal());
-    document.getElementById('open-jobs-btn').addEventListener('click', () => {
-        const el = document.getElementById('jobs-offcanvas');
-        bootstrap.Offcanvas.getOrCreateInstance(el).show();
-    });
+    document.getElementById('toggle-all-btn').addEventListener('click', onToggleAll);
 
-    const jobsSearch = document.getElementById('jobs-search');
-    if (jobsSearch) {
-        jobsSearch.addEventListener('input', (e) => {
-            jobsSearchTerm = e.target.value || '';
-            renderJobsList();
-        });
-    }
     const completedToggle = document.getElementById('show-completed-toggle');
     if (completedToggle) {
         completedToggle.addEventListener('change', (e) => {
@@ -1612,7 +1679,6 @@ function init() {
         });
     }
 
-    setupDropZone();
     bindSheetHeaderActions(document.getElementById('sheet-container'));
 
     let resizeTimer = null;

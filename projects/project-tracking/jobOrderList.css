@@ -125,8 +125,11 @@
         var(--lvl) * var(--jo-level-w) +
         var(--slot) * (var(--jo-btn-size) + var(--jo-btn-gap))
     );
-    top: 50%;
-    transform: translateY(-50%);
+    /* Centred WITHOUT transform: the button is a .btn, and shared stylesheets
+       set `transform` on button hover (e.g. table.css .action-buttons .btn:hover),
+       which would replace a centring translateY and drop the button mid-hover.
+       The height is fixed, so plain arithmetic centres it immutably. */
+    top: calc(50% - (var(--jo-btn-size) / 2));
     width: var(--jo-btn-size);
     height: var(--jo-btn-size);
     padding: 0;
@@ -140,6 +143,13 @@
     transition: background-color 0.2s ease, color 0.2s ease;
     cursor: pointer;
     z-index: 1;
+}
+
+/* Own hover feedback (colour only — never transform, see above). */
+.jo-expand-btn:hover {
+    background: var(--jo-accent, #0d6efd);
+    color: #ffffff;
+    transform: none;
 }
 
 .jo-expand-btn.expanded {

@@ -418,6 +418,40 @@ export class TableComponent {
             `;
         }
         
+        // A formatter may return an OBJECT keyed by column field instead of an
+        // HTML string. Then the group header is rendered as real cells aligned
+        // to the table's own columns — so a summary row lines up with the rows
+        // it summarises. '_actions' fills the actions column; missing keys
+        // render empty cells.
+        if (headerContent && typeof headerContent === 'object') {
+            const cellMap = headerContent;
+            const cells = this.options.columns.map(column => {
+                const widthStyle = column.width ?
+                    `style="width: ${column.width}; min-width: ${column.width};"` : '';
+                const extraClass = column.cellClass || '';
+                return `
+                    <td class="group-header-cell ${extraClass}" ${widthStyle}>
+                        ${cellMap[column.field] ?? ''}
+                    </td>
+                `;
+            });
+            if (this.options.actions.length > 0) {
+                cells.push(`
+                    <td class="group-header-cell action-column">
+                        ${cellMap._actions ?? ''}
+                    </td>
+                `);
+            }
+            if (this.options.selectable) {
+                cells.unshift('<td class="group-header-cell selection-column"></td>');
+            }
+            return `
+                <tr class="group-header ${toggleClass}" data-group-key="${groupKey}" ${toggleClick}>
+                    ${cells.join('')}
+                </tr>
+            `;
+        }
+
         if (hasExpandColumn) {
             // Render with separate cells: expand column + content spanning remaining columns
             const expandColumn = this.options.columns[0];

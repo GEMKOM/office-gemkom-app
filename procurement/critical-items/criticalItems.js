@@ -8,6 +8,10 @@ import { getPlanningItems } from '../../../apis/planning/planningRequestItems.js
 import { extractResultsFromResponse } from '../../../apis/paginationHelper.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
+// Undelivered rows are the whole point of this page, so the list is filtered to
+// them by default; this checkbox opens it up to the delivered ones too.
+const SHOW_DELIVERED_FILTER_ID = 'show_delivered';
+
 // State
 let currentPage = 1;
 let currentPageSize = 20;
@@ -82,6 +86,13 @@ function initFilters() {
             currentOrdering = '-id';
             loadItems();
             showNotification('Filtreler temizlendi', 'info');
+        },
+        // The delivered toggle reloads on its own — a checkbox that waits for
+        // the Uygula button reads as broken.
+        onFilterChange: (filterId) => {
+            if (filterId !== SHOW_DELIVERED_FILTER_ID) return;
+            currentPage = 1;
+            loadItems();
         }
     });
 
@@ -89,12 +100,18 @@ function initFilters() {
         .addTextFilter({ id: 'job_no', label: 'İş No', placeholder: 'İş no...', colSize: 3 })
         .addTextFilter({ id: 'item_code', label: 'Ürün Kodu', placeholder: 'Ürün kodu...', colSize: 3 })
         .addTextFilter({ id: 'item_name', label: 'Ürün Adı', placeholder: 'Ürün adı...', colSize: 3 })
-        .addTextFilter({ id: 'planning_request_number', label: 'Planlama Talebi', placeholder: 'Talep numarası...', colSize: 3 });
+        .addTextFilter({ id: 'planning_request_number', label: 'Planlama Talebi', placeholder: 'Talep numarası...', colSize: 3 })
+        .addCheckboxFilter({
+            id: SHOW_DELIVERED_FILTER_ID,
+            label: 'Teslim Edilenleri de Göster',
+            checked: false,
+            colSize: 3
+        });
 }
 
 function initTable() {
     table = new TableComponent('critical-items-table-container', {
-        title: 'Kritik Kalemler',
+        title: 'Teslim Edilmemiş Kritik Kalemler',
         icon: 'fas fa-circle-exclamation',
         exportable: true,
         exportFilename: () => `kritik_malzemeler_${new Date().toISOString().slice(0, 10)}.xlsx`,
@@ -141,20 +158,30 @@ function initTable() {
             currentPage = 1;
             loadItems();
         },
-        emptyMessage: 'Kritik işaretli kalem yok.',
+        emptyMessage: 'Teslim edilmemiş kritik kalem yok.',
         emptyIcon: 'fas fa-circle-check'
     });
 }
 
 async function loadItems() {
     if (isLoading || !table || !filtersComponent) return;
+    const values = filtersComponent.getFilterValues();
+    const showDelivered = values[SHOW_DELIVERED_FILTER_ID] === true;
+
+    // Set on the options before the loading render so the card header never
+    // flashes the previous scope's title.
+    table.options.title = showDelivered ? 'Kritik Kalemler' : 'Teslim Edilmemiş Kritik Kalemler';
+    table.options.emptyMessage = showDelivered
+        ? 'Kritik işaretli kalem yok.'
+        : 'Teslim edilmemiş kritik kalem yok.';
+
     try {
         isLoading = true;
         table.setLoading(true);
 
-        const values = filtersComponent.getFilterValues();
         const filters = {
             is_critical: 'true',
+            is_delivered: showDelivered ? undefined : 'false',
             job_no: values.job_no || undefined,
             item_code: values.item_code || undefined,
             item_name: values.item_name || undefined,

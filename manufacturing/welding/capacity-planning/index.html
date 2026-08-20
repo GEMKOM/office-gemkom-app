@@ -35,9 +35,15 @@
                     <div class="planning-tabs" id="resource-tabs"></div>
                     <div class="card-actions d-flex align-items-center gap-2">
                         <span id="sheet-total-kg" class="text-muted small"></span>
-                        <button class="btn btn-sm btn-outline-secondary" id="open-jobs-btn"
-                                title="Atanabilir kaynak işleri listesi">
-                            <i class="fas fa-list me-1"></i>İşler
+                        <div class="form-check form-switch mb-0" title="Tamamlanan/iptal edilen iş emirlerini de göster">
+                            <input class="form-check-input" type="checkbox" id="show-completed-toggle">
+                            <label class="form-check-label small text-muted" for="show-completed-toggle">
+                                Tamamlananlar
+                            </label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary" id="toggle-all-btn"
+                                title="Tüm blokları aç / kapat">
+                            <i class="fas fa-angles-down me-1"></i>Tümünü Aç
                         </button>
                         <button class="btn btn-sm btn-outline-primary" id="add-job-btn">
                             <i class="fas fa-plus me-1"></i>İş Ekle
@@ -65,27 +71,6 @@
             </div>
         </div>
     </section>
-
-    <div class="offcanvas offcanvas-end" tabindex="-1" id="jobs-offcanvas" aria-labelledby="jobs-offcanvas-label">
-        <div class="offcanvas-header">
-            <h5 class="offcanvas-title" id="jobs-offcanvas-label">
-                <i class="fas fa-list me-2 text-primary"></i>Kaynak İşleri
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Kapat"></button>
-        </div>
-        <div class="offcanvas-body">
-            <input type="text" id="jobs-search" class="form-control form-control-sm mb-2"
-                   placeholder="İş no, başlık veya müşteri ara...">
-            <div class="form-check mb-2">
-                <input class="form-check-input" type="checkbox" id="show-completed-toggle">
-                <label class="form-check-label small text-muted" for="show-completed-toggle">
-                    Tamamlanan işleri göster
-                </label>
-            </div>
-            <small class="text-muted d-block mb-2">Bir işi sürükleyip aktif sayfaya bırakın ya da "İş Ekle" kullanın.</small>
-            <div id="jobs-list-container" class="welding-jobs-list"></div>
-        </div>
-    </div>
 
     <div id="block-modal-container"></div>
     <div id="tier-modal-container"></div>
