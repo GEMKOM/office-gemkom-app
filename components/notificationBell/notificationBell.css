@@ -263,3 +263,24 @@
         top: 70px;
     }
 }
+
+/* Footer link out to the full archive. The dropdown only holds the newest
+   slice, so this is the way to everything older. */
+.notification-dropdown-footer {
+    padding: 12px 20px;
+    border-top: 1px solid #e1e4e8;
+    background-color: #f6f8fa;
+    text-align: center;
+    flex-shrink: 0;
+}
+
+.notification-dropdown-footer a {
+    color: #0969da;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+}
+
+.notification-dropdown-footer a:hover {
+    text-decoration: underline;
+}

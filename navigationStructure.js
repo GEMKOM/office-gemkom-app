@@ -660,6 +660,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Organizasyon Grupları',
                 icon: 'fas fa-object-group',
                 children: {}
+            },
+            '/it/neo': {
+                label: 'Neo Kullanımı',
+                icon: 'fas fa-robot',
+                children: {}
             }
         }
     },

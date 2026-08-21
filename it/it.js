@@ -86,6 +86,13 @@ async function handleITPage() {
                 icon: 'fas fa-object-group',
                 iconColor: 'secondary',
                 link: '/it/groups'
+            },
+            {
+                title: 'Neo Kullanımı',
+                description: 'Neo asistanın kullanım analizleri: kim neyi sordu, konu dağılımı, maliyet ve soru kayıtları.',
+                icon: 'fas fa-robot',
+                iconColor: 'primary',
+                link: '/it/neo'
             }
         ];
 

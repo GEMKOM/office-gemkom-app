@@ -1,0 +1,119 @@
+/* Bildirimlerim — notification history page */
+
+.notif-chip {
+    border: 1px solid #dee2e6;
+    background: #fff;
+    border-radius: 999px;
+    padding: 0.25rem 0.85rem;
+    font-size: 0.85rem;
+    color: #495057;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.notif-chip:hover {
+    background: #f1f3f5;
+}
+
+.notif-chip.active {
+    background: #8B0000;
+    border-color: #8B0000;
+    color: #fff;
+}
+
+.notif-chip-count {
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: 999px;
+    padding: 0 0.45rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.notif-chip.active .notif-chip-count {
+    background: rgba(255, 255, 255, 0.25);
+}
+
+.notif-history-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.notif-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.9rem 1.1rem;
+    border-bottom: 1px solid #f1f3f5;
+    border-left: 3px solid transparent;
+}
+
+.notif-row:last-child {
+    border-bottom: none;
+}
+
+.notif-row:hover {
+    background: #fafbfc;
+}
+
+/* Unread is a left rail rather than a background wash, so a long archive
+   does not turn into a wall of colour. */
+.notif-row.unread {
+    border-left-color: #8B0000;
+    background: #fffdfd;
+}
+
+.notif-row-main {
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+}
+
+.notif-row-title {
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 0.15rem;
+}
+
+.notif-row.unread .notif-row-title {
+    color: #8B0000;
+}
+
+.notif-row-body {
+    color: #6c757d;
+    font-size: 0.875rem;
+    white-space: pre-line;
+    /* Long notification bodies (changelogs, folder paths) are clamped so rows
+       stay scannable; the linked page has the full text. */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-bottom: 0.35rem;
+}
+
+.notif-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+}
+
+.notif-row-actions {
+    display: flex;
+    gap: 0.35rem;
+    flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+    .notif-row {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .notif-row-actions {
+        align-self: flex-end;
+    }
+}

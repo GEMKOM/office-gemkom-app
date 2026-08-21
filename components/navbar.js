@@ -348,6 +348,7 @@ export function initNavbar() {
                     
                     <ul class="navbar-nav ms-auto align-items-center">
                         ${impersonationBanner}
+                        <li class="nav-item me-2" id="assistant-launcher-li"></li>
                         <li class="nav-item dropdown attendance-nav">
                             <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button"
                                data-bs-toggle="dropdown" aria-expanded="false" id="attendanceDropdownToggle">
@@ -398,6 +399,9 @@ export function initNavbar() {
                                         </div>
                                     </div>
                                     <div class="notification-list"></div>
+                                    <div class="notification-dropdown-footer">
+                                        <a href="/general/notifications">Tüm bildirimleri gör</a>
+                                    </div>
                                 </div>
                             </div>
                         </li>
@@ -435,6 +439,16 @@ export function initNavbar() {
       const notificationBellContainer = navbarContainer.querySelector('#notification-bell-container');
       if (notificationBellContainer) {
           window.notificationBell = new NotificationBell(notificationBellContainer);
+      }
+
+      // Global assistant widget (launcher + floating chat panel on every
+      // page). Loaded dynamically and fenced off so it can never take the
+      // navbar down with it.
+      try {
+          const { initAssistantWidget } = await import('./assistant-widget/assistant-widget.js');
+          initAssistantWidget(navbarContainer.querySelector('#assistant-launcher-li'));
+      } catch (e) {
+          console.error('Assistant widget failed to initialize:', e);
       }
 
       // Attendance indicator (check-in / check-out)

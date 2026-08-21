@@ -118,6 +118,64 @@ export async function markAllNotificationsRead() {
 }
 
 /**
+ * Mark a notification as unread again, so it returns to the bell.
+ * @param {number} notificationId - Notification ID
+ * @returns {Promise<Object>} Updated notification object
+ */
+export async function markNotificationUnread(notificationId) {
+    try {
+        const url = `${NOTIFICATIONS_BASE}/${notificationId}/mark_unread/`;
+        const response = await authedFetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: 'Bildirim okunmadı olarak işaretlenirken hata oluştu' }));
+            throw new Error(errorData.detail || errorData.error || 'Bildirim okunmadı olarak işaretlenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error marking notification as unread:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get filter options (categories, types) with counts for the current user.
+ * Counts honour whatever filters are passed, so the UI can stay in sync.
+ * @param {Object} filters - Same filter params accepted by getNotifications
+ * @returns {Promise<Object>} { total, unread, categories, types, oldest }
+ */
+export async function getNotificationFacets(filters = {}) {
+    try {
+        const queryParams = new URLSearchParams();
+
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+
+        const url = `${NOTIFICATIONS_BASE}/facets/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ detail: 'Bildirim filtreleri yüklenirken hata oluştu' }));
+            throw new Error(errorData.detail || errorData.error || 'Bildirim filtreleri yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching notification facets:', error);
+        throw error;
+    }
+}
+
+/**
  * Get user's notification preferences
  * @returns {Promise<Array>} Array of notification preference objects
  */

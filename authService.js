@@ -604,5 +604,27 @@ export async function authedFetch(url, options = {}) {
         response = await fetch(url, options); // Retry the request with the new token
     }
 
+    if (response.status === 403 && await isPortalRefusal(response)) {
+        // The API says this account may not use the office portal at all --
+        // the same verdict the login screen enforces. It can only be reached
+        // by a session that outlived its office_access (revoked mid-session,
+        // or let through because /users/me/permissions/ was unreachable at
+        // login), and every page would fail for it, so end the session here
+        // instead of leaving the user in a UI where nothing loads.
+        logout();
+        throw new Error('FORBIDDEN');
+    }
+
     return response;
+}
+
+// Tells the portal gate's 403 apart from the ordinary per-page 403s the API
+// returns all the time. Matches on the stable `code`, not the Turkish message.
+async function isPortalRefusal(response) {
+    try {
+        const body = await response.clone().json();
+        return body?.code === 'portal_forbidden';
+    } catch (error) {
+        return false; // not JSON, so not the portal gate
+    }
 }

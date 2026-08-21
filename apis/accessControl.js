@@ -8,7 +8,19 @@ import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authS
  * - Dashes in path segments are converted to underscores.
  */
 
-const ALWAYS_ALLOWED_ROUTES = new Set(['/', '/login', '/login/']);
+// '/general/notifications' is personal rather than departmental: it only ever
+// shows the signed-in user's own notifications, so it needs no page permission.
+const ALWAYS_ALLOWED_ROUTES = new Set([
+    '/', '/login', '/login/', '/general/notifications',
+]);
+
+// Routes that are additionally unlocked by a non-page permission codename.
+// The Neo analytics page is gated in the backend by manage_assistant_analytics
+// (not a page grant), so holders must see the menu entry and pass the route
+// guard even though no "Page:" permission exists for it.
+const ROUTE_EXTRA_CODENAMES = {
+    '/it/neo': ['manage_assistant_analytics'],
+};
 
 // Routes that inherit access from another page's grant: whoever can open the
 // base page can also open the derived page. The derived page can still be
@@ -68,6 +80,12 @@ export function hasRouteAccess(route) {
         // New permission payload includes "name": "Page: /some/route/"
         // Use that mapping (and allow subroutes under granted base routes).
         if (routeIsAllowedByGrantedPages(normalized)) return true;
+
+        // Codename-unlocked routes (see ROUTE_EXTRA_CODENAMES above).
+        const extraCodenames = ROUTE_EXTRA_CODENAMES[normalized];
+        if (extraCodenames && extraCodenames.some((codename) => hasPerm(codename))) {
+            return true;
+        }
 
         // Inherited access: some pages follow another page's grant.
         const inheritsFrom = ROUTE_ACCESS_INHERITS[normalized];

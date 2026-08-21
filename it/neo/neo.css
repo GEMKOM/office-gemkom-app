@@ -1,0 +1,48 @@
+/* Neo usage analytics page — card shells around the shared components,
+   plus the conversation transcript styles used inside the DisplayModal. */
+
+.neo-card {
+    background: #fff;
+    border-radius: var(--border-radius, 12px);
+    box-shadow: var(--card-shadow, 0 4px 6px rgba(0, 0, 0, 0.1));
+    overflow: hidden;
+}
+
+.neo-card-title {
+    padding: 0.7rem 1rem;
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--text-color, #2c3e50);
+    border-bottom: 1px solid #e9ecef;
+}
+
+/* --- transcript (rendered inside the DisplayModal) ---------------------- */
+
+.neo-msg {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem;
+    margin-bottom: 0.6rem;
+}
+
+.neo-msg.user { background: #f8f9fa; }
+
+.neo-msg .neo-msg-role {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.25rem;
+}
+
+.neo-msg.user .neo-msg-role { color: #3e5a74; }
+.neo-msg.assistant .neo-msg-role { color: var(--primary-color, #8b0000); }
+
+.neo-msg .neo-msg-meta {
+    margin-top: 0.4rem;
+    font-size: 0.72rem;
+    color: #8a939b;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 0.8rem;
+}
