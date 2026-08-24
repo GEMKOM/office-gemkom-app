@@ -202,11 +202,13 @@ export function renderRichText(content, options = {}) {
     }
 
     // Mentions. The display name comes from API data, not from the comment, so
-    // it needs escaping of its own.
+    // it needs escaping of its own. `data-mention` keeps the username the badge
+    // was made from: the WYSIWYG editor reads it back to rebuild "@username"
+    // from a badge that reads "@Caner Şahin" on screen.
     out = out.replace(/@(\w+)/g, (match, username) => {
         const user = userMap[username];
         const displayName = user ? (user.full_name || user.username) : username;
-        return park(`<span class="mention-badge">@${escapeHtml(displayName)}</span>`);
+        return park(`<span class="mention-badge" data-mention="${escapeHtml(username)}">@${escapeHtml(displayName)}</span>`);
     });
 
     out = renderBlocks(out);

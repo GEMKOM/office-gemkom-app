@@ -94,10 +94,17 @@ check('trailing punctuation stays outside the link', () => {
     assert.ok(render('bkz https://gemkom.com.').endsWith('</a>.'), render('bkz https://gemkom.com.'));
 });
 check('mentions resolve to full names', () => {
-    assert.equal(render('@onatcalik'), '<span class="mention-badge">@Onat Çalık</span>');
+    assert.equal(render('@onatcalik'),
+        '<span class="mention-badge" data-mention="onatcalik">@Onat Çalık</span>');
 });
 check('an unknown mention falls back to the username', () => {
-    assert.equal(render('@ghost'), '<span class="mention-badge">@ghost</span>');
+    assert.equal(render('@ghost'),
+        '<span class="mention-badge" data-mention="ghost">@ghost</span>');
+});
+check('the badge carries the username it was built from', () => {
+    // The WYSIWYG editor reads data-mention back to rebuild "@onatcalik" from a
+    // badge whose visible text is "@Onat Çalık".
+    assert.ok(render('@onatcalik').includes('data-mention="onatcalik"'));
 });
 
 console.log('\ngroup mentions — a group name is not a word token');

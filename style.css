@@ -407,6 +407,15 @@ body::after {
     font-size: 13px;
 }
 
+/* Shown beside the @mention dropdown while a group is highlighted, so the
+   writer sees who they are about to tag. Display only — it must never come
+   between the pointer and the row being clicked. */
+.mention-group-popover-preview {
+    pointer-events: none;
+    max-height: none;
+    overflow: visible;
+}
+
 .mention-group-popover-header {
     display: flex;
     align-items: center;
@@ -476,12 +485,55 @@ body::after {
     border-radius: 0.375rem 0.375rem 0 0;
 }
 
-/* The toolbar and the textarea have to read as one control. */
+/* The toolbar and the writing area have to read as one control. */
 .rte > textarea.form-control,
-.rte > .rte-preview {
+.rte > .rte-surface {
     border-top-left-radius: 0;
     border-top-right-radius: 0;
     margin-bottom: 0;
+}
+
+/* The contenteditable the user actually types in. It is styled as a
+   form-control so it sits in a form like the textarea it replaces. */
+.rte-surface {
+    min-height: 4.5em;
+    max-height: 60vh;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    cursor: text;
+}
+
+.rte-surface:focus {
+    outline: none;
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* contenteditable keeps a stray <br>, so :empty never matches — the editor
+   sets .rte-empty from the serialized value instead. */
+.rte-empty .rte-surface::before {
+    content: attr(data-placeholder);
+    color: #6c757d;
+    pointer-events: none;
+}
+
+/* The surface renders finished formatting, so it borrows the read view's marks. */
+.rte-surface code {
+    background: #f1f2f4;
+    border-radius: 3px;
+    padding: 0 3px;
+}
+
+.rte-surface ul,
+.rte-surface ol {
+    margin: 0.2rem 0;
+    padding-left: 1.4rem;
+}
+
+/* A mention is one object: it is selected and deleted whole, never half-edited. */
+.rte-surface .mention-badge {
+    user-select: all;
 }
 
 .rte-btn {
@@ -540,17 +592,8 @@ body::after {
     flex: 1 1 auto;
 }
 
-.rte-preview {
-    padding: 0.375rem 0.75rem;
-    background: #fff;
-    border: 1px solid #ced4da;
-    border-radius: 0.375rem;
-    color: #172b4d;
-    overflow-y: auto;
-}
-
-/* Bootstrap's reboot already does this, but the preview toggle must not depend
-   on which stylesheet a page happened to load. */
+/* Bootstrap's reboot already does this, but swapping between the surface and
+   the raw-markdown textarea must not depend on which stylesheet a page loaded. */
 .rte > [hidden] {
     display: none !important;
 }

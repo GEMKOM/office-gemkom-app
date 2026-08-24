@@ -280,7 +280,10 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
         commentEl.querySelector('.flex-grow-1').appendChild(formDiv);
 
         const textarea = formDiv.querySelector('.edit-comment-textarea');
-        attachRichTextEditor(textarea);
+        attachRichTextEditor(textarea, {
+            mentionedUsers: comment.mentioned_users_data,
+            mentionedGroups: comment.mentioned_groups_data,
+        });
         setupFilePreview(formDiv.querySelector('.edit-new-files'), formDiv.querySelector('.edit-new-files-preview'));
         textarea.focus();
     }

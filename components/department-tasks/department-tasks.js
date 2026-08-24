@@ -5993,7 +5993,10 @@ function setupConsultationTabListeners(task) {
                 commentEl.appendChild(formDiv);
                 const editTextarea = formDiv.querySelector('.consultation-edit-textarea');
                 editTextarea.value = comment?.content || '';
-                attachRichTextEditor(editTextarea);
+                attachRichTextEditor(editTextarea, {
+                    mentionedUsers: comment?.mentioned_users_data,
+                    mentionedGroups: comment?.mentioned_groups_data,
+                });
                 editTextarea.focus();
                 return;
             }

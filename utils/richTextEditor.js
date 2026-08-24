@@ -1,20 +1,31 @@
 /**
- * Toolbar for the comment/discussion text boxes.
+ * WYSIWYG editor for the comment/discussion text boxes.
  *
- * The stored text stays markdown-lite — see utils/richText.js for why that
- * matters (e-mail, Telegram and CSV consumers read the stored text, not HTML).
- * So every button here does one thing: put the same markers a user could have
- * typed into the textarea. Nothing about the storage format changes; only
- * discovering it does. The syntax line these buttons replace
- * ("**kalın** *italik* ~~çizili~~ …") is still true, just no longer the only
- * way in — it survives behind the "?" button.
+ * What you type is what the comment will look like: bold reads as bold while
+ * you write it, not as `**kalın**`. Word's model, in other words.
  *
- * The @mention autocomplete lives here too. It is an editor concern, and
- * keeping it next to the toolbar means one `attachRichTextEditor(textarea)`
- * sets up a comment box completely. It had drifted into two near-identical
- * copies (the topic-discussion component and the project-tracking page), which
- * is how the Turkish-letter bug in the suggestion filter survived in one of
- * them after being fixed in the other.
+ * The storage format does not change, and that is the whole design.
+ * utils/richText.js explains why the stored text has to stay markdown-lite:
+ * e-mail (`send_plain_email`), Telegram and any CSV/API consumer read the
+ * stored text, and `!!acil!!` still reads as urgency to a human where a pile of
+ * HTML tags would not. So this module is a *view*:
+ *
+ *   markdown-lite ──renderRichText()──▶ contenteditable surface  (what you see)
+ *   markdown-lite ◀──serializeToMarkdown()── contenteditable surface
+ *
+ * The original <textarea> is never removed — it is hidden behind the surface
+ * and re-filled with the serialized markdown on every keystroke. Every caller
+ * still reads `textarea.value`, EditModal still validates it, and nothing
+ * downstream knows an editor is there. That is deliberate: it means a bug in
+ * here can make the surface look wrong, but it cannot invent a value that the
+ * rest of the app would not have accepted.
+ *
+ * The markers still work if you type them — "**kalın**" turns bold as you close
+ * it — because years of comments were written that way, and the "?" button
+ * still lists them. The `</>` button shows the raw markdown for anyone who
+ * wants it.
+ *
+ * The @mention autocomplete lives here too, so one call sets a box up:
  *
  *     import { attachRichTextEditor } from '../../utils/richTextEditor.js';
  *     attachRichTextEditor(document.getElementById('new-comment-text'));
@@ -27,152 +38,371 @@ import { fetchAllUsers, fetchTeams } from '../apis/users.js';
 import { renderRichText, RICH_TEXT_HINT } from './richText.js';
 import { getUserInitials, getAvatarColor } from './avatar.js';
 import { escapeHtml } from './text.js';
+import { showGroupMembers, hideGroupMembers } from './mentionGroupPopover.js';
 
 /**
- * One toolbar button. `marker` wraps the selection; `list` prefixes whole
- * lines. Titles carry the keyboard shortcut where there is one — this is the
- * only place a user finds out about it.
+ * One toolbar button. `command` runs through execCommand (native undo, native
+ * "toggle the typing state" behaviour); `wrap` is one of our own inline marks,
+ * which execCommand has no concept of.
  */
 const TOOLBAR = [
-    { id: 'bold', icon: 'fa-bold', label: 'Kalın', marker: '**', key: 'b' },
-    { id: 'italic', icon: 'fa-italic', label: 'İtalik', marker: '*', key: 'i' },
-    { id: 'strike', icon: 'fa-strikethrough', label: 'Üstü çizili', marker: '~~' },
-    { id: 'code', icon: 'fa-code', label: 'Kod', marker: '`' },
+    { id: 'bold', icon: 'fa-bold', label: 'Kalın', command: 'bold', key: 'b' },
+    { id: 'italic', icon: 'fa-italic', label: 'İtalik', command: 'italic', key: 'i' },
+    { id: 'strike', icon: 'fa-strikethrough', label: 'Üstü çizili', command: 'strikeThrough' },
+    { id: 'code', icon: 'fa-code', label: 'Kod', wrap: 'code' },
     { separator: true },
-    { id: 'critical', icon: 'fa-triangle-exclamation', label: 'Kritik (kırmızı)', marker: '!!', className: 'rte-btn-critical' },
-    { id: 'positive', icon: 'fa-circle-check', label: 'Olumlu (yeşil)', marker: '++', className: 'rte-btn-positive' },
+    { id: 'critical', icon: 'fa-triangle-exclamation', label: 'Kritik (kırmızı)', wrap: 'critical', className: 'rte-btn-critical' },
+    { id: 'positive', icon: 'fa-circle-check', label: 'Olumlu (yeşil)', wrap: 'positive', className: 'rte-btn-positive' },
     { separator: true },
-    { id: 'ul', icon: 'fa-list-ul', label: 'Madde listesi', list: 'bullet' },
-    { id: 'ol', icon: 'fa-list-ol', label: 'Numaralı liste', list: 'ordered' },
+    { id: 'ul', icon: 'fa-list-ul', label: 'Madde listesi', command: 'insertUnorderedList' },
+    { id: 'ol', icon: 'fa-list-ol', label: 'Numaralı liste', command: 'insertOrderedList' },
     { separator: true },
     { id: 'mention', icon: 'fa-at', label: 'Kişi veya grup etiketle' },
 ];
 
-const WORD_CHAR = /[\p{L}\p{N}_]/u;
-const BULLET_RE = /^\s*[-*]\s+/;
-const NUMBER_RE = /^\s*\d+[.)]\s+/;
-
-// ---------------------------------------------------------------------------
-// Text manipulation
-// ---------------------------------------------------------------------------
+/** How our own marks are drawn in the surface and read back out of it. */
+const WRAPS = {
+    code: { tag: 'code', className: '', marker: '`' },
+    critical: { tag: 'span', className: 'rt-critical', marker: '!!' },
+    positive: { tag: 'span', className: 'rt-positive', marker: '++' },
+};
 
 /**
- * Replace [start, end) and leave the caret where `selectStart`/`selectEnd` say.
- *
- * Goes through execCommand because that is what keeps the browser's own undo
- * stack intact — assigning to `textarea.value` wipes it, and people do reach
- * for Ctrl+Z straight after hitting a formatting button. It is deprecated but
- * still the only way to edit a textarea undoably, so there is a plain fallback.
+ * Typed markers that turn into formatting the moment they are closed. Each
+ * pattern must match the marker run *exactly* — anything it needs for context
+ * goes in a lookbehind, because match[0].length is what gets replaced.
  */
-function replaceRange(textarea, start, end, text, selectStart, selectEnd) {
-    textarea.focus();
-    textarea.setSelectionRange(start, end);
+const AUTOFORMAT = [
+    { re: /\*\*(?=\S)([^\n]*?\S)\*\*$/, wrap: 'bold' },
+    { re: /~~(?=\S)([^\n]*?\S)~~$/, wrap: 'strike' },
+    { re: /!!(?=\S)([^\n]*?\S)!!$/, wrap: 'critical' },
+    { re: /\+\+(?=\S)([^\n]*?\S)\+\+$/, wrap: 'positive' },
+    { re: /`([^`\n]+)`$/, wrap: 'code' },
+    // Italic last, and it refuses to hug another asterisk, so "**kalın**" is
+    // never mistaken for it and "*** dikkat" stays as typed.
+    { re: /(?<![*\p{L}\p{N}])\*(?=[^\s*])([^*\n]*?[^\s*])\*$/u, wrap: 'italic' },
+];
 
-    let handled = false;
-    if (text !== '') {
-        try {
-            handled = document.execCommand('insertText', false, text);
-        } catch {
-            handled = false;
+/** The element each auto-formatted marker becomes. */
+const ELEMENT_FOR_WRAP = {
+    bold: () => document.createElement('b'),
+    italic: () => document.createElement('i'),
+    strike: () => document.createElement('s'),
+    code: () => document.createElement('code'),
+    critical: () => withClass('span', 'rt-critical'),
+    positive: () => withClass('span', 'rt-positive'),
+};
+
+function withClass(tag, className) {
+    const element = document.createElement(tag);
+    element.className = className;
+    return element;
+}
+
+const INLINE_MARKERS = {
+    B: '**', STRONG: '**',
+    I: '*', EM: '*',
+    S: '~~', STRIKE: '~~', DEL: '~~',
+    CODE: '`',
+};
+
+/** Room a group preview needs beside the dropdown: its width plus a margin. */
+const PREVIEW_CLEARANCE = 240;
+
+const BLOCK_TAGS = new Set(['DIV', 'P', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6']);
+
+// ---------------------------------------------------------------------------
+// Surface → markdown-lite
+// ---------------------------------------------------------------------------
+
+/** A badge is one thing, so it reads back as the token it was built from. */
+function mentionToken(el) {
+    return el.dataset.mention
+        || el.dataset.groupName
+        || el.textContent.replace(/^\s*@/, '').trim();
+}
+
+function inlineText(node) {
+    if (node.nodeType === Node.TEXT_NODE) {
+        // ZWSP is the caret holder an empty mark leaves behind; NBSP comes from
+        // the browser's own editing and from the space after a mention badge.
+        // Neither belongs in the stored text.
+        return node.nodeValue
+            .replace(/\u200B/g, '')
+            .replace(/\u00A0/g, ' ');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const el = node;
+    if (el.tagName === 'BR') return '\n';
+    if (el.classList.contains('mention-badge')) return `@${mentionToken(el)}`;
+    if (el.tagName === 'A') return el.getAttribute('href') || el.textContent;
+
+    const inner = [...el.childNodes].map(inlineText).join('');
+    if (!inner.trim()) return inner;
+
+    let marker = INLINE_MARKERS[el.tagName] || null;
+    if (el.classList.contains('rt-critical')) marker = '!!';
+    else if (el.classList.contains('rt-positive')) marker = '++';
+    // The browser writes styles rather than tags in some paths.
+    else if (!marker) {
+        const style = el.style || {};
+        const weight = style.fontWeight;
+        if (weight === 'bold' || Number(weight) >= 600) marker = '**';
+        else if (style.fontStyle === 'italic') marker = '*';
+        else if ((style.textDecoration || '').includes('line-through')) marker = '~~';
+    }
+    if (!marker) return inner;
+
+    // A marker has to hug non-space or renderRichText leaves it literal, so any
+    // whitespace the selection swept up is pushed back outside.
+    const lead = inner.match(/^\s*/)[0];
+    const tail = inner.match(/\s*$/)[0];
+    const core = inner.slice(lead.length, inner.length - tail.length);
+    return `${lead}${marker}${core}${marker}${tail}`;
+}
+
+function blockText(node) {
+    let out = '';
+    for (const child of node.childNodes) {
+        if (child.nodeType === Node.ELEMENT_NODE && BLOCK_TAGS.has(child.tagName)) {
+            if (out && !out.endsWith('\n')) out += '\n';
+            if (child.tagName === 'UL' || child.tagName === 'OL') {
+                let index = 0;
+                for (const item of child.children) {
+                    if (item.tagName !== 'LI') continue;
+                    index += 1;
+                    const bullet = child.tagName === 'OL' ? `${index}. ` : '- ';
+                    out += bullet + blockText(item).trim() + '\n';
+                }
+                continue;
+            }
+            // An empty line is <div><br></div> in Chrome: its inner text is a
+            // lone newline, and the block boundary below supplies that already.
+            out += `${blockText(child).replace(/\n$/, '')}\n`;
+            continue;
         }
+        out += inlineText(child);
     }
-    if (!handled) {
-        const value = textarea.value;
-        textarea.value = value.slice(0, start) + text + value.slice(end);
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    textarea.setSelectionRange(selectStart, selectEnd);
+    return out;
+}
+
+/**
+ * Read a contenteditable surface back as the markdown-lite that gets stored.
+ * Exported for the round-trip tests — it is the half that can lose data.
+ */
+export function serializeToMarkdown(root) {
+    return blockText(root)
+        .replace(/[ \t]+$/gm, '')
+        .replace(/\n{3,}/g, '\n\n')
+        .replace(/^\n+|\n+$/g, '');
+}
+
+// ---------------------------------------------------------------------------
+// Editing
+// ---------------------------------------------------------------------------
+
+function currentRange(surface) {
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return null;
+    const range = selection.getRangeAt(0);
+    return surface.contains(range.commonAncestorContainer) ? range : null;
 }
 
 /** With nothing selected, act on the word under the caret — as Word does. */
-function expandToWord(value, start, end) {
-    if (start !== end) return [start, end];
-    let from = start;
-    let to = end;
-    while (from > 0 && WORD_CHAR.test(value[from - 1])) from -= 1;
-    while (to < value.length && WORD_CHAR.test(value[to])) to += 1;
-    return [from, to];
+function expandToWord(range) {
+    if (!range.collapsed) return range;
+    const node = range.startContainer;
+    if (node.nodeType !== Node.TEXT_NODE) return range;
+    const value = node.nodeValue;
+    const word = /[\p{L}\p{N}_]/u;
+    let from = range.startOffset;
+    let to = range.startOffset;
+    while (from > 0 && word.test(value[from - 1])) from -= 1;
+    while (to < value.length && word.test(value[to])) to += 1;
+    if (from === to) return range;
+    const expanded = document.createRange();
+    expanded.setStart(node, from);
+    expanded.setEnd(node, to);
+    return expanded;
 }
 
-/** Markers have to hug non-space or the renderer leaves them literal, so a
- *  selection that swept up a trailing space is pulled back in. */
-function trimRange(value, start, end) {
-    let from = start;
-    let to = end;
-    while (from < to && /\s/.test(value[from])) from += 1;
-    while (to > from && /\s/.test(value[to - 1])) to -= 1;
-    return [from, to];
+/** Is the caret/selection already inside one of our own marks? */
+function enclosingWrap(range, kind) {
+    const { tag, className } = WRAPS[kind];
+    let node = range.commonAncestorContainer;
+    while (node && node !== document) {
+        if (node.nodeType === Node.ELEMENT_NODE) {
+            const matches = className
+                ? node.classList?.contains(className)
+                : node.tagName === tag.toUpperCase();
+            if (matches) return node;
+        }
+        node = node.parentNode;
+    }
+    return null;
 }
 
-function toggleInline(textarea, marker) {
-    const value = textarea.value;
-    const [wordStart, wordEnd] = expandToWord(value, textarea.selectionStart, textarea.selectionEnd);
-    const [start, end] = trimRange(value, wordStart, wordEnd);
-    const len = marker.length;
+/**
+ * Replace an inline mark with its own text.
+ *
+ * Not through execCommand: `insertHTML` over a selected <span class="rt-…">
+ * deletes the contents and puts the new text straight back *inside* the same
+ * span, so the mark survives and the button does nothing. Plain DOM surgery is
+ * the only thing that actually removes it. The cost is that this one operation
+ * is not on the browser's undo stack.
+ */
+function unwrapElement(element) {
+    const text = document.createTextNode(element.textContent);
+    element.replaceWith(text);
+    const range = document.createRange();
+    range.setStart(text, text.nodeValue.length);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
 
-    if (start === end) {
-        // Nothing to wrap: drop the pair in and park the caret between them so
-        // whatever is typed next lands inside the emphasis.
-        const at = textarea.selectionStart;
-        replaceRange(textarea, at, at, marker + marker, at + len, at + len);
+/** Is the caret sitting at the very start of a text node? */
+function caretAtLineStart() {
+    const selection = window.getSelection();
+    return !!selection?.isCollapsed
+        && selection.anchorNode?.nodeType === Node.TEXT_NODE
+        && selection.anchorOffset === 0;
+}
+
+/**
+ * Undo the caret jump the list commands make.
+ *
+ * insertUnorderedList re-parents the line into a fresh <li> and leaves the
+ * caret at offset 0 of it, so the next thing typed lands in front of the line
+ * instead of after it. Only the exact symptom is corrected — the caret ending
+ * up at the start of a list item it was not at the start of — so a deliberate
+ * caret-at-line-start, or a command run on an empty new line, is left alone.
+ */
+function fixListCaret(wasAtLineStart) {
+    if (wasAtLineStart || !caretAtLineStart()) return;
+    const selection = window.getSelection();
+    const node = selection.anchorNode;
+    if (!node.parentElement?.closest('li')) return;
+    const range = document.createRange();
+    range.setStart(node, node.nodeValue.length);
+    range.collapse(true);
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+/**
+ * Toggle one of our own marks. execCommand knows bold and italic; it has never
+ * heard of "kritik", so these are built by hand — see applyAutoFormat for why
+ * insertHTML cannot be trusted with them.
+ */
+function toggleWrap(surface, kind) {
+    surface.focus();
+    const range = currentRange(surface);
+    if (!range) return;
+
+    const existing = enclosingWrap(range, kind);
+    if (existing) {
+        unwrapElement(existing);
         return;
     }
 
-    const inside = value.slice(start, end);
+    const target = expandToWord(range);
+    const text = target.toString();
+    const element = ELEMENT_FOR_WRAP[kind]();
 
-    // Already formatted → unformat, whether the markers are inside the
-    // selection or just outside it.
-    if (inside.length > 2 * len && inside.startsWith(marker) && inside.endsWith(marker)) {
-        const bare = inside.slice(len, -len);
-        replaceRange(textarea, start, end, bare, start, start + bare.length);
+    if (!text.trim()) {
+        // Nothing to wrap: leave an empty mark with the caret inside it, so the
+        // next keystrokes land in the formatting — the way a Word toggle does.
+        element.textContent = '\u200B';
+        target.insertNode(element);
+        caretInside(element);
         return;
     }
-    if (value.slice(start - len, start) === marker && value.slice(end, end + len) === marker) {
-        replaceRange(textarea, start - len, end + len, inside, start - len, start - len + inside.length);
-        return;
+
+    element.textContent = text;
+    target.deleteContents();
+    target.insertNode(element);
+    // The caret stays *inside* the new mark, matching what the native bold
+    // command does — and it is what lets the same button switch the mark off.
+    caretInside(element);
+}
+
+function caretInside(element) {
+    if (!element.firstChild) return;
+    const range = document.createRange();
+    range.setStart(element.firstChild, element.firstChild.nodeValue.length);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+}
+
+/**
+ * Turn a marker the user just finished typing into real formatting.
+ * Returns true if something was converted.
+ */
+function applyAutoFormat(surface) {
+    const selection = window.getSelection();
+    if (!selection || !selection.isCollapsed || selection.rangeCount === 0) return false;
+    const node = selection.anchorNode;
+    if (!node || node.nodeType !== Node.TEXT_NODE || !surface.contains(node)) return false;
+    // Inside a code span the markers are content, not syntax.
+    if (node.parentElement?.closest('code')) return false;
+
+    const caret = selection.anchorOffset;
+    const before = node.nodeValue.slice(0, caret);
+    for (const { re, wrap } of AUTOFORMAT) {
+        const match = before.match(re);
+        if (!match || !match[1]) continue;
+
+        // Built by hand rather than with execCommand('insertHTML'): inserting
+        // into a block Chrome has just created makes it "normalise" the markup
+        // and replace <span class="rt-critical"> with a <span style="font-size">
+        // of its own, silently dropping the formatting.
+        const start = caret - match[0].length;
+        node.deleteData(start, match[0].length);
+        const element = ELEMENT_FOR_WRAP[wrap]();
+        element.textContent = match[1];
+        node.after(element);
+        if (start < node.nodeValue.length) {
+            // The marker sat mid-text; keep what followed it after the element.
+            const tail = node.splitText(start);
+            element.after(tail);
+        }
+        caretAfter(element);
+        return true;
     }
-
-    replaceRange(textarea, start, end, marker + inside + marker, start + len, start + len + inside.length);
+    return false;
 }
 
-function toggleList(textarea, kind) {
-    const ordered = kind === 'ordered';
-    const value = textarea.value;
-    const start = value.lastIndexOf('\n', textarea.selectionStart - 1) + 1;
-    let end = value.indexOf('\n', textarea.selectionEnd);
-    if (end === -1) end = value.length;
-
-    const lines = value.slice(start, end).split('\n');
-    const marked = ordered ? NUMBER_RE : BULLET_RE;
-    const filled = lines.filter((line) => line.trim());
-    const allMarked = filled.length > 0 && filled.every((line) => marked.test(line));
-
-    let counter = 0;
-    const next = lines.map((line) => {
-        if (!line.trim()) return line;
-        const bare = line.replace(BULLET_RE, '').replace(NUMBER_RE, '');
-        if (allMarked) return bare;
-        counter += 1;
-        return ordered ? `${counter}. ${bare}` : `- ${bare}`;
-    }).join('\n');
-
-    replaceRange(textarea, start, end, next, start, start + next.length);
-}
-
-/** Type the `@` for the user and let the suggestion list open itself. */
-function insertMentionTrigger(textarea) {
-    const at = textarea.selectionStart;
-    const needsSpace = at > 0 && !/\s/.test(textarea.value[at - 1]);
-    const text = needsSpace ? ' @' : '@';
-    replaceRange(textarea, at, textarea.selectionEnd, text, at + text.length, at + text.length);
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+/**
+ * Park the caret outside an element that was just inserted.
+ *
+ * Chrome keeps typing inside the new element otherwise — the rest of the
+ * sentence would come out bold — and a Range positioned after it is not enough,
+ * because the caret still resolves to the inner context. A zero-width space is
+ * the only thing it will step out onto. It never reaches the stored value: the
+ * serializer strips it, and Backspace treats it as part of the character before
+ * it (see the keydown handler).
+ */
+function caretAfter(element) {
+    const spacer = document.createTextNode('\u200B');
+    element.after(spacer);
+    const range = document.createRange();
+    range.setStart(spacer, 1);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
 }
 
 // ---------------------------------------------------------------------------
 // Toolbar
 // ---------------------------------------------------------------------------
 
-function buildToolbar({ preview }) {
+function buildToolbar() {
     const bar = document.createElement('div');
     bar.className = 'rte-toolbar';
     bar.setAttribute('role', 'toolbar');
@@ -201,25 +431,19 @@ function buildToolbar({ preview }) {
         bar.appendChild(makeButton(item));
     });
 
-    const right = document.createElement('span');
-    right.className = 'rte-spacer';
-    bar.appendChild(right);
+    bar.appendChild(Object.assign(document.createElement('span'), { className: 'rte-spacer' }));
 
-    if (preview) {
-        const previewButton = makeButton({
-            id: 'preview', icon: 'fa-eye', label: 'Önizleme',
-        });
-        previewButton.setAttribute('aria-pressed', 'false');
-        bar.appendChild(previewButton);
-    }
+    const source = makeButton({ id: 'source', icon: 'fa-file-code', label: 'Ham metni göster' });
+    source.setAttribute('aria-pressed', 'false');
+    bar.appendChild(source);
 
     const help = makeButton({ id: 'help', icon: 'fa-question', label: 'Yazım kısayolları' });
-    help.title = `Doğrudan da yazabilirsiniz:\n${RICH_TEXT_HINT}`;
+    help.title = `Yazarken de biçimlendirebilirsiniz:\n${RICH_TEXT_HINT}`;
     bar.appendChild(help);
 
     // One tab stop for the whole toolbar, arrows move within it (ARIA toolbar
-    // pattern) — ten extra tab stops in front of every comment box would be
-    // worse than no toolbar at all for keyboard users.
+    // pattern) — a dozen extra tab stops in front of every comment box would be
+    // worse for keyboard users than no toolbar at all.
     const buttons = () => [...bar.querySelectorAll('.rte-btn')];
     buttons()[0].tabIndex = 0;
     bar.addEventListener('keydown', (event) => {
@@ -235,7 +459,7 @@ function buildToolbar({ preview }) {
         target.focus();
     });
 
-    // Keep the selection: a click would otherwise blur the textarea first and
+    // Keep the selection: a click would otherwise blur the surface first and
     // there would be nothing left to format.
     bar.addEventListener('mousedown', (event) => {
         if (event.target.closest('.rte-btn')) event.preventDefault();
@@ -244,62 +468,42 @@ function buildToolbar({ preview }) {
     return bar;
 }
 
-function applyAction(action, textarea, host) {
-    const item = TOOLBAR.find((entry) => entry.id === action);
-    if (item?.marker) {
-        toggleInline(textarea, item.marker);
-        return;
-    }
-    if (item?.list) {
-        toggleList(textarea, item.list);
-        return;
-    }
-    if (action === 'mention') {
-        insertMentionTrigger(textarea);
-        return;
-    }
-    if (action === 'preview') {
-        togglePreview(host, textarea);
-    }
-}
-
-function togglePreview(host, textarea) {
-    const previewEl = host.querySelector('.rte-preview');
-    const button = host.querySelector('[data-action="preview"]');
-    const showing = previewEl.hidden;
-
-    if (showing) {
-        // Group badges need server data to resolve, which a draft has not been
-        // through yet; a draft preview shows the person/group tags as typed.
-        previewEl.innerHTML = renderRichText(textarea.value)
-            || '<span class="text-muted">Önizlenecek bir şey yok.</span>';
-        previewEl.style.minHeight = `${textarea.offsetHeight}px`;
-    }
-
-    previewEl.hidden = !showing;
-    textarea.hidden = showing;
-    button.setAttribute('aria-pressed', String(showing));
-    button.classList.toggle('active', showing);
-    button.title = showing ? 'Düzenlemeye dön' : 'Önizleme';
-    button.querySelector('i').className = `fas ${showing ? 'fa-pen' : 'fa-eye'}`;
-    if (!showing) textarea.focus();
-}
-
 // ---------------------------------------------------------------------------
 // @mention autocomplete
 // ---------------------------------------------------------------------------
 
 /**
- * Wire @mention suggestions onto a textarea.
+ * A mention is built as a node, not as HTML.
  *
- * Exported because it predates the toolbar and is still the whole feature for
- * a caller that only wants mentions; `attachRichTextEditor` calls it for you.
+ * `contenteditable="false"` makes it one object: it is selected, dragged and
+ * deleted whole, so a badge can never end up half-edited into a token the
+ * server will not recognise.
  */
-export function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
+function buildUserBadge(username, fullName) {
+    const badge = withClass('span', 'mention-badge');
+    badge.contentEditable = 'false';
+    badge.dataset.mention = username;
+    badge.textContent = `@${fullName || username}`;
+    return badge;
+}
+
+function buildGroupBadge(name) {
+    const badge = withClass('span', 'mention-badge mention-badge-group');
+    badge.contentEditable = 'false';
+    badge.dataset.groupName = name;
+    const icon = withClass('i', 'fas fa-users');
+    icon.setAttribute('aria-hidden', 'true');
+    badge.append(icon, ` @${name}`);
+    return badge;
+}
+
+function setupMentions(surface, container) {
     let allUsers = [];
     let allGroups = [];
-    let mentionStartPos = -1;
-    let selectedSuggestionIndex = -1;
+    let selectedIndex = -1;
+    let anchor = null;
+    let visible = [];
+    let previewTimer = null;
 
     (async () => {
         try {
@@ -311,131 +515,210 @@ export function initializeMentionFunctionality(textarea, mentionSuggestionsConta
         }
     })();
 
-    const hideMentionSuggestions = () => {
-        mentionSuggestionsContainer.style.display = 'none';
-        selectedSuggestionIndex = -1;
+    /**
+     * Show the members of the highlighted group before it is picked.
+     *
+     * Tagging a group notifies everyone in it, and the row only says how many
+     * that is — this says who. Debounced, because the dropdown is rebuilt on
+     * every keystroke and a popover that reopened per character would strobe.
+     */
+    const previewGroup = () => {
+        clearTimeout(previewTimer);
+        const mention = visible[selectedIndex];
+        if (!mention || mention.type !== 'group' || mention.id === undefined || !previewFits()) {
+            hideGroupMembers();
+            return;
+        }
+        previewTimer = setTimeout(() => {
+            const row = container.querySelector(`.mention-suggestion-item[data-index="${selectedIndex}"]`);
+            if (!row) return;
+            showGroupMembers(row, { id: mention.id, name: mention.token }, {
+                placement: 'side',
+                avoid: container,
+                preview: true,
+            });
+        }, 140);
     };
 
-    const insertMention = (mentionToken) => {
-        const text = textarea.value;
-        const beforeMention = text.substring(0, mentionStartPos);
-        const afterMention = text.substring(textarea.selectionStart);
-        textarea.value = `${beforeMention}@${mentionToken} ${afterMention}`;
-        const newCursorPos = mentionStartPos + mentionToken.length + 2;
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-        textarea.focus();
+    /**
+     * Only preview where the popover can stand clear of the dropdown.
+     *
+     * On a phone neither side has the room, and a preview laid over the list
+     * would hide the very choices it is meant to inform. The row still carries
+     * the member count there, and the badge can be opened once it is inserted.
+     */
+    const previewFits = () => {
+        const box = container.getBoundingClientRect();
+        return (window.innerWidth - box.right) >= PREVIEW_CLEARANCE
+            || box.left >= PREVIEW_CLEARANCE;
     };
 
-    const renderMentionSuggestions = (mentions) => {
-        mentionSuggestionsContainer.innerHTML = mentions.map((mention, index) => {
-            const token = mention.token || '';
-            const fullName = mention.fullName || token;
-            const initials = getUserInitials(fullName);
-            const avatarColor = getAvatarColor(fullName);
+    const hide = () => {
+        clearTimeout(previewTimer);
+        hideGroupMembers();
+        container.style.display = 'none';
+        selectedIndex = -1;
+        anchor = null;
+        visible = [];
+    };
+
+    /** The "@query" immediately before the caret, if there is one. */
+    const queryAtCaret = () => {
+        const selection = window.getSelection();
+        if (!selection || !selection.isCollapsed || selection.rangeCount === 0) return null;
+        const node = selection.anchorNode;
+        if (!node || node.nodeType !== Node.TEXT_NODE || !surface.contains(node)) return null;
+        const before = node.nodeValue.slice(0, selection.anchorOffset);
+        // \p{L} rather than \w: JS's \w is ASCII, so "@Satın" used to kill the
+        // dropdown one letter into the name.
+        const match = before.match(/@([\p{L}\p{N}_-]*)$/u);
+        if (!match) return null;
+        return {
+            node,
+            start: selection.anchorOffset - match[0].length,
+            end: selection.anchorOffset,
+            query: match[1].toLowerCase(),
+        };
+    };
+
+    const insert = (mention) => {
+        if (!anchor) return;
+        const range = document.createRange();
+        range.setStart(anchor.node, anchor.start);
+        range.setEnd(anchor.node, Math.min(anchor.end, anchor.node.nodeValue.length));
+        range.deleteContents();
+        const badge = mention.type === 'group'
+            ? buildGroupBadge(mention.token)
+            : buildUserBadge(mention.token, mention.fullName);
+        range.insertNode(badge);
+        // A non-breaking space, or the browser collapses it away and there is
+        // nowhere outside the badge for the caret to land.
+        const spacer = document.createTextNode('\u00A0');
+        badge.after(spacer);
+        const after = document.createRange();
+        after.setStart(spacer, 1);
+        after.collapse(true);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(after);
+        hide();
+        surface.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const render = (mentions) => {
+        container.innerHTML = mentions.map((mention, index) => {
+            const fullName = mention.fullName || mention.token;
             const badge = mention.type === 'group'
                 ? '<span class="status-badge status-blue ms-2" style="font-size: 10px;">Grup</span>'
                 : '';
+            // The count comes free with the group list; the names behind it
+            // arrive in the preview popover when the row is highlighted.
+            const size = mention.type === 'group' && Number.isFinite(mention.memberCount)
+                ? ` · ${mention.memberCount} kişi`
+                : '';
             return `
-                <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}"
-                     data-token="${escapeHtml(token)}"
+                <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}" data-index="${index}"
                      style="cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e1e5e9;">
-                    <div style="width: 24px; height: 24px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">
-                        ${escapeHtml(initials)}
+                    <div style="width: 24px; height: 24px; border-radius: 50%; background: ${getAvatarColor(fullName)}; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">
+                        ${escapeHtml(getUserInitials(fullName))}
                     </div>
                     <div>
                         <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${escapeHtml(fullName)}${badge}</div>
-                        <div style="font-size: 12px; color: #6c757d;">@${escapeHtml(token)}</div>
+                        <div style="font-size: 12px; color: #6c757d;">@${escapeHtml(mention.token)}${size}</div>
                     </div>
                 </div>
             `;
         }).join('');
-        mentionSuggestionsContainer.style.display = 'block';
+        container.style.display = 'block';
+        selectedIndex = 0;
+        visible = mentions;
+        previewGroup();
 
-        mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item').forEach((item, index) => {
-            item.addEventListener('click', () => {
-                insertMention(item.dataset.token);
-                hideMentionSuggestions();
+        container.querySelectorAll('.mention-suggestion-item').forEach((item, index) => {
+            item.addEventListener('mousedown', (event) => {
+                event.preventDefault();      // do not blur the surface
+                insert(mentions[index]);
             });
             item.addEventListener('mouseenter', () => {
-                selectedSuggestionIndex = index;
-                mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item').forEach((el, i) => {
-                    el.classList.toggle('selected', i === index);
-                });
+                selectedIndex = index;
+                container.querySelectorAll('.mention-suggestion-item')
+                    .forEach((el, i) => el.classList.toggle('selected', i === index));
+                previewGroup();
             });
         });
     };
 
-    textarea.addEventListener('input', (e) => {
-        const text = e.target.value;
-        const cursorPos = e.target.selectionStart;
-        // \p{L} rather than \w: JS's \w is ASCII, so "@Satın" used to kill the
-        // dropdown one letter into the name.
-        const mentionMatch = text.substring(0, cursorPos).match(/@([\p{L}\p{N}_-]*)$/u);
-        if (!mentionMatch) {
-            hideMentionSuggestions();
+    const refresh = () => {
+        anchor = queryAtCaret();
+        if (!anchor) {
+            hide();
             return;
         }
-        const query = mentionMatch[1].toLowerCase();
-        mentionStartPos = cursorPos - query.length - 1;
-        const filteredUsers = allUsers
+        const { query } = anchor;
+        const users = allUsers
             .filter((user) => {
                 const username = (user.username || '').toLowerCase();
                 const fullName = (user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || '').toLowerCase();
                 return username.includes(query) || fullName.includes(query);
             })
-            .map((user) => ({
-                type: 'user',
-                token: user.username || '',
-                fullName: user.full_name || user.username || ''
-            }))
+            .map((user) => ({ type: 'user', token: user.username || '', fullName: user.full_name || user.username || '' }))
             .filter((item) => item.token);
-        const filteredGroups = allGroups
+        const groups = allGroups
             .filter((group) => {
-                const groupName = (group.name || group.value || '').toLowerCase();
-                const displayName = (group.display_name || group.label || groupName || '').toLowerCase();
-                return groupName.includes(query) || displayName.includes(query);
+                const name = (group.name || group.value || '').toLowerCase();
+                const label = (group.display_name || group.label || name || '').toLowerCase();
+                return name.includes(query) || label.includes(query);
             })
             .map((group) => ({
                 type: 'group',
+                id: group.id,
                 token: group.name || group.value || '',
-                fullName: group.display_name || group.label || group.name || ''
+                fullName: group.display_name || group.label || group.name || '',
+                memberCount: group.member_count,
             }))
             .filter((item) => item.token);
-        const filtered = [...filteredUsers, ...filteredGroups].slice(0, 10);
-        if (filtered.length) {
-            renderMentionSuggestions(filtered);
-        } else {
-            hideMentionSuggestions();
-        }
+
+        const filtered = [...users, ...groups].slice(0, 10);
+        if (filtered.length) render(filtered);
+        else hide();
+    };
+
+    surface.addEventListener('input', refresh);
+    surface.addEventListener('keyup', (event) => {
+        if (['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) refresh();
     });
 
-    textarea.addEventListener('keydown', (e) => {
-        if (mentionSuggestionsContainer.style.display === 'none') return;
-        const items = mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item');
+    surface.addEventListener('keydown', (event) => {
+        if (container.style.display === 'none') return;
+        const items = container.querySelectorAll('.mention-suggestion-item');
         if (!items.length) return;
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, items.length - 1);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, 0);
-        } else if ((e.key === 'Enter' || e.key === 'Tab') && selectedSuggestionIndex >= 0) {
-            e.preventDefault();
-            insertMention(items[selectedSuggestionIndex].dataset.token);
-            hideMentionSuggestions();
-        } else if (e.key === 'Escape') {
-            hideMentionSuggestions();
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            selectedIndex = Math.max(selectedIndex - 1, 0);
+        } else if ((event.key === 'Enter' || event.key === 'Tab') && selectedIndex >= 0) {
+            event.preventDefault();
+            insert(visible[selectedIndex]);
+            return;
+        } else if (event.key === 'Escape') {
+            hide();
+            return;
         }
-        items.forEach((item, index) => item.classList.toggle('selected', index === selectedSuggestionIndex));
+        items.forEach((item, index) => item.classList.toggle('selected', index === selectedIndex));
+        previewGroup();
     });
 
-    document.addEventListener('click', (e) => {
-        if (textarea.contains(e.target) || mentionSuggestionsContainer.contains(e.target)) return;
+    document.addEventListener('click', (event) => {
+        if (surface.contains(event.target) || container.contains(event.target)) return;
         // The toolbar's @ button is what opens this list; counting its own
         // click as an outside click would close it again in the same tick.
-        if (e.target.closest?.('.rte-toolbar')) return;
-        hideMentionSuggestions();
+        if (event.target.closest?.('.rte-toolbar')) return;
+        hide();
     });
+
+    return { refresh, hide };
 }
 
 // ---------------------------------------------------------------------------
@@ -443,66 +726,226 @@ export function initializeMentionFunctionality(textarea, mentionSuggestionsConta
 // ---------------------------------------------------------------------------
 
 /**
- * Give a textarea a formatting toolbar, a preview, and @mention suggestions.
+ * Turn a textarea into a WYSIWYG editor.
  *
- * Idempotent, so it is safe to call on a re-rendered form. Any
- * `.mention-suggestions` element already sitting next to the textarea is
- * adopted rather than duplicated.
+ * The textarea stays in the DOM, hidden, holding the markdown-lite value —
+ * callers keep reading `.value` and never see the difference. Idempotent, so it
+ * is safe to call on a re-rendered form.
  *
  * @param {HTMLTextAreaElement} textarea
  * @param {object} [options]
  * @param {boolean} [options.mentions=true] wire @mention suggestions
- * @param {boolean} [options.preview=true]  offer a preview toggle
+ * @param {Array} [options.mentionedUsers] resolves @username to a full name in
+ *        content that already exists (an edit form)
+ * @param {Array} [options.mentionedGroups] same, for group badges
  * @returns {HTMLElement|null} the wrapper element, or null if it was a no-op
  */
 export function attachRichTextEditor(textarea, options = {}) {
     if (!textarea || textarea.dataset.rteAttached === '1') return null;
-    const { mentions = true, preview = true } = options;
+    const { mentions = true, mentionedUsers, mentionedGroups } = options;
     textarea.dataset.rteAttached = '1';
+
+    // Tags, not inline styles, so the serializer reads <b> rather than a
+    // style="font-weight:700" it has to sniff.
+    try { document.execCommand('styleWithCSS', false, false); } catch { /* older engines */ }
 
     const parent = textarea.parentNode;
     const host = document.createElement('div');
     host.className = 'rte';
     parent.insertBefore(host, textarea);
 
-    host.appendChild(buildToolbar({ preview }));
+    host.appendChild(buildToolbar());
+
+    const surface = document.createElement('div');
+    surface.className = 'rte-surface form-control';
+    surface.contentEditable = 'true';
+    surface.setAttribute('role', 'textbox');
+    surface.setAttribute('aria-multiline', 'true');
+    if (textarea.getAttribute('placeholder')) {
+        surface.dataset.placeholder = textarea.getAttribute('placeholder');
+    }
+    if (textarea.rows) surface.style.minHeight = `${Math.max(3, textarea.rows) * 1.5}em`;
+    surface.innerHTML = renderRichText(textarea.value, { mentionedUsers, mentionedGroups });
+    surface.querySelectorAll('.mention-badge').forEach((badge) => {
+        badge.setAttribute('contenteditable', 'false');
+    });
+    host.appendChild(surface);
+
+    textarea.hidden = true;
+    textarea.setAttribute('aria-hidden', 'true');
     host.appendChild(textarea);
 
-    if (preview) {
-        const previewEl = document.createElement('div');
-        previewEl.className = 'rte-preview rich-text';
-        previewEl.hidden = true;
-        host.appendChild(previewEl);
-    }
+    const syncValue = () => {
+        const markdown = serializeToMarkdown(surface);
+        if (textarea.value !== markdown) {
+            textarea.value = markdown;
+            // EditModal validates on the textarea's own input event.
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        host.classList.toggle('rte-empty', markdown.trim() === '');
+    };
+    syncValue();
 
+    let mentionApi = null;
     if (mentions) {
         // The suggestion list is absolutely positioned against .rte, so an
-        // existing one has to come inside the wrapper with the textarea.
-        let suggestions = parent.querySelector(':scope > .mention-suggestions');
-        if (!suggestions) {
-            suggestions = document.createElement('div');
-            suggestions.className = 'mention-suggestions';
+        // existing one has to come inside the wrapper.
+        let container = parent.querySelector(':scope > .mention-suggestions');
+        if (!container) {
+            container = document.createElement('div');
+            container.className = 'mention-suggestions';
         }
-        suggestions.style.display = 'none';
-        host.appendChild(suggestions);
-        initializeMentionFunctionality(textarea, suggestions);
+        container.style.display = 'none';
+        host.appendChild(container);
+        mentionApi = setupMentions(surface, container);
     }
+
+    // Auto-formatting has to happen *after* the input event it reacts to.
+    // Chrome ignores an execCommand issued from inside an input handler — the
+    // range gets deleted and nothing is inserted in its place, which silently
+    // ate the text the marker was wrapping. A task boundary fixes it; the guard
+    // stops the edit it makes from scheduling another pass on itself.
+    let formatting = false;
+    surface.addEventListener('input', () => {
+        syncValue();
+        if (formatting) return;
+        setTimeout(() => {
+            formatting = true;
+            try {
+                if (applyAutoFormat(surface)) syncValue();
+            } finally {
+                formatting = false;
+            }
+        }, 0);
+    });
+
+    // The zero-width spacer that lets the caret leave a formatted run must not
+    // cost a keystroke: without this, one Backspace appears to do nothing.
+    surface.addEventListener('keydown', (event) => {
+        if (event.key !== 'Backspace') return;
+        const selection = window.getSelection();
+        if (!selection?.isCollapsed) return;
+        const node = selection.anchorNode;
+        if (node?.nodeType !== Node.TEXT_NODE) return;
+        const offset = selection.anchorOffset;
+        if (offset === 0 || node.nodeValue[offset - 1] !== '\u200B') return;
+        node.deleteData(offset - 1, 1);   // then let Backspace hit the real character
+    });
+
+    // Paste goes out through our own serializer and back in through the
+    // renderer, so nothing from Word or another page survives as markup — the
+    // round trip is the sanitiser.
+    surface.addEventListener('paste', (event) => {
+        event.preventDefault();
+        const data = event.clipboardData;
+        if (!data) return;
+        const html = data.getData('text/html');
+        let markdown;
+        if (html) {
+            const scratch = document.createElement('div');
+            scratch.innerHTML = html;
+            markdown = serializeToMarkdown(scratch);
+        } else {
+            markdown = data.getData('text/plain');
+        }
+        if (!markdown) return;
+        const range = currentRange(surface);
+        if (!range) return;
+        range.deleteContents();
+        // The HTML is our renderer's own output, so it carries only the tags
+        // this editor understands — that is what makes the round trip a
+        // sanitiser rather than a hole.
+        const fragment = range.createContextualFragment(renderRichText(markdown));
+        const last = fragment.lastChild;
+        range.insertNode(fragment);
+        if (last) caretAfter(last);
+        syncValue();
+    });
 
     host.addEventListener('click', (event) => {
         const button = event.target.closest('.rte-btn');
         if (!button) return;
         event.preventDefault();
-        if (button.dataset.action === 'help') return;   // the tooltip is the help
-        applyAction(button.dataset.action, textarea, host);
+        const action = button.dataset.action;
+        if (action === 'help') return;                  // the tooltip is the help
+        if (action === 'source') {
+            toggleSource(host, surface, textarea, button, { mentionedUsers, mentionedGroups });
+            return;
+        }
+        const item = TOOLBAR.find((entry) => entry.id === action);
+        surface.focus();
+        if (item?.command) {
+            const wasAtLineStart = caretAtLineStart();
+            document.execCommand(item.command, false, null);
+            fixListCaret(wasAtLineStart);
+        } else if (item?.wrap) {
+            toggleWrap(surface, item.wrap);
+        } else if (action === 'mention') {
+            document.execCommand('insertText', false, '@');
+            mentionApi?.refresh();
+        }
+        syncValue();
+        updateButtonStates(host, surface);
     });
 
-    textarea.addEventListener('keydown', (event) => {
-        if (!event.ctrlKey && !event.metaKey) return;
-        const item = TOOLBAR.find((entry) => entry.key && entry.key === event.key.toLowerCase());
-        if (!item) return;
-        event.preventDefault();
-        toggleInline(textarea, item.marker);
-    });
+    installSelectionWatcher();
 
     return host;
+}
+
+/**
+ * Keep the toolbar in step with wherever the caret is.
+ *
+ * One listener for the whole document, not one per editor: comment boxes are
+ * re-attached on every list re-render, and a per-instance selectionchange
+ * handler would pile up against surfaces that no longer exist.
+ */
+let selectionWatcherInstalled = false;
+
+function installSelectionWatcher() {
+    if (selectionWatcherInstalled) return;
+    selectionWatcherInstalled = true;
+    document.addEventListener('selectionchange', () => {
+        const node = document.getSelection()?.anchorNode;
+        const surface = (node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement)
+            ?.closest?.('.rte-surface');
+        if (surface) updateButtonStates(surface.closest('.rte'), surface);
+    });
+}
+
+/** Light up the buttons that apply where the caret is, the way Word does. */
+function updateButtonStates(host, surface) {
+    if (!surface.isConnected) return;
+    const range = currentRange(surface);
+    host.querySelectorAll('.rte-btn').forEach((button) => {
+        const item = TOOLBAR.find((entry) => entry.id === button.dataset.action);
+        if (!item) return;
+        let active = false;
+        if (item.command && range) {
+            try { active = document.queryCommandState(item.command); } catch { active = false; }
+        } else if (item.wrap && range) {
+            active = !!enclosingWrap(range, item.wrap);
+        }
+        button.classList.toggle('active', active);
+    });
+}
+
+/** Show the markdown that will actually be stored — the escape hatch. */
+function toggleSource(host, surface, textarea, button, renderOptions) {
+    const showingSource = surface.hidden;
+    if (showingSource) {
+        surface.innerHTML = renderRichText(textarea.value, renderOptions);
+        surface.querySelectorAll('.mention-badge').forEach((badge) => {
+            badge.setAttribute('contenteditable', 'false');
+        });
+    }
+    surface.hidden = !showingSource;
+    textarea.hidden = showingSource;
+    // Whichever one is on screen is the real control for a screen reader.
+    textarea.setAttribute('aria-hidden', String(showingSource));
+    surface.setAttribute('aria-hidden', String(!showingSource));
+    button.setAttribute('aria-pressed', String(!showingSource));
+    button.classList.toggle('active', !showingSource);
+    button.title = showingSource ? 'Ham metni göster' : 'Biçimlendirilmiş görünüme dön';
+    (showingSource ? surface : textarea).focus();
 }

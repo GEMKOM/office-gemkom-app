@@ -1,9 +1,12 @@
 /**
- * Member list for a group @mention badge.
+ * Member list for a group @mention.
  *
- * A group mention ("@Satın Alma") notifies everyone in the group, but the badge
- * alone does not say who that is — so people could not tell whether the right
- * person had been told. Clicking a badge answers that.
+ * A group mention ("@Satın Alma") notifies everyone in the group, but the name
+ * alone does not say who that is. This answers it in both directions:
+ *
+ *   - reading a thread, clicking a group badge shows who was told;
+ *   - writing one, highlighting a group in the @mention dropdown shows who you
+ *     are about to tell, *before* you pick it.
  *
  * One delegated listener on `document` serves every rich-text surface. That is
  * deliberate: group badges are rendered by utils/richText.js, which is used by
@@ -30,6 +33,8 @@ let installed = false;
 let openForGroupId = null;
 let anchor = null;
 let anchorScrollers = [];
+let placement = 'below';
+let avoidElement = null;
 
 function loadMembers(groupId) {
     if (!memberCache.has(groupId)) {
@@ -45,6 +50,8 @@ function closePopover() {
     document.getElementById(POPOVER_ID)?.remove();
     openForGroupId = null;
     anchor = null;
+    avoidElement = null;
+    placement = 'below';
     anchorScrollers.forEach((target) => target.removeEventListener('scroll', reposition));
     anchorScrollers = [];
 }
@@ -70,7 +77,7 @@ function reposition() {
         closePopover();          // the badge scrolled out of sight
         return;
     }
-    positionPopover(el, anchor);
+    positionPopover(el);
 }
 
 function watchAnchorScrollers(badge) {
@@ -99,23 +106,37 @@ function ensurePopover() {
     return el;
 }
 
-function positionPopover(el, badge) {
-    const rect = badge.getBoundingClientRect();
+function positionPopover(el) {
+    if (!anchor) return;
+    const rect = anchor.getBoundingClientRect();
     // Its width and height come from the CSS box, not from where it sits, so
     // measuring in place is safe — no hide/measure/show flicker while following.
     const { offsetWidth: width, offsetHeight: height } = el;
     const margin = 8;
+    let left;
+    let top;
 
-    let left = rect.left;
+    if (placement === 'side') {
+        // Beside the whole dropdown, not below the row: below would cover the
+        // suggestions the reader is still choosing between.
+        const avoid = (avoidElement || anchor).getBoundingClientRect();
+        if (avoid.right + 8 + width <= window.innerWidth - margin) left = avoid.right + 8;
+        else if (avoid.left - width - 8 >= margin) left = avoid.left - width - 8;
+        else left = Math.max(margin, window.innerWidth - width - margin);
+        top = rect.top;
+    } else {
+        left = rect.left;
+        top = rect.bottom + 6;
+        if (top + height > window.innerHeight - margin) {
+            const above = rect.top - height - 6;
+            top = above >= margin ? above : window.innerHeight - height - margin;
+        }
+    }
+
     if (left + width > window.innerWidth - margin) left = window.innerWidth - width - margin;
     if (left < margin) left = margin;
-
-    let top = rect.bottom + 6;
-    if (top + height > window.innerHeight - margin) {
-        const above = rect.top - height - 6;
-        if (above >= margin) top = above;
-        else top = Math.max(margin, window.innerHeight - height - margin);
-    }
+    if (top + height > window.innerHeight - margin) top = window.innerHeight - height - margin;
+    if (top < margin) top = margin;
 
     el.style.left = `${Math.round(left)}px`;
     el.style.top = `${Math.round(top)}px`;
@@ -131,45 +152,72 @@ function renderBody(groupName, inner) {
     `;
 }
 
-function renderMembers(group) {
+/** A preview cannot be scrolled (it takes no pointer events), so it is trimmed
+ *  rather than left to overflow out of reach. */
+const PREVIEW_LIMIT = 12;
+
+function renderMembers(group, { preview = false } = {}) {
     const members = group.members || [];
     if (!members.length) {
         return `<div class="mention-group-popover-empty">Bu grupta aktif üye yok — bahsetme kimseye bildirim göndermez.</div>`;
     }
-    const rows = members.map((member) => `
+    const shown = preview ? members.slice(0, PREVIEW_LIMIT) : members;
+    const rows = shown.map((member) => `
         <li>
             <span class="mention-group-member-name">${escapeHtml(member.full_name || member.username)}</span>
             ${member.position ? `<span class="mention-group-member-position">${escapeHtml(member.position)}</span>` : ''}
         </li>
     `).join('');
+    const rest = members.length - shown.length;
     return `
         <ul class="mention-group-popover-list">${rows}</ul>
+        ${rest > 0 ? `<div class="mention-group-popover-empty">…ve ${rest} kişi daha</div>` : ''}
         <div class="mention-group-popover-footer">${members.length} üye bildirim alır</div>
     `;
 }
 
-async function openPopover(badge) {
-    const groupId = badge.dataset.groupId;
-    const groupName = badge.dataset.groupName || '';
-    if (!groupId) return;
+/**
+ * Show a group's members next to `anchorElement`.
+ *
+ * @param {HTMLElement} anchorElement  what the popover points at
+ * @param {{id: (number|string), name: string}} group
+ * @param {object} [options]
+ * @param {'below'|'side'} [options.placement='below'] 'side' clears a dropdown
+ *        instead of covering it
+ * @param {HTMLElement} [options.avoid]  the box a 'side' placement steps around
+ * @param {boolean} [options.preview=false] display only — no pointer events, so
+ *        it can never come between a click and the row being clicked
+ */
+export async function showGroupMembers(anchorElement, group, options = {}) {
+    const groupId = group?.id;
+    const groupName = group?.name || '';
+    if (!anchorElement || groupId === undefined || groupId === null || groupId === '') return;
 
     const el = ensurePopover();
+    el.classList.toggle('mention-group-popover-preview', !!options.preview);
     el.innerHTML = renderBody(groupName, '<div class="mention-group-popover-empty">Yükleniyor…</div>');
-    openForGroupId = groupId;
-    anchor = badge;
-    positionPopover(el, badge);
-    watchAnchorScrollers(badge);
+    openForGroupId = String(groupId);
+    anchor = anchorElement;
+    placement = options.placement || 'below';
+    avoidElement = options.avoid || null;
+    positionPopover(el);
+    watchAnchorScrollers(anchorElement);
 
     try {
-        const group = await loadMembers(groupId);
-        if (openForGroupId !== groupId) return;   // a different badge won the race
-        el.innerHTML = renderBody(group.name || groupName, renderMembers(group));
+        const loaded = await loadMembers(groupId);
+        if (openForGroupId !== String(groupId)) return;   // another one won the race
+        el.innerHTML = renderBody(loaded.name || groupName, renderMembers(loaded, { preview: options.preview }));
     } catch (error) {
         console.error('Grup üyeleri alınamadı:', error);
-        if (openForGroupId !== groupId) return;
+        if (openForGroupId !== String(groupId)) return;
         el.innerHTML = renderBody(groupName, '<div class="mention-group-popover-empty">Grup üyeleri alınamadı.</div>');
     }
-    positionPopover(el, badge);   // the body just changed height
+    positionPopover(el);   // the body just changed height
+}
+
+/** Close whatever is open. Safe to call when nothing is. */
+export function hideGroupMembers() {
+    closePopover();
 }
 
 function handleActivate(badge) {
@@ -180,7 +228,7 @@ function handleActivate(badge) {
         closePopover();
         return;
     }
-    openPopover(badge);
+    showGroupMembers(badge, { id: badge.dataset.groupId, name: badge.dataset.groupName });
 }
 
 /** Idempotent — richText.js calls this every time it renders a group badge. */
@@ -190,7 +238,9 @@ export function installGroupMentionPopover() {
 
     document.addEventListener('click', (event) => {
         const badge = event.target.closest?.('.mention-badge-group');
-        if (badge) {
+        // Inside an editor the badge is something being written, not read:
+        // clicking it has to place the caret, not open a member list.
+        if (badge && !badge.closest('.rte-surface')) {
             event.preventDefault();
             event.stopPropagation();
             handleActivate(badge);
@@ -206,7 +256,7 @@ export function installGroupMentionPopover() {
         }
         if (event.key !== 'Enter' && event.key !== ' ') return;
         const badge = event.target.closest?.('.mention-badge-group');
-        if (badge) {
+        if (badge && !badge.closest('.rte-surface')) {
             event.preventDefault();
             handleActivate(badge);
         }

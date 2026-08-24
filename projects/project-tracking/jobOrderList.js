@@ -5698,7 +5698,10 @@ async function viewTopicDetail(topicId, jobNo) {
             commentEl.querySelector('.flex-grow-1').appendChild(formDiv);
 
             const textarea = formDiv.querySelector('.edit-comment-textarea');
-            attachRichTextEditor(textarea);
+            attachRichTextEditor(textarea, {
+                mentionedUsers: comment.mentioned_users_data,
+                mentionedGroups: comment.mentioned_groups_data,
+            });
 
             const fileInput = formDiv.querySelector('.edit-new-files');
             const filePreview = formDiv.querySelector('.edit-new-files-preview');
