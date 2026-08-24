@@ -40,6 +40,7 @@ import { getRemnantPlates, getRemnantPlateById, createRemnantPlate } from '../..
 import { getPlanningItems, markPlanningRequestItemConsumed } from '../../../apis/planning/planningRequestItems.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
+import { escapeHtml } from '../../../utils/text.js';
 
 // State management
 let currentPage = 1;
@@ -2696,7 +2697,15 @@ async function deletePart(partData) {
             await refreshPartsTable();
         } catch (error) {
             console.error('Error deleting part:', error);
-            showNotification('Parça silinirken hata oluştu', 'error');
+            // Show the backend's own reason when it sent one -- a bare
+            // "hata oluştu" hides why the delete was refused.
+            const detail = error?.message ? String(error.message).trim() : '';
+            showNotification(
+                detail
+                    ? `Parça silinemedi: ${escapeHtml(detail)}`
+                    : 'Parça silinirken hata oluştu',
+                'error'
+            );
         }
     };
     
