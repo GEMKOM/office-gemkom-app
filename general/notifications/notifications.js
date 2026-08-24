@@ -10,6 +10,7 @@ import { initNavbar } from '../../components/navbar.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { showNotification } from '../../components/notification/notification.js';
+import { categoryMeta } from '../../components/notificationBell/notificationCategories.js';
 import {
     getNotifications,
     getNotificationFacets,
@@ -189,37 +190,50 @@ function renderFacets() {
     if (!container || !state.facets) return;
 
     const { categories, total, unread, oldest } = state.facets;
-    const chips = [
-        { value: '', label: 'Tümü', count: total },
-        ...categories,
-    ].map(chip => {
-        const active = (state.filters.category || '') === chip.value ? 'active' : '';
-        return `
-            <button type="button" class="notif-chip ${active}" data-category="${escapeAttr(chip.value)}">
-                ${escapeHtml(chip.label)}
-                <span class="notif-chip-count">${chip.count}</span>
-            </button>
-        `;
-    }).join('');
+
+    // The backend keeps every category the user has ever received on the rail
+    // (at zero when the current filters exclude it), so the tabs stay put
+    // instead of vanishing one by one as filters narrow.
+    const tabs = [{ value: '', label: 'Tümü', count: total, icon: 'fa-inbox' }]
+        .concat(categories.map(c => ({ ...c, icon: categoryMeta(c.value).icon })))
+        .map(tab => {
+            const active = (state.filters.category || '') === tab.value;
+            const empty = !tab.count && !active;
+            return `
+                <button type="button"
+                        class="notif-tab ${active ? 'active' : ''} ${empty ? 'is-empty' : ''}"
+                        data-category="${escapeAttr(tab.value)}"
+                        aria-selected="${active}">
+                    <i class="fas ${tab.icon}"></i>
+                    ${escapeHtml(tab.label)}
+                    <span class="notif-tab-count">${tab.count}</span>
+                </button>
+            `;
+        }).join('');
 
     const since = oldest
         ? `${formatDate(oldest)} tarihinden bu yana`
         : 'Henüz bildirim yok';
 
     container.innerHTML = `
-        <div class="dashboard-card compact mb-3">
-            <div class="card-body py-3">
-                <div class="d-flex flex-wrap gap-2 align-items-center">
-                    ${chips}
-                    <div class="ms-auto d-flex align-items-center gap-3">
-                        <span class="text-muted small">${escapeHtml(since)}</span>
-                        <button type="button" class="btn btn-sm btn-outline-primary"
-                                id="notif-mark-all" ${unread ? '' : 'disabled'}>
-                            Tümünü Okundu İşaretle${unread ? ` (${unread})` : ''}
-                        </button>
-                    </div>
+        <div class="dashboard-card notif-card mb-3">
+            <div class="notif-toolbar">
+                <div class="notif-toolbar-summary">
+                    <span class="notif-unread-pill ${unread ? '' : 'is-clear'}">
+                        <i class="fas ${unread ? 'fa-envelope' : 'fa-check'}"></i>
+                        ${unread ? `${unread} okunmamış` : 'Tümü okundu'}
+                    </span>
+                    <span>${escapeHtml(since)}</span>
+                </div>
+                <div class="notif-toolbar-actions">
+                    <button type="button" class="notif-mark-all" id="notif-mark-all"
+                            ${unread ? '' : 'disabled'}>
+                        <i class="fas fa-check-double"></i>
+                        Tümünü Okundu İşaretle
+                    </button>
                 </div>
             </div>
+            <div class="notif-tabs" role="tablist">${tabs}</div>
         </div>
     `;
 }
@@ -229,70 +243,103 @@ function renderList({ loading = false, error = false }) {
     if (!container) return;
 
     if (loading) {
-        container.innerHTML = `
-            <div class="text-center p-5">
-                <div class="spinner-border text-primary" role="status"></div>
+        container.innerHTML = card(`
+            <div class="notif-state">
+                <div class="spinner-border text-secondary" role="status"></div>
+                <div class="notif-state-title">Bildirimler yükleniyor…</div>
             </div>
-        `;
+        `);
         return;
     }
 
     if (error) {
-        container.innerHTML = `
-            <div class="alert alert-danger">
-                Bildirimler yüklenirken hata oluştu.
+        container.innerHTML = card(`
+            <div class="notif-state">
+                <i class="fas fa-triangle-exclamation"></i>
+                <div class="notif-state-title">Bildirimler yüklenirken hata oluştu.</div>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="notif-retry">
+                    Tekrar dene
+                </button>
             </div>
-        `;
+        `);
         return;
     }
 
     if (!state.notifications.length) {
-        container.innerHTML = `
-            <div class="dashboard-card">
-                <div class="card-body text-center text-muted py-5">
-                    <i class="fas fa-bell-slash fa-2x mb-3 d-block"></i>
+        container.innerHTML = card(`
+            <div class="notif-state">
+                <i class="fas fa-bell-slash"></i>
+                <div class="notif-state-title">
                     ${hasActiveFilters()
                         ? 'Bu filtrelere uyan bildirim bulunamadı.'
                         : 'Henüz bildiriminiz yok.'}
                 </div>
+                ${hasActiveFilters()
+                    ? '<div class="small">Filtreleri temizleyip tekrar deneyin.</div>'
+                    : ''}
             </div>
-        `;
+        `);
         return;
     }
 
-    const rows = state.notifications.map(renderRow).join('');
-    container.innerHTML = `
-        <div class="dashboard-card">
-            <div class="notif-history-list">${rows}</div>
-        </div>
+    container.innerHTML = card(`
+        <div class="notif-history-list">${renderGroupedRows()}</div>
         ${renderPager()}
-    `;
+    `);
+}
+
+function card(inner) {
+    return `<div class="dashboard-card notif-card">${inner}</div>`;
+}
+
+/** Rows under sticky day headers — an archive scans far better dated. */
+function renderGroupedRows() {
+    let currentDay = null;
+    return state.notifications.map(notification => {
+        const day = dayKey(notification.created_at);
+        let header = '';
+        if (day !== currentDay) {
+            currentDay = day;
+            header = `<div class="notif-day">${escapeHtml(dayLabel(notification.created_at))}</div>`;
+        }
+        return header + renderRow(notification);
+    }).join('');
 }
 
 function renderRow(notification) {
+    const meta = categoryMeta(notification.category);
     const unreadClass = notification.is_read ? '' : 'unread';
     const hasLink = notification.link && notification.link !== '#';
     return `
         <div class="notif-row ${unreadClass}" data-id="${notification.id}">
+            <div class="notif-icon" style="background:${meta.bg};color:${meta.color}">
+                <i class="fas ${meta.icon}"></i>
+            </div>
             <div class="notif-row-main" data-action="open" data-link="${escapeAttr(notification.link || '')}">
-                <div class="notif-row-title">${escapeHtml(notification.title || '-')}</div>
-                <div class="notif-row-body">${escapeHtml(notification.body || '')}</div>
+                <div class="notif-row-head">
+                    <span class="notif-row-title">${escapeHtml(notification.title || '-')}</span>
+                    <span class="notif-row-time" title="${escapeAttr(formatDateTime(notification.created_at))}">
+                        ${escapeHtml(formatTime(notification.created_at))}
+                    </span>
+                </div>
+                ${notification.body
+                    ? `<div class="notif-row-body">${escapeHtml(notification.body)}</div>`
+                    : ''}
                 <div class="notif-row-meta">
-                    <span class="badge bg-light text-dark">${escapeHtml(notification.notification_type_display || '')}</span>
+                    <span class="notif-tag">${escapeHtml(notification.notification_type_display || '')}</span>
                     ${notification.category_display
-                        ? `<span class="badge bg-light text-dark">${escapeHtml(notification.category_display)}</span>`
+                        ? `<span class="notif-tag notif-tag-category">${escapeHtml(notification.category_display)}</span>`
                         : ''}
-                    <span class="text-muted">${formatDateTime(notification.created_at)}</span>
                 </div>
             </div>
             <div class="notif-row-actions">
                 ${hasLink
-                    ? `<button class="btn btn-sm btn-outline-secondary" data-action="open"
+                    ? `<button class="notif-action" data-action="open"
                                data-link="${escapeAttr(notification.link)}" title="Aç">
                            <i class="fas fa-arrow-up-right-from-square"></i>
                        </button>`
                     : ''}
-                <button class="btn btn-sm btn-outline-secondary"
+                <button class="notif-action"
                         data-action="${notification.is_read ? 'unread' : 'read'}"
                         title="${notification.is_read ? 'Okunmadı işaretle' : 'Okundu işaretle'}">
                     <i class="fas ${notification.is_read ? 'fa-envelope' : 'fa-envelope-open'}"></i>
@@ -304,22 +351,22 @@ function renderRow(notification) {
 
 function renderPager() {
     const totalPages = Math.max(1, Math.ceil(state.count / PAGE_SIZE));
-    if (totalPages <= 1) {
-        return `<div class="text-muted small mt-2">${state.count} bildirim</div>`;
-    }
-    const first = (state.page - 1) * PAGE_SIZE + 1;
+    const first = state.count ? (state.page - 1) * PAGE_SIZE + 1 : 0;
     const last = Math.min(state.page * PAGE_SIZE, state.count);
+
+    if (totalPages <= 1) {
+        return `<div class="notif-pager"><span>${state.count} bildirim</span></div>`;
+    }
+
     return `
-        <div class="d-flex justify-content-between align-items-center mt-3">
-            <span class="text-muted small">${first}-${last} / ${state.count}</span>
-            <div class="btn-group">
+        <div class="notif-pager">
+            <span>${first}-${last} / ${state.count}</span>
+            <div class="d-flex align-items-center">
                 <button class="btn btn-sm btn-outline-secondary" data-page="${state.page - 1}"
                         ${state.page <= 1 ? 'disabled' : ''}>
                     <i class="fas fa-chevron-left"></i> Önceki
                 </button>
-                <button class="btn btn-sm btn-outline-secondary" disabled>
-                    ${state.page} / ${totalPages}
-                </button>
+                <span class="notif-pager-position">${state.page} / ${totalPages}</span>
                 <button class="btn btn-sm btn-outline-secondary" data-page="${state.page + 1}"
                         ${state.page >= totalPages ? 'disabled' : ''}>
                     Sonraki <i class="fas fa-chevron-right"></i>
@@ -333,10 +380,15 @@ function renderPager() {
 
 function setupDelegatedClicks() {
     document.addEventListener('click', async (event) => {
-        const chip = event.target.closest('.notif-chip');
-        if (chip) {
-            state.filters.category = chip.dataset.category || '';
+        const tab = event.target.closest('.notif-tab');
+        if (tab) {
+            state.filters.category = tab.dataset.category || '';
             await load({ resetPage: true });
+            return;
+        }
+
+        if (event.target.closest('#notif-retry')) {
+            await load({});
             return;
         }
 
@@ -422,6 +474,34 @@ function formatDateTime(value) {
     return date.toLocaleString('tr-TR', {
         day: '2-digit', month: '2-digit', year: 'numeric',
         hour: '2-digit', minute: '2-digit',
+    });
+}
+
+/** Clock time only — the sticky day header above the row carries the date. */
+function formatTime(value) {
+    if (!value) return '';
+    return new Date(value).toLocaleTimeString('tr-TR', {
+        hour: '2-digit', minute: '2-digit',
+    });
+}
+
+function dayKey(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+}
+
+function dayLabel(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+
+    if (dayKey(date) === dayKey(today)) return 'Bugün';
+    if (dayKey(date) === dayKey(yesterday)) return 'Dün';
+    return date.toLocaleDateString('tr-TR', {
+        day: '2-digit', month: 'long', year: 'numeric', weekday: 'long',
     });
 }
 

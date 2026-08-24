@@ -56,10 +56,14 @@ function installGroupBadgeInteraction() {
         });
 }
 
-/** Shown under comment inputs so the syntax is discoverable. Pre-escaped. */
-export const RICH_TEXT_HINT_HTML = escapeHtml(
-    '**kalın**  *italik*  ~~çizili~~  `kod`  !!kritik!!  ++olumlu++  - liste'
-);
+/**
+ * The syntax, in one line. The toolbar in utils/richTextEditor.js replaced this
+ * as the primary way in, but typing the markers still works and this is where
+ * the toolbar's "?" button gets its text. Plain text — escape it at the point
+ * of use if it goes into markup.
+ */
+export const RICH_TEXT_HINT =
+    '**kalın**  *italik*  ~~çizili~~  `kod`  !!kritik!!  ++olumlu++  - liste';
 
 // Finished fragments are parked behind these private-use markers so later
 // passes cannot reach inside them (a `**` in a URL must stay a `**`).

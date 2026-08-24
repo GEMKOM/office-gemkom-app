@@ -57,7 +57,8 @@ import { getUser } from '../../authService.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../components/file-attachments/file-attachments.js';
 
-import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
+import { renderRichText } from '../../utils/richText.js';
+import { attachRichTextEditor } from '../../utils/richTextEditor.js';
 import { escapeHtml } from '../../utils/text.js';
 const CLOSED_STATUSES = ['cancelled']; // Only cancelled status prevents editing
 const EDITABLE_STATUSES = ['draft', 'consultation', 'pricing'];
@@ -3827,6 +3828,7 @@ async function showConsultationCommentsModal(taskId) {
 
     const refreshComments = async () => {
         sectionContainer.innerHTML = await renderCommentsContent();
+        attachRichTextEditor(sectionContainer.querySelector('#consultation-new-comment-text'));
         sectionContainer.querySelector('#consultation-add-comment-btn')?.addEventListener('click', async () => {
             const textarea = sectionContainer.querySelector('#consultation-new-comment-text');
             const content = textarea?.value?.trim();

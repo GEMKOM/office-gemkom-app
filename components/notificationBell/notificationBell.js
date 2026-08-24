@@ -5,6 +5,7 @@
 
 import { getNotifications, getUnreadCount, markNotificationRead, markAllNotificationsRead } from '../../apis/notification/notifications.js';
 import { navigateTo } from '../../authService.js';
+import { categoryIconHtml } from './notificationCategories.js';
 
 export class NotificationBell {
     constructor(container) {
@@ -12,8 +13,29 @@ export class NotificationBell {
         this.unreadCount = 0;
         this.pollInterval = null;
         this.isDropdownOpen = false;
-        
+        this.dropdown = this.portalDropdown();
+
         this.init();
+    }
+
+    /**
+     * Move the panel to <body>.
+     *
+     * It is position:fixed, and under 992px the collapsed .navbar-collapse
+     * carries a backdrop-filter — which makes it the containing block for
+     * fixed descendants. Left inside the navbar the panel measured its
+     * coordinates against the menu instead of the viewport and hung off the
+     * bottom of the screen on phones.
+     */
+    portalDropdown() {
+        const dropdown = this.container.querySelector('.notification-dropdown');
+        if (!dropdown) return null;
+
+        // A re-rendered navbar builds a fresh bell; drop the orphan first.
+        document.querySelectorAll('body > .notification-dropdown')
+            .forEach(stale => stale.remove());
+        document.body.appendChild(dropdown);
+        return dropdown;
     }
 
     async init() {
@@ -48,6 +70,20 @@ export class NotificationBell {
                 badge.style.display = 'none';
             }
         }
+
+        // The header pill repeats the count inside the open panel, where the
+        // badge behind it is covered up.
+        const headerCount = this.dropdown?.querySelector('.notification-header-count');
+        if (headerCount) {
+            headerCount.textContent = this.unreadCount > 99 ? '99+' : this.unreadCount;
+            headerCount.style.display = this.unreadCount > 0 ? 'inline-block' : 'none';
+        }
+
+        // Nothing to mark when nothing is unread.
+        const markAllReadBtn = this.dropdown?.querySelector('.mark-all-read-btn');
+        if (markAllReadBtn && this.isDropdownOpen) {
+            markAllReadBtn.style.display = this.unreadCount > 0 ? 'block' : 'none';
+        }
     }
 
     /**
@@ -77,7 +113,7 @@ export class NotificationBell {
      */
     setupEventListeners() {
         const bellButton = this.container.querySelector('.notification-bell-button');
-        const dropdown = this.container.querySelector('.notification-dropdown');
+        const dropdown = this.dropdown;
 
         if (bellButton) {
             bellButton.addEventListener('click', (e) => {
@@ -110,7 +146,9 @@ export class NotificationBell {
 
         // Close dropdown when clicking outside
         document.addEventListener('click', (e) => {
-            if (this.isDropdownOpen && !this.container.contains(e.target)) {
+            const outside = !this.container.contains(e.target)
+                && !(this.dropdown && this.dropdown.contains(e.target));
+            if (this.isDropdownOpen && outside) {
                 this.closeDropdown();
             }
         });
@@ -145,15 +183,16 @@ export class NotificationBell {
      */
     async openDropdown() {
         this.isDropdownOpen = true;
-        const dropdown = this.container.querySelector('.notification-dropdown');
+        const dropdown = this.dropdown;
         if (dropdown) {
             // Position dropdown relative to bell button
             this.positionDropdown();
             dropdown.classList.add('show');
+            this.container.querySelector('.notification-bell-button')?.classList.add('is-open');
             // Show mark all read button
-            const markAllReadBtn = this.container.querySelector('.mark-all-read-btn');
+            const markAllReadBtn = this.dropdown?.querySelector('.mark-all-read-btn');
             if (markAllReadBtn) {
-                markAllReadBtn.style.display = 'block';
+                markAllReadBtn.style.display = this.unreadCount > 0 ? 'block' : 'none';
             }
             await this.loadNotifications();
         }
@@ -163,42 +202,35 @@ export class NotificationBell {
      * Position dropdown relative to bell button
      */
     positionDropdown() {
-        const dropdown = this.container.querySelector('.notification-dropdown');
+        const dropdown = this.dropdown;
         const bellButton = this.container.querySelector('.notification-bell-button');
         if (!dropdown || !bellButton) return;
         
         const rect = bellButton.getBoundingClientRect();
-        const dropdownWidth = 400; // Match CSS width
         const viewportWidth = window.innerWidth;
         const viewportHeight = window.innerHeight;
-        
-        // Calculate right position (distance from right edge)
+        const margin = 12;
+        // Measure rather than assume: on a narrow phone the panel is capped by
+        // max-width, and a hardcoded width used to push it off the right edge.
+        const dropdownWidth = Math.min(dropdown.offsetWidth || 420, viewportWidth - margin * 2);
+
+        // Right-align to the bell, then keep the whole panel on screen.
         let rightPos = viewportWidth - rect.right;
+        rightPos = Math.max(margin, Math.min(rightPos, viewportWidth - dropdownWidth - margin));
         
-        // Ensure dropdown doesn't go off-screen on the right
-        if (rightPos < 20) {
-            rightPos = 20;
-        }
-        
-        // Ensure dropdown doesn't go off-screen on the left (mobile)
-        if (viewportWidth - rightPos - dropdownWidth < 20) {
-            rightPos = viewportWidth - dropdownWidth - 20;
-        }
-        
-        // Calculate top position
-        let topPos = rect.bottom + 8;
-        
-        // If dropdown would go below viewport, position it above the bell
-        const dropdownHeight = 600; // max-height
-        if (topPos + dropdownHeight > viewportHeight - 20) {
-            topPos = rect.top - dropdownHeight - 8;
-            // Ensure it doesn't go above viewport
-            if (topPos < 20) {
-                topPos = 20;
-                // Adjust max-height if needed
-                dropdown.style.maxHeight = `${viewportHeight - topPos - 20}px`;
-            }
-        }
+        // Hang below the bell when there is room, otherwise flip above it —
+        // on a phone the bell sits inside the expanded menu, halfway down the
+        // screen, and a panel below it would run off the bottom.
+        const spaceBelow = viewportHeight - (rect.bottom + 8) - margin;
+        const spaceAbove = rect.top - 8 - margin;
+        const below = spaceBelow >= 320 || spaceBelow >= spaceAbove;
+
+        let height = Math.min(600, below ? spaceBelow : spaceAbove);
+        height = Math.max(240, height);
+        let topPos = below ? rect.bottom + 8 : rect.top - 8 - height;
+        topPos = Math.max(margin, Math.min(topPos, viewportHeight - height - margin));
+
+        dropdown.style.maxHeight = `${height}px`;
         
         dropdown.style.top = `${topPos}px`;
         dropdown.style.right = `${rightPos}px`;
@@ -210,12 +242,13 @@ export class NotificationBell {
      */
     closeDropdown() {
         this.isDropdownOpen = false;
-        const dropdown = this.container.querySelector('.notification-dropdown');
+        const dropdown = this.dropdown;
         if (dropdown) {
             dropdown.classList.remove('show');
         }
+        this.container.querySelector('.notification-bell-button')?.classList.remove('is-open');
         // Hide mark all read button
-        const markAllReadBtn = this.container.querySelector('.mark-all-read-btn');
+        const markAllReadBtn = this.dropdown?.querySelector('.mark-all-read-btn');
         if (markAllReadBtn) {
             markAllReadBtn.style.display = 'none';
         }
@@ -225,13 +258,13 @@ export class NotificationBell {
      * Load and display notifications
      */
     async loadNotifications() {
-        const dropdown = this.container.querySelector('.notification-dropdown');
+        const dropdown = this.dropdown;
         const listContainer = dropdown?.querySelector('.notification-list');
         
         if (!listContainer) return;
 
         // Show loading state
-        listContainer.innerHTML = '<div class="text-center p-3"><div class="spinner-border spinner-border-sm" role="status"></div></div>';
+        listContainer.innerHTML = '<div class="notification-loading"><div class="spinner-border spinner-border-sm" role="status"></div></div>';
 
         try {
             const response = await getNotifications({
@@ -244,9 +277,9 @@ export class NotificationBell {
         } catch (error) {
             console.error('Failed to load notifications:', error);
             listContainer.innerHTML = `
-                <div class="text-center p-3 text-muted">
-                    <i class="fas fa-exclamation-triangle me-2"></i>
-                    Bildirimler yüklenirken hata oluştu.
+                <div class="notification-empty">
+                    <i class="fas fa-triangle-exclamation"></i>
+                    <div class="notification-empty-text">Bildirimler yüklenirken hata oluştu.</div>
                 </div>
             `;
         }
@@ -260,7 +293,7 @@ export class NotificationBell {
             container.innerHTML = `
                 <div class="notification-empty">
                     <i class="fas fa-bell-slash"></i>
-                    <div class="notification-empty-text">Okunmamış bildirim yok</div>
+                    <div class="notification-empty-text">Henüz bildiriminiz yok</div>
                 </div>
             `;
             return;
@@ -273,14 +306,16 @@ export class NotificationBell {
             return `
                 <div class="notification-item ${isReadClass}" 
                      data-notification-id="${notification.id}" 
-                     data-link="${notification.link || '#'}">
-                    <div class="notification-unread-indicator"></div>
+                     data-link="${notification.link || '#'}"
+                     title="${this.escapeHtml(notification.title || '')}">
+                    ${categoryIconHtml(notification.category)}
                     <div class="notification-content">
                         <div class="notification-title">${this.escapeHtml(notification.title || '-')}</div>
                         <div class="notification-body">${this.escapeHtml(notification.body || '-')}</div>
                         <div class="notification-meta">
                             <span class="notification-type">${this.escapeHtml(notification.notification_type_display || '-')}</span>
                             <span class="notification-time">${timeAgo}</span>
+                            <span class="notification-unread-indicator"></span>
                         </div>
                     </div>
                 </div>
@@ -299,7 +334,7 @@ export class NotificationBell {
             await markNotificationRead(notificationId);
             
             // Update UI
-            const notificationItem = this.container.querySelector(`[data-notification-id="${notificationId}"]`);
+            const notificationItem = this.dropdown?.querySelector(`[data-notification-id="${notificationId}"]`);
             if (notificationItem) {
                 notificationItem.classList.add('read');
             }
@@ -372,5 +407,7 @@ export class NotificationBell {
      */
     destroy() {
         this.stopPolling();
+        this.dropdown?.remove();
+        this.dropdown = null;
     }
 }

@@ -636,16 +636,30 @@
     color: rgba(255, 255, 255, 0.72) !important;
 }
 
+/* ============================================================================
+   Notification bell + dropdown
+   ----------------------------------------------------------------------------
+   Single source of truth for the bell. Every page loads navbar.css, so these
+   styles live here rather than alongside the component — a second copy under
+   components/notificationBell/ drifted out of sync and left the footer link
+   completely unstyled on every page but the dashboard.
+   ========================================================================== */
+
+.notification-bell-container {
+    position: relative;
+    display: inline-block;
+}
+
 .notification-bell-button {
     position: relative;
     background: none;
     border: none;
     color: rgba(255, 255, 255, 0.8);
-    font-size: 1.25rem;
-    padding: 0.5rem 0.75rem;
+    font-size: 1.15rem;
+    padding: 0;
     cursor: pointer;
-    transition: all 0.2s ease;
-    border-radius: 6px;
+    transition: color 0.2s ease, background-color 0.2s ease;
+    border-radius: 8px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -653,22 +667,23 @@
     height: 40px;
 }
 
-.notification-bell-button:hover {
+.notification-bell-button:hover,
+.notification-bell-button.is-open {
     color: #fff;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: rgba(255, 255, 255, 0.12);
 }
 
 .notification-badge {
     position: absolute;
-    top: 6px;
-    right: 6px;
+    top: 3px;
+    right: 2px;
     background-color: #dc3545;
-    color: white;
-    border-radius: 10px;
+    color: #fff;
+    border-radius: 999px;
     min-width: 18px;
     height: 18px;
-    font-size: 0.7rem;
-    font-weight: 600;
+    font-size: 0.68rem;
+    font-weight: 700;
     display: none;
     align-items: center;
     justify-content: center;
@@ -678,19 +693,26 @@
     box-sizing: border-box;
 }
 
+/* ------------------------------------------------------------------ panel */
+
 .notification-dropdown {
     position: fixed;
     background: #ffffff;
-    border: 1px solid #e1e4e8;
-    border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-    width: 400px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 14px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.18), 0 2px 6px rgba(15, 23, 42, 0.06);
+    width: 420px;
     max-height: 600px;
     display: none;
     flex-direction: column;
     z-index: 1050;
     overflow: hidden;
-    animation: slideDown 0.2s ease-out;
+    animation: slideDown 0.18s ease-out;
+}
+
+@keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .notification-dropdown.show {
@@ -698,21 +720,35 @@
 }
 
 .notification-dropdown-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid #e1e4e8;
+    padding: 14px 16px;
+    border-bottom: 1px solid #eef0f3;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background-color: #ffffff;
+    gap: 12px;
+    background: #fff;
     flex-shrink: 0;
 }
 
 .notification-dropdown-header h6 {
     margin: 0;
-    font-weight: 600;
-    font-size: 16px;
-    color: #24292f;
-    line-height: 1.5;
+    font-weight: 700;
+    font-size: 15px;
+    color: #1f2937;
+    line-height: 1.4;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.notification-header-count {
+    background: #8B0000;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    border-radius: 999px;
+    padding: 1px 7px;
+    line-height: 1.6;
 }
 
 .notification-dropdown-actions {
@@ -723,118 +759,116 @@
 
 .mark-all-read-btn {
     background: none;
-    border: none;
-    color: #0969da;
-    font-size: 14px;
-    padding: 4px 8px;
+    border: 1px solid transparent;
+    color: #8B0000;
+    font-size: 12.5px;
+    padding: 5px 10px;
     cursor: pointer;
-    transition: color 0.2s ease;
-    font-weight: 500;
-    border-radius: 4px;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+    font-weight: 600;
+    border-radius: 999px;
+    white-space: nowrap;
 }
 
 .mark-all-read-btn:hover {
-    color: #0860ca;
-    background-color: #f6f8fa;
+    background-color: #fdf2f2;
+    border-color: #f3d9d9;
 }
 
 .mark-all-read-btn:active {
-    background-color: #eaeef2;
+    background-color: #f8e6e6;
 }
+
+/* --------------------------------------------------------------- the list */
 
 .notification-list {
     overflow-y: auto;
     overflow-x: hidden;
-    flex: 1;
-    max-height: 500px;
+    /* min-height:0 lets the flex child actually scroll instead of stretching
+       the panel; the height then comes from the panel's max-height. */
+    flex: 1 1 auto;
+    min-height: 0;
+    overscroll-behavior: contain;
 }
 
-.notification-list::-webkit-scrollbar {
-    width: 8px;
-}
-
-.notification-list::-webkit-scrollbar-track {
-    background: #f6f8fa;
-}
-
+.notification-list::-webkit-scrollbar { width: 8px; }
+.notification-list::-webkit-scrollbar-track { background: transparent; }
 .notification-list::-webkit-scrollbar-thumb {
-    background: #d1d9e0;
-    border-radius: 4px;
+    background: #d8dde3;
+    border-radius: 999px;
+    border: 2px solid #fff;
 }
-
-.notification-list::-webkit-scrollbar-thumb:hover {
-    background: #afb8c1;
-}
+.notification-list::-webkit-scrollbar-thumb:hover { background: #b9c1ca; }
 
 .notification-item {
-    padding: 12px 20px;
-    border-bottom: 1px solid #f0f0f0;
+    display: grid;
+    grid-template-columns: 34px 1fr;
+    align-items: start;
+    gap: 12px;
+    padding: 12px 16px 12px 13px;
+    border-left: 3px solid transparent;
+    border-bottom: 1px solid #f4f5f7;
     cursor: pointer;
     transition: background-color 0.15s ease;
     position: relative;
+}
+
+.notification-item:last-child { border-bottom: none; }
+
+.notification-item:hover { background-color: #f7f8fa; }
+
+/* Unread reads as a left rail plus a faint tint, so twenty unread rows still
+   look like a list rather than one solid block of colour. */
+.notification-item:not(.read) {
+    border-left-color: #8B0000;
+    background-color: #fdf8f8;
+}
+
+.notification-item:not(.read):hover { background-color: #fbf1f1; }
+
+.notification-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
     display: flex;
-    align-items: flex-start;
-    gap: 12px;
-}
-
-.notification-item:last-child {
-    border-bottom: none;
-}
-
-.notification-item:hover {
-    background-color: #f6f8fa;
-}
-
-.notification-item.read {
-    background-color: #ffffff;
-}
-
-.notification-item.read:hover {
-    background-color: #f6f8fa;
-}
-
-.notification-unread-indicator {
-    position: absolute;
-    right: 12px;
-    top: 16px;
-    width: 8px;
-    height: 8px;
-    background-color: #0969da;
-    border-radius: 50%;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
     flex-shrink: 0;
-    display: none;
-}
-
-.notification-item:not(.read) .notification-unread-indicator {
-    display: block;
+    background: #eef1f5;
+    color: #64748b;
 }
 
 .notification-content {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    flex: 1;
+    gap: 2px;
     min-width: 0;
 }
 
 .notification-title {
-    font-weight: 500;
-    font-size: 14px;
-    color: #24292f;
-    line-height: 1.5;
+    font-weight: 600;
+    font-size: 13.5px;
+    color: #1f2937;
+    line-height: 1.45;
     margin: 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
+.notification-item:not(.read) .notification-title { color: #7a0b0b; }
+
 .notification-body {
-    font-size: 13px;
-    color: #656d76;
+    font-size: 12.5px;
+    color: #6b7280;
     line-height: 1.5;
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .notification-meta {
@@ -842,42 +876,109 @@
     align-items: center;
     gap: 8px;
     margin-top: 6px;
-    font-size: 12px;
-    color: #656d76;
+    font-size: 11.5px;
+    color: #6b7280;
+    min-width: 0;
 }
 
 .notification-type {
-    font-weight: 500;
-    color: #656d76;
+    font-weight: 600;
+    color: #4b5563;
+    background: #f1f3f6;
+    border-radius: 999px;
+    padding: 2px 8px;
+    max-width: 62%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .notification-time {
-    color: #8b949e;
+    color: #9aa3af;
     margin-left: auto;
+    white-space: nowrap;
 }
+
+/* Sits in the meta row next to the timestamp instead of floating over the
+   title, where it used to collide with long headings. */
+.notification-unread-indicator {
+    width: 7px;
+    height: 7px;
+    background-color: #8B0000;
+    border-radius: 50%;
+    flex-shrink: 0;
+    display: none;
+}
+
+.notification-item:not(.read) .notification-unread-indicator { display: block; }
 
 .notification-empty {
     padding: 48px 20px;
     text-align: center;
-    color: #656d76;
+    color: #6b7280;
 }
 
 .notification-empty i {
-    font-size: 32px;
-    color: #d1d9e0;
+    font-size: 30px;
+    color: #d7dce2;
     margin-bottom: 12px;
     display: block;
 }
 
 .notification-empty-text {
-    font-size: 14px;
-    color: #656d76;
+    font-size: 13.5px;
+    color: #6b7280;
 }
+
+.notification-loading {
+    padding: 40px 20px;
+    text-align: center;
+    color: #9aa3af;
+}
+
+/* ----------------------------------------------------------------- footer */
+/* Way out to the full archive — the dropdown only holds the newest slice. */
+
+.notification-dropdown-footer {
+    padding: 10px 12px;
+    border-top: 1px solid #eef0f3;
+    background-color: #fafbfc;
+    flex-shrink: 0;
+}
+
+.notification-dropdown-footer a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 9px;
+    color: #8B0000;
+    background: #fff;
+    border: 1px solid #ecd7d7;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.notification-dropdown-footer a:hover {
+    background: #8B0000;
+    border-color: #8B0000;
+    color: #fff;
+    text-decoration: none;
+}
+
+.notification-dropdown-footer a i {
+    font-size: 11px;
+    transition: transform 0.15s ease;
+}
+
+.notification-dropdown-footer a:hover i { transform: translateX(2px); }
 
 @media (max-width: 576px) {
     .notification-dropdown {
-        width: calc(100vw - 32px);
-        right: 16px;
-        left: 16px;
+        max-width: calc(100vw - 24px);
     }
 }

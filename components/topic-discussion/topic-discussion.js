@@ -7,33 +7,11 @@ import {
     uploadTopicAttachment,
     deleteAttachment,
 } from '../../apis/projects/topics.js';
-import { fetchAllUsers, fetchTeams } from '../../apis/users.js';
 import { getUser } from '../../authService.js';
 import { showNotification } from '../notification/notification.js';
-import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
-
-function getUserInitials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-}
-
-function getAvatarColor(name) {
-    if (!name) return '#6c757d';
-    const colors = [
-        '#0052CC', '#0065FF', '#0747A6', '#00875A', '#36B37E',
-        '#FF5630', '#FFAB00', '#FF991F', '#6554C0', '#8777D9',
-        '#00B8D9', '#00C7E6', '#DE350B', '#FF8F73', '#253858'
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-}
+import { renderRichText } from '../../utils/richText.js';
+import { attachRichTextEditor } from '../../utils/richTextEditor.js';
+import { getUserInitials, getAvatarColor } from '../../utils/avatar.js';
 
 function formatDateTime(dateString) {
     if (!dateString) return '-';
@@ -150,145 +128,6 @@ function renderCommentHtml(comment, currentUsername) {
             </div>
         </div>
     `;
-}
-
-export function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
-    let allUsers = [];
-    let allGroups = [];
-    let mentionStartPos = -1;
-    let selectedSuggestionIndex = -1;
-
-    (async () => {
-        try {
-            const [users, groups] = await Promise.all([fetchAllUsers(), fetchTeams()]);
-            allUsers = users || [];
-            allGroups = groups || [];
-        } catch (error) {
-            console.error('Error loading mention data:', error);
-        }
-    })();
-
-    const hideMentionSuggestions = () => {
-        mentionSuggestionsContainer.style.display = 'none';
-        selectedSuggestionIndex = -1;
-    };
-
-    const insertMention = (mentionToken) => {
-        const text = textarea.value;
-        const beforeMention = text.substring(0, mentionStartPos);
-        const afterMention = text.substring(textarea.selectionStart);
-        textarea.value = `${beforeMention}@${mentionToken} ${afterMention}`;
-        const newCursorPos = mentionStartPos + mentionToken.length + 2;
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-        textarea.focus();
-    };
-
-    const renderMentionSuggestions = (mentions) => {
-        mentionSuggestionsContainer.innerHTML = mentions.map((mention, index) => {
-            const token = mention.token || '';
-            const fullName = mention.fullName || token;
-            const initials = getUserInitials(fullName);
-            const avatarColor = getAvatarColor(fullName);
-            const badge = mention.type === 'group'
-                ? '<span class="status-badge status-blue ms-2" style="font-size: 10px;">Grup</span>'
-                : '';
-            return `
-                <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}"
-                     data-token="${token}"
-                     style="cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e1e5e9;">
-                    <div style="width: 24px; height: 24px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">
-                        ${initials}
-                    </div>
-                    <div>
-                        <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${fullName}${badge}</div>
-                        <div style="font-size: 12px; color: #6c757d;">@${token}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        mentionSuggestionsContainer.style.display = 'block';
-
-        mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item').forEach((item, index) => {
-            item.addEventListener('click', () => {
-                insertMention(item.dataset.token);
-                hideMentionSuggestions();
-            });
-            item.addEventListener('mouseenter', () => {
-                selectedSuggestionIndex = index;
-                mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item').forEach((el, i) => {
-                    el.classList.toggle('selected', i === index);
-                });
-            });
-        });
-    };
-
-    textarea.addEventListener('input', (e) => {
-        const text = e.target.value;
-        const cursorPos = e.target.selectionStart;
-        const mentionMatch = text.substring(0, cursorPos).match(/@([\p{L}\p{N}_-]*)$/u);
-        if (!mentionMatch) {
-            hideMentionSuggestions();
-            return;
-        }
-        const query = mentionMatch[1].toLowerCase();
-        mentionStartPos = cursorPos - query.length - 1;
-        const filteredUsers = allUsers
-            .filter((user) => {
-                const username = (user.username || '').toLowerCase();
-                const fullName = (user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || '').toLowerCase();
-                return username.includes(query) || fullName.includes(query);
-            })
-            .map((user) => ({
-                type: 'user',
-                token: user.username || '',
-                fullName: user.full_name || user.username || ''
-            }))
-            .filter((item) => item.token);
-        const filteredGroups = allGroups
-            .filter((group) => {
-                const groupName = (group.name || group.value || '').toLowerCase();
-                const displayName = (group.display_name || group.label || groupName || '').toLowerCase();
-                return groupName.includes(query) || displayName.includes(query);
-            })
-            .map((group) => ({
-                type: 'group',
-                token: group.name || group.value || '',
-                fullName: group.display_name || group.label || group.name || ''
-            }))
-            .filter((item) => item.token);
-        const filtered = [...filteredUsers, ...filteredGroups].slice(0, 10);
-        if (filtered.length) {
-            renderMentionSuggestions(filtered);
-        } else {
-            hideMentionSuggestions();
-        }
-    });
-
-    textarea.addEventListener('keydown', (e) => {
-        if (mentionSuggestionsContainer.style.display === 'none') return;
-        const items = mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item');
-        if (!items.length) return;
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, items.length - 1);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, 0);
-        } else if ((e.key === 'Enter' || e.key === 'Tab') && selectedSuggestionIndex >= 0) {
-            e.preventDefault();
-            insertMention(items[selectedSuggestionIndex].dataset.token);
-            hideMentionSuggestions();
-        } else if (e.key === 'Escape') {
-            hideMentionSuggestions();
-        }
-        items.forEach((item, index) => item.classList.toggle('selected', index === selectedSuggestionIndex));
-    });
-
-    document.addEventListener('click', (e) => {
-        if (!textarea.contains(e.target) && !mentionSuggestionsContainer.contains(e.target)) {
-            hideMentionSuggestions();
-        }
-    });
 }
 
 function setupFilePreview(input, previewEl) {
@@ -441,7 +280,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
         commentEl.querySelector('.flex-grow-1').appendChild(formDiv);
 
         const textarea = formDiv.querySelector('.edit-comment-textarea');
-        initializeMentionFunctionality(textarea, formDiv.querySelector('.edit-mention-suggestions'));
+        attachRichTextEditor(textarea);
         setupFilePreview(formDiv.querySelector('.edit-new-files'), formDiv.querySelector('.edit-new-files-preview'));
         textarea.focus();
     }
@@ -499,11 +338,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
     }
 
     function bindEvents() {
-        const commentTextarea = document.getElementById(ids.commentText);
-        const mentionSuggestions = document.getElementById(ids.mentionSuggestions);
-        if (commentTextarea && mentionSuggestions) {
-            initializeMentionFunctionality(commentTextarea, mentionSuggestions);
-        }
+        attachRichTextEditor(document.getElementById(ids.commentText));
 
         const commentFileInput = document.getElementById(ids.commentFiles);
         const commentFilePreview = document.getElementById(ids.commentFilesPreview);
@@ -646,7 +481,6 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
                             placeholder="Yorum yazın... (@ile kullanıcı etiketleyin)" style="resize: vertical;"></textarea>
                         <div id="${ids.mentionSuggestions}" class="mention-suggestions" style="display: none;"></div>
                     </div>
-                    <div class="rich-text-hint mt-1">${RICH_TEXT_HINT_HTML}</div>
                     <div class="mb-2">
                         <label class="form-label small">
                             <i class="fas fa-paperclip me-1"></i>Yorum Ekleri (Opsiyonel)

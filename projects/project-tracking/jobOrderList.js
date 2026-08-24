@@ -1,5 +1,7 @@
 import { initNavbar } from '../../components/navbar.js';
-import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
+import { renderRichText } from '../../utils/richText.js';
+import { attachRichTextEditor } from '../../utils/richTextEditor.js';
+import { getUserInitials, getAvatarColor } from '../../utils/avatar.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import { 
     listJobOrders, 
@@ -55,7 +57,6 @@ import { showNotification } from '../../components/notification/notification.js'
 import { backendBase } from '../../base.js';
 import { isAdmin, hasPerm, getUser } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
-import { fetchAllUsers, fetchTeams } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 import {
     initMeetingView,
@@ -5175,207 +5176,6 @@ function renderTopicsUI(container, topics, jobNo) {
     });
 }
 
-// Helper functions for mentions (reusable)
-function getUserInitials(name) {
-    if (!name) return '?';
-    const parts = name.trim().split(' ');
-    if (parts.length >= 2) {
-        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return name.substring(0, 2).toUpperCase();
-}
-
-function getAvatarColor(name) {
-    if (!name) return '#6c757d';
-    const colors = [
-        '#0052CC', '#0065FF', '#0747A6', '#00875A', '#36B37E',
-        '#FF5630', '#FFAB00', '#FF991F', '#6554C0', '#8777D9',
-        '#00B8D9', '#00C7E6', '#DE350B', '#FF8F73', '#253858'
-    ];
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-        hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    return colors[Math.abs(hash) % colors.length];
-}
-
-// Initialize @mention functionality for any textarea
-function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
-    let allUsers = [];
-    let allGroups = [];
-    let mentionStartPos = -1;
-    let selectedSuggestionIndex = -1;
-    
-    // Load users and groups for @mentions
-    (async () => {
-        try {
-            const [users, groups] = await Promise.all([
-                fetchAllUsers(),
-                fetchTeams()
-            ]);
-            allUsers = users || [];
-            allGroups = groups || [];
-        } catch (error) {
-            console.error('Error loading mention data:', error);
-        }
-    })();
-    
-    // Handle @mention detection
-    textarea.addEventListener('input', (e) => {
-        const text = e.target.value;
-        const cursorPos = e.target.selectionStart;
-        const textBeforeCursor = text.substring(0, cursorPos);
-        
-        // Check if we're typing after @
-        const mentionMatch = textBeforeCursor.match(/@([\p{L}\p{N}_-]*)$/u);
-        
-        if (mentionMatch) {
-            const query = mentionMatch[1].toLowerCase();
-            mentionStartPos = cursorPos - query.length - 1; // -1 for @
-            
-            // Filter users and groups based on query
-            const filteredUsers = allUsers.filter(user => {
-                const username = (user.username || '').toLowerCase();
-                const fullName = (user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || '').toLowerCase();
-                return username.includes(query) || fullName.includes(query);
-            }).map(user => ({
-                type: 'user',
-                token: user.username || '',
-                fullName: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || ''
-            })).filter(item => item.token);
-
-            const filteredGroups = allGroups.filter(group => {
-                const groupName = (group.name || group.value || '').toLowerCase();
-                const displayName = (group.display_name || group.label || groupName || '').toLowerCase();
-                return groupName.includes(query) || displayName.includes(query);
-            }).map(group => ({
-                type: 'group',
-                token: group.name || group.value || '',
-                fullName: group.display_name || group.label || group.name || group.value || ''
-            })).filter(item => item.token);
-
-            const filteredMentions = [...filteredUsers, ...filteredGroups].slice(0, 10); // Limit to 10 suggestions
-            
-            if (filteredMentions.length > 0) {
-                selectedSuggestionIndex = -1;
-                renderMentionSuggestions(filteredMentions, mentionSuggestionsContainer, textarea);
-            } else {
-                hideMentionSuggestions(mentionSuggestionsContainer);
-            }
-        } else {
-            hideMentionSuggestions(mentionSuggestionsContainer);
-        }
-    });
-    
-    // Handle keyboard navigation in suggestions
-    textarea.addEventListener('keydown', (e) => {
-        if (mentionSuggestionsContainer.style.display === 'none') return;
-        
-        const suggestionItems = mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item');
-        if (suggestionItems.length === 0) return;
-        
-        if (e.key === 'ArrowDown') {
-            e.preventDefault();
-            selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, suggestionItems.length - 1);
-            updateSuggestionSelection(suggestionItems);
-        } else if (e.key === 'ArrowUp') {
-            e.preventDefault();
-            selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
-            updateSuggestionSelection(suggestionItems);
-        } else if (e.key === 'Enter' || e.key === 'Tab') {
-            if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestionItems.length) {
-                e.preventDefault();
-                const selectedItem = suggestionItems[selectedSuggestionIndex];
-                const mentionToken = selectedItem.dataset.token;
-                insertMention(mentionToken, textarea, mentionStartPos);
-                hideMentionSuggestions(mentionSuggestionsContainer);
-            }
-        } else if (e.key === 'Escape') {
-            hideMentionSuggestions(mentionSuggestionsContainer);
-        }
-    });
-    
-    // Hide suggestions when clicking outside
-    const clickHandler = (e) => {
-        if (!textarea.contains(e.target) && !mentionSuggestionsContainer.contains(e.target)) {
-            hideMentionSuggestions(mentionSuggestionsContainer);
-        }
-    };
-    document.addEventListener('click', clickHandler);
-    
-    function renderMentionSuggestions(mentions, container, textarea) {
-        container.innerHTML = mentions.map((mention, index) => {
-            const token = mention.token || '';
-            const fullName = mention.fullName || token;
-            const initials = getUserInitials(fullName);
-            const avatarColor = getAvatarColor(fullName);
-            const mentionTypeBadge = mention.type === 'group'
-                ? '<span class="status-badge status-blue ms-2" style="font-size: 10px;">Grup</span>'
-                : '';
-            
-            return `
-                <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}" 
-                     data-token="${token}" 
-                     data-full-name="${fullName}"
-                     style="cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e1e5e9;">
-                    <div class="mention-avatar" style="width: 24px; height: 24px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0;">
-                        ${initials}
-                    </div>
-                    <div class="flex-grow-1">
-                        <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${fullName}${mentionTypeBadge}</div>
-                        <div style="font-size: 12px; color: #6c757d;">@${token}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        container.style.display = 'block';
-        
-        // Add click handlers
-        container.querySelectorAll('.mention-suggestion-item').forEach((item, index) => {
-            item.addEventListener('click', () => {
-                const mentionToken = item.dataset.token;
-                insertMention(mentionToken, textarea, mentionStartPos);
-                hideMentionSuggestions(container);
-            });
-            
-            item.addEventListener('mouseenter', () => {
-                selectedSuggestionIndex = index;
-                updateSuggestionSelection(container.querySelectorAll('.mention-suggestion-item'));
-            });
-        });
-    }
-    
-    function updateSuggestionSelection(items) {
-        items.forEach((item, index) => {
-            if (index === selectedSuggestionIndex) {
-                item.style.backgroundColor = '#e3fcef';
-                item.classList.add('selected');
-            } else {
-                item.style.backgroundColor = '';
-                item.classList.remove('selected');
-            }
-        });
-    }
-    
-    function insertMention(mentionToken, textarea, startPos) {
-        const text = textarea.value;
-        const beforeMention = text.substring(0, startPos);
-        const afterMention = text.substring(textarea.selectionStart);
-        const newText = beforeMention + `@${mentionToken} ` + afterMention;
-        
-        textarea.value = newText;
-        const newCursorPos = startPos + mentionToken.length + 2; // +2 for @ and space
-        textarea.setSelectionRange(newCursorPos, newCursorPos);
-        textarea.focus();
-    }
-    
-    function hideMentionSuggestions(container) {
-        container.style.display = 'none';
-        selectedSuggestionIndex = -1;
-    }
-}
-
 function redirectToReleaseReview(topic) {
     if (topic?.topic_type === 'release_review' && topic?.linked_release_id) {
         window.location.href = `/design/release-approvals/?release_id=${topic.linked_release_id}`;
@@ -5637,7 +5437,6 @@ async function viewTopicDetail(topicId, jobNo) {
                                     <textarea id="new-comment-text" class="form-control mb-2" rows="3" placeholder="Yorum yazın... (@ile kullanıcı etiketleyin)" style="resize: vertical;"></textarea>
                                     <div id="mention-suggestions" class="mention-suggestions" style="display: none;"></div>
                                 </div>
-                                <div class="rich-text-hint mt-1">${RICH_TEXT_HINT_HTML}</div>
                                 <div class="mb-2">
                                     <label class="form-label small">
                                         <i class="fas fa-paperclip me-1"></i>Dosyalar (Opsiyonel)
@@ -5749,13 +5548,8 @@ async function viewTopicDetail(topicId, jobNo) {
             mountCommentAttachments(comments);
         }, 100);
         
-        // Initialize @mention functionality for comments
-        const commentTextarea = document.getElementById('new-comment-text');
-        const mentionSuggestions = document.getElementById('mention-suggestions');
-        
-        if (commentTextarea && mentionSuggestions) {
-            initializeMentionFunctionality(commentTextarea, mentionSuggestions);
-        }
+        // Formatting toolbar + @mention autocomplete on the comment box
+        attachRichTextEditor(document.getElementById('new-comment-text'));
         
         // Handle file selection preview for comments
         const commentFileInput = document.getElementById('comment-files-input');
@@ -5904,7 +5698,7 @@ async function viewTopicDetail(topicId, jobNo) {
             commentEl.querySelector('.flex-grow-1').appendChild(formDiv);
 
             const textarea = formDiv.querySelector('.edit-comment-textarea');
-            initializeMentionFunctionality(textarea, formDiv.querySelector('.edit-mention-suggestions'));
+            attachRichTextEditor(textarea);
 
             const fileInput = formDiv.querySelector('.edit-new-files');
             const filePreview = formDiv.querySelector('.edit-new-files-preview');
@@ -6039,7 +5833,8 @@ function showCreateTopicModal(jobNo) {
         required: true,
         icon: 'fas fa-align-left',
         colSize: 12,
-        helpText: 'Tartışma içeriği (@ile kullanıcı etiketleyin)',
+        helpText: 'Tartışma içeriği (biçimlendirme ve @etiketleme destekli)',
+        richText: true,
         rows: 5
     });
     
@@ -6061,26 +5856,6 @@ function showCreateTopicModal(jobNo) {
     });
     
     createModal.render();
-    
-    // Add @mention functionality to content textarea
-    setTimeout(() => {
-        const contentTextarea = document.getElementById('content');
-        if (contentTextarea) {
-            // Wrap textarea in a relative container for mention suggestions
-            const textareaContainer = contentTextarea.parentElement;
-            if (textareaContainer && !textareaContainer.querySelector('.mention-suggestions')) {
-                const mentionSuggestions = document.createElement('div');
-                mentionSuggestions.id = 'topic-mention-suggestions';
-                mentionSuggestions.className = 'mention-suggestions';
-                mentionSuggestions.style.display = 'none';
-                textareaContainer.style.position = 'relative';
-                textareaContainer.appendChild(mentionSuggestions);
-                
-                // Initialize mention functionality
-                initializeMentionFunctionality(contentTextarea, mentionSuggestions);
-            }
-        }
-    }, 100);
     
     // Add file upload section after rendering
     const form = createModal.form;

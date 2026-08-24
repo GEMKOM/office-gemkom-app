@@ -8,7 +8,7 @@ import { EditModal } from '../edit-modal/edit-modal.js';
 import { DisplayModal } from '../display-modal/display-modal.js';
 import { showNotification } from '../notification/notification.js';
 import { downloadFilesAsZip } from '../../utils/zipDownload.js';
-import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
+import { renderRichText } from '../../utils/richText.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { getUser } from '../../authService.js';
 import {
@@ -63,7 +63,7 @@ import {
 } from '../../apis/welding/internalTeamAssignments.js';
 import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
 import { createComment, updateComment, uploadCommentAttachment, deleteAttachment } from '../../apis/projects/topics.js';
-import { initializeMentionFunctionality } from '../topic-discussion/topic-discussion.js';
+import { attachRichTextEditor } from '../../utils/richTextEditor.js';
 import { escapeHtml } from '../../utils/text.js';
 
 // Comment bodies are user text: escaped, then formatted, by
@@ -5633,7 +5633,6 @@ async function renderConsultationTab(task) {
                             <textarea class="form-control" id="consultation-comment-input" rows="3" placeholder="Yorum yazın... (@ile kullanıcı etiketleyin)"></textarea>
                             <div class="mention-suggestions" id="consultation-mention-suggestions" style="display: none;"></div>
                         </div>
-                        <div class="rich-text-hint mt-1">${RICH_TEXT_HINT_HTML}</div>
                         <button class="btn btn-primary btn-sm" id="consultation-comment-add-btn" data-topic-id="${discussionTopic.id}">
                             <i class="fas fa-paper-plane me-1"></i>Yorum Ekle
                         </button>
@@ -5790,12 +5789,8 @@ function setupConsultationTabListeners(task) {
     const contentContainer = taskDetailsModal.container.querySelector('#action-content-consultation');
     if (!contentContainer) return;
 
-    // Enable @mention autocomplete on the new-comment textarea
-    const commentTextarea = contentContainer.querySelector('#consultation-comment-input');
-    const mentionSuggestions = contentContainer.querySelector('#consultation-mention-suggestions');
-    if (commentTextarea && mentionSuggestions) {
-        initializeMentionFunctionality(commentTextarea, mentionSuggestions);
-    }
+    // Formatting toolbar + @mention autocomplete on the new-comment textarea
+    attachRichTextEditor(contentContainer.querySelector('#consultation-comment-input'));
 
     contentContainer.querySelectorAll('.sibling-consult-task-row').forEach((row) => {
         row.addEventListener('click', async () => {
@@ -5998,7 +5993,7 @@ function setupConsultationTabListeners(task) {
                 commentEl.appendChild(formDiv);
                 const editTextarea = formDiv.querySelector('.consultation-edit-textarea');
                 editTextarea.value = comment?.content || '';
-                initializeMentionFunctionality(editTextarea, formDiv.querySelector('.consultation-edit-mention-suggestions'));
+                attachRichTextEditor(editTextarea);
                 editTextarea.focus();
                 return;
             }
@@ -7735,6 +7730,7 @@ async function showCompleteRevisionModal(taskId) {
 
         completeRevisionModal.addField({
             id: 'rev-complete-changelog',
+            richText: true,
             name: 'changelog',
             label: 'Değişiklik Günlüğü',
             type: 'textarea',
@@ -7754,6 +7750,7 @@ async function showCompleteRevisionModal(taskId) {
 
         completeRevisionModal.addField({
             id: 'rev-complete-topic-content',
+            richText: true,
             name: 'topic_content',
             label: 'Konu Mesajı',
             type: 'textarea',
@@ -7916,6 +7913,7 @@ async function showSubtaskCompleteModal(taskId) {
         
         createReleaseModal.addField({
             id: 'release-changelog',
+            richText: true,
             name: 'changelog',
             label: 'Değişiklik Günlüğü',
             type: 'textarea',
@@ -8212,6 +8210,7 @@ async function showCreateReleaseModal(taskId, options = {}) {
         
         createReleaseModal.addField({
             id: 'release-changelog',
+            richText: true,
             name: 'changelog',
             label: 'Değişiklik Günlüğü',
             type: 'textarea',

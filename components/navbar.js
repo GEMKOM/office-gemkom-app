@@ -393,14 +393,20 @@ export function initNavbar() {
                                 </button>
                                 <div class="notification-dropdown">
                                     <div class="notification-dropdown-header">
-                                        <h6>Bildirimler</h6>
+                                        <h6>
+                                            Bildirimler
+                                            <span class="notification-header-count" style="display: none;"></span>
+                                        </h6>
                                         <div class="notification-dropdown-actions">
                                             <button class="mark-all-read-btn" type="button" style="display: none;">Tümünü Okundu İşaretle</button>
                                         </div>
                                     </div>
                                     <div class="notification-list"></div>
                                     <div class="notification-dropdown-footer">
-                                        <a href="/general/notifications">Tüm bildirimleri gör</a>
+                                        <a href="/general/notifications">
+                                            Tüm bildirimleri gör
+                                            <i class="fas fa-arrow-right"></i>
+                                        </a>
                                     </div>
                                 </div>
                             </div>

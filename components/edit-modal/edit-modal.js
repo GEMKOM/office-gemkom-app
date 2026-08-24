@@ -155,13 +155,41 @@ export class EditModal {
     // Render the modal with all sections and fields
     render() {
         this.form.innerHTML = '';
-        
+
         this.sections.forEach(section => {
             const sectionElement = this.createSectionElement(section);
             this.form.appendChild(sectionElement);
         });
-        
+
+        this.attachRichTextEditors();
+
         return this;
+    }
+
+    /**
+     * Give every `richText: true` textarea the comment-box formatting toolbar
+     * and @mention autocomplete.
+     *
+     * Loaded on demand: nearly every page in the app builds an EditModal, and
+     * only a handful of fields want an editor — none of the rest should pull in
+     * the user and group lookups behind it.
+     */
+    attachRichTextEditors() {
+        const targets = [...this.fields.values()]
+            .filter(field => field.richText && field.type === 'textarea');
+        if (!targets.length) return;
+
+        import('../../utils/richTextEditor.js')
+            .then(({ attachRichTextEditor }) => {
+                targets.forEach(field => {
+                    const textarea = this.container.querySelector(
+                        `[data-field-id="${field.id}"] textarea.field-input`);
+                    if (textarea) {
+                        attachRichTextEditor(textarea, field.richTextOptions || {});
+                    }
+                });
+            })
+            .catch(error => console.error('Biçimlendirme araç çubuğu yüklenemedi:', error));
     }
     
     createSectionElement(section) {

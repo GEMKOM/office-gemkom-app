@@ -21,10 +21,19 @@ import {
     sendMessageFeedback,
     streamChat,
 } from '../../apis/assistant.js';
-import { createFeedbackReport, listMyFeedbackReports } from '../../apis/feedback.js';
+import {
+    createFeedbackReport,
+    listMyFeedbackReports,
+    respondFeedbackReport,
+} from '../../apis/feedback.js';
 
 const STORAGE_OPEN = 'assistantOpen';
 const STORAGE_CONVERSATION = 'assistantConversationId';
+
+// Report id from a bell-notification deep link (/?bildirim=<id>), if any.
+const DEEPLINK_REPORT_ID = Number(
+    new URLSearchParams(window.location.search).get('bildirim'),
+) || null;
 
 const TOOL_LABELS = {
     search_job_orders: 'İş emri aranıyor',
@@ -91,6 +100,13 @@ export function initAssistantWidget(launcherMount) {
     state.conversationId = Number(sessionStorage.getItem(STORAGE_CONVERSATION)) || null;
     if (sessionStorage.getItem(STORAGE_OPEN) === '1') {
         openPanel({ instant: true });
+    }
+
+    // Bell-notification deep link ("Neo bildiriminizle ilgili bilgi istiyor"
+    // links to /?bildirim=<id>): open straight into the report view.
+    if (new URLSearchParams(window.location.search).has('bildirim')) {
+        openPanel({ instant: true });
+        toggleReportView();
     }
 }
 
@@ -451,17 +467,77 @@ function renderMyReports(reports) {
     }
     el.reportList.innerHTML = '';
     for (const report of reports) {
-        const meta = REPORT_STATUS_META[report.status] || { label: report.status_display || report.status, cls: 'grey' };
-        const icon = REPORT_KIND_ICONS[report.kind] || 'fa-comment-dots';
-        const item = document.createElement('div');
-        item.className = 'report-item';
-        item.title = report.ai_summary || report.title;
-        item.innerHTML = `
-            <i class="fas ${icon} report-kind-icon"></i>
-            <span class="report-title">${escapeHtml(report.title)}</span>
-            <span class="report-status report-status-${meta.cls}">${escapeHtml(meta.label)}</span>`;
-        el.reportList.appendChild(item);
+        el.reportList.appendChild(buildReportItem(report));
     }
+}
+
+function buildReportItem(report) {
+    const meta = REPORT_STATUS_META[report.status] || { label: report.status_display || report.status, cls: 'grey' };
+    const icon = REPORT_KIND_ICONS[report.kind] || 'fa-comment-dots';
+    const needsAnswer = report.status === 'needs_info'
+        && (report.clarifying_questions || []).length > 0;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'report-entry';
+
+    const item = document.createElement('div');
+    item.className = 'report-item';
+    item.title = report.ai_summary || report.title;
+    item.innerHTML = `
+        <i class="fas ${icon} report-kind-icon"></i>
+        <span class="report-title">${escapeHtml(report.title)}</span>
+        ${needsAnswer ? '<i class="fas fa-reply report-answer-hint" title="Neo yanıtınızı bekliyor"></i>' : ''}
+        <span class="report-status report-status-${meta.cls}">${escapeHtml(meta.label)}</span>`;
+    wrap.appendChild(item);
+
+    if (needsAnswer) {
+        const details = document.createElement('div');
+        details.className = 'report-qa';
+        details.innerHTML = `
+            <div class="report-qa-intro">Neo bu bildirimi çözmek için ek bilgiye ihtiyaç duyuyor:</div>
+            <ul class="report-qa-questions">
+                ${report.clarifying_questions.map((q) => `<li>${escapeHtml(q)}</li>`).join('')}
+            </ul>
+            <form class="report-qa-form">
+                <textarea class="form-control form-control-sm" rows="4" maxlength="8000"
+                          placeholder="Soruların yanıtlarını buraya yazın..."></textarea>
+                <button type="submit" class="aw-report-submit">
+                    <i class="fas fa-paper-plane me-1"></i>Yanıtla
+                </button>
+            </form>`;
+        wrap.appendChild(details);
+
+        // Collapsed by default; the header row toggles it open. A deep link
+        // from the bell notification lands with its questions already open.
+        item.classList.add('report-item-clickable');
+        item.addEventListener('click', () => details.classList.toggle('open'));
+        if (report.id === DEEPLINK_REPORT_ID) details.classList.add('open');
+
+        const form = details.querySelector('form');
+        const textarea = details.querySelector('textarea');
+        const submitBtn = details.querySelector('button');
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const text = textarea.value.trim();
+            if (text.length < 5) {
+                showNotification('Lütfen soruları yanıtlayın.', 'error');
+                return;
+            }
+            submitBtn.disabled = true;
+            submitBtn.innerHTML =
+                '<span class="spinner-border spinner-border-sm me-1" style="width:0.8rem;height:0.8rem"></span>Gönderiliyor...';
+            try {
+                await respondFeedbackReport(report.id, text);
+                showNotification('Yanıtınız alındı; bildirim yeniden inceleniyor.', 'success');
+                refreshMyReports();
+            } catch (error) {
+                showNotification(error.message || 'Yanıt gönderilemedi.', 'error');
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Yanıtla';
+            }
+        });
+    }
+    return wrap;
 }
 
 async function submitReport() {

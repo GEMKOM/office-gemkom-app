@@ -665,6 +665,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Neo Kullanımı',
                 icon: 'fas fa-robot',
                 children: {}
+            },
+            '/it/feedback': {
+                label: 'Geri Bildirimler',
+                icon: 'fas fa-bug',
+                children: {}
             }
         }
     },

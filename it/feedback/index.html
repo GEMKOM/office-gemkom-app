@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Bildirimlerim</title>
+    <title>GEMKOM - Geri Bildirimler</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
@@ -11,11 +11,13 @@
     <link rel="stylesheet" href="../../style.css">
     <link rel="stylesheet" href="../../components/navbar.css">
     <link rel="stylesheet" href="../../components/header/header.css">
-    <link rel="stylesheet" href="../../components/table/table.css">
-    <link rel="stylesheet" href="../../components/badges/badges.css">
     <link rel="stylesheet" href="../../components/dropdown/dropdown.css">
     <link rel="stylesheet" href="../../components/filters/filters.css">
-    <link rel="stylesheet" href="./notifications.css">
+    <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../components/table/table.css">
+    <link rel="stylesheet" href="../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="./feedback.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
 </head>
 <body>
@@ -28,32 +30,36 @@
             <!-- Header Component Placeholder -->
             <div id="header-placeholder"></div>
 
-            <!-- Filters Section -->
-            <div class="row">
-                <div class="col-12">
-                    <div id="filters-placeholder"></div>
-                </div>
+            <div id="fb-denied" class="alert alert-secondary d-none" role="alert">
+                <i class="fas fa-lock me-2"></i>
+                Geri bildirim yönetimi yetkiniz yok. Bu sayfa AI triyaj kararlarını ve
+                geliştirme kuyruğunu yönettiği için ayrı bir yetkiye bağlıdır.
             </div>
 
-            <!-- Category chips + summary -->
-            <div class="row">
-                <div class="col-12">
-                    <div id="notification-facets"></div>
+            <div id="fb-content" class="d-none">
+                <!-- Filters -->
+                <div class="row">
+                    <div class="col-12"><div id="filters-placeholder"></div></div>
                 </div>
-            </div>
 
-            <!-- Notification history -->
-            <div class="row">
-                <div class="col-12">
-                    <div id="notification-history"></div>
+                <!-- Statistics cards -->
+                <div id="fb-stats"></div>
+
+                <!-- Reports table -->
+                <div class="fb-card mb-4">
+                    <div class="fb-card-title"><i class="fas fa-bug me-2"></i>Bildirimler</div>
+                    <div id="fb-reports-table"></div>
                 </div>
             </div>
         </div>
     </section>
 
+    <!-- Report detail modal mount -->
+    <div id="fb-modal-container"></div>
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Page script -->
-    <script type="module" src="./notifications.js"></script>
+    <script type="module" src="./feedback.js"></script>
 </body>
 </html>

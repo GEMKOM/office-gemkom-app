@@ -1,52 +1,213 @@
-/* Bildirimlerim — notification history page */
+/* Bildirimlerim — notification archive page.
+ *
+ * Two cards: a toolbar + category tab rail on top, the dated history below.
+ * Row visuals deliberately echo the navbar bell (same category squares, same
+ * unread rail) so a notification looks the same wherever it is met.
+ */
 
-.notif-chip {
-    border: 1px solid #dee2e6;
-    background: #fff;
-    border-radius: 999px;
-    padding: 0.25rem 0.85rem;
+:root {
+    --notif-brand: #8B0000;
+    --notif-border: #e9ecef;
+    --notif-muted: #6c757d;
+}
+
+/* ------------------------------------------------------------------ cards */
+
+.notif-card {
+    padding: 0;
+    /* dropdown.css force-opens overflow on every .dashboard-card so menus can
+       escape; these two hold no dropdowns and do need to clip their rows to
+       the rounded corners. */
+    overflow: hidden !important;
+    border-radius: 15px;
+}
+
+/* No hover lift on a full-height list card — it drags the whole archive
+   around while the user is reading it. */
+.notif-card:hover {
+    transform: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.notif-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.85rem 1.25rem;
+}
+
+.notif-toolbar-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
     font-size: 0.85rem;
-    color: #495057;
+    color: var(--notif-muted);
+    min-width: 0;
+}
+
+.notif-unread-pill {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
+    background: #fdf2f2;
+    border: 1px solid #f0d9d9;
+    color: var(--notif-brand);
+    font-weight: 600;
+    font-size: 0.8rem;
+    border-radius: 999px;
+    padding: 0.2rem 0.65rem;
+    white-space: nowrap;
+}
+
+.notif-unread-pill.is-clear {
+    background: #eef7f2;
+    border-color: #d5ebe0;
+    color: #0f7a52;
+}
+
+.notif-toolbar-actions {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.notif-mark-all {
+    border: 1px solid #e0c9c9;
+    background: #fff;
+    color: var(--notif-brand);
+    font-size: 0.82rem;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 0.4rem 0.85rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
     transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
 
-.notif-chip:hover {
-    background: #f1f3f5;
-}
-
-.notif-chip.active {
-    background: #8B0000;
-    border-color: #8B0000;
+.notif-mark-all:hover:not(:disabled) {
+    background: var(--notif-brand);
+    border-color: var(--notif-brand);
     color: #fff;
 }
 
-.notif-chip-count {
-    background: rgba(0, 0, 0, 0.08);
-    border-radius: 999px;
-    padding: 0 0.45rem;
-    font-size: 0.75rem;
-    font-weight: 600;
+.notif-mark-all:disabled {
+    opacity: 0.5;
+    border-color: var(--notif-border);
+    color: var(--notif-muted);
+    cursor: default;
 }
 
-.notif-chip.active .notif-chip-count {
-    background: rgba(255, 255, 255, 0.25);
+/* ------------------------------------------------------------------- tabs */
+/* A real tab rail: every category the user has ever received stays on the
+   rail, greyed at zero, so the row never reshuffles under the cursor. */
+
+.notif-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 0.15rem;
+    padding: 0 0.75rem;
+    border-top: 1px solid var(--notif-border);
+    overflow-x: auto;
+    scrollbar-width: thin;
 }
+
+.notif-tabs::-webkit-scrollbar { height: 4px; }
+.notif-tabs::-webkit-scrollbar-thumb { background: #dfe3e8; border-radius: 999px; }
+
+.notif-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.7rem 0.8rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--notif-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+    border-radius: 6px 6px 0 0;
+}
+
+.notif-tab i {
+    font-size: 0.8rem;
+    opacity: 0.75;
+}
+
+.notif-tab:hover {
+    color: #212529;
+    background: #f6f7f9;
+}
+
+.notif-tab.active {
+    color: var(--notif-brand);
+    border-bottom-color: var(--notif-brand);
+    background: transparent;
+}
+
+.notif-tab.active i { opacity: 1; }
+
+.notif-tab.is-empty {
+    opacity: 0.45;
+}
+
+.notif-tab-count {
+    background: #eef1f5;
+    color: #52606d;
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    min-width: 1.35rem;
+    text-align: center;
+}
+
+.notif-tab.active .notif-tab-count {
+    background: var(--notif-brand);
+    color: #fff;
+}
+
+/* ------------------------------------------------------------------- list */
 
 .notif-history-list {
     display: flex;
     flex-direction: column;
 }
 
+.notif-day {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f7f8fa;
+    border-top: 1px solid var(--notif-border);
+    border-bottom: 1px solid var(--notif-border);
+    padding: 0.4rem 1.25rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #7b8794;
+}
+
+.notif-history-list .notif-day:first-child {
+    border-top: none;
+}
+
 .notif-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 1rem;
-    padding: 0.9rem 1.1rem;
-    border-bottom: 1px solid #f1f3f5;
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    align-items: start;
+    gap: 0.9rem;
+    padding: 0.85rem 1.25rem 0.85rem 1.1rem;
+    border-bottom: 1px solid #f2f4f6;
     border-left: 3px solid transparent;
+    transition: background-color 0.15s ease;
 }
 
 .notif-row:last-child {
@@ -54,66 +215,208 @@
 }
 
 .notif-row:hover {
-    background: #fafbfc;
+    background: #f8f9fb;
 }
 
-/* Unread is a left rail rather than a background wash, so a long archive
-   does not turn into a wall of colour. */
+/* Unread is a left rail plus a faint tint rather than a background wash, so a
+   long archive does not turn into a wall of colour. */
 .notif-row.unread {
-    border-left-color: #8B0000;
-    background: #fffdfd;
+    border-left-color: var(--notif-brand);
+    background: #fdf8f8;
+}
+
+.notif-row.unread:hover {
+    background: #fbf1f1;
+}
+
+.notif-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    background: #eef1f5;
+    color: #64748b;
 }
 
 .notif-row-main {
-    flex: 1;
     min-width: 0;
     cursor: pointer;
 }
 
+.notif-row-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+}
+
 .notif-row-title {
     font-weight: 600;
+    font-size: 0.92rem;
     color: #212529;
-    margin-bottom: 0.15rem;
+    line-height: 1.4;
+    min-width: 0;
+    flex: 1;
 }
 
 .notif-row.unread .notif-row-title {
-    color: #8B0000;
+    color: #7a0b0b;
+}
+
+.notif-row-time {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: #9aa3af;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .notif-row-body {
-    color: #6c757d;
-    font-size: 0.875rem;
+    color: var(--notif-muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
     white-space: pre-line;
-    /* Long notification bodies (changelogs, folder paths) are clamped so rows
-       stay scannable; the linked page has the full text. */
+    /* Long bodies (changelogs, folder paths) are clamped so rows stay
+       scannable; the linked page has the full text. */
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    margin-bottom: 0.35rem;
+    margin-top: 0.15rem;
 }
 
 .notif-row-meta {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 0.78rem;
+    gap: 0.4rem;
+    margin-top: 0.45rem;
 }
 
+.notif-tag {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #52606d;
+    background: #f1f3f6;
+    border-radius: 999px;
+    padding: 0.12rem 0.55rem;
+    white-space: nowrap;
+}
+
+.notif-tag-category {
+    background: transparent;
+    border: 1px solid #e3e7ec;
+    color: #7b8794;
+}
+
+/* Actions stay out of the way until the row is hovered, so the archive reads
+   as text rather than as a grid of buttons. Touch devices never hover, so
+   they get them permanently. */
 .notif-row-actions {
     display: flex;
-    gap: 0.35rem;
+    gap: 0.3rem;
     flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s ease;
 }
+
+.notif-row:hover .notif-row-actions,
+.notif-row:focus-within .notif-row-actions {
+    opacity: 1;
+}
+
+.notif-action {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--notif-border);
+    background: #fff;
+    color: var(--notif-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.notif-action:hover {
+    background: var(--notif-brand);
+    border-color: var(--notif-brand);
+    color: #fff;
+}
+
+@media (hover: none) {
+    .notif-row-actions { opacity: 1; }
+}
+
+/* ------------------------------------------------------------- pager/state */
+
+.notif-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--notif-border);
+    background: #fafbfc;
+    font-size: 0.82rem;
+    color: var(--notif-muted);
+}
+
+.notif-pager .btn {
+    font-size: 0.8rem;
+}
+
+.notif-pager-position {
+    font-weight: 600;
+    color: #52606d;
+    padding: 0 0.5rem;
+}
+
+.notif-state {
+    /* Keeps the card from collapsing between loads, which made the page jump. */
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: var(--notif-muted);
+    padding: 2rem 1.25rem;
+    text-align: center;
+}
+
+.notif-state i {
+    font-size: 2rem;
+    color: #d7dce2;
+}
+
+.notif-state-title {
+    font-weight: 600;
+    color: #52606d;
+}
+
+/* --------------------------------------------------------------- responsive */
 
 @media (max-width: 768px) {
     .notif-row {
-        flex-direction: column;
-        gap: 0.5rem;
+        grid-template-columns: 32px 1fr;
+        grid-template-areas:
+            "icon main"
+            "actions actions";
+        row-gap: 0.5rem;
     }
 
-    .notif-row-actions {
-        align-self: flex-end;
-    }
+    .notif-icon { grid-area: icon; width: 32px; height: 32px; }
+    .notif-row-main { grid-area: main; }
+    .notif-row-actions { grid-area: actions; justify-content: flex-end; }
+
+    .notif-row-head { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
+    .notif-row-time { margin-left: 0; }
+
+    .notif-toolbar-actions { margin-left: 0; width: 100%; }
+    .notif-mark-all { width: 100%; justify-content: center; }
 }

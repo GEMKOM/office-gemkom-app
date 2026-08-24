@@ -19,7 +19,8 @@ import {
 } from '../../../apis/qualityControl.js';
 import { createComment } from '../../../apis/projects/topics.js';
 
-import { renderRichText, RICH_TEXT_HINT_HTML } from '../../utils/richText.js';
+import { renderRichText } from '../../utils/richText.js';
+import { attachRichTextEditor } from '../../utils/richTextEditor.js';
 import { escapeHtml } from '../../utils/text.js';
 // State management
 const urlParams = new URLSearchParams(window.location.search);
@@ -663,6 +664,9 @@ function renderDiscussionTopicCustomHtml(discussionTopic) {
 function setupQcReviewDiscussionListeners(reviewId) {
     const btn = reviewDetailsModal.container.querySelector('#qc-review-discussion-comment-add-btn');
     if (!btn) return;
+
+    attachRichTextEditor(
+        reviewDetailsModal.container.querySelector('#qc-review-discussion-comment-input'));
 
     btn.addEventListener('click', async () => {
         const commentInput = reviewDetailsModal.container.querySelector('#qc-review-discussion-comment-input');

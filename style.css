@@ -452,9 +452,128 @@ body::after {
     color: #6c757d;
 }
 
-/* Syntax hint shown under comment inputs. */
-.rich-text-hint {
-    font-size: 11px;
-    color: #6c757d;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+/* ---------------------------------------------------------------------------
+   Rich text editor — the toolbar built by utils/richTextEditor.js.
+
+   Global rather than a component stylesheet because comment boxes appear on
+   pages that share no component CSS (project-tracking loads neither
+   department-tasks.css nor topic-discussion.css), and a toolbar that styles
+   itself on only some pages is worse than none.
+   --------------------------------------------------------------------------- */
+.rte {
+    position: relative;
 }
+
+.rte-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+    padding: 4px 6px;
+    background: #f4f5f7;
+    border: 1px solid #ced4da;
+    border-bottom: none;
+    border-radius: 0.375rem 0.375rem 0 0;
+}
+
+/* The toolbar and the textarea have to read as one control. */
+.rte > textarea.form-control,
+.rte > .rte-preview {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    margin-bottom: 0;
+}
+
+.rte-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 3px;
+    background: transparent;
+    color: #42526e;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background-color 0.12s ease-in-out, color 0.12s ease-in-out;
+}
+
+.rte-btn:hover {
+    background: #e2e5e9;
+    color: #172b4d;
+}
+
+.rte-btn:focus-visible {
+    outline: 2px solid #0052cc;
+    outline-offset: -1px;
+}
+
+.rte-btn.active {
+    background: #dbeafe;
+    color: #1e40af;
+}
+
+/* The two colour markers preview their own colour on the button. */
+.rte-btn-critical { color: #b3261e; }
+.rte-btn-positive { color: #0b6b3a; }
+
+/* Roomier tap targets where there is no mouse; the toolbar wraps to two rows. */
+@media (max-width: 767.98px) {
+    .rte-btn {
+        width: 34px;
+        height: 32px;
+        font-size: 13px;
+    }
+}
+
+.rte-sep {
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    background: #ced4da;
+}
+
+.rte-spacer {
+    flex: 1 1 auto;
+}
+
+.rte-preview {
+    padding: 0.375rem 0.75rem;
+    background: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    color: #172b4d;
+    overflow-y: auto;
+}
+
+/* Bootstrap's reboot already does this, but the preview toggle must not depend
+   on which stylesheet a page happened to load. */
+.rte > [hidden] {
+    display: none !important;
+}
+
+/* @mention autocomplete dropdown. Was defined in two component stylesheets and
+   missing from every page that loads neither of them. */
+.mention-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #dfe1e6;
+    border-radius: 4px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1055;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
+.mention-suggestion-item:hover,
+.mention-suggestion-item.selected {
+    background-color: #e3fcef !important;
+}
+

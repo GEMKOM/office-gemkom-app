@@ -4,9 +4,10 @@
 # Required setup (one-time):
 #   - Install the Claude GitHub App on this repo.
 #   - Repo secret ANTHROPIC_API_KEY.
-#   - Optional repo variable AI_AUTO_MERGE=true to merge automatically.
-#     WARNING: merging to main publishes the site (GitHub Pages). Leave it
-#     unset to review AI PRs yourself (links arrive in the daily digest email).
+#
+# PRs are never merged automatically — a human reviews and merges (merge to
+# main publishes the site via GitHub Pages). The feedback pipeline's hourly
+# sync flips the report to "done" once the PR is merged.
 name: AI Implement Issue
 
 on:
@@ -64,17 +65,3 @@ jobs:
             6. If the change cannot be done safely or the issue is unclear, still open
                a PR containing only your written analysis in the description (no code
                changes), so a human can take over.
-
-      - name: Auto-merge PR (only when AI_AUTO_MERGE=true)
-        if: vars.AI_AUTO_MERGE == 'true'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE: ${{ github.event.issue.number }}
-        run: |
-          pr=$(gh pr list --state open --json number,headRefName \
-            --jq "[.[] | select(.headRefName | startswith(\"ai-implement/$ISSUE\"))][0].number")
-          if [ -n "$pr" ] && [ "$pr" != "null" ]; then
-            gh pr merge "$pr" --squash --auto || gh pr merge "$pr" --squash
-          else
-            echo "No open PR found for issue #$ISSUE — nothing to merge."
-          fi

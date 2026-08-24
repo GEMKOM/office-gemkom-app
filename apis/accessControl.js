@@ -20,6 +20,9 @@ const ALWAYS_ALLOWED_ROUTES = new Set([
 // guard even though no "Page:" permission exists for it.
 const ROUTE_EXTRA_CODENAMES = {
     '/it/neo': ['manage_assistant_analytics'],
+    // Feedback management is gated by manage_feedback in the backend, not a
+    // page grant — holders must see the menu entry and pass the route guard.
+    '/it/feedback': ['manage_feedback'],
 };
 
 // Routes that inherit access from another page's grant: whoever can open the
