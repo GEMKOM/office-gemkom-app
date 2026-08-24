@@ -876,41 +876,52 @@ function initializeTableComponent() {
                     `;
                 }
             },
-            {
+            // Planning only: who the welded fabrication is allocated to — outside
+            // subcontractors and in-house teams both live under this one column.
+            // The backend only fills these two fields for planning tasks anyway.
+            ...(department === 'planning' ? [{
                 field: 'assigned_subcontractors',
-                label: 'Taşeron',
+                label: 'Taşeron / Takım',
                 sortable: false,
-                formatter: (value) => {
-                    if (!Array.isArray(value) || value.length === 0) {
-                        return '-';
-                    }
+                formatter: (value, row) => {
+                    const formatWeight = (rawWeight) => {
+                        const parsedWeight = Number.parseFloat(rawWeight);
+                        if (!Number.isFinite(parsedWeight)) {
+                            return '';
+                        }
+                        const formatted = parsedWeight.toLocaleString('tr-TR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2
+                        });
+                        return ` <small class="text-muted">(${escapeHtml(formatted)} kg)</small>`;
+                    };
 
-                    const visibleSubcontractors = value.filter((item) => Number(item?.subcontractor_id) !== 9);
-                    if (visibleSubcontractors.length === 0) {
-                        return '-';
-                    }
-
-                    const subcontractorLines = visibleSubcontractors
+                    // Subcontractor 9 is the fixed paint subcontractor — it is assigned to
+                    // every painted job, so listing it here would be noise.
+                    const subcontractorLines = (Array.isArray(value) ? value : [])
+                        .filter((item) => Number(item?.subcontractor_id) !== 9)
                         .map((item) => {
                             const name = escapeHtml(item?.subcontractor_name || '-');
-                            const rawWeight = item?.allocated_weight_kg;
-                            const parsedWeight = Number.parseFloat(rawWeight);
-                            const formattedWeight = Number.isFinite(parsedWeight)
-                                ? `${parsedWeight.toLocaleString('tr-TR', {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2
-                                })} kg`
-                                : null;
-                            const weightHtml = formattedWeight
-                                ? ` <small class="text-muted">(${escapeHtml(formattedWeight)})</small>`
-                                : '';
-                            return `<div>${name}${weightHtml}</div>`;
-                        })
-                        .join('');
+                            return `<div><i class="fas fa-handshake text-muted me-1"></i>${name}${formatWeight(item?.allocated_weight_kg)}</div>`;
+                        });
 
-                    return `<div class="small">${subcontractorLines}</div>`;
+                    // A welding subtask goes either to a subcontractor or to an internal team
+                    // (mutually exclusive), so a job welded in-house would otherwise render
+                    // an empty cell.
+                    const teamLines = (Array.isArray(row?.assigned_teams) ? row.assigned_teams : [])
+                        .map((item) => {
+                            const name = escapeHtml(item?.team_name || '-');
+                            return `<div><i class="fas fa-users text-muted me-1"></i>${name}${formatWeight(item?.allocated_weight_kg)}</div>`;
+                        });
+
+                    const lines = [...subcontractorLines, ...teamLines];
+                    if (lines.length === 0) {
+                        return '-';
+                    }
+
+                    return `<div class="small">${lines.join('')}</div>`;
                 }
-            },
+            }] : []),
             // Manufacturing only: the job order's total weight (kg), set by planning.
             ...(department === 'manufacturing' ? [{
                 field: 'job_order_total_weight_kg',

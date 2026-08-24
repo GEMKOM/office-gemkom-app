@@ -42,6 +42,7 @@ const TOOL_LABELS = {
     get_job_costs: 'Maliyetler alınıyor',
     get_material_status: 'Malzeme durumu alınıyor',
     get_discussions: 'Tartışmalar okunuyor',
+    get_my_mentions: 'Etiketlenmeler alınıyor',
     get_my_summary: 'Kişisel özet alınıyor',
     search_docs: 'Rehber dokümanlar aranıyor',
     read_doc: 'Rehber okunuyor',
@@ -74,6 +75,9 @@ const REPORT_KIND_ICONS = {
     other: 'fa-comment-dots',
 };
 
+// How many reports the history list shows before the "tümünü göster" button.
+const REPORT_PAGE_SIZE = 5;
+
 const state = {
     open: false,
     expanded: false,
@@ -84,6 +88,8 @@ const state = {
     bootstrapped: false,
     locked: false,
     reportSending: false,
+    reports: [],
+    reportsExpanded: false,
 };
 
 const el = {};
@@ -174,7 +180,7 @@ function buildPanel() {
                     Bildiriminiz yapay zekâ tarafından incelenir; uygun görülenler otomatik
                     olarak geliştirme kuyruğuna alınır. Durumunu aşağıdan takip edebilirsiniz.
                 </div>
-                <div class="aw-report-list-title">Bildirimlerim</div>
+                <div class="aw-report-list-title">Bildirim Geçmişim</div>
                 <div class="aw-report-list"></div>
             </div>
             <div class="aw-input-area">
@@ -451,24 +457,115 @@ function toggleReportView() {
 
 async function refreshMyReports() {
     try {
-        const reports = await listMyFeedbackReports();
-        renderMyReports(reports.slice(0, 10));
+        state.reports = await listMyFeedbackReports();
+        renderMyReports();
     } catch (error) {
         el.reportList.innerHTML =
             '<div class="aw-muted-block">Bildirimler yüklenemedi.</div>';
     }
 }
 
-function renderMyReports(reports) {
+function renderMyReports() {
+    const reports = state.reports || [];
     if (!reports.length) {
         el.reportList.innerHTML =
             '<div class="aw-muted-block">Henüz bildiriminiz yok.</div>';
         return;
     }
+
+    const visible = state.reportsExpanded ? reports : reports.slice(0, REPORT_PAGE_SIZE);
     el.reportList.innerHTML = '';
-    for (const report of reports) {
+    for (const report of visible) {
         el.reportList.appendChild(buildReportItem(report));
     }
+
+    if (reports.length > visible.length) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'report-show-all';
+        more.textContent = `Tümünü göster (${reports.length})`;
+        more.addEventListener('click', () => {
+            state.reportsExpanded = true;
+            renderMyReports();
+        });
+        el.reportList.appendChild(more);
+    }
+}
+
+function formatReportDate(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('tr-TR', {
+        day: '2-digit', month: '2-digit', year: '2-digit',
+        hour: '2-digit', minute: '2-digit',
+    });
+}
+
+function timelineRow(done, label, when) {
+    const icon = done
+        ? '<i class="fas fa-check-circle rt-done"></i>'
+        : '<i class="far fa-circle rt-pending"></i>';
+    return `<li class="${done ? '' : 'rt-muted'}">${icon}
+        <span class="rt-label">${escapeHtml(label)}</span>
+        <span class="rt-when">${escapeHtml(formatReportDate(when))}</span></li>`;
+}
+
+function buildReportTimeline(report) {
+    const status = report.status;
+    const analyzed = !!report.analyzed_at;
+    // reviewed_at is also stamped on dismissal, so the status decides whether
+    // the report actually reached development.
+    const wentToDev = ['queued', 'in_review', 'done'].includes(status);
+    const closed = ['done', 'dismissed', 'duplicate'].includes(status);
+
+    let finalLabel = 'Tamamlanma';
+    if (status === 'done') finalLabel = 'Tamamlandı — yayında';
+    else if (status === 'dismissed') finalLabel = 'Değerlendirildi, uygulanmayacak';
+    else if (status === 'duplicate') finalLabel = 'Aynı konu daha önce bildirilmiş';
+
+    const rows = [
+        timelineRow(true, 'Bildiriminiz alındı', report.created_at),
+        timelineRow(analyzed, 'Neo inceledi', report.analyzed_at),
+    ];
+    if (status === 'needs_info') {
+        rows.push(timelineRow(false, 'Yanıtınız bekleniyor', null));
+    }
+    rows.push(timelineRow(wentToDev, 'Geliştirmeye alındı', wentToDev ? report.queued_at : null));
+    if (status === 'in_review') {
+        rows.push(timelineRow(false, 'Değişiklik hazır, onay bekliyor', null));
+    }
+    rows.push(timelineRow(closed, finalLabel, report.resolved_at));
+    return `<ul class="report-timeline">${rows.join('')}</ul>`;
+}
+
+function buildReportHistory(report) {
+    const parts = [buildReportTimeline(report)];
+
+    parts.push(`
+        <div class="report-section-label">Bildiriminiz</div>
+        <div class="report-quote">${escapeHtml(report.description || '')}</div>`);
+
+    if (report.ai_summary) {
+        parts.push(`
+            <div class="report-section-label">Neo'nun değerlendirmesi</div>
+            <div class="report-quote report-quote-ai">${escapeHtml(report.ai_summary)}</div>`);
+    }
+
+    // Previous Q&A rounds, oldest first — the conversation so far.
+    for (const response of report.user_responses || []) {
+        const questions = (response.questions || [])
+            .map((q) => `<li>${escapeHtml(q)}</li>`).join('');
+        parts.push(`
+            <div class="report-section-label">Neo sordu</div>
+            <ul class="report-qa-questions">${questions}</ul>
+            <div class="report-section-label">Yanıtınız
+                <span class="report-when">${escapeHtml(formatReportDate(response.at))}</span>
+            </div>
+            <div class="report-quote">${escapeHtml(response.text || '')}</div>`);
+    }
+
+    return parts.join('');
 }
 
 function buildReportItem(report) {
@@ -481,41 +578,47 @@ function buildReportItem(report) {
     wrap.className = 'report-entry';
 
     const item = document.createElement('div');
-    item.className = 'report-item';
-    item.title = report.ai_summary || report.title;
+    item.className = 'report-item report-item-clickable';
+    item.title = 'Ayrıntılar için tıklayın';
     item.innerHTML = `
         <i class="fas ${icon} report-kind-icon"></i>
         <span class="report-title">${escapeHtml(report.title)}</span>
         ${needsAnswer ? '<i class="fas fa-reply report-answer-hint" title="Neo yanıtınızı bekliyor"></i>' : ''}
-        <span class="report-status report-status-${meta.cls}">${escapeHtml(meta.label)}</span>`;
+        <span class="report-status report-status-${meta.cls}">${escapeHtml(meta.label)}</span>
+        <i class="fas fa-chevron-down report-caret"></i>`;
     wrap.appendChild(item);
 
-    if (needsAnswer) {
-        const details = document.createElement('div');
-        details.className = 'report-qa';
-        details.innerHTML = `
-            <div class="report-qa-intro">Neo bu bildirimi çözmek için ek bilgiye ihtiyaç duyuyor:</div>
-            <ul class="report-qa-questions">
-                ${report.clarifying_questions.map((q) => `<li>${escapeHtml(q)}</li>`).join('')}
-            </ul>
-            <form class="report-qa-form">
-                <textarea class="form-control form-control-sm" rows="4" maxlength="8000"
-                          placeholder="Soruların yanıtlarını buraya yazın..."></textarea>
-                <button type="submit" class="aw-report-submit">
-                    <i class="fas fa-paper-plane me-1"></i>Yanıtla
-                </button>
-            </form>`;
-        wrap.appendChild(details);
+    const details = document.createElement('div');
+    details.className = 'report-qa';
+    details.innerHTML = buildReportHistory(report) + (needsAnswer ? `
+        <div class="report-qa-intro">Neo bu bildirimi çözmek için ek bilgiye ihtiyaç duyuyor:</div>
+        <ul class="report-qa-questions">
+            ${report.clarifying_questions.map((q) => `<li>${escapeHtml(q)}</li>`).join('')}
+        </ul>
+        <form class="report-qa-form">
+            <textarea class="form-control form-control-sm" rows="4" maxlength="8000"
+                      placeholder="Soruların yanıtlarını buraya yazın..."></textarea>
+            <button type="submit" class="aw-report-submit">
+                <i class="fas fa-paper-plane me-1"></i>Yanıtla
+            </button>
+        </form>` : '');
+    wrap.appendChild(details);
 
-        // Collapsed by default; the header row toggles it open. A deep link
-        // from the bell notification lands with its questions already open.
-        item.classList.add('report-item-clickable');
-        item.addEventListener('click', () => details.classList.toggle('open'));
-        if (report.id === DEEPLINK_REPORT_ID) details.classList.add('open');
+    // Collapsed by default; the header row toggles the history open. A deep
+    // link from the bell notification lands with its report already open.
+    item.addEventListener('click', () => {
+        const open = details.classList.toggle('open');
+        item.classList.toggle('report-item-open', open);
+    });
+    if (report.id === DEEPLINK_REPORT_ID) {
+        details.classList.add('open');
+        item.classList.add('report-item-open');
+    }
 
-        const form = details.querySelector('form');
-        const textarea = details.querySelector('textarea');
-        const submitBtn = details.querySelector('button');
+    const form = details.querySelector('form');
+    if (form) {
+        const textarea = form.querySelector('textarea');
+        const submitBtn = form.querySelector('button');
         form.addEventListener('submit', async (event) => {
             event.preventDefault();
             const text = textarea.value.trim();
@@ -536,6 +639,8 @@ function buildReportItem(report) {
                 submitBtn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Yanıtla';
             }
         });
+        // Clicks inside the reply form must not collapse the panel.
+        form.addEventListener('click', (event) => event.stopPropagation());
     }
     return wrap;
 }

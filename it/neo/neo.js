@@ -37,6 +37,7 @@ const TOOL_LABELS = {
     get_job_costs: 'Maliyetler',
     get_material_status: 'Malzeme durumu',
     get_discussions: 'Tartışmalar',
+    get_my_mentions: 'Etiketlenmeler',
     get_my_summary: 'Kişisel özet',
     search_docs: 'Rehber arama',
     read_doc: 'Rehber okuma',

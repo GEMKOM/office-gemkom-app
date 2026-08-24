@@ -499,6 +499,84 @@
 
 .report-item-clickable { cursor: pointer; }
 .report-item-clickable:hover { background: #f8f9fa; }
+.report-item-open { background: #f8f9fa; }
+
+.report-caret {
+    color: #adb5bd;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+    transition: transform 0.15s ease;
+}
+
+.report-item-open .report-caret { transform: rotate(180deg); }
+
+.report-show-all {
+    display: block;
+    width: 100%;
+    border: none;
+    background: none;
+    padding: 0.5rem 1rem;
+    font-size: 0.79rem;
+    font-weight: 600;
+    color: var(--primary-color, #8b0000);
+    cursor: pointer;
+}
+
+.report-show-all:hover { background: #f8f9fa; }
+
+/* --- per-report history panel ------------------------------------------- */
+
+.report-timeline {
+    list-style: none;
+    margin: 0 0 0.6rem;
+    padding: 0;
+    font-size: 0.78rem;
+}
+
+.report-timeline li {
+    display: flex;
+    align-items: baseline;
+    gap: 0.45rem;
+    padding: 0.16rem 0;
+}
+
+.report-timeline .rt-done { color: #146c43; font-size: 0.72rem; }
+.report-timeline .rt-pending { color: #ced4da; font-size: 0.72rem; }
+.report-timeline .rt-label { flex: 1; color: var(--text-color, #2c3e50); }
+.report-timeline .rt-muted .rt-label { color: #adb5bd; }
+.report-timeline .rt-when { color: #8a939b; font-size: 0.72rem; white-space: nowrap; }
+
+.report-section-label {
+    font-size: 0.73rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #8a939b;
+    margin: 0.5rem 0 0.22rem;
+}
+
+.report-when {
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 500;
+    margin-left: 0.3rem;
+}
+
+.report-quote {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.45rem 0.6rem;
+    font-size: 0.79rem;
+    line-height: 1.4;
+    color: #495057;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.report-quote-ai {
+    border-left: 3px solid var(--primary-color, #8b0000);
+}
 
 .report-qa {
     display: none;
