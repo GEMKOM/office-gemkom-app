@@ -1,0 +1,80 @@
+# Runs Claude Code on issues labeled `ai-implement` (created by the backend's
+# feedback pipeline). Claude implements the change on a branch and opens a PR.
+#
+# Required setup (one-time):
+#   - Install the Claude GitHub App on this repo.
+#   - Repo secret ANTHROPIC_API_KEY.
+#   - Optional repo variable AI_AUTO_MERGE=true to merge automatically.
+#     WARNING: merging to main publishes the site (GitHub Pages). Leave it
+#     unset to review AI PRs yourself (links arrive in the daily digest email).
+name: AI Implement Issue
+
+on:
+  issues:
+    types: [labeled]
+
+jobs:
+  implement:
+    if: github.event.label.name == 'ai-implement'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - uses: anthropics/claude-code-action@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          track_progress: true
+          branch_prefix: "ai-implement/"
+          claude_args: |
+            --model claude-opus-5
+            --max-turns 60
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep,mcp__github__create_pull_request,mcp__github__create_issue_comment"
+          prompt: |
+            Implement the change requested in issue #${{ github.event.issue.number }}
+            of this vanilla-JS + Bootstrap 5 internal web app (Turkish UI, served
+            from main via GitHub Pages at ofis.gemcore.com.tr).
+
+            Issue title: ${{ github.event.issue.title }}
+
+            Issue body:
+            ${{ github.event.issue.body }}
+
+            Rules:
+            1. Explore the codebase first; follow existing page/component patterns
+               (ES modules, authedFetch from authService.js, backendBase from base.js,
+               components/ for shared widgets, Turkish user-facing strings).
+            2. Reuse existing components: ModernDropdown for selects, badges.css
+               status-badge classes for statuses. Never introduce yellow/bg-warning
+               styling.
+            3. Keep the diff minimal — implement ONLY what the issue describes.
+               The "Guardrails" section of the issue is binding.
+            4. There is no build step: files ship as-is, so double-check syntax.
+            5. Create a branch named ai-implement/${{ github.event.issue.number }}-<short-slug>,
+               commit, push, and open a pull request whose body starts with
+               "Closes #${{ github.event.issue.number }}" and summarizes what changed
+               and any risks.
+            6. If the change cannot be done safely or the issue is unclear, still open
+               a PR containing only your written analysis in the description (no code
+               changes), so a human can take over.
+
+      - name: Auto-merge PR (only when AI_AUTO_MERGE=true)
+        if: vars.AI_AUTO_MERGE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE: ${{ github.event.issue.number }}
+        run: |
+          pr=$(gh pr list --state open --json number,headRefName \
+            --jq "[.[] | select(.headRefName | startswith(\"ai-implement/$ISSUE\"))][0].number")
+          if [ -n "$pr" ] && [ "$pr" != "null" ]; then
+            gh pr merge "$pr" --squash --auto || gh pr merge "$pr" --squash
+          else
+            echo "No open PR found for issue #$ISSUE — nothing to merge."
+          fi

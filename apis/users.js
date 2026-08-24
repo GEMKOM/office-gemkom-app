@@ -221,6 +221,21 @@ export async function fetchUserGroups() {
 }
 
 /**
+ * Members of one group — who a @group mention actually notifies.
+ * GET /organization/groups/{id}/members/
+ *
+ * Open to any authenticated user, unlike the admin-only group detail endpoint,
+ * because the group-mention badge in a discussion already names the group.
+ */
+export async function fetchUserGroupMembers(groupId) {
+    const resp = await authedFetch(`${backendBase}/organization/groups/${groupId}/members/`);
+    if (!resp.ok) {
+        throw new Error('Grup üyeleri alınamadı');
+    }
+    return await resp.json();
+}
+
+/**
  * Fetch full permission state for a single user.
  * GET /users/{id}/permissions/
  */

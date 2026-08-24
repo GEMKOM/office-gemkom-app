@@ -5227,7 +5227,7 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
         const textBeforeCursor = text.substring(0, cursorPos);
         
         // Check if we're typing after @
-        const mentionMatch = textBeforeCursor.match(/@([\w-]*)$/);
+        const mentionMatch = textBeforeCursor.match(/@([\p{L}\p{N}_-]*)$/u);
         
         if (mentionMatch) {
             const query = mentionMatch[1].toLowerCase();
@@ -5310,7 +5310,7 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
             const initials = getUserInitials(fullName);
             const avatarColor = getAvatarColor(fullName);
             const mentionTypeBadge = mention.type === 'group'
-                ? '<span class="badge bg-warning text-dark ms-2" style="font-size: 10px;">Grup</span>'
+                ? '<span class="status-badge status-blue ms-2" style="font-size: 10px;">Grup</span>'
                 : '';
             
             return `
@@ -5454,8 +5454,8 @@ async function viewTopicDetail(topicId, jobNo) {
         // Format content with @mentions - enhanced version
         // User text: escaped, then formatted, by utils/richText.js. This used to
         // go straight into innerHTML unescaped.
-        const formatContent = (content, mentionedUsers = []) =>
-            renderRichText(content, { mentionedUsers });
+        const formatContent = (content, mentionedUsers = [], mentionedGroups = []) =>
+            renderRichText(content, { mentionedUsers, mentionedGroups });
 
         const buildCommentHtml = (comment) => {
             const initials = getUserInitials(comment.created_by_name);
@@ -5475,7 +5475,7 @@ async function viewTopicDetail(topicId, jobNo) {
                             ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                         </div>
                         <div class="comment-content rich-text" style="color: #172b4d; margin-bottom: 8px;">
-                            ${formatContent(comment.content, comment.mentioned_users_data || [])}
+                            ${formatContent(comment.content, comment.mentioned_users_data || [], comment.mentioned_groups_data || [])}
                         </div>
                         ${comment.attachments_data && comment.attachments_data.length > 0 ? `
                             <div class="mt-2" id="comment-attachments-${comment.id}"></div>
@@ -5599,7 +5599,7 @@ async function viewTopicDetail(topicId, jobNo) {
             customContent: `
                 <div class="mb-3">
                     <h6 class="mb-2"><i class="fas fa-align-left me-2"></i>İçerik</h6>
-                    <div class="p-3 bg-light rounded rich-text">${formatContent(topic.content, topic.mentioned_users_data || [])}</div>
+                    <div class="p-3 bg-light rounded rich-text">${formatContent(topic.content, topic.mentioned_users_data || [], topic.mentioned_groups_data || [])}</div>
                 </div>
             `
         });

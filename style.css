@@ -369,6 +369,89 @@ body::after {
     margin: 0 2px;
 }
 
+/* Group mention badge — a different colour from a person's badge because it
+   reaches several people, and clickable because the badge alone does not say
+   who. */
+.mention-badge-group {
+    background-color: #dbeafe;
+    color: #1e40af;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mention-badge-group:hover,
+.mention-badge-group:focus-visible {
+    background-color: #bfdbfe;
+    outline: none;
+}
+
+.mention-badge-group i {
+    font-size: 11px;
+    margin-right: 1px;
+}
+
+/* Member list for a group mention. Anchored to <body> with fixed positioning:
+   these threads live inside modals with their own overflow and stacking. */
+.mention-group-popover {
+    position: fixed;
+    z-index: 1080;
+    min-width: 220px;
+    max-width: 320px;
+    max-height: 340px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #dfe1e6;
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(9, 30, 66, 0.18);
+    padding: 8px 0;
+    font-size: 13px;
+}
+
+.mention-group-popover-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 12px 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid #f1f2f4;
+    font-weight: 600;
+    color: #172b4d;
+}
+
+.mention-group-popover-header i { color: #1e40af; }
+
+.mention-group-popover-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.mention-group-popover-list li {
+    display: flex;
+    flex-direction: column;
+    padding: 4px 12px;
+}
+
+.mention-group-member-name { color: #172b4d; }
+
+.mention-group-member-position {
+    font-size: 11px;
+    color: #6c757d;
+}
+
+.mention-group-popover-empty {
+    padding: 4px 12px;
+    color: #6c757d;
+}
+
+.mention-group-popover-footer {
+    margin-top: 6px;
+    padding: 6px 12px 0;
+    border-top: 1px solid #f1f2f4;
+    font-size: 11px;
+    color: #6c757d;
+}
+
 /* Syntax hint shown under comment inputs. */
 .rich-text-hint {
     font-size: 11px;

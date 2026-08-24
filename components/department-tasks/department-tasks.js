@@ -68,8 +68,8 @@ import { escapeHtml } from '../../utils/text.js';
 
 // Comment bodies are user text: escaped, then formatted, by
 // utils/richText.js (markdown-lite + @mention badges).
-function formatCommentWithMentions(content, mentionedUsers = []) {
-    return renderRichText(content, { mentionedUsers });
+function formatCommentWithMentions(content, mentionedUsers = [], mentionedGroups = []) {
+    return renderRichText(content, { mentionedUsers, mentionedGroups });
 }
 
 /**
@@ -5622,7 +5622,7 @@ async function renderConsultationTab(task) {
                                         ${comment.is_edited ? '<small class="text-muted"><i class="fas fa-edit me-1"></i>Düzenlendi</small>' : ''}
                                         ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                                     </div>
-                                    <div class="consultation-comment-content rich-text">${formatCommentWithMentions(comment.content, comment.mentioned_users_data)}</div>
+                                    <div class="consultation-comment-content rich-text">${formatCommentWithMentions(comment.content, comment.mentioned_users_data, comment.mentioned_groups_data)}</div>
                                 </div>
                                 `;
                             }).join('')}

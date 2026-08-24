@@ -100,6 +100,53 @@ check('an unknown mention falls back to the username', () => {
     assert.equal(render('@ghost'), '<span class="mention-badge">@ghost</span>');
 });
 
+console.log('\ngroup mentions — a group name is not a word token');
+const GROUPS = [
+    { id: 7, name: 'Planlama', slug: 'planlama' },
+    { id: 9, name: 'Satın Alma', slug: 'satn-alma' }
+];
+const renderGroups = (text) =>
+    renderRichText(text, { mentionedUsers: MENTIONS, mentionedGroups: GROUPS });
+
+check('a group name with a space and a Turkish letter is one badge', () => {
+    // The reported bug: \w is ASCII in JS, so this used to badge "@Sat" and
+    // leave "ın Alma" behind as loose text.
+    const html = renderGroups('@Satın Alma');
+    assert.equal(html.match(/mention-badge-group/g).length, 1, html);
+    assert.ok(html.includes('@Satın Alma</span>'), html);
+    assert.ok(!html.includes('>ın Alma'), html);
+});
+check('groups and people badge side by side', () => {
+    const html = renderGroups('@Planlama @Satın Alma @onatcalik');
+    assert.equal(html.match(/mention-badge-group/g).length, 2, html);
+    assert.ok(html.includes('@Onat Çalık</span>'), html);
+});
+check('the explicit @[group:...] form badges too', () => {
+    const html = renderGroups('@[group:Satın Alma] ve @[group:planlama]');
+    assert.equal(html.match(/mention-badge-group/g).length, 2, html);
+    assert.ok(!html.includes('[group:'), html);
+});
+check('the slug form badges too', () => {
+    assert.ok(renderGroups('@satn-alma').includes('data-group-name="Satın Alma"'));
+});
+check('a longer word starting with a group name is not a group', () => {
+    assert.ok(!renderGroups('@Planlamaci').includes('mention-badge-group'));
+});
+check('without group data nothing is badged as a group', () => {
+    // The server resolves the text into groups; the renderer never guesses.
+    assert.ok(!render('@Planlama').includes('mention-badge-group'));
+});
+check('an injected group name cannot break out of the badge', () => {
+    const html = renderRichText('@Planlama', {
+        mentionedGroups: [
+            { id: '"><img src=x onerror=alert(1)>', name: '<b>Planlama</b>' },
+            { id: 7, name: 'Planlama', slug: 'planlama' }
+        ]
+    });
+    assert.ok(!html.includes('<img'), html);
+    assert.ok(!html.includes('<b>'), html);
+});
+
 console.log('\npredictability — markers must not fire by accident');
 check('a stray !! is left alone', () => assert.equal(render('harika!! sonra'), 'harika!! sonra'));
 check('arithmetic asterisks are left alone', () => assert.equal(render('3 * 4 * 5'), '3 * 4 * 5'));

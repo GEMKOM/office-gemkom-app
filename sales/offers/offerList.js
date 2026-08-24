@@ -3787,7 +3787,7 @@ async function showConsultationCommentsModal(taskId) {
                 const author = escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı');
                 const date = comment.created_at ? new Date(comment.created_at) : null;
                 const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleString('tr-TR') : '-';
-                const content = renderRichText(comment.content, { mentionedUsers: comment.mentioned_users_data });
+                const content = renderRichText(comment.content, { mentionedUsers: comment.mentioned_users_data, mentionedGroups: comment.mentioned_groups_data });
                 return `
                     <div class="comment-item mb-3 pb-3 border-bottom">
                         <div class="d-flex align-items-center gap-2 mb-1">

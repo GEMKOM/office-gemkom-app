@@ -392,3 +392,102 @@
     font-size: 0.85rem;
     text-align: center;
 }
+
+/* --- feedback report view ------------------------------------------------ */
+
+.aw-report {
+    flex: 1;
+    overflow-y: auto;
+    background: #fff;
+}
+
+.aw-report .aw-report-title {
+    padding: 0.65rem 1rem;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-color, #2c3e50);
+    border-bottom: 1px solid #e9ecef;
+}
+
+.aw-report-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.85rem 1rem 0.35rem;
+}
+
+.aw-report-form textarea {
+    resize: vertical;
+}
+
+.aw-report-submit {
+    align-self: flex-end;
+    border: none;
+    border-radius: 8px;
+    padding: 0.4rem 1.1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #fff;
+    background: var(--gradient-primary, linear-gradient(135deg, #8b0000, #a52a2a));
+    cursor: pointer;
+}
+
+.aw-report-submit:disabled {
+    opacity: 0.65;
+    cursor: default;
+}
+
+.aw-report-note {
+    padding: 0 1rem 0.6rem;
+    color: #8a939b;
+    font-size: 0.74rem;
+    line-height: 1.35;
+}
+
+.aw-report-list-title {
+    padding: 0.5rem 1rem 0.3rem;
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: var(--text-color, #2c3e50);
+    border-top: 1px solid #e9ecef;
+}
+
+.aw-report-list .report-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 1rem;
+    font-size: 0.82rem;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.report-kind-icon {
+    color: #8a939b;
+    font-size: 0.78rem;
+    flex-shrink: 0;
+}
+
+.report-item .report-title {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--text-color, #2c3e50);
+}
+
+.report-status {
+    flex-shrink: 0;
+    padding: 0.14rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.report-status-grey   { background: #e9ecef; color: #495057; }
+.report-status-blue   { background: #d7e7ff; color: #0b5ed7; }
+.report-status-purple { background: #e7defc; color: #59359c; }
+.report-status-orange { background: #ffe3cc; color: #b35900; }
+.report-status-green  { background: #d6f2e0; color: #146c43; }
+.report-status-red    { background: #f8d7da; color: #b02a37; }

@@ -611,7 +611,7 @@ function renderDiscussionTopicCustomHtml(discussionTopic) {
     `;
 
     if (discussionTopic.content) {
-        html += `<div class="mb-3 rich-text">${renderRichText(discussionTopic.content)}</div>`;
+        html += `<div class="mb-3 rich-text">${renderRichText(discussionTopic.content, { mentionedUsers: discussionTopic.mentioned_users_data, mentionedGroups: discussionTopic.mentioned_groups_data })}</div>`;
     }
 
     if (attachments.length > 0) {
@@ -642,7 +642,7 @@ function renderDiscussionTopicCustomHtml(discussionTopic) {
                                     <strong>${escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı')}</strong>
                                     <small class="text-muted">${formatCommentDate(comment.created_at)}</small>
                                 </div>
-                                <div class="rich-text">${renderRichText(comment.content, { mentionedUsers: comment.mentioned_users_data })}</div>
+                                <div class="rich-text">${renderRichText(comment.content, { mentionedUsers: comment.mentioned_users_data, mentionedGroups: comment.mentioned_groups_data })}</div>
                             </div>
                         `).join('')}
                 </div>

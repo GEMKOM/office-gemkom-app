@@ -21,6 +21,7 @@ import {
     sendMessageFeedback,
     streamChat,
 } from '../../apis/assistant.js';
+import { createFeedbackReport, listMyFeedbackReports } from '../../apis/feedback.js';
 
 const STORAGE_OPEN = 'assistantOpen';
 const STORAGE_CONVERSATION = 'assistantConversationId';
@@ -44,6 +45,26 @@ const SUGGESTIONS = [
     'İzin bakiyem ne durumda?',
 ];
 
+// Report statuses → chip color + label (backend feedback.FeedbackReport).
+const REPORT_STATUS_META = {
+    new: { label: 'Yeni', cls: 'grey' },
+    analyzed: { label: 'İncelendi', cls: 'purple' },
+    needs_info: { label: 'Bilgi Bekleniyor', cls: 'orange' },
+    duplicate: { label: 'Yinelenen', cls: 'grey' },
+    queued: { label: 'Kuyruğa Alındı', cls: 'blue' },
+    in_review: { label: 'İncelemede', cls: 'orange' },
+    done: { label: 'Tamamlandı', cls: 'green' },
+    dismissed: { label: 'Reddedildi', cls: 'grey' },
+    failed: { label: 'Başarısız', cls: 'red' },
+};
+
+const REPORT_KIND_ICONS = {
+    bug: 'fa-bug',
+    feature: 'fa-lightbulb',
+    improvement: 'fa-arrow-trend-up',
+    other: 'fa-comment-dots',
+};
+
 const state = {
     open: false,
     expanded: false,
@@ -52,6 +73,8 @@ const state = {
     streaming: false,
     conversations: [],
     bootstrapped: false,
+    locked: false,
+    reportSending: false,
 };
 
 const el = {};
@@ -101,6 +124,7 @@ function buildPanel() {
     panel.innerHTML = `
         <div class="aw-header">
             <span class="aw-title"><i class="fas fa-robot"></i> Neo</span>
+            <button type="button" class="aw-btn" data-action="report" title="Hata / öneri bildir"><i class="fas fa-bug"></i></button>
             <button type="button" class="aw-btn" data-action="history" title="Sohbet geçmişi"><i class="fas fa-history"></i></button>
             <button type="button" class="aw-btn" data-action="new" title="Yeni sohbet"><i class="fas fa-plus"></i></button>
             <button type="button" class="aw-btn d-none d-sm-inline-block" data-action="expand" title="Genişlet"><i class="fas fa-expand"></i></button>
@@ -111,6 +135,31 @@ function buildPanel() {
             <div class="aw-history" style="display:none">
                 <div class="aw-history-title"><i class="fas fa-comments me-2"></i>Sohbetler</div>
                 <div class="aw-history-list"></div>
+            </div>
+            <div class="aw-report" style="display:none">
+                <div class="aw-report-title"><i class="fas fa-bug me-2"></i>Hata / Öneri Bildir</div>
+                <form class="aw-report-form">
+                    <select class="form-select form-select-sm" name="kind" aria-label="Bildirim türü">
+                        <option value="bug">Hata</option>
+                        <option value="feature">Özellik İsteği</option>
+                        <option value="improvement">İyileştirme</option>
+                        <option value="other">Diğer</option>
+                    </select>
+                    <input class="form-control form-control-sm" name="title" maxlength="200"
+                           placeholder="Kısa başlık" required>
+                    <textarea class="form-control form-control-sm" name="description" rows="5" maxlength="8000"
+                              placeholder="Sorunu veya isteği anlatın: Hangi sayfada? Ne yaptınız? Ne oldu, ne olmalıydı?"
+                              required></textarea>
+                    <button type="submit" class="aw-report-submit">
+                        <i class="fas fa-paper-plane me-1"></i>Gönder
+                    </button>
+                </form>
+                <div class="aw-report-note">
+                    Bildiriminiz yapay zekâ tarafından incelenir; uygun görülenler otomatik
+                    olarak geliştirme kuyruğuna alınır. Durumunu aşağıdan takip edebilirsiniz.
+                </div>
+                <div class="aw-report-list-title">Bildirimlerim</div>
+                <div class="aw-report-list"></div>
             </div>
             <div class="aw-input-area">
                 <form>
@@ -133,16 +182,26 @@ function buildPanel() {
     el.history = panel.querySelector('.aw-history');
     el.historyList = panel.querySelector('.aw-history-list');
     el.inputArea = panel.querySelector('.aw-input-area');
-    el.form = panel.querySelector('form');
-    el.input = panel.querySelector('textarea');
+    // Scope to the chat input area: the report pane has its own form/textarea.
+    el.form = panel.querySelector('.aw-input-area form');
+    el.input = panel.querySelector('.aw-input-area textarea');
     el.sendBtn = panel.querySelector('.aw-send-btn');
     el.quotaLine = panel.querySelector('.aw-quota');
     el.historyBtn = panel.querySelector('[data-action="history"]');
     el.expandBtn = panel.querySelector('[data-action="expand"]');
+    el.report = panel.querySelector('.aw-report');
+    el.reportBtn = panel.querySelector('[data-action="report"]');
+    el.reportForm = panel.querySelector('.aw-report-form');
+    el.reportList = panel.querySelector('.aw-report-list');
 
     panel.querySelector('[data-action="close"]').addEventListener('click', () => closePanel());
     panel.querySelector('[data-action="new"]').addEventListener('click', () => startNewChat());
     el.historyBtn.addEventListener('click', () => toggleHistoryView());
+    el.reportBtn.addEventListener('click', () => toggleReportView());
+    el.reportForm.addEventListener('submit', (event) => {
+        event.preventDefault();
+        submitReport();
+    });
     el.expandBtn.addEventListener('click', () => {
         state.expanded = !state.expanded;
         panel.classList.toggle('expanded', state.expanded);
@@ -201,6 +260,7 @@ function closePanel() {
 async function bootstrap() {
     const hasAccess = await refreshQuota();
     if (!hasAccess) {
+        state.locked = true;  // chat kapalı; hata/öneri bildirimi yine açık
         el.messages.innerHTML =
             '<div class="aw-muted-block"><i class="fas fa-lock me-1"></i> ' +
             "Neo'ya erişiminiz kapatılmış görünüyor. Gerekli olduğunu düşünüyorsanız " +
@@ -213,7 +273,9 @@ async function bootstrap() {
         const ok = await openConversation(state.conversationId, { silent: true });
         if (ok) return;
     }
-    startNewChat({ keepPanel: true });
+    // keepView: the user may already have switched to the report/history pane
+    // while this bootstrap was in flight — don't yank them back to chat.
+    startNewChat({ keepPanel: true, keepView: true });
 }
 
 // ------------------------------------------------------------------ quota
@@ -240,10 +302,12 @@ async function refreshQuota() {
 // ---------------------------------------------------------------- history
 
 function toggleHistoryView() {
-    if (state.view === 'chat') {
+    if (state.view !== 'history') {
         state.view = 'history';
         el.messages.style.display = 'none';
         el.inputArea.style.display = 'none';
+        el.report.style.display = 'none';
+        el.reportBtn.classList.remove('active');
         el.history.style.display = 'block';
         el.historyBtn.classList.add('active');
         refreshConversationList();
@@ -255,9 +319,12 @@ function toggleHistoryView() {
 function showChatView() {
     state.view = 'chat';
     el.history.style.display = 'none';
+    el.report.style.display = 'none';
     el.messages.style.display = 'flex';
-    el.inputArea.style.display = 'block';
+    // Locked users keep chat input hidden (bootstrap) but can still report.
+    el.inputArea.style.display = state.locked ? 'none' : 'block';
     el.historyBtn.classList.remove('active');
+    el.reportBtn.classList.remove('active');
 }
 
 async function refreshConversationList() {
@@ -348,12 +415,112 @@ async function openConversation(conversationId, { silent = false } = {}) {
     }
 }
 
-function startNewChat({ keepPanel = false } = {}) {
+// -------------------------------------------------------- feedback reports
+
+function toggleReportView() {
+    if (state.view === 'report') {
+        showChatView();
+        return;
+    }
+    state.view = 'report';
+    el.messages.style.display = 'none';
+    el.inputArea.style.display = 'none';
+    el.history.style.display = 'none';
+    el.historyBtn.classList.remove('active');
+    el.report.style.display = 'block';
+    el.reportBtn.classList.add('active');
+    refreshMyReports();
+    el.reportForm.querySelector('[name="title"]').focus();
+}
+
+async function refreshMyReports() {
+    try {
+        const reports = await listMyFeedbackReports();
+        renderMyReports(reports.slice(0, 10));
+    } catch (error) {
+        el.reportList.innerHTML =
+            '<div class="aw-muted-block">Bildirimler yüklenemedi.</div>';
+    }
+}
+
+function renderMyReports(reports) {
+    if (!reports.length) {
+        el.reportList.innerHTML =
+            '<div class="aw-muted-block">Henüz bildiriminiz yok.</div>';
+        return;
+    }
+    el.reportList.innerHTML = '';
+    for (const report of reports) {
+        const meta = REPORT_STATUS_META[report.status] || { label: report.status_display || report.status, cls: 'grey' };
+        const icon = REPORT_KIND_ICONS[report.kind] || 'fa-comment-dots';
+        const item = document.createElement('div');
+        item.className = 'report-item';
+        item.title = report.ai_summary || report.title;
+        item.innerHTML = `
+            <i class="fas ${icon} report-kind-icon"></i>
+            <span class="report-title">${escapeHtml(report.title)}</span>
+            <span class="report-status report-status-${meta.cls}">${escapeHtml(meta.label)}</span>`;
+        el.reportList.appendChild(item);
+    }
+}
+
+async function submitReport() {
+    if (state.reportSending) return;
+    const form = el.reportForm;
+    const kind = form.querySelector('[name="kind"]').value;
+    const titleInput = form.querySelector('[name="title"]');
+    const descriptionInput = form.querySelector('[name="description"]');
+    const title = titleInput.value.trim();
+    const description = descriptionInput.value.trim();
+
+    if (title.length < 5) {
+        showNotification('Başlık en az 5 karakter olmalı.', 'error');
+        return;
+    }
+    if (description.length < 15) {
+        showNotification('Lütfen sorunu biraz daha ayrıntılı anlatın.', 'error');
+        return;
+    }
+
+    const submitBtn = form.querySelector('.aw-report-submit');
+    state.reportSending = true;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML =
+        '<span class="spinner-border spinner-border-sm me-1" style="width:0.8rem;height:0.8rem"></span>Gönderiliyor...';
+
+    try {
+        await createFeedbackReport({
+            kind,
+            title,
+            description,
+            pageUrl: window.location.href,
+            context: {
+                user_agent: navigator.userAgent,
+                screen: `${window.innerWidth}x${window.innerHeight}`,
+                portal: 'office',
+            },
+        });
+        titleInput.value = '';
+        descriptionInput.value = '';
+        showNotification('Bildiriminiz alındı. Teşekkürler!', 'success');
+        refreshMyReports();
+    } catch (error) {
+        showNotification(error.message || 'Bildirim gönderilemedi.', 'error');
+    } finally {
+        state.reportSending = false;
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Gönder';
+    }
+}
+
+function startNewChat({ keepPanel = false, keepView = false } = {}) {
     if (state.streaming) return;
     state.conversationId = null;
     sessionStorage.removeItem(STORAGE_CONVERSATION);
     renderEmptyState();
-    showChatView();
+    if (!(keepView && state.view !== 'chat')) {
+        showChatView();
+    }
     if (!keepPanel) el.input.focus();
 }
 

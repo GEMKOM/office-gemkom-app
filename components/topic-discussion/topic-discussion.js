@@ -49,8 +49,8 @@ function formatDateTime(dateString) {
 // Comment and topic bodies are user text: escaped, then formatted, by
 // utils/richText.js. This used to interpolate `content` straight into
 // innerHTML — never render comment text any other way.
-function formatContent(content, mentionedUsers = []) {
-    return renderRichText(content, { mentionedUsers });
+function formatContent(content, mentionedUsers = [], mentionedGroups = []) {
+    return renderRichText(content, { mentionedUsers, mentionedGroups });
 }
 
 function mapAttachment(att) {
@@ -143,7 +143,7 @@ function renderCommentHtml(comment, currentUsername) {
                         ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                     </div>
                     <div class="comment-content rich-text" style="color: #172b4d; margin-bottom: 8px;">
-                        ${formatContent(comment.content, comment.mentioned_users_data || [])}
+                        ${formatContent(comment.content, comment.mentioned_users_data || [], comment.mentioned_groups_data || [])}
                     </div>
                     ${comment.attachments_data?.length ? `<div class="mt-2" id="${attachmentId}"></div>` : ''}
                 </div>
@@ -190,7 +190,7 @@ export function initializeMentionFunctionality(textarea, mentionSuggestionsConta
             const initials = getUserInitials(fullName);
             const avatarColor = getAvatarColor(fullName);
             const badge = mention.type === 'group'
-                ? '<span class="badge bg-warning text-dark ms-2" style="font-size: 10px;">Grup</span>'
+                ? '<span class="status-badge status-blue ms-2" style="font-size: 10px;">Grup</span>'
                 : '';
             return `
                 <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}"
@@ -225,7 +225,7 @@ export function initializeMentionFunctionality(textarea, mentionSuggestionsConta
     textarea.addEventListener('input', (e) => {
         const text = e.target.value;
         const cursorPos = e.target.selectionStart;
-        const mentionMatch = text.substring(0, cursorPos).match(/@([\w-]*)$/);
+        const mentionMatch = text.substring(0, cursorPos).match(/@([\p{L}\p{N}_-]*)$/u);
         if (!mentionMatch) {
             hideMentionSuggestions();
             return;
@@ -615,7 +615,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
                 <div class="mb-3">
                     <h6 class="mb-2"><i class="fas fa-align-left me-2"></i>Konu İçeriği</h6>
                     <div class="p-3 bg-light rounded rich-text">
-                        ${formatContent(topic.content, topic.mentioned_users_data || [])}
+                        ${formatContent(topic.content, topic.mentioned_users_data || [], topic.mentioned_groups_data || [])}
                     </div>
                 </div>
             ` : ''}

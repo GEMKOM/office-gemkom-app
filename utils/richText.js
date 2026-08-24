@@ -29,6 +29,7 @@
  *   - madde / 1. madde   lists
  *   http://…             autolinked
  *   @kullanıcı           mention badge
+ *   @Grup Adı            group mention badge (click → member list)
  *
  * The two colours are deliberate: red and green are the only ones that carry
  * meaning on their own, and their markers stay legible when the text is read
@@ -36,6 +37,24 @@
  */
 
 import { escapeHtml } from './text.js';
+
+// The group-badge click handler is a DOM concern, so it is not loaded until a
+// group badge is actually rendered. One delegated listener serves every
+// rich-text surface, which is what keeps the two mention call sites (the
+// topic-discussion component and the project-tracking copy) from each needing
+// their own wiring.
+let groupBadgeInteractionRequested = false;
+
+function installGroupBadgeInteraction() {
+    if (groupBadgeInteractionRequested) return;
+    groupBadgeInteractionRequested = true;
+    import('./mentionGroupPopover.js')
+        .then((module) => module.installGroupMentionPopover())
+        .catch((error) => {
+            groupBadgeInteractionRequested = false;
+            console.error('Grup bahsetme açılır listesi yüklenemedi:', error);
+        });
+}
 
 /** Shown under comment inputs so the syntax is discoverable. Pre-escaped. */
 export const RICH_TEXT_HINT_HTML = escapeHtml(
@@ -47,6 +66,12 @@ export const RICH_TEXT_HINT_HTML = escapeHtml(
 const PARK_OPEN = '\uE000';
 const PARK_CLOSE = '\uE001';
 const PARK_PATTERN = new RegExp(`${PARK_OPEN}(\\d+)${PARK_CLOSE}`, 'g');
+
+/** Escape for use as a literal inside a RegExp. `-` is left alone: escaping it
+ *  outside a character class is a syntax error in unicode (`u`) mode. */
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 function buildUserMap(mentionedUsers) {
     const map = {};
@@ -106,6 +131,8 @@ function renderBlocks(text) {
  * @param {string} content            what the user typed (never HTML)
  * @param {object} [options]
  * @param {Array}  [options.mentionedUsers] resolves @username to a full name
+ * @param {Array}  [options.mentionedGroups] the groups the server found in this
+ *        text ([{id, name, slug}]); each becomes one clickable group badge
  * @returns {string} HTML safe to assign to innerHTML
  */
 export function renderRichText(content, options = {}) {
@@ -142,6 +169,33 @@ export function renderRichText(content, options = {}) {
         // decorative run like "*** dikkat" stays exactly as typed.
         .replace(/(^|[\s(])\*(?=[^\s*])([^*\n]*?[^\s*])\*/g, '$1<em>$2</em>')
         .replace(/(^|[\s(])_(?=[^\s_])([^_\n]*?[^\s_])_/g, '$1<em>$2</em>');
+
+    // Group mentions, before the username scan. A group name carries spaces and
+    // Turkish letters ("Satın Alma"), so no token scan can find one — `\w` is
+    // ASCII here and would badge "@Sat" and leave "ın Alma" as loose text, which
+    // is exactly the bug this pass fixes. The names come from the server, which
+    // resolved the same text into the notification audience, so the badge and
+    // who actually got notified cannot drift apart. Longest name first, so a
+    // group whose name prefixes another cannot cut the longer one short.
+    const groups = (options.mentionedGroups || []).filter((group) => group && group.name);
+    if (groups.length) {
+        installGroupBadgeInteraction();
+    }
+    for (const group of [...groups].sort((a, b) => b.name.length - a.name.length)) {
+        // `out` is already escaped, so the needle has to be escaped the same way.
+        const name = escapeRegExp(escapeHtml(group.name));
+        const slug = group.slug ? escapeRegExp(escapeHtml(group.slug)) : '';
+        const forms = [`\\[group:\\s*(?:${name}${slug ? `|${slug}` : ''})\\s*\\]`, name];
+        if (slug) forms.push(slug);
+        const pattern = new RegExp(`@(?:${forms.join('|')})(?![\\p{L}\\p{N}_])`, 'giu');
+        out = out.replace(pattern, () => park(
+            `<span class="mention-badge mention-badge-group" role="button" tabindex="0"`
+            + ` data-group-id="${escapeHtml(group.id)}"`
+            + ` data-group-name="${escapeHtml(group.name)}"`
+            + ` title="Grup — üyeleri görmek için tıklayın">`
+            + `<i class="fas fa-users" aria-hidden="true"></i> @${escapeHtml(group.name)}</span>`
+        ));
+    }
 
     // Mentions. The display name comes from API data, not from the comment, so
     // it needs escaping of its own.
