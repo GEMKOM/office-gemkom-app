@@ -100,6 +100,23 @@ export async function updateCncPart(partId, partData) {
 }
 
 /**
+ * Pull a human-readable message out of a DRF error body, so callers can show
+ * the backend's own reason (e.g. "bu parça bir plana bağlı") instead of a
+ * generic failure text. Returns null when the body carries nothing usable.
+ * @param {any} errorData - Parsed response body
+ * @returns {string|null} Error message
+ */
+function extractErrorDetail(errorData) {
+    if (!errorData || typeof errorData !== 'object') return null;
+    if (typeof errorData.detail === 'string' && errorData.detail.trim()) return errorData.detail.trim();
+    if (typeof errorData.error === 'string' && errorData.error.trim()) return errorData.error.trim();
+    if (Array.isArray(errorData.non_field_errors) && errorData.non_field_errors.length) {
+        return errorData.non_field_errors.join(' ');
+    }
+    return null;
+}
+
+/**
  * Delete a CNC part
  * @param {number} partId - The CNC part ID
  * @returns {Promise<boolean>} Success status
@@ -111,7 +128,8 @@ export async function deleteCncPart(partId) {
         });
         
         if (!response.ok) {
-            throw new Error(`Failed to delete CNC part: ${response.statusText}`);
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(extractErrorDetail(errorData) || `HTTP ${response.status}`);
         }
         
         return true;
