@@ -258,6 +258,11 @@ function bindMeetingControls() {
                 else if (action === 'exit') exitMeeting();
                 return;
             }
+            // A press on a scroll list's scrollbar (thumb or track) targets
+            // the container itself, past its content box — that is scrolling,
+            // not a drill-down request.
+            if (e.target.classList.contains('pp-scroll')
+                && e.offsetX > e.target.clientWidth) return;
             // Section drill-down: an in-slide modal — the meeting never leaves
             // the screen.
             const trigger = e.target.closest('[data-modal]');
@@ -286,6 +291,12 @@ function bindMeetingControls() {
     // modal's own scroll area.
     window.addEventListener('wheel', (e) => {
         if (currentMode !== 'meeting' || meetingModalOpen) return;
+        // A panel list that actually overflows owns the wheel while the
+        // pointer is over it — otherwise the deck turns instead of scrolling.
+        // Checked per event (not per render) because overflow depends on the
+        // slide's own row count.
+        const scroller = e.target?.closest?.('.pp-scroll');
+        if (scroller && scroller.scrollHeight > scroller.clientHeight) return;
         const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
         if (Math.abs(delta) < 30) return;
         const now = Date.now();
@@ -1302,12 +1313,13 @@ function meetingHeroHtml(item) {
 }
 
 // Content caps shrink one step on short screens (laptop 768p) so every panel
-// stays inside its clipped cell. The finans medallion's notch eats a line
-// of the welding panel's bottom-right corner, so resources cap one lower
-// than v2 — the "+N kaynak" note carries the overflow.
+// stays inside its clipped cell. Welding is deliberately NOT here: its
+// resource list scrolls instead (.pp-scroll). A row cap made the same slide
+// show different welders to different people — whoever sat at a 768p laptop,
+// or ran browser/display zoom, silently lost the tail of the list.
 function meetingCaps() {
     const short = window.matchMedia('(max-height: 860px)').matches;
-    return { resources: short ? 2 : 3, files: short ? 3 : 4, ncrs: 3 };
+    return { files: short ? 3 : 4, ncrs: 3 };
 }
 
 function ensureBrief(jobNo) {
@@ -1537,10 +1549,8 @@ function machiningPanelHtml(machining, jobNo) {
 
 function weldingPanelHtml(welding) {
     if (!welding) return '';
-    const caps = meetingCaps();
     const resources = welding.resources || [];
-    const shown = resources.slice(0, caps.resources);
-    const rows = shown.map((r) => {
+    const rows = resources.map((r) => {
         const badge = r.kind === 'subcontractor'
             ? '<span class="status-badge status-purple">Taşeron</span>'
             : '<span class="status-badge status-blue">Dahili</span>';
@@ -1565,8 +1575,8 @@ function weldingPanelHtml(welding) {
     const bigLabel = usingTaskProgress ? 'görev ilerlemesi' : 'ağırlıklı ilerleme';
     const kgNote = welding.allocated_kg_total
         ? `<span class="pp-panel-sub text-muted">${fmtInt(welding.allocated_kg_total)} kg tahsis</span>` : '';
-    const moreNote = resources.length > shown.length
-        ? `<span class="pp-panel-sub text-muted">+${fmtInt(resources.length - shown.length)} kaynak</span>` : '';
+    const countNote = resources.length
+        ? `<span class="pp-panel-sub text-muted">${fmtInt(resources.length)} kaynak</span>` : '';
 
     const hours = welding.hours || {};
     const hourParts = [];
@@ -1592,11 +1602,11 @@ function weldingPanelHtml(welding) {
         <div class="pp-panel-hero">
             <span class="pp-panel-big">${big === null || big === undefined ? '—' : `%${fmtInt(big)}`}</span>
             <span class="pp-panel-big-label">${bigLabel}</span>
-            ${kgNote}${moreNote}
+            ${kgNote}${countNote}
         </div>
-        ${rows || (usingTaskProgress || big === null
-            ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}
-        ${waitLine}${hoursStrip}`;
+        <div class="pp-scroll pp-res-scroll">${rows || (usingTaskProgress || big === null
+            ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}</div>
+        <div class="pp-welding-foot">${waitLine}${hoursStrip}</div>`;
     return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-area-welding', 'welding');
 }
 

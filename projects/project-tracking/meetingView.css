@@ -660,6 +660,20 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     margin-right: calc(var(--medal-notch) + 4px);
 }
 
+/* The medallion masks a quarter-circle out of this panel's bottom-right
+   corner, so the scrolling resource list must END above the arc — rows may
+   not travel through a clipped corner. This footer reserves that band:
+   its height + the card's bottom padding (14px, 9px on short screens) covers
+   --medal-notch (82px / 66px). Bottom-aligned so a short footer still hugs
+   the panel's edge. */
+.pp-meeting-grid .pp-area-welding .pp-welding-foot {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    min-height: calc(var(--medal-notch) - 9px);
+}
+
 .pp-meeting-grid .pp-area-machining .card-body {
     padding-bottom: 14px;
 }
@@ -897,6 +911,37 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
 .pp-num-red { color: #dc2626; }
 .pp-num-green { color: #059669; }
 .pp-num-orange { color: #ea580c; }
+
+/* Scrolling list viewport inside a panel: takes the slack the panel's fixed
+   blocks leave, and scrolls rather than dropping rows. Scroll chaining is
+   contained because the deck itself must not move; meetingView.js stands the
+   wheel-to-turn-slide gesture down while the pointer is over one of these. */
+.pp-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: #c8cfd9 transparent;
+}
+
+.pp-scroll::-webkit-scrollbar {
+    width: 6px;
+}
+
+.pp-scroll::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.pp-scroll::-webkit-scrollbar-thumb {
+    background: #c8cfd9;
+    border-radius: 3px;
+}
+
+/* Rows sit slightly clear of the scrollbar gutter so the % never touches it */
+.pp-res-scroll .pp-line {
+    padding-right: 2px;
+}
 
 /* Generic list line: content left, status right — single line, always */
 .pp-line {
