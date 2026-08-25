@@ -527,6 +527,33 @@ async function openPlanModal(item) {
         return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
     };
 
+    // Indented rows carry their parent visually, so the row label drops the
+    // "Üretim - " prefix `label()` builds for the driver box and the counts.
+    const rowLabel = (task) => {
+        if (task.parent !== null) return task.title || '';
+        const node = nodeByJob.get(task.job_no);
+        const hasCustomTitle = task.title && node && task.title !== node.title
+            && task.title !== task.department_display;
+        return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
+    };
+
+    // A parent's entered duration is split down to its children by weight, so
+    // the two figures describe the same work. When they disagree the backend
+    // flags the highest task where it shows, and we say which entries collide
+    // — the planner, not the reader, is the one who can fix it.
+    const conflictSentence = (t) => {
+        const c = t.schedule.duration_conflict;
+        if (!c) return '';
+        const source = byId.get(c.source_task_id);
+        const sourceName = source ? label(source) : (c.source_title || 'üst görev');
+        const where = c.actual_source === 'own'
+            ? `bu göreve ${formatWd(c.actual_wd)} iş günü girili`
+            : `alt görevlerinde toplam ${formatWd(c.actual_wd)} iş günü girili`;
+        return `Süre tutarsızlığı: "${sourceName}" görevinde ${formatWd(c.source_wd)} iş günü girili`
+            + ` ve bu görevin ağırlık payı %${formatWd(c.share_pct)}, yani ~${formatWd(c.implied_wd)} iş günü`
+            + ` beklenir — ama ${where}.`;
+    };
+
     // Plain-language answer to "why this date?" — one short sentence per task,
     // so the column reads without a legend.
     const coreBasisSentence = (t) => {
@@ -651,7 +678,7 @@ async function openPlanModal(item) {
             </div>`;
     };
 
-    const taskRow = (t) => {
+    const taskRow = (t, depth = 0) => {
         const s = t.schedule;
         const completed = t.status === 'completed';
         // "Plansız" on a finished row reads as a problem — a completed task
@@ -667,15 +694,19 @@ async function openPlanModal(item) {
                 : (variance < 0 ? ` <span class="pp-num-green">${formatWd(variance)} g erken</span>` : ''));
         const materialWaitHtml = s.material_wait ? ` ${materialWaitBadgeHtml(s.material_wait)}` : '';
         const driver = s.drives_completion;
+        const conflict = conflictSentence(t);
+        const warnIcon = conflict
+            ? `<i class="fas fa-triangle-exclamation pp-warn-flag" title="${escapeHtml(conflict)}"></i> ` : '';
         return `
             <tr${driver ? ' class="pp-modal-driver"' : ''}>
-                <td class="pp-td-main" title="${escapeHtml(label(t))}">${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${escapeHtml(label(t))}</td>
+                <td class="pp-td-main" style="padding-left: ${8 + depth * 16}px" title="${escapeHtml(label(t))}">${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${warnIcon}${escapeHtml(rowLabel(t))}</td>
                 <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
                 <td>${progressCell(t)}</td>
                 <td class="pp-td-date">${startCell(t)}</td>
                 <td>${fmtShortDate(t.target_completion_date)}</td>
                 <td>${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
-                <td class="pp-td-basis">${escapeHtml(basisSentence(t))}</td>
+                <td class="pp-td-basis">${escapeHtml(basisSentence(t))}${conflict
+                    ? `<div class="pp-td-conflict">${escapeHtml(conflict)}</div>` : ''}</td>
             </tr>`;
     };
 
@@ -694,11 +725,37 @@ async function openPlanModal(item) {
     // Subtrees group by job order in tree order (the endpoint's nodes array
     // is DFS), tasks in their original plan order within each group — a lone
     // job order renders as a flat list with no group chrome.
+    // Parents used to be hidden here, on the grounds that their row repeated
+    // the children's story. It hid exactly the rows the push arrows point AT:
+    // "Boya · Önce şu görev bitmeli: Üretim - Kaynaklı İmalat" named a task
+    // that was nowhere in the table, so its date looked like it came from
+    // nothing. The whole tree renders now, indented by depth.
     const tasksByJob = new Map();
-    for (const t of visibleOf(planData.tasks)) {
+    for (const t of planData.tasks) {
         if (!tasksByJob.has(t.job_no)) tasksByJob.set(t.job_no, []);
         tasksByJob.get(t.job_no).push(t);
     }
+    // Depth-first within each job, children under their parent, plan order
+    // preserved among siblings. Anything whose parent sits outside the group
+    // (shouldn't happen) is appended rather than dropped.
+    const asTree = (list) => {
+        const ids = new Set(list.map(t => t.id));
+        const byParent = new Map();
+        for (const t of list) {
+            const key = (t.parent !== null && ids.has(t.parent)) ? t.parent : '_';
+            if (!byParent.has(key)) byParent.set(key, []);
+            byParent.get(key).push(t);
+        }
+        const out = [];
+        const walk = (key, depth) => {
+            for (const t of byParent.get(key) || []) {
+                out.push({ task: t, depth });
+                walk(t.id, depth + 1);
+            }
+        };
+        walk('_', 0);
+        return out;
+    };
     const groups = (planData.nodes || [])
         .filter(n => (tasksByJob.get(n.job_no) || []).length)
         .map(n => ({ node: n, tasks: tasksByJob.get(n.job_no) }));
@@ -725,12 +782,21 @@ async function openPlanModal(item) {
                     </td>
                 </tr>`);
         }
-        if (!collapse) rows.push(...tasks.map(taskRow));
+        if (!collapse) rows.push(...asTree(tasks).map(({ task, depth }) => taskRow(task, depth)));
     }
 
     // The story, top-down: verdict sentence → the three dates → the task that
     // decides the end date → task counts → the per-task table.
-    const forecast = item.forecast || {};
+    //
+    // Read the forecast from the PLAN, not from `item`. The slide item comes
+    // from the production-plan OVERVIEW, which is cached ~15 minutes server
+    // side; the plan below is recomputed per request. Sourcing the header from
+    // `item` let this modal contradict itself — the Sapma figure quoting a
+    // stale snapshot while the driver box and the table, built from `planData`
+    // two lines down, quoted the current one. Same shape, same values when
+    // both are fresh (verified across phased and unphased roots), so the only
+    // thing that changes is which of the two can be out of date.
+    const forecast = planData.job_order?.forecast || item.forecast || {};
     const vMeta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
     const phased = !!(forecast.phases && forecast.phases.length);
     let verdictSentence = {
@@ -765,6 +831,19 @@ async function openPlanModal(item) {
                     ${fmtShortDate(driverTask.schedule.projected_end_date)} — iş de o gün tamamlanır.
                     ${escapeHtml(basisSentence(driverTask))}</div>
             </div>
+        </div>` : '';
+
+    // Every date under a contradicted duration rests on one of two entries
+    // that cannot both be right, so the count belongs above the table rather
+    // than only in the rows.
+    const conflicted = planData.tasks.filter(t => t.schedule.duration_conflict);
+    const conflictBanner = conflicted.length ? `
+        <div class="pp-plan-warn">
+            <i class="fas fa-triangle-exclamation"></i>
+            <div><strong>${conflicted.length} görevde süre tutarsızlığı var.</strong>
+                Bir üst görevin süresi, alt görevlere ağırlık payına göre bölünür;
+                girilen süreler bu payla çelişiyor. Aşağıdaki tarihlerden bir kısmı
+                hatalı süreye dayanıyor olabilir.</div>
         </div>` : '';
 
     const counts = summarizePlanTasks(planData.tasks);
@@ -802,6 +881,7 @@ async function openPlanModal(item) {
         </div>`}
         ${driverBox}
         ${countsHtml}
+        ${conflictBanner}
         ${multiNode ? '<div class="pp-modal-note">Görevler alt iş emirlerine göre gruplu.</div>' : ''}
         ${modalTableHtml(['Görev', 'Durum', 'İlerleme', 'Başlangıç', 'Hedef', 'Öngörülen Bitiş', 'Neden bu tarih?'], rows)}`;
 }
