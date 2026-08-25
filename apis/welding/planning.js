@@ -29,7 +29,7 @@ async function parseError(resp, fallbackMessage) {
  *   welding_tasks: [{welding_task_id, job_no, job_order_title, customer_name,
  *                    total_weight_kg, allocated_total, remaining_weight_kg,
  *                    over_allocated}],
- *   job_info: {job_no: {material_supply, machining[], cutting[], painting}},
+ *   job_info: {job_no: {manufacturing, material_supply, machining[], cutting[], painting}},
  *   holidays: [{date, is_half_day}],
  *   warnings: [{welding_task_id, job_no, allocated_total, total_weight_kg}],
  * }
@@ -55,6 +55,8 @@ export async function getWeldingPlanningBoard(includeCompleted = false) {
  *   deleted_blocks: [{assignment_type, assignment_id}],
  *   painting_tasks: [{task_id, status?, progress?, duration_wd?,
  *                     start_date?, end_date?}],
+ *   manufacturing_tasks: [{task_id, status?, duration_wd?,
+ *                          start_date?, end_date?}],
  * }
  * Returns {saved, board}.
  */

@@ -765,26 +765,58 @@ export function attachRichTextEditor(textarea, options = {}) {
         surface.dataset.placeholder = textarea.getAttribute('placeholder');
     }
     if (textarea.rows) surface.style.minHeight = `${Math.max(3, textarea.rows) * 1.5}em`;
-    surface.innerHTML = renderRichText(textarea.value, { mentionedUsers, mentionedGroups });
-    surface.querySelectorAll('.mention-badge').forEach((badge) => {
-        badge.setAttribute('contenteditable', 'false');
-    });
+
+    const renderSurface = () => {
+        surface.innerHTML = renderRichText(textarea.value, { mentionedUsers, mentionedGroups });
+        surface.querySelectorAll('.mention-badge').forEach((badge) => {
+            badge.setAttribute('contenteditable', 'false');
+        });
+        host.classList.toggle('rte-empty', !textarea.value.trim());
+    };
+    renderSurface();
     host.appendChild(surface);
 
     textarea.hidden = true;
     textarea.setAttribute('aria-hidden', 'true');
     host.appendChild(textarea);
 
+    // True while the editor is the one writing, so the surface is not rebuilt
+    // from underneath the caret on every keystroke.
+    let writingBack = false;
+
     const syncValue = () => {
         const markdown = serializeToMarkdown(surface);
         if (textarea.value !== markdown) {
-            textarea.value = markdown;
+            writingBack = true;
+            try {
+                textarea.value = markdown;
+            } finally {
+                writingBack = false;
+            }
             // EditModal validates on the textarea's own input event.
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
         }
         host.classList.toggle('rte-empty', markdown.trim() === '');
     };
     syncValue();
+
+    // Callers reset a comment box with `textarea.value = ''` after posting, and
+    // EditModal.setFieldValue writes to it the same way. Those writes have to
+    // reach the surface too, or the box the user is looking at keeps the text
+    // that was just sent. Intercepting the property keeps every existing call
+    // site working unchanged — which is the promise this editor makes.
+    const nativeValue = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+    Object.defineProperty(textarea, 'value', {
+        configurable: true,
+        enumerable: true,
+        get() {
+            return nativeValue.get.call(this);
+        },
+        set(next) {
+            nativeValue.set.call(this, next);
+            if (!writingBack) renderSurface();
+        },
+    });
 
     let mentionApi = null;
     if (mentions) {

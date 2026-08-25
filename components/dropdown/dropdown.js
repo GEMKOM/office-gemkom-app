@@ -598,10 +598,26 @@ export class ModernDropdown {
         }));
     }
     
+    // A label may be markup (see `searchText`), and the collapsed field is
+    // plain text — so prefer the item's own `selectedText`, and strip tags
+    // rather than print them if a caller supplies neither.
+    plainLabel(value) {
+        const item = (this.allItems || this.items || []).find(
+            it => String(it.value) === String(value));
+        if (!item) return null;
+        if (item.selectedText) return item.selectedText;
+        const text = String(item.text ?? '');
+        if (text.indexOf('<') === -1) return text;
+        const tmp = document.createElement('div');
+        tmp.innerHTML = text;
+        return tmp.textContent.replace(/\s+/g, ' ').trim();
+    }
+
     updateDisplay(text) {
         const selectedText = this.selectedDisplay.querySelector('.selected-text');
         if (selectedText) {
-            selectedText.textContent = text || this.options.placeholder;
+            const plain = this.plainLabel(this.selectedValue);
+            selectedText.textContent = plain || text || this.options.placeholder;
         }
         
         // Update selected state in items
@@ -627,7 +643,8 @@ export class ModernDropdown {
             selectedTextElement.textContent = this.options.placeholder;
         } else if (this.selectedValues.length === 1) {
             const item = this.items.find(i => i.value === this.selectedValues[0]);
-            selectedTextElement.textContent = item ? item.text : this.options.placeholder;
+            selectedTextElement.textContent = (item && this.plainLabel(item.value))
+                || this.options.placeholder;
         } else {
             selectedTextElement.textContent = `${this.selectedValues.length} seçenek`;
         }
@@ -679,7 +696,10 @@ export class ModernDropdown {
             this.items = source;
         } else {
             this.items = source.filter((it) => {
-                const hay = String(it?.text ?? it?.label ?? it?.value ?? '').toLowerCase();
+                // searchText lets a caller render a rich label without the
+                // markup polluting what the user is matching against.
+                const hay = String(
+                    it?.searchText ?? it?.text ?? it?.label ?? it?.value ?? '').toLowerCase();
                 return hay.includes(term);
             });
         }

@@ -73,7 +73,8 @@ function initStatisticsCards() {
         cards: [
             { title: 'Toplam Taşeron', value: '0', icon: 'fas fa-building', color: 'primary', id: 'overview-total-subcontractors' },
             { title: 'Toplam Sözleşme Tutarı', value: '0', icon: 'fas fa-file-contract', color: 'success', id: 'overview-total-contract' },
-            { title: 'Bekleyen Hakediş (Sonraki Fatura)', value: '0', icon: 'fas fa-hourglass-half', color: 'warning', id: 'overview-next-bill' }
+            { title: 'Bekleyen Hakediş (Sonraki Fatura)', value: '0', icon: 'fas fa-hourglass-half', color: 'warning', id: 'overview-next-bill' },
+            { title: 'Ort. Toplam Çalışan', value: '0', icon: 'fas fa-users', color: 'info', id: 'overview-avg-employees' }
         ],
         compact: true,
         animation: true
@@ -100,11 +101,24 @@ function initializeFiltersComponent() {
 
     overviewFilters.addDropdownFilter({
         id: 'is-active-filter',
-        label: 'Durum',
+        label: 'Taşeron Durumu',
         options: [
             { value: '', label: 'Tümü' },
             { value: 'true', label: 'Aktif' },
             { value: 'false', label: 'Pasif' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 3
+    });
+
+    overviewFilters.addDropdownFilter({
+        id: 'job-status-filter',
+        label: 'İş Emri Durumu',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'active', label: 'Aktif' },
+            { value: 'completed', label: 'Tamamlandı' },
+            { value: 'active,completed', label: 'Aktif + Tamamlandı' }
         ],
         placeholder: 'Tümü',
         colSize: 3
@@ -129,6 +143,19 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     const display = row.subcontractor_short_name || value;
                     return `<strong>${display || '-'}</strong>`;
+                }
+            },
+            {
+                field: 'avg_employee_count',
+                label: 'Ort. Çalışan',
+                sortable: true,
+                type: 'number',
+                formatter: (value, row) => {
+                    if (value === null || value === undefined) {
+                        return '<span class="text-muted" title="Hakedişlerde çalışan sayısı girilmemiş">-</span>';
+                    }
+                    const months = row.employee_count_months || 0;
+                    return `${formatNumber(value)} <small class="text-muted">(${months} hakediş)</small>`;
                 }
             },
             {
@@ -261,19 +288,6 @@ function initializeTableComponent() {
                     if (!value) return '-';
                     return formatAmount(value, row.currency || 'TRY');
                 }
-            },
-            {
-                field: 'job_price_per_kg',
-                label: 'Birim Fiyat (₺/kg)',
-                sortable: true,
-                type: 'number',
-                formatter: (value, row) => {
-                    const total = row.job_total_cost ?? row.job_next_bill_cost ?? row.job_total_billed_cost;
-                    const kg = row.job_allocated_weight_kg;
-                    const pricePerKg = calculatePricePerKg(total, kg);
-                    if (pricePerKg === null) return '-';
-                    return `${formatNumber(pricePerKg)} ${row.currency || 'TRY'}/kg`;
-                }
             }
         ],
         data: [],
@@ -301,12 +315,19 @@ function initializeTableComponent() {
             const nextBill = first.next_bill_cost || 0;
             const remaining = first.unbilled_remaining_cost || 0;
             const currency = first.default_currency || 'TRY';
+            const avgEmployees = first.avg_employee_count;
+            const employeeMonths = first.employee_count_months || 0;
 
             return `
                 <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center w-100">
                     <div class="mb-2 mb-md-0">
                         <strong>${groupValue || '-'}</strong>
                         ${first.subcontractor_short_name ? `<span class="text-muted"> (${first.subcontractor_short_name})</span>` : ''}
+                        <div class="small text-muted mt-1">
+                            Ortalama Çalışan:
+                            <span class="fw-semibold">${avgEmployees === null || avgEmployees === undefined ? '-' : formatNumber(avgEmployees)}</span>
+                            ${employeeMonths ? `<span class="text-muted"> (${employeeMonths} hakediş ortalaması)</span>` : ''}
+                        </div>
                     </div>
                     <div class="text-md-end">
                         <div class="small text-muted">Toplam Sözleşme</div>
@@ -342,6 +363,9 @@ async function loadOverviewData() {
         if (filterValues['is-active-filter']) {
             filters.is_active = filterValues['is-active-filter'] === 'true';
         }
+        if (filterValues['job-status-filter']) {
+            filters.job_status = filterValues['job-status-filter'];
+        }
 
         // Default ordering by name
         filters.ordering = 'name';
@@ -369,7 +393,8 @@ async function loadOverviewData() {
             overviewStats.updateValues({
                 0: '0',
                 1: '0',
-                2: '0'
+                2: '0',
+                3: '0'
             });
         }
     } finally {
@@ -387,18 +412,25 @@ function updateStatisticsCards() {
 
     let totalContract = 0;
     let totalNextBill = 0;
+    // Sum of per-subcontractor averages = average headcount working for us
+    // across all subcontractors. Subcontractors with no employee_count on any
+    // statement contribute nothing rather than a zero.
+    let totalAvgEmployees = 0;
 
     overviewData.forEach(item => {
         const contractVal = parseFloat(item.total_cost || 0);
         const nextBillVal = parseFloat(item.next_bill_cost || 0);
+        const avgEmployeeVal = parseFloat(item.avg_employee_count);
         if (!isNaN(contractVal)) totalContract += contractVal;
         if (!isNaN(nextBillVal)) totalNextBill += nextBillVal;
+        if (!isNaN(avgEmployeeVal)) totalAvgEmployees += avgEmployeeVal;
     });
 
     overviewStats.updateValues({
         0: totalSubcontractors.toString(),
         1: formatAmount(totalContract, 'TRY'),
-        2: formatAmount(totalNextBill, 'TRY')
+        2: formatAmount(totalNextBill, 'TRY'),
+        3: formatNumber(totalAvgEmployees)
     });
 }
 
@@ -423,6 +455,8 @@ function buildTableRows(subcontractors) {
                 next_bill_cost: sub.next_bill_cost,
                 unbilled_remaining_cost: sub.unbilled_remaining_cost,
                 total_cost: sub.total_cost,
+                avg_employee_count: sub.avg_employee_count ?? null,
+                employee_count_months: sub.employee_count_months || 0,
                 job_no: null,
                 job_title: null,
                 customer_name: null,
@@ -455,6 +489,8 @@ function buildTableRows(subcontractors) {
                 next_bill_cost: sub.next_bill_cost,
                 unbilled_remaining_cost: sub.unbilled_remaining_cost,
                 total_cost: sub.total_cost,
+                avg_employee_count: sub.avg_employee_count ?? null,
+                employee_count_months: sub.employee_count_months || 0,
                 job_no: job.job_no,
                 job_title: job.job_title,
                 customer_name: job.customer_name || null,
