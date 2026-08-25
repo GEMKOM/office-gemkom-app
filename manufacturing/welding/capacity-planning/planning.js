@@ -1012,7 +1012,14 @@ function onCellEdit(row, field, newValue) {
         const status = String(newValue);
         if (!STATUS_META[status]) throw new Error('Geçersiz durum.');
         target.status = status;
-        if (status === 'completed') target.progress = 100;
+        if (status === 'completed') {
+            target.progress = 100;
+            row.progress = 100;
+            // Painting payload omits progress unless this field is dirty.
+            // Completing is itself a progress write (100); without marking
+            // it, bulk-save would persist "completed" with the old percent.
+            if (row.kind === 'painting') markPaintingDirty(row.job_no, 'progress');
+        }
         row.status = status;
     } else if (field === 'note') {
         if (row.kind === 'stage') {
@@ -1741,7 +1748,12 @@ function buildPayload() {
             item.start_date = p.start_date;
             item.end_date = p.end_date;
         }
-        if (!p.has_subtasks && fields.has('progress')) item.progress = p.progress;
+        // Leaf painting progress is omitted unless edited — except
+        // completed, which always means 100 and is set as a side effect
+        // of the status change (see onCellEdit).
+        if (!p.has_subtasks && (fields.has('progress') || p.status === 'completed')) {
+            item.progress = p.progress;
+        }
         payload.painting_tasks.push(item);
     });
 
