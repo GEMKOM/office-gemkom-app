@@ -40,6 +40,9 @@ const STATUS_META = {
 const EDITABLE_STATUS_OPTIONS = ['pending', 'in_progress', 'completed', 'on_hold', 'cancelled']
     .map(s => ({ value: s, label: STATUS_META[s].label }));
 
+// Editing any one of these reconciles all three, so they travel together.
+const SCHEDULE_FIELDS = ['start_date', 'end_date', 'duration_wd'];
+
 // ---- state ---------------------------------------------------------------
 
 let board = null;                 // last raw server board
@@ -52,7 +55,7 @@ let paintingByJob = {};           // job_no -> mutable painting VM (shared acros
 let snapBlocks = new Map();       // block.key -> {allocated_weight_kg, notes}
 let snapPainting = new Map();     // job_no -> JSON snapshot
 let dirtyBlocks = new Set();      // block.key
-let dirtyPainting = new Set();    // job_no
+let dirtyPainting = new Map();    // job_no -> Set of edited field names
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
 
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
@@ -210,6 +213,13 @@ function hydrate(boardData) {
                 forecast_date: p.forecast_date || null,
                 forecast_kind: p.forecast_kind || null,
                 has_subtasks: !!p.has_subtasks,
+                // Boya rarely carries a plan of its own: the date is usually
+                // the first real progress on it and the duration its weight
+                // share of the manufacturing task. Both must READ as derived,
+                // and must not be written back as if they had been entered.
+                start_is_actual: !!p.start_is_actual,
+                end_is_actual: !!p.end_is_actual,
+                duration_is_derived: !!p.duration_is_derived,
             };
             snapPainting.set(jobNo, JSON.stringify(paintingByJob[jobNo]));
         }
@@ -232,7 +242,7 @@ function hydrate(boardData) {
     }));
 
     dirtyBlocks = new Set();
-    dirtyPainting = new Set();
+    dirtyPainting = new Map();
     deletedBlocks = [];
 
     if (!activeResourceKey || !resources.some(r => resourceKeyOf(r) === activeResourceKey)) {
@@ -258,8 +268,14 @@ function markBlockDirty(blockRef) {
     updateSaveState();
 }
 
-function markPaintingDirty(jobNo) {
-    dirtyPainting.add(jobNo);
+// Painting tracks WHICH fields were edited, not just that the row is dirty:
+// its start/duration are usually derived values the server sent for display,
+// and sending them back on an unrelated status edit would freeze a derived
+// number into the task as if it were a plan.
+function markPaintingDirty(jobNo, field) {
+    const fields = dirtyPainting.get(jobNo) || new Set();
+    if (field) fields.add(field);
+    dirtyPainting.set(jobNo, fields);
     updateSaveState();
 }
 
@@ -399,6 +415,14 @@ function dateCell(value, isActual) {
     return `<span class="date-actual" title="Gerçekleşen tarih (planlanmış tarih girilmemiş)">${fmtDate(value)}</span>`;
 }
 
+// A duration the server derived (weight share of the parent's planned span)
+// is not a plan anyone entered — mark it so it does not read as one.
+function durationCell(value, isDerived) {
+    if (value == null) return '<span class="text-muted">—</span>';
+    if (!isDerived) return fmtDuration(value);
+    return `<span class="duration-derived" title="Ağırlık payından hesaplandı — girilmiş bir süre değil">≈${fmtDuration(value)}</span>`;
+}
+
 // Actual completion date for finished rows, projected finish for open ones.
 function forecastCell(row) {
     if (!row.forecast_date) return '<span class="text-muted">—</span>';
@@ -436,45 +460,16 @@ function buildSheetRows(res) {
         const groupKey = `${String(idx).padStart(3, '0')}|${b.key}`;
         const info = jobInfo[b.job_no] || {};
         const painting = paintingByJob[b.job_no] || null;
+        const base = { blockKey: groupKey, blockRef: b.key };
 
-        const pushInfo = (item, label) => {
-            if (!item) return;
-            rows.push({
-                key: `${b.key}-info-${item.task_id}`,
-                blockKey: groupKey,
-                blockRef: b.key,
-                kind: 'info',
-                title: label,
-                start_date: item.start_date,
-                end_date: item.end_date,
-                duration_wd: item.duration_wd,
-                weight: item.weight ?? null,
-                progress: item.progress,
-                status: item.status,
-                // These tasks rarely carry planned dates; the backend falls
-                // back to the real started_at/completed_at and flags it.
-                start_is_actual: !!item.start_is_actual,
-                end_is_actual: !!item.end_is_actual,
-                completed_at: item.completed_at || null,
-                forecast_date: item.forecast_date || null,
-                forecast_kind: item.forecast_kind || null,
-                note: '',
-            });
-        };
-
-        const machiningRows = info.machining || [];
-        const cuttingRows = info.cutting || [];
-        pushInfo(info.material_supply, 'Malzeme Tedarik');
-        machiningRows.forEach(m => pushInfo(m, `Talaşlı İmalat${machiningRows.length > 1 ? ` — ${m.title}` : ''}`));
-        cuttingRows.forEach(c => pushInfo(c, `Kesim${cuttingRows.length > 1 ? ` — ${c.title}` : ''}`));
-
+        // --- the block's OWN work: the only rows that belong to this
+        // assignment, and the only ones the header's rollup summarises.
         const visibleStages = b.stages.filter(s => !s.deleted);
         if (visibleStages.length) {
             visibleStages.forEach(s => {
                 rows.push({
+                    ...base,
                     key: `${b.key}-stage-${s.cid}`,
-                    blockKey: groupKey,
-                    blockRef: b.key,
                     kind: 'stage',
                     stageCid: s.cid,
                     title: s.title,
@@ -493,9 +488,8 @@ function buildSheetRows(res) {
             });
         } else {
             rows.push({
+                ...base,
                 key: `${b.key}-subtask`,
-                blockKey: groupKey,
-                blockRef: b.key,
                 kind: 'subtask',
                 title: 'Kaynak İşi (aşamasız)',
                 start_date: b.subtask.start_date,
@@ -511,25 +505,77 @@ function buildSheetRows(res) {
             });
         }
 
+        // --- everything below is the JOB ORDER's context, not this block's.
+        // Without the band they read as children of the welding assignment,
+        // and since one of them is itself a welding task the whole group
+        // looked like a single hierarchy. They also overlap in time, so the
+        // header's day count is not their sum and never was.
+        const machiningRows = info.machining || [];
+        const cuttingRows = info.cutting || [];
+        const contextRows = [];
+
+        const pushInfo = (item, label) => {
+            if (!item) return;
+            contextRows.push({
+                ...base,
+                key: `${b.key}-info-${item.task_id}`,
+                kind: 'info',
+                title: label,
+                start_date: item.start_date,
+                end_date: item.end_date,
+                duration_wd: item.duration_wd,
+                weight: item.weight ?? null,
+                progress: item.progress,
+                status: item.status,
+                // These tasks rarely carry planned dates; the backend falls
+                // back to first real progress / weight share and flags it.
+                start_is_actual: !!item.start_is_actual,
+                end_is_actual: !!item.end_is_actual,
+                duration_is_derived: !!item.duration_is_derived,
+                completed_at: item.completed_at || null,
+                forecast_date: item.forecast_date || null,
+                forecast_kind: item.forecast_kind || null,
+                note: '',
+            });
+        };
+
+        pushInfo(info.material_supply, 'Malzeme Tedarik');
+        machiningRows.forEach(m => pushInfo(m, `Talaşlı İmalat${machiningRows.length > 1 ? ` — ${m.title}` : ''}`));
+        cuttingRows.forEach(c => pushInfo(c, `Kesim${cuttingRows.length > 1 ? ` — ${c.title}` : ''}`));
+
         if (painting) {
-            rows.push({
+            contextRows.push({
+                ...base,
                 key: `${b.key}-painting`,
-                blockKey: groupKey,
-                blockRef: b.key,
                 kind: 'painting',
                 job_no: b.job_no,
-                title: 'Boya (iş emri geneli)',
+                title: 'Boya',
                 start_date: painting.start_date,
                 end_date: painting.end_date,
                 duration_wd: painting.duration_wd,
                 weight: null,
                 progress: painting.progress,
                 status: painting.status,
+                start_is_actual: !!painting.start_is_actual,
+                end_is_actual: !!painting.end_is_actual,
+                duration_is_derived: !!painting.duration_is_derived,
                 completed_at: painting.completed_at,
                 forecast_date: painting.forecast_date,
                 forecast_kind: painting.forecast_kind,
                 note: '',
             });
+        }
+
+        if (contextRows.length) {
+            rows.push({
+                ...base,
+                key: `${b.key}-band`,
+                kind: 'band',
+                title: `${b.job_no} — diğer departmanlar (bu bloğa dahil değil)`,
+                start_date: null, end_date: null, duration_wd: null,
+                weight: null, progress: null, status: null, note: '',
+            });
+            rows.push(...contextRows);
         }
     });
 
@@ -665,7 +711,16 @@ function blockHeaderCells(b, groupValue) {
     };
 }
 
+// The band is a divider, not a task: every other column stays empty so it
+// cannot be read as a row with a 0% progress and a 'not started' status.
+function bandBlank(row) {
+    return row.kind === 'band' ? '' : null;
+}
+
 function titleCell(value, row) {
+    if (row.kind === 'band') {
+        return `<span class="band-title"><i class="fas fa-diagram-project"></i>${esc(row.title)}</span>`;
+    }
     if (row.kind === 'info') {
         return `<span class="stage-title"><i class="fas fa-circle-info custom-ico"></i>${esc(row.title)}</span>`;
     }
@@ -735,12 +790,16 @@ function renderSheet() {
             },
             editable: true,
             editableColumns: ['title', 'start_date', 'end_date', 'duration_wd', 'weight', 'progress', 'status', 'note'],
-            isRowEditable: (row) => row.kind !== 'info',
+            isRowEditable: (row) => row.kind !== 'info' && row.kind !== 'band',
             onEdit: onCellEdit,
             rowAttributes: (row) => {
                 const classes = [];
+                if (row.kind === 'band') classes.push('band-row');
                 if (row.kind === 'info') classes.push('info-row');
                 if (row.kind === 'painting') classes.push('painting-row');
+                // Context rows sit under the band, indented, so the block's
+                // own stages stay visually the group's only children.
+                if (['info', 'painting'].includes(row.kind)) classes.push('context-row');
                 if (row.status === 'cancelled') classes.push('row-cancelled');
                 return { class: classes.join(' '), 'data-row-ref': row.key };
             },
@@ -753,47 +812,47 @@ function renderSheet() {
                 {
                     field: 'start_date', label: 'Başlangıç', type: 'date', width: '110px',
                     headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v, row) => dateCell(v, row.start_is_actual),
+                    formatter: (v, row) => bandBlank(row) ?? dateCell(v, row.start_is_actual),
                 },
                 {
                     field: 'end_date', label: 'Bitiş', type: 'date', width: '110px',
                     headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v, row) => dateCell(v, row.end_is_actual),
+                    formatter: (v, row) => bandBlank(row) ?? dateCell(v, row.end_is_actual),
                 },
                 {
                     field: 'duration_wd', label: 'Süre (iş g.)', type: 'number',
                     min: 0, step: 0.5, width: '92px',
                     headerClass: 'col-center', cellClass: 'col-center col-num',
-                    formatter: (v) => fmtDuration(v),
+                    formatter: (v, row) => bandBlank(row) ?? durationCell(v, row.duration_is_derived),
                 },
                 {
                     field: 'weight', label: 'Ağırlık', type: 'number', min: 1, step: 1, width: '82px',
                     headerClass: 'col-center', cellClass: 'col-center col-num',
                     // Info rows carry a real rollup weight too — it just isn't
                     // editable from this page.
-                    formatter: (v, row) => v == null
+                    formatter: (v, row) => bandBlank(row) ?? (v == null
                         ? '<span class="text-muted">—</span>'
-                        : (row.kind === 'stage' ? String(v) : `<span class="weight-readonly">${v}</span>`),
+                        : (row.kind === 'stage' ? String(v) : `<span class="weight-readonly">${v}</span>`)),
                 },
                 {
                     field: 'progress', label: 'İlerleme', type: 'number', min: 0, max: 100, step: 1,
                     width: '138px', headerClass: 'col-center', cellClass: 'col-progress',
-                    formatter: (v) => progressBar(v),
+                    formatter: (v, row) => bandBlank(row) ?? progressBar(v),
                 },
                 {
                     field: 'status', label: 'Durum', type: 'select', width: '140px',
                     headerClass: 'col-center', cellClass: 'col-center',
                     options: EDITABLE_STATUS_OPTIONS,
-                    formatter: (v, row) => statusBadge(v, isRowOverdue(row)),
+                    formatter: (v, row) => bandBlank(row) ?? statusBadge(v, isRowOverdue(row)),
                 },
                 {
                     field: 'forecast_date', label: 'Gerçek./Tahmini', width: '132px',
                     headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v, row) => forecastCell(row),
+                    formatter: (v, row) => bandBlank(row) ?? forecastCell(row),
                 },
                 {
                     field: 'note', label: 'Not', type: 'text',
-                    formatter: (v) => v ? `<span class="stage-note">${esc(v)}</span>` : '<span class="text-muted">—</span>',
+                    formatter: (v, row) => bandBlank(row) ?? (v ? `<span class="stage-note">${esc(v)}</span>` : '<span class="text-muted">—</span>'),
                 },
             ],
             actions: [
@@ -911,7 +970,7 @@ function onCellEdit(row, field, newValue) {
     if (!target) return;
 
     const markDirty = () => {
-        if (row.kind === 'painting') markPaintingDirty(row.job_no);
+        if (row.kind === 'painting') markPaintingDirty(row.job_no, field);
         else markBlockDirty(block.key);
     };
 
@@ -1670,17 +1729,19 @@ function buildPayload() {
         payload.blocks.push(item);
     }));
 
-    dirtyPainting.forEach(jobNo => {
+    dirtyPainting.forEach((fields, jobNo) => {
         const p = paintingByJob[jobNo];
         if (!p) return;
-        const item = {
-            task_id: p.task_id,
-            status: p.status,
-            duration_wd: p.duration_wd,
-            start_date: p.start_date,
-            end_date: p.end_date,
-        };
-        if (!p.has_subtasks) item.progress = p.progress;
+        const item = { task_id: p.task_id, status: p.status };
+        // An absent key means "unchanged" to the server, so the schedule trio
+        // only travels when the planner actually touched one of them —
+        // otherwise a status edit would persist the derived start/duration.
+        if (SCHEDULE_FIELDS.some(f => fields.has(f))) {
+            item.duration_wd = p.duration_wd;
+            item.start_date = p.start_date;
+            item.end_date = p.end_date;
+        }
+        if (!p.has_subtasks && fields.has('progress')) item.progress = p.progress;
         payload.painting_tasks.push(item);
     });
 

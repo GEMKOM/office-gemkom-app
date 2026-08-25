@@ -256,6 +256,12 @@
 
 .weight-readonly { color: #6b7280; }
 
+/* A duration nobody entered — computed from the weight share. */
+.duration-derived {
+    color: #6b7280;
+    font-style: italic;
+}
+
 /* Actual vs projected completion. */
 .forecast-cell {
     display: inline-flex;
@@ -357,6 +363,40 @@ tr.row-cancelled td:first-child { text-decoration: line-through; }
 
 tr.painting-row td {
     background: #f5f3ff !important;
+}
+
+/* ---- job-order context band ----
+   The rows below this divider belong to the JOB ORDER, not to the welding
+   block above it. They used to sit in the same flat list as the block's own
+   stages — and because one of those context rows is itself a welding task,
+   the whole group read as one hierarchy whose day counts should add up. They
+   never did: the block header spans only its own stages, while these overlap
+   each other and run months earlier. */
+tr.band-row td {
+    background: #eef1f5 !important;
+    border-top: 2px solid #cbd2da !important;
+    padding-top: 5px !important;
+    padding-bottom: 5px !important;
+}
+
+.band-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #6b7280;
+}
+
+.band-title .fas { font-size: .68rem; opacity: .75; }
+
+/* Indent past the block's own rows so the eye reads "different list", not
+   "deeper child". Must out-specify the generic detail-row indent above, which
+   is itself !important. */
+#sheet-container tbody tr.context-row td:first-child {
+    padding-left: 3.4rem !important;
 }
 
 .stage-title .default-ico { color: #8b0000; margin-right: 6px; }
