@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Kaynak Planlama</title>
+    <title>GEMKOM - İmalat Planlama</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../../style.css">
@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="../../../components/confirmation-modal/confirmation-modal.css">
     <link rel="stylesheet" href="../../../components/notification/notification.css">
     <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="stylesheet" href="grid.css">
     <link rel="stylesheet" href="planning.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
 </head>
@@ -28,45 +29,48 @@
 
             <div id="warnings-banner" class="alert alert-danger d-none" role="alert"></div>
 
-            <div class="dashboard-card mb-3">
+            <div class="dashboard-card">
                 <div class="card-header planning-toolbar">
                     <!-- Deliberately NOT Bootstrap nav-tabs: navbar.css styles the global
                          .nav-link class with !important white text for the top navbar. -->
                     <div class="planning-tabs" id="resource-tabs"></div>
-                    <div class="card-actions d-flex align-items-center gap-2">
-                        <span id="sheet-total-kg" class="text-muted small"></span>
+                    <!-- Sheet-wide actions only. Anything that acts on the
+                         grid itself — expand/collapse, column choice — lives on
+                         the grid header, next to what it changes. -->
+                    <div class="card-actions d-flex align-items-center gap-2 flex-wrap">
                         <div class="form-check form-switch mb-0" title="Tamamlanan/iptal edilen iş emirlerini de göster">
                             <input class="form-check-input" type="checkbox" id="show-completed-toggle">
                             <label class="form-check-label small text-muted" for="show-completed-toggle">
                                 Tamamlananlar
                             </label>
                         </div>
-                        <button class="btn btn-sm btn-outline-secondary" id="toggle-all-btn"
-                                title="Tüm blokları aç / kapat">
-                            <i class="fas fa-angles-down me-1"></i>Tümünü Aç
-                        </button>
                         <button class="btn btn-sm btn-outline-primary" id="add-job-btn">
                             <i class="fas fa-plus me-1"></i>İş Ekle
                         </button>
                         <button class="btn btn-sm btn-success" id="save-btn" disabled>
                             <i class="fas fa-save me-1"></i>Kaydet
                         </button>
+                        <span class="btn-group pg-zoom" id="zoom-buttons" role="group"
+                              aria-label="Zaman ölçeği"
+                              title="Zaman ölçeği — zaman çizelgesi üzerinde Ctrl + fare tekerleği ile de değiştirebilirsiniz">
+                            <button class="btn btn-outline-secondary" data-zoom="day">Gün</button>
+                            <button class="btn btn-outline-secondary active" data-zoom="week">Hafta</button>
+                            <button class="btn btn-outline-secondary" data-zoom="month">Ay</button>
+                        </span>
                     </div>
                 </div>
                 <div class="card-body p-0">
-                    <div id="sheet-container"></div>
+                    <div id="planning-grid" class="pg"></div>
                 </div>
-            </div>
-
-            <div class="dashboard-card">
-                <div class="card-header">
-                    <h5 class="card-title">
-                        <i class="fas fa-chart-gantt me-2 text-primary"></i>
-                        Zaman Çizelgesi
-                    </h5>
-                </div>
-                <div class="card-body">
-                    <div id="gantt-container"></div>
+                <div class="card-footer py-2">
+                    <!-- Two channels at once: the bar is the schedule state, the
+                         blue fill inside it is progress. -->
+                    <div class="pg-legend">
+                        <span class="pg-legend-item"><i class="pg-swatch pg-swatch-on-time"></i>Zamanında</span>
+                        <span class="pg-legend-item"><i class="pg-swatch pg-swatch-late"></i>Gecikmiş</span>
+                        <span class="pg-legend-item"><i class="pg-swatch pg-swatch-hold"></i>Beklemede</span>
+                        <span class="pg-legend-item"><i class="pg-swatch pg-swatch-progress"></i>Tamamlanan kısım</span>
+                    </div>
                 </div>
             </div>
         </div>

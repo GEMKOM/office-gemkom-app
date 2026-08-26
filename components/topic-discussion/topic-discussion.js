@@ -341,7 +341,8 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
     }
 
     function bindEvents() {
-        attachRichTextEditor(document.getElementById(ids.commentText));
+        const commentTextarea = document.getElementById(ids.commentText);
+        attachRichTextEditor(commentTextarea);
 
         const commentFileInput = document.getElementById(ids.commentFiles);
         const commentFilePreview = document.getElementById(ids.commentFilesPreview);

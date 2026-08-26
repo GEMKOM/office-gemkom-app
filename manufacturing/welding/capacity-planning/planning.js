@@ -1,9 +1,10 @@
-// Kaynak Planlama — Excel-style multi-project tracking on REAL records.
+// İmalat Planlama — Excel-style multi-project tracking on REAL records.
 //
-// One tab ("sheet") per resource (taşeron / ekip). Each block is a real
-// assignment; its rows are real department tasks: read-only info rows
-// (Malzeme Tedarik, Talaşlı İmalat, Kesim), editable stages (Montaj,
-// Kaynak ve Taşlama + custom), and the job's editable Boya task.
+// One tab ("sheet") per resource (taşeron / ekip), grouped by JOB ORDER. Each
+// group is the job's manufacturing main task, and under it sit its real
+// children: Talaşlı İmalat, the welding assignments for this resource with
+// their stages (Montaj, Kaynak ve Taşlama + custom), and Boya. Malzeme Tedarik
+// and Kesim belong to other departments and show as read-only context.
 // Everything is edited in memory (workday-aware date↔duration sync) and
 // committed with one bulk save.
 
@@ -11,8 +12,7 @@ import { guardRoute } from '../../../authService.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
-import { TableComponent } from '../../../components/table/table.js';
-import { GanttChart } from '../../../components/gantt/gantt.js';
+import { PlanningGrid } from './grid.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
@@ -50,24 +50,23 @@ let calendar = createWorkdayCalendar([]);
 let resources = [];               // [{resource_type, id, name, blocks: [BlockVM]}]
 let weldingTasks = [];            // assignable jobs
 let jobInfo = {};                 // job_no -> {material_supply, machining[], cutting[], painting}
-let paintingByJob = {};           // job_no -> mutable painting VM (shared across tabs)
+let deptByJob = {};               // job_no -> {manufacturing, welding, painting} VMs
+let machiningByJob = {};          // job_no -> Talaşlı İmalat VM (weight only)
 
 let snapBlocks = new Map();       // block.key -> {allocated_weight_kg, notes}
-let snapPainting = new Map();     // job_no -> JSON snapshot
 let dirtyBlocks = new Set();      // block.key
-let dirtyPainting = new Map();    // job_no -> Set of edited field names
+let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
+let dirtyMachining = new Map();   // job_no -> Set of edited field names
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
 
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
-let expandedByBlockKey = {};      // block.key -> bool
+let collapsedJobs = new Set();    // job_no -> collapsed in the grid
 let showCompleted = false;
 let showEmptyResources = false;   // empty-resource tabs tucked behind a toggle
 let newCounter = 0;
 
-let sheetTable = null;
+let grid = null;
 let sheetRows = [];
-let ganttChart = null;
-let lastGanttRows = [];
 let refreshTimer = null;
 
 let blockModal = null;            // add job / edit weight
@@ -122,7 +121,8 @@ function findBlock(blockRef) {
 }
 
 function hasUnsavedChanges() {
-    return dirtyBlocks.size > 0 || dirtyPainting.size > 0 || deletedBlocks.length > 0;
+    return dirtyBlocks.size > 0 || dirtyDept.size > 0
+        || dirtyMachining.size > 0 || deletedBlocks.length > 0;
 }
 
 function todayStr() {
@@ -187,6 +187,7 @@ function blockVM(b, res) {
         deleted: false,
         resource_type: res.resource_type,
         resource_id: res.id,
+        resource_name: res.display_name || res.name,
     };
 }
 
@@ -196,32 +197,18 @@ function hydrate(boardData) {
     weldingTasks = boardData.welding_tasks || [];
     jobInfo = boardData.job_info || {};
 
-    paintingByJob = {};
-    snapPainting = new Map();
+    deptByJob = {};
+    machiningByJob = {};
     Object.entries(jobInfo).forEach(([jobNo, info]) => {
-        if (info.painting) {
-            const p = info.painting;
-            paintingByJob[jobNo] = {
-                task_id: p.task_id,
-                title: p.title || 'Boya',
-                status: p.status,
-                progress: Number(p.progress ?? 0),
-                duration_wd: p.duration_wd,
-                start_date: p.start_date,
-                end_date: p.end_date,
-                completed_at: p.completed_at || null,
-                forecast_date: p.forecast_date || null,
-                forecast_kind: p.forecast_kind || null,
-                has_subtasks: !!p.has_subtasks,
-                // Boya rarely carries a plan of its own: the date is usually
-                // the first real progress on it and the duration its weight
-                // share of the manufacturing task. Both must READ as derived,
-                // and must not be written back as if they had been entered.
-                start_is_actual: !!p.start_is_actual,
-                end_is_actual: !!p.end_is_actual,
-                duration_is_derived: !!p.duration_is_derived,
+        const slots = {};
+        DEPT_SLOTS.forEach(slot => { slots[slot] = deptVM(info[slot]); });
+        deptByJob[jobNo] = slots;
+        const machining = (info.machining || [])[0];
+        if (machining) {
+            machiningByJob[jobNo] = {
+                task_id: machining.task_id,
+                weight: machining.weight ?? null,
             };
-            snapPainting.set(jobNo, JSON.stringify(paintingByJob[jobNo]));
         }
     });
 
@@ -242,7 +229,8 @@ function hydrate(boardData) {
     }));
 
     dirtyBlocks = new Set();
-    dirtyPainting = new Map();
+    dirtyDept = new Map();
+    dirtyMachining = new Map();
     deletedBlocks = [];
 
     if (!activeResourceKey || !resources.some(r => resourceKeyOf(r) === activeResourceKey)) {
@@ -268,15 +256,139 @@ function markBlockDirty(blockRef) {
     updateSaveState();
 }
 
-// Painting tracks WHICH fields were edited, not just that the row is dirty:
-// its start/duration are usually derived values the server sent for display,
-// and sending them back on an unrelated status edit would freeze a derived
-// number into the task as if it were a plan.
-function markPaintingDirty(jobNo, field) {
-    const fields = dirtyPainting.get(jobNo) || new Set();
+// The manufacturing task's window must cover everything under it, live —
+// dragging a welding stage past its end is the usual way that window moves,
+// and the planner should see it happen rather than discover it after a save.
+// Widen only: a child pulling inwards leaves the parent where the planner
+// put it. Duration always follows the span, never a sum — the children
+// overlap, so adding their durations would invent weeks nobody works.
+// The three department tasks this sheet plans, in the order they appear under
+// a job order. They are real JobOrderDepartmentTask rows — edits here are
+// saved back onto them, not into anything the board invented.
+const DEPT_SLOTS = ['manufacturing', 'welding', 'painting'];
+
+function deptVM(row) {
+    if (!row) return null;
+    return {
+        task_id: row.task_id,
+        status: row.status,
+        // How much of its parent's progress this task is worth. Kaynaklı
+        // İmalat is 97 of 100 on a typical job, Boya 2 — the split that
+        // decides what "İmalat %94" actually means.
+        weight: row.weight ?? null,
+        progress: Number(row.progress ?? 0),
+        duration_wd: row.duration_wd,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        completed_at: row.completed_at || null,
+        forecast_date: row.forecast_date || null,
+        forecast_kind: row.forecast_kind || null,
+        has_subtasks: !!row.has_subtasks,
+        // Which parts the planner did not type: the date may be first real
+        // progress, the duration a weight share, the window widened to cover a
+        // child. None of them may be written back unless the row is edited.
+        start_is_actual: !!row.start_is_actual,
+        end_is_actual: !!row.end_is_actual,
+        duration_is_derived: !!row.duration_is_derived,
+        duration_source: row.duration_source || null,
+        entered_duration_wd: row.entered_duration_wd == null ? null : row.entered_duration_wd,
+        start_from_children: !!row.start_from_children,
+        end_from_children: !!row.end_from_children,
+        // The stored plan, before any widening — the floor the union keeps.
+        entered_start_date: row.entered_start_date || null,
+        entered_end_date: row.entered_end_date || null,
+    };
+}
+
+function deptOf(jobNo, slot) {
+    return (deptByJob[jobNo] || {})[slot] || null;
+}
+
+function markMachiningDirty(jobNo, field) {
+    const fields = dirtyMachining.get(jobNo) || new Set();
     if (field) fields.add(field);
-    dirtyPainting.set(jobNo, fields);
+    dirtyMachining.set(jobNo, fields);
     updateSaveState();
+}
+
+function markDeptDirty(jobNo, slot, field) {
+    const key = `${jobNo}|${slot}`;
+    const fields = dirtyDept.get(key) || new Set();
+    if (field) fields.add(field);
+    dirtyDept.set(key, fields);
+    updateSaveState();
+}
+
+// Everything scheduled under a task, as the grid currently holds it. Used both
+// to widen a parent when a child moves and to refuse a parent edit that would
+// cut into its children.
+function childCoverage(jobNo, slot) {
+    const dated = [];
+    if (slot === 'welding' || slot === 'manufacturing') {
+        resources.forEach(res => res.blocks
+            .filter(b => !b.deleted && b.job_no === jobNo)
+            .forEach(b => {
+                const staged = b.stages.filter(x => !x.deleted && x.status !== 'cancelled');
+                (staged.length ? staged : [b.subtask]).forEach(x => dated.push(x));
+            }));
+    }
+    if (slot === 'manufacturing') {
+        const painting = deptOf(jobNo, 'painting');
+        if (painting) dated.push(painting);
+        (jobInfo[jobNo]?.machining || []).forEach(m => dated.push(m));
+    }
+    // Only dates somebody planned widen a parent. A machining row borrows its
+    // operations' schedule and a paint row may be showing first-progress
+    // evidence; widening from those and then saving would write an estimate
+    // onto a real task as though it had been typed there.
+    const planned = (x, field) => {
+        if (!x[field]) return null;
+        if (x.date_source) return null;
+        if (field === 'start_date' && x.start_is_actual) return null;
+        if (field === 'end_date' && x.end_is_actual) return null;
+        return x[field];
+    };
+    const starts = dated.map(x => planned(x, 'start_date')).filter(Boolean).sort();
+    const ends = dated.map(x => planned(x, 'end_date')).filter(Boolean).sort();
+    return { start: starts[0] || null, end: ends[ends.length - 1] || null };
+}
+
+// A parent's window must cover everything under it, live — dragging a welding
+// stage past its end is the usual way that window moves, and the planner should
+// watch it happen rather than discover it after a save. Widen only: a child
+// pulling inwards leaves the parent where the planner put it. Duration follows
+// the span, never a sum — the children overlap.
+// A parent's window is the UNION of what the planner entered on it and what
+// its children occupy. That tracks in both directions: lengthen a stage and
+// the parent grows, shorten it and the parent pulls back — but never inside
+// the dates somebody actually typed on the parent, which stay a floor.
+//
+// Widen-only was the first cut, and it left a phantom window behind after a
+// stage was shortened: İmalat still claimed 16.10 when nothing under it ran
+// past 25.08.
+function reflowParents(jobNo) {
+    ['welding', 'manufacturing'].forEach(slot => {
+        const target = deptOf(jobNo, slot);
+        if (!target) return;
+        const child = childCoverage(jobNo, slot);
+        const earliest = (a, b) => (a && b) ? (a < b ? a : b) : (a || b);
+        const latest = (a, b) => (a && b) ? (a > b ? a : b) : (a || b);
+
+        const start = earliest(target.entered_start_date, child.start);
+        const end = latest(target.entered_end_date, child.end);
+        if (start === target.start_date && end === target.end_date) return;
+
+        target.start_date = start;
+        target.end_date = end;
+        target.start_from_children = !!(child.start && child.start !== target.entered_start_date);
+        target.end_from_children = !!(child.end && child.end !== target.entered_end_date);
+        if (start && end) {
+            target.duration_wd = calendar.workingDaysInclusive(start, end);
+            target.duration_is_derived = !(
+                start === target.entered_start_date && end === target.entered_end_date);
+        }
+        markDeptDirty(jobNo, slot, 'start_date');
+    });
 }
 
 function updateSaveState() {
@@ -409,18 +521,49 @@ function statusBadge(status, overdue) {
 
 // A planned date reads plain; a real (started_at/completed_at) date that stands
 // in for a missing plan is marked so the two are never confused.
-function dateCell(value, isActual) {
+// A date nobody typed on this task has to say where it came from. Talaşlı
+// İmalat is the case that forced this: its own dates are empty on 252 of 253
+// jobs, so the row now borrows the operations' schedule — which is a real plan,
+// just one level down, and must not be mistaken for one entered here.
+const DATE_SOURCE_TITLES = {
+    operations_plan: 'Operasyon planından hesaplandı — bu göreve girilmiş bir tarih değil',
+    operations_actual: 'Operasyonlardaki gerçek çalışmadan alındı',
+};
+
+function dateCell(value, isActual, row) {
     if (!value) return '<span class="text-muted">—</span>';
+    const derived = row && DATE_SOURCE_TITLES[row.date_source];
+    if (derived) {
+        return `<span class="date-derived" title="${esc(derived)}">${fmtDate(value)}</span>`;
+    }
     if (!isActual) return fmtDate(value);
     return `<span class="date-actual" title="Gerçekleşen tarih (planlanmış tarih girilmemiş)">${fmtDate(value)}</span>`;
 }
 
-// A duration the server derived (weight share of the parent's planned span)
-// is not a plan anyone entered — mark it so it does not read as one.
-function durationCell(value, isDerived) {
+// A derived duration is not a plan anyone entered, and the two derivations are
+// not interchangeable: a weight share is a guess at unplanned work, while a
+// children's span has OVERRULED an entered value — and the planner needs to see
+// what it overruled, or the sheet and /projects/ look like they disagree for no
+// reason.
+function durationCell(value, isDerived, row) {
     if (value == null) return '<span class="text-muted">—</span>';
     if (!isDerived) return fmtDuration(value);
-    return `<span class="duration-derived" title="Ağırlık payından hesaplandı — girilmiş bir süre değil">≈${fmtDuration(value)}</span>`;
+    const entered = row && row.entered_duration_wd;
+    const source = row && row.duration_source;
+    let title;
+    if (source === 'children_span') {
+        title = `Alt görevlerin kapladığı süreden hesaplandı${
+            entered != null ? ` — göreve girilen süre ${fmtDuration(entered)}` : ''}`;
+    } else if (source === 'operations_hours') {
+        // 9-hour day: 07:30-17:00 less the lunch break.
+        title = `Operasyonların girilen saatlerinden hesaplandı${
+            row.operation_hours != null ? ` (${row.operation_hours} saat / 9 saatlik gün)` : ''}`;
+    } else if (source === 'operations_plan' || source === 'operations_actual') {
+        title = 'Operasyonların kapladığı süreden hesaplandı';
+    } else {
+        title = 'Ağırlık payından hesaplandı — girilmiş bir süre değil';
+    }
+    return `<span class="duration-derived" title="${esc(title)}">≈${fmtDuration(value)}</span>`;
 }
 
 // Actual completion date for finished rows, projected finish for open ones.
@@ -452,131 +595,223 @@ function progressBar(value) {
         </div>`;
 }
 
+function hasStages(blockRef) {
+    const block = findBlock(blockRef);
+    return !!block && block.stages.some(x => !x.deleted);
+}
+
+// Distinct job orders on a resource sheet, in display order — the grid groups
+// by job, so a job with two assignments here is still one group.
+function jobNosOf(res) {
+    const seen = [];
+    res.blocks.filter(b => !b.deleted).forEach(b => {
+        if (!seen.includes(b.job_no)) seen.push(b.job_no);
+    });
+    // Always by iş emri number. Assignment order is an accident of when the
+    // work was handed out; a planner looking for 293-03-07 wants it where the
+    // numbers say it is, on every sheet.
+    return seen.sort((a, b) => String(a || '').localeCompare(String(b || ''), 'tr',
+        { numeric: true, sensitivity: 'base' }));
+}
+
+// One row per task, flat, in tree order — the grid draws the hierarchy from
+// `indent` and hides a job's rows when it is collapsed. The shape mirrors the
+// real task tree exactly:
+//
+//   293-03-07 · COOLED PANEL 4      ← the JOB ORDER: opened → promised, read-only
+//     Diğer departmanlar
+//       Malzeme Tedarik, Kesim      ← other departments, read-only
+//     İmalat                        ← manufacturing main task, editable
+//       Talaşlı İmalat              ← read-only
+//       Kaynaklı İmalat             ← editable
+//         HARUN METAL BAKIR         ← a subcontractor/team assignment
+//           Montaj, Kaynak ve Taşlama
+//       Boya                        ← editable
 function buildSheetRows(res) {
     const rows = [];
-    const visibleBlocks = res.blocks.filter(b => !b.deleted);
 
-    visibleBlocks.forEach((b, idx) => {
-        const groupKey = `${String(idx).padStart(3, '0')}|${b.key}`;
-        const info = jobInfo[b.job_no] || {};
-        const painting = paintingByJob[b.job_no] || null;
-        const base = { blockKey: groupKey, blockRef: b.key };
+    jobNosOf(res).forEach(jobNo => {
+        const blocks = res.blocks.filter(b => !b.deleted && b.job_no === jobNo);
+        const first = blocks[0] || {};
+        const info = jobInfo[jobNo] || {};
+        const base = { job_no: jobNo, groupKey: jobNo };
+        const jo = info.job_order || null;
 
-        // --- the block's OWN work: the only rows that belong to this
-        // assignment, and the only ones the header's rollup summarises.
-        const visibleStages = b.stages.filter(s => !s.deleted);
-        if (visibleStages.length) {
-            visibleStages.forEach(s => {
-                rows.push({
-                    ...base,
-                    key: `${b.key}-stage-${s.cid}`,
-                    kind: 'stage',
-                    stageCid: s.cid,
-                    title: s.title,
-                    is_default: s.is_default,
-                    start_date: s.start_date,
-                    end_date: s.end_date,
-                    duration_wd: s.duration_wd,
-                    weight: s.weight,
-                    progress: s.progress,
-                    status: s.status,
-                    completed_at: s.completed_at,
-                    forecast_date: s.forecast_date,
-                    forecast_kind: s.forecast_kind,
-                    note: s.note,
-                });
-            });
-        } else {
-            rows.push({
+        // The job order frames everything under it. It is not a department
+        // task and nothing here edits it — its dates are when the order was
+        // opened and when it was promised.
+        rows.push({
+            ...base,
+            key: `${jobNo}-group`,
+            kind: 'group',
+            groupKey: null,
+            indent: 0,
+            collapsed: collapsedJobs.has(jobNo),
+            title: jobNo,
+            job_order_title: jo?.title || first.job_order_title || '',
+            customer_name: first.customer_name || '',
+            block_count: blocks.length,
+            bar_label: jobNo,
+            weight_is_kg: true,
+            start_date: jo?.start_date ?? null,
+            end_date: jo?.end_date ?? null,
+            duration_wd: jo?.duration_wd ?? null,
+            weight: jo?.total_weight_kg ?? null,
+            progress: jo?.progress ?? 0,
+            status: jo?.status || 'active',
+            completed_at: jo?.completed_at || null,
+            forecast_date: null,
+            forecast_kind: null,
+            note: '',
+        });
+
+        const infoRow = (item, label, kind, indent) => ({
+            ...base,
+            key: `${jobNo}-info-${item.task_id}`,
+            kind: kind || 'info',
+            indent,
+            title: label,
+            start_date: item.start_date,
+            end_date: item.end_date,
+            duration_wd: item.duration_wd,
+            weight: item.weight ?? null,
+            progress: item.progress,
+            status: item.status,
+            start_is_actual: !!item.start_is_actual,
+            end_is_actual: !!item.end_is_actual,
+            duration_is_derived: !!item.duration_is_derived,
+            duration_source: item.duration_source || null,
+            date_source: item.date_source || null,
+            operation_hours: item.operation_hours == null ? null : item.operation_hours,
+            entered_duration_wd: item.entered_duration_wd == null ? null : item.entered_duration_wd,
+            completed_at: item.completed_at || null,
+            forecast_date: item.forecast_date || null,
+            forecast_kind: item.forecast_kind || null,
+            note: '',
+        });
+
+        const deptRow = (slot, label, indent) => {
+            const vm = deptOf(jobNo, slot);
+            if (!vm) return null;
+            return {
                 ...base,
-                key: `${b.key}-subtask`,
-                kind: 'subtask',
-                title: 'Kaynak İşi (aşamasız)',
-                start_date: b.subtask.start_date,
-                end_date: b.subtask.end_date,
-                duration_wd: b.subtask.duration_wd,
-                weight: null,
-                progress: b.subtask.progress,
-                status: b.subtask.status,
-                completed_at: b.subtask.completed_at,
-                forecast_date: b.subtask.forecast_date,
-                forecast_kind: b.subtask.forecast_kind,
-                note: b.notes,
-            });
-        }
-
-        // --- everything below is the JOB ORDER's context, not this block's.
-        // Without the band they read as children of the welding assignment,
-        // and since one of them is itself a welding task the whole group
-        // looked like a single hierarchy. They also overlap in time, so the
-        // header's day count is not their sum and never was.
-        const machiningRows = info.machining || [];
-        const cuttingRows = info.cutting || [];
-        const contextRows = [];
-
-        const pushInfo = (item, label) => {
-            if (!item) return;
-            contextRows.push({
-                ...base,
-                key: `${b.key}-info-${item.task_id}`,
-                kind: 'info',
+                key: `${jobNo}-${slot}`,
+                kind: 'dept',
+                slot,
+                indent,
                 title: label,
-                start_date: item.start_date,
-                end_date: item.end_date,
-                duration_wd: item.duration_wd,
-                weight: item.weight ?? null,
-                progress: item.progress,
-                status: item.status,
-                // These tasks rarely carry planned dates; the backend falls
-                // back to first real progress / weight share and flags it.
-                start_is_actual: !!item.start_is_actual,
-                end_is_actual: !!item.end_is_actual,
-                duration_is_derived: !!item.duration_is_derived,
-                completed_at: item.completed_at || null,
-                forecast_date: item.forecast_date || null,
-                forecast_kind: item.forecast_kind || null,
+                bar_label: label,
+                start_date: vm.start_date,
+                end_date: vm.end_date,
+                duration_wd: vm.duration_wd,
+                weight: vm.weight,
+                progress: vm.progress,
+                status: vm.status,
+                has_subtasks: vm.has_subtasks,
+                start_is_actual: vm.start_is_actual,
+                end_is_actual: vm.end_is_actual,
+                duration_is_derived: vm.duration_is_derived,
+                duration_source: vm.duration_source,
+                entered_duration_wd: vm.entered_duration_wd,
+                completed_at: vm.completed_at,
+                forecast_date: vm.forecast_date,
+                forecast_kind: vm.forecast_kind,
                 note: '',
-            });
+            };
         };
 
-        pushInfo(info.material_supply, 'Malzeme Tedarik');
-        machiningRows.forEach(m => pushInfo(m, `Talaşlı İmalat${machiningRows.length > 1 ? ` — ${m.title}` : ''}`));
-        cuttingRows.forEach(c => pushInfo(c, `Kesim${cuttingRows.length > 1 ? ` — ${c.title}` : ''}`));
-
-        if (painting) {
-            contextRows.push({
-                ...base,
-                key: `${b.key}-painting`,
-                kind: 'painting',
-                job_no: b.job_no,
-                title: 'Boya',
-                start_date: painting.start_date,
-                end_date: painting.end_date,
-                duration_wd: painting.duration_wd,
-                weight: null,
-                progress: painting.progress,
-                status: painting.status,
-                start_is_actual: !!painting.start_is_actual,
-                end_is_actual: !!painting.end_is_actual,
-                duration_is_derived: !!painting.duration_is_derived,
-                completed_at: painting.completed_at,
-                forecast_date: painting.forecast_date,
-                forecast_kind: painting.forecast_kind,
-                note: '',
-            });
+        // Other departments first: material supply and cutting run before any
+        // of this, so the group reads top-to-bottom as a sequence.
+        const cuttingRows = info.cutting || [];
+        const otherRows = [];
+        if (info.material_supply) {
+            otherRows.push(infoRow(info.material_supply, 'Malzeme Tedarik', 'info', 2));
         }
-
-        if (contextRows.length) {
+        cuttingRows.forEach(c => otherRows.push(infoRow(
+            c, `Kesim${cuttingRows.length > 1 ? ` — ${c.title}` : ''}`, 'info', 2)));
+        if (otherRows.length) {
             rows.push({
                 ...base,
-                key: `${b.key}-band`,
+                key: `${jobNo}-band-other`,
                 kind: 'band',
-                title: `${b.job_no} — diğer departmanlar (bu bloğa dahil değil)`,
+                indent: 1,
+                title: 'Diğer departmanlar',
                 start_date: null, end_date: null, duration_wd: null,
                 weight: null, progress: null, status: null, note: '',
             });
-            rows.push(...contextRows);
+            rows.push(...otherRows);
         }
+
+        const manufacturing = deptRow('manufacturing', 'İmalat', 1);
+        if (manufacturing) rows.push(manufacturing);
+
+        const machiningRows = info.machining || [];
+        machiningRows.forEach((x, i) => {
+            const row = infoRow(
+                x, `Talaşlı İmalat${machiningRows.length > 1 ? ` — ${x.title}` : ''}`,
+                'machining', 2);
+            if (i === 0 && machiningByJob[jobNo]) row.weight = machiningByJob[jobNo].weight;
+            rows.push(row);
+        });
+
+        const welding = deptRow('welding', 'Kaynaklı İmalat', 2);
+        if (welding) rows.push(welding);
+
+        blocks.forEach(b => {
+            const staged = b.stages.filter(s => !s.deleted);
+            const rollup = blockRollup(b);
+            // With stages, the assignment row is their rollup and reports only.
+            // Without them, it IS the schedule and takes the edits directly —
+            // which is also the only shape the server accepts a subtask
+            // schedule for.
+            rows.push({
+                ...base,
+                key: `${b.key}-block`,
+                blockRef: b.key,
+                kind: 'block',
+                indent: 3,
+                isNew: b.isNew,
+                is_billed: b.is_billed,
+                has_stages: staged.length > 0,
+                title: b.resource_name || 'Kaynak İşi',
+                bar_label: b.resource_name || 'Kaynak İşi',
+                start_date: staged.length ? rollup.windowStart : b.subtask.start_date,
+                end_date: staged.length ? rollup.windowEnd : b.subtask.end_date,
+                duration_wd: staged.length ? rollup.totalDays : b.subtask.duration_wd,
+                weight: b.allocated_weight_kg,
+                weight_is_kg: true,
+                progress: staged.length ? rollup.progress : b.subtask.progress,
+                status: staged.length ? rollup.derived : b.subtask.status,
+                completed_at: staged.length ? null : b.subtask.completed_at,
+                forecast_date: staged.length ? rollup.forecastDate : b.subtask.forecast_date,
+                forecast_kind: staged.length ? rollup.forecastKind : b.subtask.forecast_kind,
+                note: b.notes,
+            });
+
+            staged.forEach(s => rows.push({
+                ...base,
+                key: `${b.key}-stage-${s.cid}`,
+                blockRef: b.key,
+                kind: 'stage',
+                indent: 4,
+                stageCid: s.cid,
+                title: s.title,
+                is_default: s.is_default,
+                start_date: s.start_date,
+                end_date: s.end_date,
+                duration_wd: s.duration_wd,
+                weight: s.weight,
+                progress: s.progress,
+                status: s.status,
+                completed_at: s.completed_at,
+                forecast_date: s.forecast_date,
+                forecast_kind: s.forecast_kind,
+                note: s.note,
+            }));
+        });
+
+        const painting = deptRow('painting', 'Boya', 2);
+        if (painting) rows.push(painting);
     });
 
     return rows;
@@ -647,330 +882,416 @@ function blockRollup(b) {
 
 // Returns an object keyed by column field: the table renders it as real cells,
 // so a block's summary row lines up with the stage rows beneath it.
-function blockHeaderCells(b, groupValue) {
-    const rollup = blockRollup(b);
-    const hasStages = b.stages.some(s => !s.deleted);
-    const weightLocked = b.is_billed;
-    const pct = Math.round(rollup.progress);
-    // The table's default group header draws the collapse chevron; a custom
-    // formatter must render its own. The row's own onclick does the toggling.
-    const expanded = sheetTable?.groupExpandedState?.[groupValue] === true;
-
-    return {
-        title: `
-            <div class="block-id" data-block-ref="${esc(b.key)}">
-                <i class="fas ${expanded ? 'fa-chevron-down' : 'fa-chevron-right'} block-toggle-ico"></i>
-                <div class="block-id-text">
-                    <div class="block-id-line">
-                        <span class="block-job">${esc(b.job_no || '')}</span>
-                        ${b.isNew ? '<span class="badge bg-info ms-1">yeni</span>' : ''}
-                        <span class="block-title" title="${esc(b.job_order_title || '')}">${esc(b.job_order_title || '')}</span>
-                    </div>
-                    <div class="block-customer" title="${esc(b.customer_name || '')}">
-                        <i class="fas fa-user"></i>${esc(b.customer_name || '—')}
-                    </div>
-                </div>
-            </div>`,
-        start_date: `<span class="block-cell-value">${fmtDate(rollup.windowStart)}</span>`,
-        end_date: `<span class="block-cell-value">${fmtDate(rollup.windowEnd)}</span>`,
-        duration_wd: `<span class="block-cell-value">${fmtDuration(rollup.totalDays)}</span>`,
-        weight: `
-            <span class="block-weight-chip ${weightLocked ? 'locked' : ''}" data-action="edit-weight"
-                  title="${weightLocked ? 'Hakediş kesilmiş — ağırlık kilitli' : 'Ağırlığı düzenle'}">
-                ${fmtKg(b.allocated_weight_kg)} kg${weightLocked ? ' <i class="fas fa-lock"></i>' : ''}
-            </span>`,
-        progress: `
-            <div class="mini-progress">
-                <div class="progress"><div class="progress-bar ${pct >= 100 ? 'bg-success' : 'bg-primary'}" style="width:${Math.min(pct, 100)}%"></div></div>
-                <span class="progress-label">${pct}%</span>
-            </div>`,
-        status: statusBadge(rollup.derived, rollup.overdue),
-        forecast_date: forecastCell({
-            forecast_date: rollup.forecastDate,
-            forecast_kind: rollup.forecastKind,
-            end_date: rollup.windowEnd,
-        }),
-        note: b.notes
-            ? `<span class="stage-note">${esc(b.notes)}</span>`
-            : `<span class="block-stage-count">${hasStages ? `${b.stages.filter(s => !s.deleted).length} aşama` : 'aşama yok'}</span>`,
-        _actions: `
-            <div class="block-actions" data-block-ref="${esc(b.key)}">
-                ${!hasStages ? `
-                    <button class="btn btn-sm btn-outline-primary" data-action="create-stages"
-                            title="Varsayılan aşamaları (Montaj, Kaynak ve Taşlama) oluştur">
-                        <i class="fas fa-layer-group"></i>
-                    </button>` : `
-                    <button class="btn btn-sm btn-outline-secondary" data-action="add-custom" title="Özel aşama ekle">
-                        <i class="fas fa-plus"></i>
-                    </button>`}
-                <button class="btn btn-sm btn-outline-danger" data-action="delete-block"
-                        ${b.is_billed ? 'disabled title="Hakediş kesilmiş — silinemez"' : 'title="Atamayı sil"'}>
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>`,
-    };
-}
-
-// The band is a divider, not a task: every other column stays empty so it
-// cannot be read as a row with a 0% progress and a 'not started' status.
-function bandBlank(row) {
+// The band is a divider, not a task: every column but its label stays empty so
+// it cannot be read as a row at 0% progress and 'not started'.
+function cellOverride(row, field) {
     return row.kind === 'band' ? '' : null;
 }
 
+const ROW_ICONS = {
+    machining: 'fas fa-gear',
+    block: 'fas fa-user-gear',
+    stage: 'fas fa-pen-ruler',
+    info: 'fas fa-circle-info',
+    band: 'fas fa-diagram-project',
+};
+
+const DEPT_ICONS = {
+    manufacturing: 'fas fa-industry',
+    welding: 'fas fa-fire',
+    painting: 'fas fa-fill-drip',
+};
+
 function titleCell(value, row) {
-    if (row.kind === 'band') {
-        return `<span class="band-title"><i class="fas fa-diagram-project"></i>${esc(row.title)}</span>`;
+    if (row.kind === 'group') {
+        const chevron = row.collapsed ? 'fa-chevron-right' : 'fa-chevron-down';
+        return `
+            <i class="fas ${chevron} pg-toggle"></i>
+            <span class="pg-title" title="${esc(row.job_order_title)} — ${esc(row.customer_name)}">
+                <strong>${esc(row.title)}</strong>
+                <span class="pg-sub">${esc(row.job_order_title)}</span>
+                ${row.block_count > 1
+                    ? `<span class="block-count">${row.block_count} blok</span>` : ''}
+            </span>`;
     }
-    if (row.kind === 'info') {
-        return `<span class="stage-title"><i class="fas fa-circle-info custom-ico"></i>${esc(row.title)}</span>`;
+    if (row.kind === 'stage' && row.is_default) {
+        return `<span class="pg-title"><i class="fas fa-thumbtack pg-ico"
+                     title="Varsayılan aşama — silinemez, süresiz/iptal edilebilir"></i>${esc(row.title)}</span>`;
     }
-    if (row.kind === 'painting') {
-        return `<span class="stage-title"><i class="fas fa-fill-drip custom-ico"></i>${esc(row.title)}</span>`;
-    }
-    if (row.kind === 'subtask') {
-        return `<span class="stage-title"><i class="fas fa-fire custom-ico"></i>${esc(row.title)}</span>`;
-    }
-    const icon = row.is_default
-        ? '<i class="fas fa-thumbtack default-ico" title="Varsayılan aşama — silinemez, süresiz/iptal edilebilir"></i>'
-        : '<i class="fas fa-pen-ruler custom-ico" title="Özel aşama"></i>';
-    return `<span class="stage-title">${icon}${esc(row.title)}</span>`;
+    const icon = (row.kind === 'dept' ? DEPT_ICONS[row.slot] : ROW_ICONS[row.kind])
+        || 'fas fa-circle';
+    return `<span class="pg-title"><i class="${icon} pg-ico"></i>${esc(row.title)}${
+        row.isNew ? '<span class="badge bg-info ms-1">yeni</span>' : ''}</span>`;
 }
 
-function renderSheet() {
-    const container = document.getElementById('sheet-container');
+// ---- grid definition -----------------------------------------------------
+
+// Six columns earn their width next to a timeline; the rest are a click away.
+// The choice is per user, so a planner who lives in Durum keeps it on.
+const GRID_COLUMNS = [
+    { field: 'title', label: 'Görev', width: '250px', always: true,
+      formatter: (v, row) => titleCell(v, row) },
+    { field: 'start_date', label: 'Başlangıç', width: '96px', type: 'date',
+      headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
+      formatter: (v, row) => cellOverride(row, 'start_date') ?? dateCell(v, row.start_is_actual, row) },
+    { field: 'end_date', label: 'Bitiş', width: '96px', type: 'date',
+      headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
+      formatter: (v, row) => cellOverride(row, 'end_date') ?? dateCell(v, row.end_is_actual, row) },
+    { field: 'duration_wd', label: 'Süre', width: '76px', type: 'number', min: 0, step: 0.5,
+      headerClass: 'col-center', cellClass: 'col-center col-num', always: true,
+      formatter: (v, row) => cellOverride(row, 'duration_wd') ?? durationCell(v, row.duration_is_derived, row) },
+    { field: 'weight', label: 'Ağırlık', width: '76px', type: 'number', min: 1, step: 1,
+      headerClass: 'col-center', cellClass: 'col-center col-num', always: true,
+      // A block row's "weight" is its kg allocation, not a rollup weight —
+      // same column, different unit, so it has to say which.
+      formatter: (v, row) => cellOverride(row, 'weight') ?? (v == null
+          ? '<span class="text-muted">—</span>'
+          : (row.weight_is_kg
+              ? `<span class="weight-readonly">${fmtKg(v)} kg</span>`
+              : (['stage', 'dept', 'machining'].includes(row.kind)
+                  ? String(v)
+                  : `<span class="weight-readonly">${v}</span>`))) },
+    { field: 'progress', label: 'İlerleme', width: '116px', type: 'number', min: 0, max: 100, step: 1,
+      headerClass: 'col-center', cellClass: 'col-progress', always: true,
+      formatter: (v, row) => cellOverride(row, 'progress') ?? progressBar(v) },
+    { field: 'status', label: 'Durum', width: '124px', type: 'select',
+      headerClass: 'col-center', cellClass: 'col-center', options: EDITABLE_STATUS_OPTIONS,
+      formatter: (v, row) => cellOverride(row, 'status') ?? statusBadge(v, isRowOverdue(row)) },
+    { field: 'forecast_date', label: 'Gerçek./Tahmini', width: '118px',
+      headerClass: 'col-center', cellClass: 'col-center col-date',
+      formatter: (v, row) => cellOverride(row, 'forecast_date') ?? forecastCell(row) },
+    { field: 'note', label: 'Not', width: '160px', type: 'text',
+      formatter: (v, row) => cellOverride(row, 'note')
+          ?? (v ? `<span class="stage-note">${esc(v)}</span>` : '<span class="text-muted">—</span>') },
+];
+
+// Rows that only ever report: other departments' work, and the block row,
+// which is a summary of the stages beneath it.
+// Rows that only ever report: the job order (its dates come from the order
+// record), other departments' work, and Talaşlı İmalat.
+const READ_ONLY_KINDS = ['group', 'info', 'band'];
+const SCHEDULE_ONLY = ['start_date', 'end_date', 'duration_wd', 'status'];
+
+// Per cell, not per row. Showing a cell as editable and then throwing when it
+// is touched is a worse answer than not offering it: the planner learns the
+// rule from the cursor instead of from an error.
+function isCellEditable(row, field) {
+    if (READ_ONLY_KINDS.includes(row.kind)) return false;
+    // Talaşlı İmalat's share of the manufacturing rollup is set here; its dates
+    // are not — those come from the operations underneath it.
+    if (row.kind === 'machining') return field === 'weight';
+    if (row.kind === 'dept') {
+        // Progress on a parent is the rollup of its children — İmalat and
+        // Kaynaklı İmalat always have some, Boya usually does.
+        if (field === 'progress') return !row.has_subtasks;
+        // The rollup weight is the planner's to set on the work they own.
+        // İmalat's weight splits the JOB ORDER across departments, which is a
+        // different decision and not made from this sheet.
+        if (field === 'weight') return row.slot !== 'manufacturing';
+        return SCHEDULE_ONLY.includes(field);
+    }
+    if (row.kind === 'block') {
+        // A block WITH stages is their rollup; its schedule is theirs to move,
+        // and the server rejects a subtask schedule in that shape anyway. The
+        // kg allocation has its own dialog because it touches billing.
+        return !row.has_stages && SCHEDULE_ONLY.concat('progress', 'note').includes(field);
+    }
+    if (field === 'title') return row.kind === 'stage' && !row.is_default;
+    if (field === 'weight') return row.kind === 'stage';
+    return true;
+}
+const COLUMNS_KEY = 'imalatPlanlama.columns';
+const ZOOM_KEY = 'imalatPlanlama.zoom';
+const GRIDW_KEY = 'imalatPlanlama.gridWidth';
+
+function defaultColumnKeys() {
+    return GRID_COLUMNS.filter(c => c.always).map(c => c.field);
+}
+
+function activeColumnKeys() {
+    try {
+        const stored = JSON.parse(localStorage.getItem(COLUMNS_KEY) || 'null');
+        if (Array.isArray(stored) && stored.length) {
+            const known = new Set(GRID_COLUMNS.map(c => c.field));
+            return stored.filter(f => known.has(f));
+        }
+    } catch { /* fall through to the default set */ }
+    return defaultColumnKeys();
+}
+
+function activeColumns() {
+    const keys = new Set(activeColumnKeys());
+    return GRID_COLUMNS.filter(c => c.always || keys.has(c.field));
+}
+
+// ---- rendering -----------------------------------------------------------
+
+function barState(row) {
+    if (['completed', 'skipped'].includes(row.status)) return 'done';
+    if (isRowOverdue(row)) return 'late';
+    if (row.status === 'on_hold') return 'hold';
+    return 'on-time';
+}
+
+// Only rows with a real span get a bar. A row whose dates are still unknown
+// draws nothing rather than a one-day stub at an invented date.
+function rowBar(row) {
+    if (row.kind === 'band') return null;
+    const start = row.start_date || row.end_date;
+    const end = row.end_date || row.start_date;
+    if (!start || !end) return null;
+    // 57 of 768 job orders carry a promised date EARLIER than the day they
+    // were opened. There is no span to draw; the two dates stay visible in the
+    // grid so the contradiction is obvious rather than hidden behind a stub.
+    if (end < start) return null;
+    return {
+        start, end,
+        progress: Number(row.progress || 0),
+        state: barState(row),
+        label: row.bar_label || row.title,
+        title: `${row.title} · ${fmtDate(row.start_date)} – ${fmtDate(row.end_date)}`,
+    };
+}
+
+function renderGrid() {
+    const container = document.getElementById('planning-grid');
     if (!container) return;
     const res = activeResource();
-    const totalKgEl = document.getElementById('sheet-total-kg');
+    const rows = res ? buildSheetRows(res) : [];
+    sheetRows = rows;
 
-    if (!res) {
-        container.innerHTML = `<div class="empty-sheet">Kaynak (taşeron/ekip) bulunamadı.</div>`;
-        if (totalKgEl) totalKgEl.textContent = '';
-        sheetTable = null;
-        updateToggleAllBtn();
-        return;
+    if (!grid) {
+        grid = new PlanningGrid('planning-grid', {
+            columns: activeColumns(),
+            rows,
+            zoom: localStorage.getItem(ZOOM_KEY) || 'week',
+            gridWidth: Number(localStorage.getItem(GRIDW_KEY)) || 560,
+            collapsed: collapsedJobs,
+            isCellEditable,
+            rowAttributes: (row) => ({ class: rowClasses(row) }),
+            bar: rowBar,
+            isNonWorkingDay: (dateStr) => calendar.isNonWorkingDay(dateStr),
+            today: new Date(),
+            onEdit: (row, field, value) => onCellEdit(row, field, value),
+            onEditError: (err) => showNotification(err?.message || 'Düzenleme başarısız', 'error'),
+            onToggleGroup: (row) => toggleJob(row.job_no),
+            onToggleAll,
+            onAction: onGridAction,
+            onGridWidthChange: (px) => localStorage.setItem(GRIDW_KEY, String(px)),
+            onZoomChange: (zoom) => applyZoom(zoom),
+            actions: GRID_ACTIONS,
+        });
+    } else {
+        grid.options.columns = activeColumns();
+        grid.options.collapsed = collapsedJobs;
+        grid.options.rows = rows;
     }
+    grid.options.allCollapsed = expandedJobCount() === 0;
+    grid.render();
+    // The header is rebuilt on every render, so the button needs re-binding —
+    // and any open menu belongs to the old one.
+    closeColumnPicker();
+    bindColumnPicker();
+}
 
-    const totalKg = res.blocks.filter(b => !b.deleted)
-        .reduce((sum, b) => sum + Number(b.allocated_weight_kg || 0), 0);
-    if (totalKgEl) totalKgEl.textContent = `Toplam: ${fmtKg(totalKg)} kg`;
+function rowClasses(row) {
+    const classes = [];
+    if (row.kind === 'group') classes.push('pg-row-group');
+    if (row.kind === 'band') classes.push('pg-row-band');
+    if (['info', 'machining'].includes(row.kind)) classes.push('pg-row-info');
+    if (row.kind === 'dept') classes.push(`pg-row-dept pg-row-${row.slot}`);
+    if (row.kind === 'block') classes.push('pg-row-block');
+    if (row.status === 'cancelled') classes.push('pg-row-cancelled');
+    classes.push(`pg-indent-${row.indent || 0}`);
+    return classes.join(' ');
+}
 
-    sheetRows = buildSheetRows(res);
+const GRID_ACTIONS = [
+    {
+        key: 'create-stages',
+        icon: 'fas fa-layer-group',
+        title: 'Varsayılan aşamaları (Montaj, Kaynak ve Taşlama) oluştur',
+        visible: (row) => row.kind === 'block' && !hasStages(row.blockRef),
+    },
+    {
+        key: 'add-custom',
+        icon: 'fas fa-plus',
+        title: 'Özel aşama ekle',
+        visible: (row) => row.kind === 'block' && hasStages(row.blockRef),
+    },
+    {
+        key: 'edit-weight',
+        icon: 'fas fa-weight-hanging',
+        title: 'Ağırlığı düzenle',
+        visible: (row) => row.kind === 'block',
+        disabled: (row) => !!findBlock(row.blockRef)?.is_billed,
+    },
+    {
+        key: 'delete-block',
+        icon: 'fas fa-trash',
+        title: 'Atamayı sil',
+        visible: (row) => row.kind === 'block',
+        disabled: (row) => !!findBlock(row.blockRef)?.is_billed,
+    },
+    {
+        key: 'delete-stage',
+        icon: 'fas fa-trash',
+        title: 'Özel aşamayı sil',
+        visible: (row) => row.kind === 'stage' && !row.is_default,
+    },
+];
 
-    if (!sheetRows.length) {
-        container.innerHTML = `
-            <div class="empty-sheet">
-                <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
-                Bu kaynağa atanmış iş yok. "İş Ekle" ile başlayın veya işler listesinden sürükleyin.
-            </div>`;
-        sheetTable = null;
-        updateToggleAllBtn();
-        return;
-    }
+function onGridAction(action, row) {
+    if (action === 'create-stages') onCreateStages(row.blockRef);
+    else if (action === 'add-custom') onAddCustomStage(row.blockRef);
+    else if (action === 'edit-weight') onEditWeight(row.blockRef);
+    else if (action === 'delete-block') onDeleteBlock(row.blockRef);
+    else if (action === 'delete-stage') onDeleteCustomStage(row);
+}
 
-    const blocksByRef = {};
-    res.blocks.forEach(b => { blocksByRef[b.key] = b; });
+function toggleJob(jobNo) {
+    if (collapsedJobs.has(jobNo)) collapsedJobs.delete(jobNo);
+    else collapsedJobs.add(jobNo);
+    renderGrid();
+}
 
-    if (!sheetTable) {
-        container.innerHTML = '';
-        sheetTable = new TableComponent('sheet-container', {
-            // The page card already supplies the title and toolbar.
-            showHeader: false,
-            data: sheetRows,
-            sortable: false,
-            pagination: false,
-            responsive: true,
-            stickyHeader: true,
-            groupBy: 'blockKey',
-            groupCollapsible: true,
-            defaultGroupExpanded: false,
-            groupHeaderFormatter: (groupValue) => {
-                const blockRef = String(groupValue).split('|').slice(1).join('|');
-                const block = findBlock(blockRef);
-                return block ? blockHeaderCells(block, String(groupValue)) : esc(groupValue);
-            },
-            editable: true,
-            editableColumns: ['title', 'start_date', 'end_date', 'duration_wd', 'weight', 'progress', 'status', 'note'],
-            isRowEditable: (row) => row.kind !== 'info' && row.kind !== 'band',
-            onEdit: onCellEdit,
-            rowAttributes: (row) => {
-                const classes = [];
-                if (row.kind === 'band') classes.push('band-row');
-                if (row.kind === 'info') classes.push('info-row');
-                if (row.kind === 'painting') classes.push('painting-row');
-                // Context rows sit under the band, indented, so the block's
-                // own stages stay visually the group's only children.
-                if (['info', 'painting'].includes(row.kind)) classes.push('context-row');
-                if (row.status === 'cancelled') classes.push('row-cancelled');
-                return { class: classes.join(' '), 'data-row-ref': row.key };
-            },
-            actionColumnWidth: '88px',
-            columns: [
-                {
-                    field: 'title', label: 'Aşama', width: '240px',
-                    formatter: (v, row) => titleCell(v, row),
-                },
-                {
-                    field: 'start_date', label: 'Başlangıç', type: 'date', width: '110px',
-                    headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v, row) => bandBlank(row) ?? dateCell(v, row.start_is_actual),
-                },
-                {
-                    field: 'end_date', label: 'Bitiş', type: 'date', width: '110px',
-                    headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v, row) => bandBlank(row) ?? dateCell(v, row.end_is_actual),
-                },
-                {
-                    field: 'duration_wd', label: 'Süre (iş g.)', type: 'number',
-                    min: 0, step: 0.5, width: '92px',
-                    headerClass: 'col-center', cellClass: 'col-center col-num',
-                    formatter: (v, row) => bandBlank(row) ?? durationCell(v, row.duration_is_derived),
-                },
-                {
-                    field: 'weight', label: 'Ağırlık', type: 'number', min: 1, step: 1, width: '82px',
-                    headerClass: 'col-center', cellClass: 'col-center col-num',
-                    // Info rows carry a real rollup weight too — it just isn't
-                    // editable from this page.
-                    formatter: (v, row) => bandBlank(row) ?? (v == null
-                        ? '<span class="text-muted">—</span>'
-                        : (row.kind === 'stage' ? String(v) : `<span class="weight-readonly">${v}</span>`)),
-                },
-                {
-                    field: 'progress', label: 'İlerleme', type: 'number', min: 0, max: 100, step: 1,
-                    width: '138px', headerClass: 'col-center', cellClass: 'col-progress',
-                    formatter: (v, row) => bandBlank(row) ?? progressBar(v),
-                },
-                {
-                    field: 'status', label: 'Durum', type: 'select', width: '140px',
-                    headerClass: 'col-center', cellClass: 'col-center',
-                    options: EDITABLE_STATUS_OPTIONS,
-                    formatter: (v, row) => bandBlank(row) ?? statusBadge(v, isRowOverdue(row)),
-                },
-                {
-                    field: 'forecast_date', label: 'Gerçek./Tahmini', width: '132px',
-                    headerClass: 'col-center', cellClass: 'col-center col-date',
-                    formatter: (v, row) => bandBlank(row) ?? forecastCell(row),
-                },
-                {
-                    field: 'note', label: 'Not', type: 'text',
-                    formatter: (v, row) => bandBlank(row) ?? (v ? `<span class="stage-note">${esc(v)}</span>` : '<span class="text-muted">—</span>'),
-                },
-            ],
-            actions: [
-                {
-                    key: 'delete-stage',
-                    icon: 'fas fa-trash',
-                    class: 'btn-outline-danger',
-                    title: 'Özel aşamayı sil',
-                    visible: (row) => row.kind === 'stage' && !row.is_default,
-                    onClick: (row) => onDeleteCustomStage(row),
-                },
-            ],
+// One place to change the scale, whether it came from a button or Ctrl+wheel.
+function applyZoom(zoom) {
+    localStorage.setItem(ZOOM_KEY, zoom);
+    document.querySelectorAll('#zoom-buttons [data-zoom]').forEach(
+        b => b.classList.toggle('active', b.dataset.zoom === zoom));
+    if (grid) grid.setZoom(zoom);
+}
+
+function initGridToolbar() {
+    const zoomWrap = document.getElementById('zoom-buttons');
+    if (zoomWrap) {
+        const stored = localStorage.getItem(ZOOM_KEY) || 'week';
+        zoomWrap.querySelectorAll('[data-zoom]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.zoom === stored);
+            btn.addEventListener('click', () => applyZoom(btn.dataset.zoom));
         });
     }
 
-    // Re-seed collapse state (keys carry a position prefix that can shift).
-    // Blocks start COLLAPSED — a sheet holds many jobs and the header row
-    // already carries the rollup; only explicitly opened blocks expand.
-    const expandedState = {};
-    const seen = new Set();
-    sheetRows.forEach(row => {
-        if (seen.has(row.blockKey)) return;
-        seen.add(row.blockKey);
-        expandedState[row.blockKey] = expandedByBlockKey[row.blockRef] === true;
-    });
-    sheetTable.groupExpandedState = expandedState;
-    sheetTable.updateData(sheetRows);
-    updateToggleAllBtn();
 }
 
-function expandedBlockCount() {
+// The picker lives on <body>, not in the grid header: that cell clips its
+// contents so columns cannot spill over the timeline, and it sits inside the
+// header's stacking context — a menu rendered in place was both cut off and
+// painted under the rest of the page. Positioned under the button on open.
+let columnPickerEl = null;
+
+function closeColumnPicker() {
+    if (columnPickerEl) columnPickerEl.remove();
+    columnPickerEl = null;
+    document.removeEventListener('click', onColumnPickerOutside, true);
+    document.removeEventListener('keydown', onColumnPickerKey, true);
+    window.removeEventListener('resize', closeColumnPicker);
+}
+
+function onColumnPickerOutside(e) {
+    if (columnPickerEl && !columnPickerEl.contains(e.target)
+        && !e.target.closest('.pg-columns-btn')) closeColumnPicker();
+}
+
+function onColumnPickerKey(e) {
+    if (e.key === 'Escape') closeColumnPicker();
+}
+
+function openColumnPicker(button) {
+    closeColumnPicker();
+    const keys = new Set(activeColumnKeys());
+    const el = document.createElement('div');
+    el.className = 'pg-picker-pop';
+    el.innerHTML = '<div class="pg-picker-head">Sütunlar</div>' + GRID_COLUMNS.map(c => `
+        <label class="pg-picker-item ${c.always ? 'pg-fixed-col' : ''}">
+            <input type="checkbox" class="form-check-input" value="${esc(c.field)}"
+                   ${c.always || keys.has(c.field) ? 'checked' : ''}
+                   ${c.always ? 'disabled' : ''}>
+            <span>${esc(c.label)}</span>
+            ${c.always ? '<i class="fas fa-lock pg-lock" title="Her zaman açık"></i>' : ''}
+        </label>`).join('');
+
+    document.body.appendChild(el);
+    const r = button.getBoundingClientRect();
+    // Flip up when there is no room below, and never run off the right edge.
+    const width = el.offsetWidth;
+    const height = el.offsetHeight;
+    const top = (r.bottom + height + 8 > window.innerHeight) ? r.top - height - 6 : r.bottom + 6;
+    el.style.top = `${Math.max(8, top)}px`;
+    el.style.left = `${Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8))}px`;
+
+    el.addEventListener('change', (e) => {
+        const box = e.target.closest('input[type=checkbox]');
+        if (!box) return;
+        const next = [...el.querySelectorAll('input[type=checkbox]')]
+            .filter(i => i.checked).map(i => i.value);
+        localStorage.setItem(COLUMNS_KEY, JSON.stringify(next));
+        renderGrid();
+    });
+
+    columnPickerEl = el;
+    document.addEventListener('click', onColumnPickerOutside, true);
+    document.addEventListener('keydown', onColumnPickerKey, true);
+    window.addEventListener('resize', closeColumnPicker);
+}
+
+function bindColumnPicker() {
+    const btn = document.querySelector('.pg-columns-btn');
+    if (!btn) return;
+    btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (columnPickerEl) closeColumnPicker();
+        else openColumnPicker(btn);
+    });
+}
+
+function expandedJobCount() {
     const res = activeResource();
     if (!res) return 0;
-    return res.blocks.filter(b => !b.deleted && expandedByBlockKey[b.key] === true).length;
-}
-
-function updateToggleAllBtn() {
-    const btn = document.getElementById('toggle-all-btn');
-    if (!btn) return;
-    const res = activeResource();
-    const blockCount = res ? res.blocks.filter(b => !b.deleted).length : 0;
-    btn.disabled = blockCount === 0;
-    const anyOpen = expandedBlockCount() > 0;
-    btn.innerHTML = anyOpen
-        ? '<i class="fas fa-angles-up me-1"></i>Tümünü Kapat'
-        : '<i class="fas fa-angles-down me-1"></i>Tümünü Aç';
+    return jobNosOf(res).filter(jobNo => !collapsedJobs.has(jobNo)).length;
 }
 
 function onToggleAll() {
     const res = activeResource();
     if (!res) return;
-    const expand = expandedBlockCount() === 0;
-    res.blocks.filter(b => !b.deleted).forEach(b => { expandedByBlockKey[b.key] = expand; });
-    renderSheet();
-}
-
-function bindSheetHeaderActions(container) {
-    if (container.dataset.headerActionsBound) return;
-    container.dataset.headerActionsBound = '1';
-    // Capture phase: the group-header TR carries an inline onclick that toggles
-    // collapse — stopPropagation here must run BEFORE that inline handler.
-    container.addEventListener('click', (e) => {
-        const actionEl = e.target.closest('[data-action]');
-        if (!actionEl || actionEl.disabled) return;
-        // The block's identity lives on the group row: "<order>|<blockRef>".
-        const row = actionEl.closest('tr.group-header');
-        if (!row) return;
-        e.preventDefault();
-        e.stopPropagation();
-        const blockRef = String(row.dataset.groupKey || '').split('|').slice(1).join('|');
-        const action = actionEl.dataset.action;
-        if (action === 'edit-weight') onEditWeight(blockRef);
-        else if (action === 'create-stages') onCreateStages(blockRef);
-        else if (action === 'add-custom') onAddCustomStage(blockRef);
-        else if (action === 'delete-block') onDeleteBlock(blockRef);
-    }, true);
-
-    // Track collapse toggles so tab switches / refreshes keep the state.
-    container.addEventListener('toggleGroup', (e) => {
-        const groupKey = e.detail?.groupKey;
-        if (!groupKey) return;
-        const blockRef = String(groupKey).split('|').slice(1).join('|');
-        // The table flips state after this event; mirror it.
-        setTimeout(() => {
-            if (sheetTable) expandedByBlockKey[blockRef] = !!sheetTable.groupExpandedState[groupKey];
-            updateToggleAllBtn();
-        }, 0);
+    const collapse = expandedJobCount() > 0;
+    jobNosOf(res).forEach(jobNo => {
+        if (collapse) collapsedJobs.add(jobNo);
+        else collapsedJobs.delete(jobNo);
     });
+    renderGrid();
 }
 
-// Deferred refresh: rebuild rows + gantt after in-place VM edits.
 function scheduleRefresh() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
-        renderSheet();
+        renderGrid();
         renderWarnings();
-        renderGantt();
     }, 0);
 }
 
 // ---- inline editing ------------------------------------------------------
 
 function onCellEdit(row, field, newValue) {
-    const block = findBlock(row.blockRef);
-    if (!block) return;
+    const block = row.blockRef ? findBlock(row.blockRef) : null;
 
     let target = null;
     if (row.kind === 'stage') {
-        target = block.stages.find(s => s.cid === row.stageCid);
-    } else if (row.kind === 'subtask') {
-        target = block.subtask;
-    } else if (row.kind === 'painting') {
-        target = paintingByJob[row.job_no];
+        target = block && block.stages.find(s => s.cid === row.stageCid);
+    } else if (row.kind === 'machining') {
+        target = machiningByJob[row.job_no];
+    } else if (row.kind === 'dept') {
+        target = deptOf(row.job_no, row.slot);
+    } else if (row.kind === 'block') {
+        target = block && block.subtask;
     }
     if (!target) return;
 
     const markDirty = () => {
-        if (row.kind === 'painting') markPaintingDirty(row.job_no, field);
+        if (row.kind === 'dept') markDeptDirty(row.job_no, row.slot, field);
+        else if (row.kind === 'machining') markMachiningDirty(row.job_no, field);
         else markBlockDirty(block.key);
     };
 
@@ -983,8 +1304,8 @@ function onCellEdit(row, field, newValue) {
         target.title = title;
         row.title = title;
     } else if (field === 'weight') {
-        if (row.kind !== 'stage') {
-            throw new Error('Ağırlık yalnızca aşamalarda düzenlenebilir.');
+        if (!['stage', 'dept', 'machining'].includes(row.kind)) {
+            throw new Error('Bu satırda ağırlık düzenlenemez.');
         }
         const weight = parseInt(newValue, 10);
         if (!Number.isFinite(weight) || weight < 1) {
@@ -993,8 +1314,8 @@ function onCellEdit(row, field, newValue) {
         target.weight = weight;
         row.weight = weight;
     } else if (field === 'progress') {
-        if (row.kind === 'painting' && target.has_subtasks) {
-            throw new Error('Boya görevinin ilerlemesi alt görevlerinden hesaplanır.');
+        if (row.kind === 'dept' && row.has_subtasks) {
+            throw new Error(`${row.title} ilerlemesi alt görevlerinden hesaplanır.`);
         }
         const progress = Number(newValue);
         if (!Number.isFinite(progress) || progress < 0 || progress > 100) {
@@ -1015,16 +1336,16 @@ function onCellEdit(row, field, newValue) {
         if (status === 'completed') {
             target.progress = 100;
             row.progress = 100;
-            // Painting payload omits progress unless this field is dirty.
+            // Dept payload omits progress unless this field is dirty.
             // Completing is itself a progress write (100); without marking
             // it, bulk-save would persist "completed" with the old percent.
-            if (row.kind === 'painting') markPaintingDirty(row.job_no, 'progress');
+            if (row.kind === 'dept') markDeptDirty(row.job_no, row.slot, 'progress');
         }
         row.status = status;
     } else if (field === 'note') {
         if (row.kind === 'stage') {
             target.note = String(newValue || '');
-        } else if (row.kind === 'subtask') {
+        } else if (row.kind === 'block') {
             block.notes = String(newValue || '');
         } else {
             throw new Error('Bu satırda not düzenlenemez.');
@@ -1064,6 +1385,37 @@ function onCellEdit(row, field, newValue) {
         const result = reconcileScheduleEdit(editedField, current, calendar);
         if (result.error) throw new Error(result.error);
 
+        // Whatever the planner just typed is entered, not derived — the row
+        // must stop wearing the "≈" and its tooltip. This applies to every
+        // editable row, Boya included: it was still showing its weight-share
+        // marker over a duration somebody had keyed in by hand.
+        target.duration_is_derived = false;
+        target.duration_source = null;
+        target.start_is_actual = false;
+        target.end_is_actual = false;
+        target.date_source = null;
+        if (row.kind === 'dept') {
+            target.entered_start_date = result.start_date;
+            target.entered_end_date = result.end_date;
+        }
+
+        if (row.kind === 'dept' && row.slot !== 'painting') {
+            const cover = childCoverage(row.job_no, row.slot);
+            if (cover.start && result.start_date && result.start_date > cover.start) {
+                throw new Error(
+                    `Alt görevler ${fmtDate(cover.start)} tarihinde başlıyor; ` +
+                    'ana görev daha geç başlayamaz.');
+            }
+            if (cover.end && result.end_date && result.end_date < cover.end) {
+                throw new Error(
+                    `Alt görevler ${fmtDate(cover.end)} tarihinde bitiyor; ` +
+                    'ana görev daha erken bitemez.');
+            }
+            // Typing on the parent moves the floor, so a later child change
+            // unions against what was just entered, not the stale value.
+            target.start_from_children = false;
+            target.end_from_children = false;
+        }
         target.duration_wd = result.duration_wd;
         target.start_date = result.start_date;
         target.end_date = result.end_date;
@@ -1077,12 +1429,21 @@ function onCellEdit(row, field, newValue) {
             start_date: result.start_date,
             end_date: result.end_date,
             status: target.status ?? row.status,
+            duration_is_derived: false,
+            duration_source: null,
+            start_is_actual: false,
+            end_is_actual: false,
+            date_source: null,
         });
     } else {
         return;
     }
 
     markDirty();
+    if (SCHEDULE_FIELDS.includes(field)
+            && (row.kind !== 'dept' || row.slot !== 'manufacturing')) {
+        reflowParents(row.job_no);
+    }
     scheduleRefresh();
 }
 
@@ -1110,7 +1471,7 @@ function onCreateStages(blockRef) {
         });
     });
     block.createDefaultStages = true;
-    expandedByBlockKey[block.key] = true;   // show what was just created
+    collapsedJobs.delete(block.job_no);   // show what was just created
     markBlockDirty(block.key);
     scheduleRefresh();
 }
@@ -1159,7 +1520,7 @@ function onAddCustomStage(blockRef) {
             note: '',
             deleted: false,
         });
-        expandedByBlockKey[block.key] = true;   // show what was just created
+        collapsedJobs.delete(block.job_no);   // show what was just created
         markBlockDirty(block.key);
         customStageModal.hide();
         scheduleRefresh();
@@ -1245,16 +1606,53 @@ function holdersForTask(weldingTaskId) {
 
 // Only jobs with capacity left are offerable: a job whose welding weight is
 // fully assigned has nothing to hand out.
+//
+// Each option carries what the decision actually needs — how big the job is,
+// how much of it is already out, and who has it — because picking from a list
+// of job numbers alone meant opening the modal repeatedly just to find out.
+// `searchText` keeps the markup out of what the search box matches.
 function weldingTaskOptions() {
     return weldingTasks
         .filter(t => t.total_weight_kg != null)
         .map(t => ({ task: t, remaining: remainingForTask(t.welding_task_id, t.total_weight_kg) }))
         .filter(({ remaining }) => remaining > 0)
         .sort((a, b) => String(a.task.job_no).localeCompare(String(b.task.job_no), 'tr'))
-        .map(({ task, remaining }) => ({
-            value: String(task.welding_task_id),
-            label: `${task.job_no} — ${task.job_order_title || ''} (kalan ${fmtKg(remaining)} kg)`,
-        }));
+        .map(({ task, remaining }) => {
+            const total = Number(task.total_weight_kg);
+            const assigned = allocatedForTask(task.welding_task_id);
+            const holders = holdersForTask(task.welding_task_id);
+            const shown = holders.slice(0, 3);
+            const rest = holders.length - shown.length;
+            const holderHtml = holders.length
+                ? shown.map(h => `<span class="jp-holder">
+                        <i class="fas ${h.type === 'subcontractor' ? 'fa-truck-field' : 'fa-users'}"></i>
+                        ${esc(h.name)} · ${fmtKg(h.kg)}</span>`).join('')
+                    + (rest > 0 ? `<span class="jp-holder jp-more">+${rest}</span>` : '')
+                : '<span class="jp-holder jp-none">henüz atanmadı</span>';
+
+            return {
+                value: String(task.welding_task_id),
+                searchText: [task.job_no, task.job_order_title, task.customer_name,
+                    ...holders.map(h => h.name)].filter(Boolean).join(' '),
+                // What the field shows once collapsed — the rich label is
+                // markup and would print as literal tags there.
+                selectedText: `${task.job_no} — ${task.job_order_title || ''}`
+                    + ` (kalan ${fmtKg(remaining)} kg)`,
+                label: `
+                    <span class="jp-opt">
+                        <span class="jp-top">
+                            <b class="jp-no">${esc(task.job_no)}</b>
+                            <span class="jp-title">${esc(task.job_order_title || '')}</span>
+                            <span class="jp-rem">kalan ${fmtKg(remaining)} kg</span>
+                        </span>
+                        <span class="jp-meta">
+                            <span class="jp-kg">toplam ${fmtKg(total)}</span>
+                            <span class="jp-kg">atanmış ${fmtKg(assigned)}</span>
+                            ${holderHtml}
+                        </span>
+                    </span>`,
+            };
+        });
 }
 
 function jobAllocInfoHTML(weldingTaskId) {
@@ -1319,6 +1717,9 @@ function openAddJobModal(prefillTaskId = null) {
                 id: 'welding_task_id', name: 'welding_task_id',
                 label: 'Kaynak Görevi (İş No)', type: 'dropdown', required: true,
                 searchable: true, icon: 'fas fa-tasks', colSize: 12,
+                // Two-line options need the room; the component still clamps
+                // this to whatever the viewport actually has.
+                maxHeight: 460,
                 options, value: defaultTaskId,
             },
             {
@@ -1551,115 +1952,13 @@ function pushNewBlock(draft) {
         resource_id: res.id,
     };
     res.blocks.push(block);
-    expandedByBlockKey[key] = true;
+    collapsedJobs.delete(block.job_no);
     markBlockDirty(key);
     scheduleRefresh();
     showNotification('Blok eklendi — Kaydet ile kalıcılaşır.', 'info');
 }
 
 // ---- gantt ---------------------------------------------------------------
-
-function dateToMs(dateStr) {
-    if (!dateStr) return null;
-    const [y, m, d] = dateStr.split('-').map(Number);
-    return new Date(y, m - 1, d).getTime();
-}
-
-function ganttStatus(status, overdue) {
-    if (status === 'completed' || status === 'skipped') return 'completed';
-    if (overdue) return 'delayed';
-    if (status === 'on_hold') return 'on-hold';
-    return 'in-progress';
-}
-
-function renderGantt() {
-    const res = activeResource();
-    const rows = [];
-
-    if (res) {
-        res.blocks.filter(b => !b.deleted).forEach(b => {
-            rows.push({
-                is_group: true,
-                id: `group-${b.key}`,
-                group_id: b.key,
-                ti_number: b.job_no || '',
-                title: `${b.job_order_title || ''} — ${fmtKg(b.allocated_weight_kg)} kg`,
-            });
-            const visibleStages = b.stages.filter(s => !s.deleted && s.status !== 'cancelled');
-            if (visibleStages.length) {
-                visibleStages.forEach(s => {
-                    if (!s.start_date && !s.end_date) return;
-                    const overdue = !!(s.end_date && s.end_date < todayStr()
-                        && !['completed', 'skipped'].includes(s.status));
-                    rows.push({
-                        id: `${b.key}-${s.cid}`,
-                        group_id: b.key,
-                        ti_number: s.title,
-                        title: `${b.job_no} · %${Math.round(s.progress || 0)}`,
-                        planned_start_ms: dateToMs(s.start_date || s.end_date),
-                        planned_end_ms: dateToMs(s.end_date || s.start_date),
-                        progress_percentage: Number(s.progress || 0),
-                        status: ganttStatus(s.status, overdue),
-                        is_overdue: overdue,
-                    });
-                });
-            } else if (b.subtask.start_date || b.subtask.end_date) {
-                const overdue = !!(b.subtask.end_date && b.subtask.end_date < todayStr()
-                    && !['completed', 'skipped'].includes(b.subtask.status));
-                rows.push({
-                    id: `${b.key}-subtask`,
-                    group_id: b.key,
-                    ti_number: 'Kaynak İşi',
-                    title: `${b.job_no} · %${Math.round(b.subtask.progress || 0)}`,
-                    planned_start_ms: dateToMs(b.subtask.start_date || b.subtask.end_date),
-                    planned_end_ms: dateToMs(b.subtask.end_date || b.subtask.start_date),
-                    progress_percentage: Number(b.subtask.progress || 0),
-                    status: ganttStatus(b.subtask.status, overdue),
-                    is_overdue: overdue,
-                });
-            }
-            const painting = paintingByJob[b.job_no];
-            if (painting && (painting.start_date || painting.end_date)) {
-                const overdue = !!(painting.end_date && painting.end_date < todayStr()
-                    && !['completed', 'skipped'].includes(painting.status));
-                rows.push({
-                    id: `${b.key}-painting`,
-                    group_id: b.key,
-                    ti_number: 'Boya',
-                    title: `${b.job_no} (iş emri geneli)`,
-                    planned_start_ms: dateToMs(painting.start_date || painting.end_date),
-                    planned_end_ms: dateToMs(painting.end_date || painting.start_date),
-                    progress_percentage: Number(painting.progress || 0),
-                    status: ganttStatus(painting.status, overdue),
-                    is_overdue: overdue,
-                });
-            }
-        });
-    }
-
-    if (!ganttChart) {
-        ganttChart = new GanttChart('gantt-container', {
-            title: 'Kaynak Planı',
-            defaultPeriod: 'month',
-            availableViews: ['week', 'month', 'year'],
-            filterByWorkingDays: false,
-            showCurrentTime: true,
-            // Continuous timeline: the month view spans every month the plan
-            // touches and scrolls, instead of one month at a time.
-            monthsPerView: 'auto',
-            isNonWorkingDay: (dateStr) => calendar.isNonWorkingDay(dateStr),
-            // No onTaskClick: a Gantt click stays on the Gantt (the component
-            // scrolls to the bar itself); it must not yank the page back to
-            // the table.
-        });
-        // Columns are measured from .gantt-scrolling-column, which only exists
-        // after the first render — re-render once on the next frame.
-        requestAnimationFrame(() => { if (ganttChart) ganttChart.setTasks(lastGanttRows); });
-    }
-    lastGanttRows = rows;
-    ganttChart.setTasks(rows);
-}
-
 
 // ---- save ----------------------------------------------------------------
 
@@ -1679,7 +1978,9 @@ function stagePayload(s) {
 }
 
 function buildPayload() {
-    const payload = { new_blocks: [], blocks: [], deleted_blocks: [], painting_tasks: [] };
+    const payload = {
+        new_blocks: [], blocks: [], deleted_blocks: [], department_tasks: [],
+    };
 
     deletedBlocks.forEach(d => payload.deleted_blocks.push({
         assignment_type: d.assignment_type,
@@ -1736,25 +2037,35 @@ function buildPayload() {
         payload.blocks.push(item);
     }));
 
-    dirtyPainting.forEach((fields, jobNo) => {
-        const p = paintingByJob[jobNo];
-        if (!p) return;
-        const item = { task_id: p.task_id, status: p.status };
+    dirtyDept.forEach((fields, key) => {
+        const [jobNo, slot] = key.split('|');
+        const vm = deptOf(jobNo, slot);
+        if (!vm) return;
+        const item = { task_id: vm.task_id, status: vm.status };
         // An absent key means "unchanged" to the server, so the schedule trio
         // only travels when the planner actually touched one of them —
-        // otherwise a status edit would persist the derived start/duration.
+        // otherwise a status edit would freeze the derived start/duration in.
         if (SCHEDULE_FIELDS.some(f => fields.has(f))) {
-            item.duration_wd = p.duration_wd;
-            item.start_date = p.start_date;
-            item.end_date = p.end_date;
+            item.duration_wd = vm.duration_wd;
+            item.start_date = vm.start_date;
+            item.end_date = vm.end_date;
         }
-        // Leaf painting progress is omitted unless edited — except
+        // Leaf dept progress is omitted unless edited — except
         // completed, which always means 100 and is set as a side effect
         // of the status change (see onCellEdit).
-        if (!p.has_subtasks && (fields.has('progress') || p.status === 'completed')) {
-            item.progress = p.progress;
+        if (!vm.has_subtasks && (fields.has('progress') || vm.status === 'completed')) {
+            item.progress = vm.progress;
         }
-        payload.painting_tasks.push(item);
+        if (fields.has('weight') && vm.weight != null) item.weight = vm.weight;
+        payload.department_tasks.push(item);
+    });
+
+    // Talaşlı İmalat travels the same channel, but only ever its weight — the
+    // server refuses a schedule on it, because those dates are its operations'.
+    dirtyMachining.forEach((fields, jobNo) => {
+        const vm = machiningByJob[jobNo];
+        if (!vm || !fields.has('weight') || vm.weight == null) return;
+        payload.department_tasks.push({ task_id: vm.task_id, weight: vm.weight });
     });
 
     return payload;
@@ -1782,22 +2093,15 @@ async function onSave() {
 function renderAll() {
     renderTabs();
     renderWarnings();
-    renderSheet();
-    renderGantt();
+    renderGrid();
     updateSaveState();
 }
 
 function switchResource(key) {
     if (key === activeResourceKey) return;
     activeResourceKey = key;
-    // The container element (and its once-bound delegated listeners) stays;
-    // only the table instance is rebuilt for the new resource.
-    sheetTable = null;
-    const container = document.getElementById('sheet-container');
-    if (container) container.innerHTML = '';
     renderTabs();
-    renderSheet();
-    renderGantt();
+    renderGrid();
 }
 
 function init() {
@@ -1807,9 +2111,11 @@ function init() {
     initNavbar();
 
     new HeaderComponent({
-        title: 'Kaynak Planlama',
-        subtitle: 'Taşeron ve ekip bazında iş takibi — aşamalar, süreler ve ilerleme',
-        icon: 'fire',
+        // The sheet plans the whole manufacturing task now — machining,
+        // welding and paint together — not just the welding assignments.
+        title: 'İmalat Planlama',
+        subtitle: 'İş emri bazında imalat takibi — talaşlı, kaynak, boya; süreler ve ilerleme',
+        icon: 'industry',
         containerId: 'header-placeholder',
         showBackButton: 'block',
         showRefreshButton: 'block',
@@ -1823,8 +2129,10 @@ function init() {
         },
     });
 
+    // xl, not md: the job picker's options carry the job, its tonnage, what is
+    // already assigned and to whom, and the allocation panel sits under them.
     blockModal = new EditModal('block-modal-container', {
-        title: 'İş Ekle', icon: 'fas fa-plus-circle', saveButtonText: 'Ekle', size: 'md',
+        title: 'İş Ekle', icon: 'fas fa-plus-circle', saveButtonText: 'Ekle', size: 'xl',
     });
     tierModal = new EditModal('tier-modal-container', {
         title: 'Fiyat Kademesi', icon: 'fas fa-tags', saveButtonText: 'Ekle', size: 'md',
@@ -1848,7 +2156,6 @@ function init() {
     });
     document.getElementById('save-btn').addEventListener('click', onSave);
     document.getElementById('add-job-btn').addEventListener('click', () => openAddJobModal());
-    document.getElementById('toggle-all-btn').addEventListener('click', onToggleAll);
 
     const completedToggle = document.getElementById('show-completed-toggle');
     if (completedToggle) {
@@ -1862,13 +2169,7 @@ function init() {
         });
     }
 
-    bindSheetHeaderActions(document.getElementById('sheet-container'));
-
-    let resizeTimer = null;
-    window.addEventListener('resize', () => {
-        clearTimeout(resizeTimer);
-        resizeTimer = setTimeout(() => { if (ganttChart) ganttChart.setTasks(lastGanttRows); }, 150);
-    });
+    initGridToolbar();
 
     window.addEventListener('beforeunload', (e) => {
         if (hasUnsavedChanges()) {

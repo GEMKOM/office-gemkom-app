@@ -113,142 +113,16 @@
     outline: 2px solid #dc3545;
 }
 
-/* ---- block header (group row rendered as REAL aligned cells) ---- */
-#sheet-container tr.group-header td {
-    padding: 0.5rem 0.75rem !important;
-    background-color: #f1f3f5;
-    border-top: 2px solid #dee2e6;
-    border-bottom: 1px solid #dee2e6;
-    vertical-align: middle;
-}
 
-#sheet-container tr.group-header:hover td { background-color: #e9ecef; }
-
-/* Identity cell: job no + title on one line, customer beneath. */
-.block-id {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
-.block-id .block-toggle-ico {
-    color: #8b0000;
-    font-size: .78rem;
-    width: 12px;
-    flex: none;
-}
-
-.block-id-text { min-width: 0; }
-
-.block-id-line {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-    min-width: 0;
-}
-
-.block-id-line .block-job {
-    font-weight: 700;
-    color: #1f2937;
-    white-space: nowrap;
-}
-
-.block-id-line .block-title {
-    color: #4b5563;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.block-customer {
-    color: #6b7280;
-    font-size: .72rem;
-    font-weight: 400;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.block-customer .fas { margin-right: 4px; font-size: .66rem; }
-
-.block-cell-value {
-    font-weight: 500;
-    color: #374151;
-    font-variant-numeric: tabular-nums;
-}
-
-.block-weight-chip {
-    display: inline-block;
-    background: #fff;
-    border: 1px solid #d1d5db;
-    border-radius: 12px;
-    padding: 1px 10px;
-    font-size: .76rem;
-    font-weight: 600;
-    color: #1f2937;
-    white-space: nowrap;
-    cursor: pointer;
-}
-
-.block-weight-chip:hover { background: #8b0000; border-color: #8b0000; color: #fff; }
-.block-weight-chip.locked { cursor: not-allowed; opacity: .8; }
-.block-weight-chip.locked:hover { background: #fff; border-color: #d1d5db; color: #1f2937; }
-
-.block-stage-count { color: #9ca3af; font-size: .74rem; font-weight: 400; }
-
-.block-actions {
-    display: flex;
-    gap: 4px;
-    justify-content: flex-end;
-}
-
-.block-actions .btn { padding: 2px 7px; font-size: .72rem; line-height: 1.3; }
-
-/* ---- column alignment ----
-   Labels and notes read left; dates, durations, weights and status badges are
-   scanned down the column, so they centre. Numeric columns use tabular figures
-   so digits line up between rows. */
-#sheet-container th,
-#sheet-container td {
-    vertical-align: middle;
-}
-
-#sheet-container th.col-center,
-#sheet-container td.col-center {
-    text-align: center;
-}
-
-#sheet-container td.col-num,
-#sheet-container td.col-date {
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-}
-
-#sheet-container td.col-progress {
-    text-align: center;
-}
-
-/* Inline editors inherit the column's alignment instead of jumping left. */
-#sheet-container td.col-center input,
-#sheet-container td.col-center select {
-    text-align: center;
-    text-align-last: center;
-}
-
-/* Header cells keep their label on one line where the column is wide enough. */
-#sheet-container thead th {
-    white-space: nowrap;
-    font-size: .8rem;
-}
-
-/* Detail rows sit one level under their block header. */
-#sheet-container tbody tr:not(.group-header) td:first-child {
-    padding-left: 2.1rem !important;
-}
 
 /* A real date standing in for a missing planned one. */
+/* Borrowed from a level down (a machining operation's plan), not entered on
+   this task — distinct from .date-actual, which is work that really happened. */
+.date-derived {
+    color: #6b7280;
+    font-style: italic;
+}
+
 .date-actual {
     color: #157347;
     font-style: italic;
@@ -274,7 +148,9 @@
 }
 
 .forecast-cell .fas { font-size: .72rem; }
+
 .forecast-cell.actual { color: #157347; font-weight: 600; }
+
 .forecast-cell.late { color: #b02a37; font-weight: 600; }
 
 /* ---- "İş Ekle" job allocation summary ---- */
@@ -300,6 +176,7 @@
 }
 
 .alloc-summary .is-free strong { color: #157347; }
+
 .alloc-summary .is-empty strong { color: #b02a37; }
 
 .alloc-holders {
@@ -323,7 +200,9 @@
 
 /* ---- over-allocation warning ---- */
 .warn-list { padding-left: 1.1rem; }
+
 .warn-list li { margin-bottom: .35rem; }
+
 .warn-over { color: #b02a37; font-weight: 600; }
 
 .warn-holders {
@@ -345,62 +224,17 @@
 
 .warn-holder .fas { font-size: .68rem; margin-right: 4px; opacity: .7; }
 
-/* ---- row states ---- */
-tr.info-row td {
-    background: #f9fafb !important;
-    color: #6b7280;
-    font-size: .82rem;
-}
-
-tr.info-row td:first-child { font-style: italic; }
-
-tr.row-cancelled td {
-    background: #f8f9fa !important;
-    color: #9ca3af;
-}
-
-tr.row-cancelled td:first-child { text-decoration: line-through; }
-
-tr.painting-row td {
-    background: #f5f3ff !important;
-}
-
-/* ---- job-order context band ----
-   The rows below this divider belong to the JOB ORDER, not to the welding
-   block above it. They used to sit in the same flat list as the block's own
-   stages — and because one of those context rows is itself a welding task,
-   the whole group read as one hierarchy whose day counts should add up. They
-   never did: the block header spans only its own stages, while these overlap
-   each other and run months earlier. */
-tr.band-row td {
-    background: #eef1f5 !important;
-    border-top: 2px solid #cbd2da !important;
-    padding-top: 5px !important;
-    padding-bottom: 5px !important;
-}
-
-.band-title {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: .72rem;
-    font-weight: 600;
-    letter-spacing: .04em;
-    text-transform: uppercase;
-    color: #6b7280;
+.block-count {
+    margin-left: 8px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: #e9ecef;
+    font-size: .68rem;
+    color: #495057;
 }
 
 .band-title .fas { font-size: .68rem; opacity: .75; }
 
-/* Indent past the block's own rows so the eye reads "different list", not
-   "deeper child". Must out-specify the generic detail-row indent above, which
-   is itself !important. */
-#sheet-container tbody tr.context-row td:first-child {
-    padding-left: 3.4rem !important;
-}
-
-.stage-title .default-ico { color: #8b0000; margin-right: 6px; }
-.stage-title .custom-ico { color: #6b7280; margin-right: 6px; }
 .stage-note { color: #6b7280; font-size: .78rem; }
 
 .mini-progress {
@@ -425,8 +259,78 @@ tr.band-row td {
     color: #4b5563;
 }
 
-#sheet-container .empty-sheet {
-    padding: 48px 16px;
-    text-align: center;
+/* ---- İş Ekle job picker ----
+   Two lines per option: what the job is, then how much of it is left and who
+   already holds the rest. Scoped off the label's own class so the shared
+   dropdown needs no extra plumbing. */
+.modern-dropdown .dropdown-item:has(.jp-opt) {
+    white-space: normal;
+    padding: 8px 12px;
+    line-height: 1.35;
+}
+
+.modern-dropdown .dropdown-item:has(.jp-opt) .item-text {
+    white-space: normal;
+    overflow: visible;
+    width: 100%;
+}
+
+.jp-opt { display: flex; flex-direction: column; gap: 3px; width: 100%; }
+
+.jp-top {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+}
+
+.jp-no { font-weight: 700; color: #212529; flex: 0 0 auto; }
+
+.jp-title {
+    color: #495057;
+    font-size: .84rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.jp-rem {
+    flex: 0 0 auto;
+    font-size: .72rem;
+    font-weight: 700;
+    color: #157347;
+    background: #e8f5ec;
+    border-radius: 9px;
+    padding: 1px 8px;
+}
+
+.jp-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    font-size: .72rem;
     color: #6b7280;
 }
+
+.jp-kg { font-variant-numeric: tabular-nums; }
+
+.jp-holder {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #f1f3f5;
+    border-radius: 9px;
+    padding: 1px 8px;
+    color: #495057;
+    max-width: 220px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.jp-holder .fas { font-size: .62rem; opacity: .7; }
+.jp-holder.jp-more { font-weight: 600; }
+.jp-holder.jp-none { background: transparent; color: #adb5bd; font-style: italic; padding-left: 0; }

@@ -472,6 +472,7 @@ export class EditModal {
                 searchable: field.searchable || false,
                 multiple: field.multiple || false
             };
+            if (field.maxHeight) dropdownOptions.maxHeight = field.maxHeight;
             if (field.remoteSearch && typeof field.remoteSearch === 'function') {
                 dropdownOptions.remoteSearch = field.remoteSearch;
                 dropdownOptions.minSearchLength = field.minSearchLength != null ? field.minSearchLength : 3;
@@ -487,7 +488,12 @@ export class EditModal {
                 let value = option.value !== undefined ? option.value : option.id;
                 if (value === undefined) value = index;
                 const text = option.label || option.text || option.name;
-                return { value, text, disabled: option.disabled || false };
+                return {
+                    value, text,
+                    searchText: option.searchText,
+                    selectedText: option.selectedText,
+                    disabled: option.disabled || false,
+                };
             };
             const items = (field.options || []).map(mapOptionToItem);
             

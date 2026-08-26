@@ -5549,7 +5549,8 @@ async function viewTopicDetail(topicId, jobNo) {
         }, 100);
         
         // Formatting toolbar + @mention autocomplete on the comment box
-        attachRichTextEditor(document.getElementById('new-comment-text'));
+        const commentTextarea = document.getElementById('new-comment-text');
+        attachRichTextEditor(commentTextarea);
         
         // Handle file selection preview for comments
         const commentFileInput = document.getElementById('comment-files-input');

@@ -1,0 +1,510 @@
+/* Planning grid — spreadsheet on the left, timeline on the right, one row.
+   Every measurement flows from --pg-row-h: the bar lane, the header tiers and
+   the today line all derive from it, so changing row density stays a one-line
+   edit instead of a hunt through the file. */
+
+.pg {
+    --pg-grid-w: 560px;
+    --pg-row-h: 30px;
+    --pg-col-w: 46px;
+    --pg-time-w: 0px;
+    --pg-header-h: 46px;
+    --pg-line: #e3e6ea;
+    --pg-line-strong: #c9ced4;
+    --pg-nonwork: #f1f3f5;
+    --pg-nonwork-bg: none;
+
+    border: 1px solid var(--pg-line-strong);
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
+}
+
+/* The only scroller. Both axes live here so the header can stick to the top
+   and the grid columns to the left without a second element to keep in sync —
+   the classic two-scrollers-out-of-step bug simply cannot happen. */
+.pg-scroll {
+    overflow: auto;
+    /* Nearly the whole viewport: this grid IS the page, and every row it can
+       show is a row the planner does not have to scroll to. */
+    max-height: calc(100vh - 172px);
+    min-height: 520px;
+}
+
+.pg-canvas {
+    width: calc(var(--pg-grid-w) + var(--pg-time-w));
+    position: relative;
+    font-size: .8rem;
+}
+
+/* ---- header ---- */
+
+.pg-header {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    display: flex;
+    height: var(--pg-header-h);
+    background: #f8f9fa;
+    border-bottom: 2px solid var(--pg-line-strong);
+}
+
+.pg-header-grid {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    display: flex;
+    width: var(--pg-grid-w);
+    flex: 0 0 var(--pg-grid-w);
+    background: #f8f9fa;
+    border-right: 2px solid var(--pg-line-strong);
+    /* Clip, do not spill: the cells inside have fixed widths, so a pane
+       dragged narrower than their total would otherwise paint straight over
+       the timeline and the two would read as one tangled row. The column
+       picker's menu is portalled out by Bootstrap, so clipping does not
+       swallow it. */
+    overflow: hidden;
+}
+
+.pg-hcell {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    font-size: .7rem;
+    font-weight: 700;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+    color: #495057;
+    border-right: 1px solid var(--pg-line);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex: 0 0 auto;
+}
+
+.pg-hcell.col-center { justify-content: center; }
+.pg-hcell-actions {
+    flex: 1 1 auto;
+    border-right: none;
+    justify-content: flex-end;
+    padding-right: 6px;
+    /* The picker's menu must escape the header's clip. */
+    position: static;
+}
+
+/* Expand/collapse every job, on the column it collapses. */
+.pg-toggle-all {
+    cursor: pointer;
+    margin-right: 6px;
+    color: #6c757d;
+    font-size: .74rem;
+}
+
+.pg-toggle-all:hover { color: #8b0000; }
+
+.pg-columns-btn { color: #6c757d; }
+.pg-columns-btn:hover { color: #212529; }
+
+/* Drag handle for the frozen-column width, sitting on the seam. */
+.pg-grip {
+    position: absolute;
+    right: -3px;
+    top: 0;
+    bottom: 0;
+    width: 7px;
+    cursor: col-resize;
+    z-index: 6;
+}
+
+.pg-grip:hover { background: rgba(139, 0, 0, .25); }
+
+body.pg-resizing,
+body.pg-resizing * {
+    cursor: col-resize !important;
+    user-select: none !important;
+}
+
+.pg-header-time { flex: 0 0 auto; }
+
+.pg-tier { display: flex; height: calc(var(--pg-header-h) / 2); }
+
+.pg-tier-top .pg-tier-cell {
+    font-weight: 700;
+    font-size: .68rem;
+    color: #343a40;
+    justify-content: flex-start;
+    padding-left: 6px;
+    border-bottom: 1px solid var(--pg-line);
+    /* A month label stays readable when its first weeks scroll off. */
+    position: relative;
+}
+
+.pg-tier-top .pg-tier-cell span {
+    position: sticky;
+    left: 4px;
+    white-space: nowrap;
+}
+
+.pg-tier-bottom .pg-tier-cell {
+    font-size: .66rem;
+    color: #6c757d;
+    justify-content: center;
+}
+
+.pg-tier-cell {
+    display: flex;
+    align-items: center;
+    border-right: 1px solid var(--pg-line);
+    overflow: hidden;
+    flex: 0 0 auto;
+}
+
+/* ---- rows ---- */
+
+.pg-rows { position: relative; }
+
+.pg-row {
+    display: flex;
+    height: var(--pg-row-h);
+    border-bottom: 1px solid var(--pg-line);
+}
+
+.pg-row:hover .pg-row-grid { background: #eef4fb; }
+.pg-row:hover .pg-row-time { background-color: rgba(13, 110, 253, .04); }
+
+.pg-row-grid {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    display: flex;
+    width: var(--pg-grid-w);
+    flex: 0 0 var(--pg-grid-w);
+    background: #fff;
+    border-right: 2px solid var(--pg-line-strong);
+    overflow: hidden;
+}
+
+.pg-cell {
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    border-right: 1px solid var(--pg-line);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    flex: 0 0 auto;
+}
+
+.pg-cell.col-center { justify-content: center; }
+.pg-cell.col-num,
+.pg-cell.col-date { font-variant-numeric: tabular-nums; }
+
+.pg-cell-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    gap: 3px;
+    border-right: none;
+    padding-right: 6px;
+}
+
+/* The name column is a jump-to-bar control as well as a label. */
+.pg-cell[data-field="title"] { cursor: pointer; }
+.pg-cell[data-field="title"]:hover .pg-title { text-decoration: underline dotted; }
+
+.pg-editable { cursor: cell; }
+.pg-editable:hover { box-shadow: inset 0 0 0 1px rgba(13, 110, 253, .45); }
+
+.pg-editor {
+    width: 100%;
+    height: calc(var(--pg-row-h) - 6px);
+    border: 1px solid #0d6efd;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: .78rem;
+    outline: none;
+}
+
+.pg-action-btn {
+    border: 1px solid transparent;
+    background: transparent;
+    color: #6c757d;
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    font-size: .68rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.pg-action-btn:hover:not(:disabled) { background: #e9ecef; color: #212529; }
+.pg-action-btn:disabled { opacity: .35; }
+
+/* ---- timeline lane ---- */
+
+.pg-row-time {
+    position: relative;
+    flex: 0 0 var(--pg-time-w);
+    width: var(--pg-time-w);
+    /* Weekend/holiday shading and the column rules are painted, not built out
+       of elements: at ~70 rows a div per column per row is thousands of nodes
+       for something a background can draw for free. */
+    background-image:
+        var(--pg-nonwork-bg),
+        repeating-linear-gradient(90deg, var(--pg-line) 0 1px, transparent 1px var(--pg-col-w));
+}
+
+.pg-today {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dc3545;
+    z-index: 3;
+    pointer-events: none;
+}
+
+.pg-bar {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: calc(var(--pg-row-h) - 12px);
+    min-height: 12px;
+    border-radius: 3px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .18);
+}
+
+/* Bar colour is the SCHEDULE state; the fill inside is progress. Keeping the
+   two on separate channels is what stops an overdue bar from drawing red
+   progress on a red bar and reading as 0%. */
+.pg-bar-on-time { background: linear-gradient(180deg, #34ad51 0%, #248239 100%); }
+.pg-bar-late { background: linear-gradient(180deg, #e2515f 0%, #bd2130 100%); }
+.pg-bar-hold { background: linear-gradient(180deg, #f0bf3f 0%, #d99e00 100%); }
+.pg-bar-done { background: linear-gradient(180deg, #34ad51 0%, #248239 100%); }
+
+.pg-bar-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(13, 110, 253, .95) 0%, rgba(0, 86, 179, .95) 100%);
+}
+
+.pg-bar-done .pg-bar-fill {
+    background: linear-gradient(180deg, rgba(25, 135, 60, .0) 0%, rgba(25, 135, 60, .0) 100%);
+}
+
+.pg-bar-label {
+    position: relative;
+    z-index: 1;
+    padding: 0 6px;
+    font-size: .66rem;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    text-shadow: 0 1px 1px rgba(0, 0, 0, .35);
+}
+
+/* A summary row's bar reads as a bracket, the way a project plan draws a
+   parent task — otherwise it is indistinguishable from the work beneath it. */
+.pg-row-group .pg-bar {
+    height: 10px;
+    border-radius: 2px;
+    box-shadow: none;
+}
+
+.pg-row-group .pg-bar::before,
+.pg-row-group .pg-bar::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    border-top: 5px solid #1f6f31;
+    height: 0;
+    width: 0;
+}
+
+.pg-row-group .pg-bar::before { left: 0; border-right: 5px solid transparent; }
+.pg-row-group .pg-bar::after { right: 0; border-left: 5px solid transparent; }
+
+/* ---- row kinds ---- */
+
+.pg-row-group .pg-row-grid {
+    background: #f1f3f5;
+    font-weight: 600;
+}
+
+.pg-row-group { border-bottom: 1px solid var(--pg-line-strong); }
+.pg-row-group:hover .pg-row-grid { background: #e7ebef; }
+
+.pg-row-block .pg-row-grid { background: #fbfbfc; }
+.pg-row-info .pg-row-grid { color: #6b7280; }
+.pg-row-manufacturing .pg-row-grid { background: #eef6ff; font-weight: 600; }
+.pg-row-welding .pg-row-grid { background: #fff6f2; }
+.pg-row-painting .pg-row-grid { background: #f7f5ff; }
+.pg-indent-4 .pg-cell:first-child { padding-left: 68px; }
+.pg-row-band .pg-row-grid {
+    background: #eef1f5;
+    color: #6b7280;
+}
+
+.pg-row-band { border-top: 1px solid var(--pg-line-strong); }
+.pg-row-cancelled .pg-row-grid { color: #adb5bd; text-decoration: line-through; }
+
+/* Indentation carries the hierarchy: job → its tasks → an assignment's
+   stages → other departments' context. */
+.pg-indent-1 .pg-cell:first-child { padding-left: 20px; }
+.pg-indent-2 .pg-cell:first-child { padding-left: 36px; }
+.pg-indent-3 .pg-cell:first-child { padding-left: 52px; }
+
+.pg-toggle {
+    cursor: pointer;
+    width: 14px;
+    margin-right: 4px;
+    color: #6c757d;
+    flex: 0 0 auto;
+}
+
+.pg-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.pg-title .pg-ico { color: #8b0000; opacity: .75; width: 12px; }
+
+/* The job's description rides along with its number, dimmed, so the group row
+   identifies the work without stealing the column's width from the number. */
+.pg-sub {
+    color: #6c757d;
+    font-weight: 400;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.pg-row-group .block-count {
+    margin-left: 6px;
+    padding: 0 6px;
+    border-radius: 8px;
+    background: #dee2e6;
+    font-size: .64rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.pg-empty {
+    padding: 48px 16px;
+    text-align: center;
+    color: #6b7280;
+}
+
+/* ---- toolbar bits that belong to the grid ---- */
+
+.pg-zoom .btn { font-size: .72rem; padding: 2px 10px; }
+
+.pg-legend {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    font-size: .72rem;
+    color: #6b7280;
+}
+
+.pg-legend-item { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
+
+.pg-swatch {
+    width: 15px;
+    height: 9px;
+    border-radius: 2px;
+    display: inline-block;
+    border: 1px solid rgba(0, 0, 0, .15);
+}
+
+.pg-swatch-on-time { background: linear-gradient(180deg, #34ad51, #248239); }
+.pg-swatch-late { background: linear-gradient(180deg, #e2515f, #bd2130); }
+.pg-swatch-hold { background: linear-gradient(180deg, #f0bf3f, #d99e00); }
+.pg-swatch-progress { background: linear-gradient(180deg, rgba(13,110,253,.95), rgba(0,86,179,.95)); }
+
+@media (max-width: 991.98px) {
+    .pg-scroll { max-height: none; }
+}
+
+/* ---- column picker ----
+   Rendered on <body> so the grid header can keep clipping its own cells
+   without swallowing the menu, and so nothing on the page paints over it.
+   Literal colours: the --pg-* variables live on .pg and do not reach here. */
+.pg-picker-pop {
+    position: fixed;
+    z-index: 2000;
+    min-width: 210px;
+    padding: 5px;
+    background: #fff;
+    border: 1px solid #c9ced4;
+    border-radius: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, .16);
+    font-size: .8rem;
+}
+
+.pg-picker-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    color: #343a40;
+    cursor: pointer;
+    margin: 0;
+}
+
+.pg-picker-item:hover { background: #f1f3f5; }
+
+.pg-picker-pop .form-check-input {
+    margin: 0;
+    border-color: #adb5bd;
+    cursor: pointer;
+    flex: 0 0 auto;
+}
+
+.pg-picker-pop .form-check-input:checked {
+    background-color: #8b0000;
+    border-color: #8b0000;
+}
+
+.pg-picker-pop .form-check-input:focus {
+    border-color: #8b0000;
+    box-shadow: 0 0 0 .18rem rgba(139, 0, 0, .18);
+}
+
+.pg-picker-pop .form-check-input:disabled { opacity: .5; }
+
+.pg-picker-pop .pg-lock { margin-left: auto; font-size: .62rem; color: #adb5bd; }
+
+.pg-picker-head {
+    padding: 3px 8px 6px;
+    font-size: .66rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: #adb5bd;
+}
+
+/* Zoom control: label it, or nobody finds it. */
+.pg-zoom-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .72rem;
+    color: #6c757d;
+}
+
+.pg-zoom .btn.active {
+    background: #8b0000;
+    border-color: #8b0000;
+    color: #fff;
+}

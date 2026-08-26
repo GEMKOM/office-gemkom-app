@@ -663,15 +663,15 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 /* The medallion masks a quarter-circle out of this panel's bottom-right
    corner, so the scrolling resource list must END above the arc — rows may
    not travel through a clipped corner. This footer reserves that band:
-   its height + the card's bottom padding (14px, 9px on short screens) covers
-   --medal-notch (82px / 66px). Bottom-aligned so a short footer still hugs
-   the panel's edge. */
+   its height + the card's bottom padding (14px, 9px on short screens) clears
+   --medal-notch (82px / 66px) with a few px to spare. Bottom-aligned so a
+   short footer still hugs the panel's edge. */
 .pp-meeting-grid .pp-area-welding .pp-welding-foot {
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    min-height: calc(var(--medal-notch) - 9px);
+    min-height: calc(var(--medal-notch) - 4px);
 }
 
 .pp-meeting-grid .pp-area-machining .card-body {
@@ -925,22 +925,47 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     scrollbar-color: #c8cfd9 transparent;
 }
 
-.pp-scroll::-webkit-scrollbar {
-    width: 6px;
-}
-
-.pp-scroll::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.pp-scroll::-webkit-scrollbar-thumb {
-    background: #c8cfd9;
-    border-radius: 3px;
-}
-
-/* Rows sit slightly clear of the scrollbar gutter so the % never touches it */
+/* Rows keep clear of the scrollbar gutter so the % never touches the thumb */
 .pp-res-scroll .pp-line {
-    padding-right: 2px;
+    padding-right: 4px;
+}
+
+/* Duration-entry contradiction: a warning about the DATA, not the schedule,
+   so it reads as an aside (amber, smaller) rather than a status colour that
+   would compete with the red/green verdict vocabulary. */
+.pp-plan-warn {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin: 10px 0 6px;
+    padding: 10px 14px;
+    border: 1px solid #f5d9a8;
+    border-left: 3px solid #ea9a3e;
+    border-radius: 10px;
+    background: #fdf6ea;
+    color: #6b4d21;
+    font-size: 0.9rem;
+    line-height: 1.45;
+}
+
+.pp-plan-warn i {
+    color: #ea9a3e;
+    margin-top: 2px;
+}
+
+.pp-plan-warn strong {
+    color: #4a3616;
+}
+
+.pp-warn-flag {
+    color: #ea9a3e;
+}
+
+.pp-td-conflict {
+    margin-top: 3px;
+    color: #8a6224;
+    font-size: 0.84rem;
+    line-height: 1.35;
 }
 
 /* Generic list line: content left, status right — single line, always */
