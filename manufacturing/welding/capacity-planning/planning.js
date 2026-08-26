@@ -1333,7 +1333,14 @@ function onCellEdit(row, field, newValue) {
         const status = String(newValue);
         if (!STATUS_META[status]) throw new Error('Geçersiz durum.');
         target.status = status;
-        if (status === 'completed') target.progress = 100;
+        if (status === 'completed') {
+            target.progress = 100;
+            row.progress = 100;
+            // Dept payload omits progress unless this field is dirty.
+            // Completing is itself a progress write (100); without marking
+            // it, bulk-save would persist "completed" with the old percent.
+            if (row.kind === 'dept') markDeptDirty(row.job_no, row.slot, 'progress');
+        }
         row.status = status;
     } else if (field === 'note') {
         if (row.kind === 'stage') {
@@ -2043,7 +2050,12 @@ function buildPayload() {
             item.start_date = vm.start_date;
             item.end_date = vm.end_date;
         }
-        if (!vm.has_subtasks && fields.has('progress')) item.progress = vm.progress;
+        // Leaf dept progress is omitted unless edited — except
+        // completed, which always means 100 and is set as a side effect
+        // of the status change (see onCellEdit).
+        if (!vm.has_subtasks && (fields.has('progress') || vm.status === 'completed')) {
+            item.progress = vm.progress;
+        }
         if (fields.has('weight') && vm.weight != null) item.weight = vm.weight;
         payload.department_tasks.push(item);
     });
