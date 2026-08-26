@@ -1385,20 +1385,10 @@ function onCellEdit(row, field, newValue) {
         const result = reconcileScheduleEdit(editedField, current, calendar);
         if (result.error) throw new Error(result.error);
 
-        // Whatever the planner just typed is entered, not derived — the row
-        // must stop wearing the "≈" and its tooltip. This applies to every
-        // editable row, Boya included: it was still showing its weight-share
-        // marker over a duration somebody had keyed in by hand.
-        target.duration_is_derived = false;
-        target.duration_source = null;
-        target.start_is_actual = false;
-        target.end_is_actual = false;
-        target.date_source = null;
-        if (row.kind === 'dept') {
-            target.entered_start_date = result.start_date;
-            target.entered_end_date = result.end_date;
-        }
-
+        // Refuse before touching the VM. reflowParents uses entered_* as the
+        // floor of the parent window; writing a rejected start/end there (and
+        // then throwing) poisoned that floor so a later child edit would save
+        // the dates the planner was just told were illegal.
         if (row.kind === 'dept' && row.slot !== 'painting') {
             const cover = childCoverage(row.job_no, row.slot);
             if (cover.start && result.start_date && result.start_date > cover.start) {
@@ -1411,10 +1401,26 @@ function onCellEdit(row, field, newValue) {
                     `Alt görevler ${fmtDate(cover.end)} tarihinde bitiyor; ` +
                     'ana görev daha erken bitemez.');
             }
-            // Typing on the parent moves the floor, so a later child change
-            // unions against what was just entered, not the stale value.
-            target.start_from_children = false;
-            target.end_from_children = false;
+        }
+
+        // Whatever the planner just typed is entered, not derived — the row
+        // must stop wearing the "≈" and its tooltip. This applies to every
+        // editable row, Boya included: it was still showing its weight-share
+        // marker over a duration somebody had keyed in by hand.
+        target.duration_is_derived = false;
+        target.duration_source = null;
+        target.start_is_actual = false;
+        target.end_is_actual = false;
+        target.date_source = null;
+        if (row.kind === 'dept') {
+            target.entered_start_date = result.start_date;
+            target.entered_end_date = result.end_date;
+            if (row.slot !== 'painting') {
+                // Typing on the parent moves the floor, so a later child change
+                // unions against what was just entered, not the stale value.
+                target.start_from_children = false;
+                target.end_from_children = false;
+            }
         }
         target.duration_wd = result.duration_wd;
         target.start_date = result.start_date;

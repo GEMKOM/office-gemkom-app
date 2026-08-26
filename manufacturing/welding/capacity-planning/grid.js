@@ -75,6 +75,18 @@ function daysInMonth(date) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
+// Keep the current value in a <select> even when it is not in the editable
+// list (blocked/skipped on a department row). Otherwise the browser picks the
+// first option and a blur looks like a real edit.
+export function optionsWithCurrentValue(options, currentValue) {
+    const opts = Array.isArray(options) ? options.slice() : [];
+    if (currentValue != null && String(currentValue) !== ''
+        && !opts.some(o => String(o.value) === String(currentValue))) {
+        opts.unshift({ value: currentValue, label: String(currentValue) });
+    }
+    return opts;
+}
+
 // ---------------------------------------------------------------------------
 // Timeline model
 // ---------------------------------------------------------------------------
@@ -549,7 +561,8 @@ export class PlanningGrid {
         if (col.type === 'select') {
             editor = document.createElement('select');
             editor.className = 'pg-editor';
-            (col.options || []).forEach(opt => {
+            const opts = optionsWithCurrentValue(col.options, value);
+            opts.forEach(opt => {
                 const o = document.createElement('option');
                 o.value = opt.value;
                 o.textContent = opt.label;
@@ -589,7 +602,10 @@ export class PlanningGrid {
             }
         };
 
-        editor.addEventListener('blur', () => finish(true));
+        // Selects commit on change. Blur without a change must not commit:
+        // an unmatched current value used to look like "pending" and a click
+        // away would write that.
+        editor.addEventListener('blur', () => finish(col.type !== 'select'));
         editor.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); finish(true); }
             else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
