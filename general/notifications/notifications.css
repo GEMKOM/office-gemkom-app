@@ -199,6 +199,25 @@
     border-top: none;
 }
 
+/* Marks where the already-handled rows start in the mixed view. Not sticky —
+   only one of these exists per page, and it should scroll away with its
+   block. */
+.notif-group {
+    background: #eef0f3;
+    border-top: 1px solid var(--notif-border);
+    border-bottom: 1px solid var(--notif-border);
+    padding: 0.5rem 1.25rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #52606d;
+}
+
+.notif-group + .notif-day {
+    border-top: none;
+}
+
 .notif-row {
     display: grid;
     grid-template-columns: 38px 1fr auto;

@@ -268,12 +268,15 @@ export class NotificationBell {
 
         try {
             const response = await getNotifications({
-                page_size: 20
+                page_size: 20,
+                // Unread first, newest first inside each group, so what is still
+                // waiting never sits below what the user has already read.
+                ordering: 'is_read,-created_at'
             });
 
             // Handle both paginated and non-paginated responses
             const notifications = Array.isArray(response) ? response : (response.results || []);
-            this.renderNotifications(listContainer, notifications);
+            this.renderNotifications(listContainer, this.sortUnreadFirst(notifications));
         } catch (error) {
             console.error('Failed to load notifications:', error);
             listContainer.innerHTML = `
@@ -283,6 +286,19 @@ export class NotificationBell {
                 </div>
             `;
         }
+    }
+
+    /**
+     * Unread before read, newest first within each group.
+     *
+     * The server is asked for this ordering too; repeating it here keeps the
+     * panel right even if the API ignores the ordering parameter.
+     */
+    sortUnreadFirst(notifications) {
+        return (notifications || []).slice().sort((a, b) => {
+            if (!!a.is_read !== !!b.is_read) return a.is_read ? 1 : -1;
+            return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        });
     }
 
     /**
