@@ -21,6 +21,13 @@ import {
 
 const PAGE_SIZE = 25;
 
+/**
+ * The page opens on unread only. Read notifications are the ones the user has
+ * already dealt with, and leaving them in the list pushed everything still
+ * waiting below the fold.
+ */
+const DEFAULT_READ_FILTER = 'false';
+
 const state = {
     page: 1,
     count: 0,
@@ -31,7 +38,7 @@ const state = {
         search: '',
         category: '',
         notification_type: '',
-        is_read: '',
+        is_read: DEFAULT_READ_FILTER,
         created_at__date__gte: '',
         created_at__date__lte: '',
     },
@@ -80,6 +87,9 @@ function setupFilters() {
         },
         onClear: () => {
             Object.keys(state.filters).forEach((key) => { state.filters[key] = ''; });
+            // Clearing returns to the default view rather than to everything.
+            state.filters.is_read = DEFAULT_READ_FILTER;
+            filtersComponent.setFilterValues({ 'notif-read': DEFAULT_READ_FILTER });
             load({ resetPage: true });
         },
     });
@@ -107,6 +117,7 @@ function setupFilters() {
             { value: 'false', label: 'Okunmamış' },
             { value: 'true', label: 'Okunmuş' },
         ],
+        value: DEFAULT_READ_FILTER,
         placeholder: 'Tümü',
         colSize: 2,
         searchable: false,
@@ -134,19 +145,51 @@ function syncTypeOptions() {
     if (typeFilter._signature === signature) return;
     typeFilter._signature = signature;
     typeFilter.options = options;
+
+    // renderFilters() rebuilds every field from its config, which would snap the
+    // other inputs back to their defaults — carry the live values across.
+    const current = filtersComponent.getFilterValues();
     filtersComponent.renderFilters();
+    filtersComponent.setFilterValues(current);
 }
 
 // ------------------------------------------------------------------ data
 
 function activeQuery() {
-    const query = { ordering: '-created_at', page_size: PAGE_SIZE, page: state.page };
+    // In the mixed view unread has to come first across the whole archive, not
+    // just within the page we happen to be showing, so the server orders it.
+    const ordering = state.filters.is_read === '' ? 'is_read,-created_at' : '-created_at';
+    const query = { ordering, page_size: PAGE_SIZE, page: state.page };
     Object.entries(state.filters).forEach(([key, value]) => {
         if (value !== '' && value !== null && value !== undefined) {
             query[key] = value;
         }
     });
     return query;
+}
+
+/**
+ * What the list should actually show right now.
+ *
+ * Read state is edited in place (optimistically) between loads, so a row can
+ * stop matching the active status filter without a round trip; it drops out
+ * here. The sort repeats the server ordering so an optimistically flipped row
+ * lands in the right group immediately.
+ */
+function visibleNotifications() {
+    const readFilter = state.filters.is_read;
+    const rows = state.notifications.filter(n => matchesReadFilter(n));
+    if (readFilter !== '') return rows;
+
+    return rows.slice().sort((a, b) => {
+        if (!!a.is_read !== !!b.is_read) return a.is_read ? 1 : -1;
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+    });
+}
+
+function matchesReadFilter(notification) {
+    if (state.filters.is_read === '') return true;
+    return String(!!notification.is_read) === state.filters.is_read;
 }
 
 async function load({ resetPage = false } = {}) {
@@ -265,27 +308,47 @@ function renderList({ loading = false, error = false }) {
         return;
     }
 
-    if (!state.notifications.length) {
-        container.innerHTML = card(`
-            <div class="notif-state">
-                <i class="fas fa-bell-slash"></i>
-                <div class="notif-state-title">
-                    ${hasActiveFilters()
-                        ? 'Bu filtrelere uyan bildirim bulunamadı.'
-                        : 'Henüz bildiriminiz yok.'}
-                </div>
-                ${hasActiveFilters()
-                    ? '<div class="small">Filtreleri temizleyip tekrar deneyin.</div>'
-                    : ''}
-            </div>
-        `);
+    const rows = visibleNotifications();
+
+    if (!rows.length) {
+        container.innerHTML = card(renderEmptyState());
         return;
     }
 
     container.innerHTML = card(`
-        <div class="notif-history-list">${renderGroupedRows()}</div>
+        <div class="notif-history-list">${renderGroupedRows(rows)}</div>
         ${renderPager()}
     `);
+}
+
+function renderEmptyState() {
+    // The default view is unread-only, so an empty list there is good news
+    // rather than a dead end — say so instead of blaming the filters.
+    if (state.filters.is_read === DEFAULT_READ_FILTER && !hasActiveFilters()) {
+        return `
+            <div class="notif-state">
+                <i class="fas fa-check-circle"></i>
+                <div class="notif-state-title">Okunmamış bildirim yok.</div>
+                <div class="small">
+                    Geçmiş bildirimleriniz için durum filtresini "Tümü" yapın.
+                </div>
+            </div>
+        `;
+    }
+
+    return `
+        <div class="notif-state">
+            <i class="fas fa-bell-slash"></i>
+            <div class="notif-state-title">
+                ${hasActiveFilters()
+                    ? 'Bu filtrelere uyan bildirim bulunamadı.'
+                    : 'Henüz bildiriminiz yok.'}
+            </div>
+            ${hasActiveFilters()
+                ? '<div class="small">Filtreleri temizleyip tekrar deneyin.</div>'
+                : ''}
+        </div>
+    `;
 }
 
 function card(inner) {
@@ -293,14 +356,25 @@ function card(inner) {
 }
 
 /** Rows under sticky day headers — an archive scans far better dated. */
-function renderGroupedRows() {
+function renderGroupedRows(notifications) {
+    // In the mixed view the read rows sit in their own block below the unread
+    // ones, so the day headers restart there instead of repeating out of order.
+    const splitByReadState = state.filters.is_read === '';
     let currentDay = null;
-    return state.notifications.map(notification => {
-        const day = dayKey(notification.created_at);
+    let readBlockOpened = false;
+
+    return notifications.map(notification => {
         let header = '';
+        if (splitByReadState && notification.is_read && !readBlockOpened) {
+            readBlockOpened = true;
+            currentDay = null;
+            header += '<div class="notif-group">Okunanlar</div>';
+        }
+
+        const day = dayKey(notification.created_at);
         if (day !== currentDay) {
             currentDay = day;
-            header = `<div class="notif-day">${escapeHtml(dayLabel(notification.created_at))}</div>`;
+            header += `<div class="notif-day">${escapeHtml(dayLabel(notification.created_at))}</div>`;
         }
         return header + renderRow(notification);
     }).join('');
@@ -425,47 +499,136 @@ function setupDelegatedClicks() {
 }
 
 async function handleOpen(id, link) {
+    const notification = findNotification(id);
+    const wasRead = notification ? !!notification.is_read : true;
+    if (notification) {
+        applyReadState(notification, true);
+        refreshView();
+    }
+
     try {
         await markNotificationRead(id);
+        syncBellCount();
     } catch (error) {
         console.error('Failed to mark notification as read:', error);
+        revertReadState(notification, wasRead);
     }
+
     if (link) {
         navigateTo(link);
-    } else {
-        await load({});
     }
 }
 
 async function handleToggleRead(id, read) {
+    const notification = findNotification(id);
+    if (!notification || !!notification.is_read === read) return;
+
+    // Flip it in place first: reloading the page would rebuild the list under
+    // the user and throw away their scroll position.
+    applyReadState(notification, read);
+    refreshView();
+
     try {
         if (read) {
             await markNotificationRead(id);
         } else {
             await markNotificationUnread(id);
         }
-        await load({});
+        syncBellCount();
     } catch (error) {
         console.error('Failed to toggle read state:', error);
+        revertReadState(notification, !read);
         showNotification('Bildirim durumu güncellenemedi', 'error');
     }
 }
 
 async function handleMarkAllRead() {
+    const rows = state.notifications;
+    const snapshot = {
+        readStates: rows.map(n => !!n.is_read),
+        count: state.count,
+        unread: state.facets ? state.facets.unread : null,
+    };
+
+    rows.forEach(n => applyReadState(n, true));
+    // The call clears every page, not just the rows in hand.
+    if (state.facets) state.facets.unread = 0;
+    if (state.filters.is_read === DEFAULT_READ_FILTER) state.count = 0;
+    refreshView();
+
     try {
         await markAllNotificationsRead();
-        await load({});
+        syncBellCount();
         showNotification('Tüm bildirimler okundu olarak işaretlendi', 'success');
+        // Rows we never loaded changed too; the unread view is already empty
+        // and correct, the others need the real page back.
+        if (state.filters.is_read !== DEFAULT_READ_FILTER) await load({});
     } catch (error) {
         console.error('Failed to mark all as read:', error);
+        // Only unwind if a reload has not already replaced these rows.
+        if (state.notifications === rows) {
+            rows.forEach((n, index) => { n.is_read = snapshot.readStates[index]; });
+            state.count = snapshot.count;
+            if (state.facets && snapshot.unread !== null) state.facets.unread = snapshot.unread;
+            refreshView();
+        }
         showNotification('Bildirimler güncellenemedi', 'error');
     }
+}
+
+function findNotification(id) {
+    return state.notifications.find(n => String(n.id) === String(id));
+}
+
+/**
+ * Move one row's read state locally, keeping the counters that were rendered
+ * from the server response in step with it.
+ */
+function applyReadState(notification, read) {
+    if (!!notification.is_read === !!read) return;
+
+    const matchedBefore = matchesReadFilter(notification);
+    notification.is_read = !!read;
+    const matchesNow = matchesReadFilter(notification);
+
+    if (matchedBefore !== matchesNow) {
+        state.count = Math.max(0, state.count + (matchesNow ? 1 : -1));
+    }
+    if (state.facets && typeof state.facets.unread === 'number') {
+        state.facets.unread = Math.max(0, state.facets.unread + (read ? -1 : 1));
+    }
+}
+
+/**
+ * Undo an optimistic flip after a failed call — unless a reload has already
+ * replaced the list, in which case the server state is on screen anyway.
+ */
+function revertReadState(notification, read) {
+    if (!notification || !state.notifications.includes(notification)) return;
+    applyReadState(notification, read);
+    refreshView();
+}
+
+/** Re-render from local state, holding the page where the user left it. */
+function refreshView() {
+    const scrollY = window.scrollY;
+    renderFacets();
+    renderList({});
+    window.scrollTo(0, scrollY);
+}
+
+/** Keep the navbar bell badge honest after a read-state change. */
+function syncBellCount() {
+    window.notificationBell?.updateUnreadCount?.();
 }
 
 // ---------------------------------------------------------------- helpers
 
 function hasActiveFilters() {
-    return Object.values(state.filters).some(value => value !== '' && value !== null);
+    // The default unread-only view is the resting state, not a filter the user
+    // has to be told about.
+    return Object.entries(state.filters).some(([key, value]) =>
+        value !== '' && value !== null && !(key === 'is_read' && value === DEFAULT_READ_FILTER));
 }
 
 function formatDateTime(value) {
