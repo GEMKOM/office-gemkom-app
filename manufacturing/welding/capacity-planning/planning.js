@@ -147,6 +147,12 @@ function stageVM(s) {
         status: s.status,
         progress: Number(s.progress ?? 0),
         duration_wd: s.duration_wd,
+        // Weight-share slice inherited down the ancestor chain (Üretim ->
+        // Kaynaklı İmalat -> assignment -> this stage). Display + forecast
+        // only — never written back unless the planner edits the row.
+        duration_is_derived: !!s.duration_is_derived,
+        duration_source: s.duration_source || null,
+        entered_duration_wd: s.entered_duration_wd == null ? null : s.entered_duration_wd,
         start_date: s.start_date,
         end_date: s.end_date,
         completed_at: s.completed_at || null,
@@ -178,6 +184,10 @@ function blockVM(b, res) {
             start_date: b.subtask.start_date,
             end_date: b.subtask.end_date,
             duration_wd: b.subtask.duration_wd,
+            duration_is_derived: !!b.subtask.duration_is_derived,
+            duration_source: b.subtask.duration_source || null,
+            entered_duration_wd: (b.subtask.entered_duration_wd == null
+                ? null : b.subtask.entered_duration_wd),
             completed_at: b.subtask.completed_at || null,
             forecast_date: b.subtask.forecast_date || null,
             forecast_kind: b.subtask.forecast_kind || null,
@@ -778,6 +788,13 @@ function buildSheetRows(res) {
                 start_date: staged.length ? rollup.windowStart : b.subtask.start_date,
                 end_date: staged.length ? rollup.windowEnd : b.subtask.end_date,
                 duration_wd: staged.length ? rollup.totalDays : b.subtask.duration_wd,
+                duration_is_derived: staged.length
+                    ? rollup.totalDays != null
+                    : !!b.subtask.duration_is_derived,
+                duration_source: staged.length
+                    ? (rollup.totalDays != null ? 'children_span' : null)
+                    : b.subtask.duration_source,
+                entered_duration_wd: b.subtask.entered_duration_wd ?? null,
                 weight: b.allocated_weight_kg,
                 weight_is_kg: true,
                 progress: staged.length ? rollup.progress : b.subtask.progress,
@@ -800,6 +817,9 @@ function buildSheetRows(res) {
                 start_date: s.start_date,
                 end_date: s.end_date,
                 duration_wd: s.duration_wd,
+                duration_is_derived: !!s.duration_is_derived,
+                duration_source: s.duration_source || null,
+                entered_duration_wd: s.entered_duration_wd ?? null,
                 weight: s.weight,
                 progress: s.progress,
                 status: s.status,
@@ -977,6 +997,14 @@ const SCHEDULE_ONLY = ['start_date', 'end_date', 'duration_wd', 'status'];
 // rule from the cursor instead of from an error.
 function isCellEditable(row, field) {
     if (READ_ONLY_KINDS.includes(row.kind)) return false;
+    // ONE duration entry point (top-down model, 2026-08-28): the İmalat
+    // row. Everything under it — Kaynaklı İmalat, Boya, blocks, stages —
+    // sizes as a live weight-share slice of that number; weights are the
+    // lever, dates remain free (scheduling is a different decision).
+    if (field === 'duration_wd'
+            && !(row.kind === 'dept' && row.slot === 'manufacturing')) {
+        return false;
+    }
     // Talaşlı İmalat's share of the manufacturing rollup is set here; its dates
     // are not — those come from the operations underneath it.
     if (row.kind === 'machining') return field === 'weight';
@@ -1053,9 +1081,68 @@ function rowBar(row) {
     };
 }
 
+// Live top-down duration propagation (user model 2026-08-28): the İmalat
+// entry divides down by weight at every level — dept rows, blocks, stages —
+// recomputed from the CURRENT VMs on every render, so a weight edit, a new
+// stage or a changed İmalat number redistributes instantly. Only rows with
+// no entered duration take the slice (legacy per-child entries display until
+// saving the İmalat number purges them server-side). The server recomputes
+// authoritatively on reload — this is the same arithmetic, sooner.
+function rederiveDerivedDurations() {
+    const round1 = (v) => Math.round(v * 10) / 10;
+    const w = (x) => Number(x || 0);
+
+    const jobBlocks = {};
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (b.deleted) return;
+        (jobBlocks[b.job_no] = jobBlocks[b.job_no] || []).push(b);
+    }));
+
+    Object.entries(deptByJob).forEach(([jobNo, slots]) => {
+        const imalat = slots.manufacturing;
+        if (!imalat) return;
+        const top = imalat.entered_duration_wd != null
+            ? Number(imalat.entered_duration_wd)
+            : (!imalat.duration_is_derived && imalat.duration_wd != null
+                ? Number(imalat.duration_wd) : null);
+        if (top == null || top <= 0) return;
+
+        const weld = slots.welding;
+        const paint = slots.painting;
+        const mach = machiningByJob[jobNo];
+        const sibSum = w(weld && weld.weight) + w(paint && paint.weight)
+            + w(mach && mach.weight);
+        if (sibSum <= 0) return;
+
+        const setSlice = (vm, value) => {
+            if (!vm || vm.entered_duration_wd != null) return;
+            vm.duration_wd = round1(value);
+            vm.duration_is_derived = true;
+            vm.duration_source = 'weight_share';
+        };
+
+        const weldSlice = top * w(weld && weld.weight) / sibSum;
+        setSlice(weld, weldSlice);
+        setSlice(paint, top * w(paint && paint.weight) / sibSum);
+
+        const blocks = (jobBlocks[jobNo] || []);
+        const kgSum = blocks.reduce((acc, b) => acc + w(b.allocated_weight_kg), 0);
+        blocks.forEach(b => {
+            if (kgSum <= 0) return;
+            const blockSlice = weldSlice * w(b.allocated_weight_kg) / kgSum;
+            setSlice(b.subtask, blockSlice);
+            const live = b.stages.filter(s => !s.deleted && s.status !== 'cancelled');
+            const stageSum = live.reduce((acc, s) => acc + w(s.weight), 0);
+            if (stageSum <= 0) return;
+            live.forEach(s => setSlice(s, blockSlice * w(s.weight) / stageSum));
+        });
+    });
+}
+
 function renderGrid() {
     const container = document.getElementById('planning-grid');
     if (!container) return;
+    rederiveDerivedDurations();
     const res = activeResource();
     const rows = res ? buildSheetRows(res) : [];
     sheetRows = rows;
@@ -1351,62 +1438,63 @@ function onCellEdit(row, field, newValue) {
             throw new Error('Bu satırda not düzenlenemez.');
         }
         row.note = String(newValue || '');
-    } else if (field === 'start_date' || field === 'end_date' || field === 'duration_wd') {
-        const current = {
-            duration_wd: target.duration_wd != null ? Number(target.duration_wd) : null,
-            start_date: target.start_date || null,
-            end_date: target.end_date || null,
-        };
-        const editedField = field === 'duration_wd' ? 'duration' : (field === 'start_date' ? 'start' : 'end');
-        if (field === 'duration_wd') {
-            const raw = String(newValue ?? '').trim();
-            current.duration_wd = raw === '' ? null : Number(raw);
-            if (current.duration_wd != null && (!Number.isFinite(current.duration_wd) || current.duration_wd < 0)) {
-                throw new Error('Süre 0 veya daha büyük olmalıdır.');
-            }
-        } else {
-            current[field] = newValue || null;
+    } else if (field === 'duration_wd') {
+        // Only the İmalat row reaches here (isCellEditable). Duration is
+        // PURE SIZING, fully decoupled from dates (user model 2026-08-28):
+        // it never moves a date, and the render pass redistributes every
+        // child slice immediately — before any save.
+        const raw = String(newValue ?? '').trim();
+        const num = raw === '' ? null : Number(raw);
+        if (num != null && (!Number.isFinite(num) || num < 0)) {
+            throw new Error('Süre 0 veya daha büyük olmalıdır.');
         }
-
-        // Duration 0 on a DEFAULT stage = cancel (Excel's "0 gün" convention).
-        if (row.kind === 'stage' && row.is_default && field === 'duration_wd' && current.duration_wd === 0) {
-            target.duration_wd = 0;
-            target.start_date = null;
-            target.end_date = null;
-            target.status = 'cancelled';
-            Object.assign(row, {
-                duration_wd: 0, start_date: null, end_date: null, status: 'cancelled',
-            });
-            markDirty();
-            scheduleRefresh();
-            return;
-        }
-
-        const result = reconcileScheduleEdit(editedField, current, calendar);
-        if (result.error) throw new Error(result.error);
-
-        // Whatever the planner just typed is entered, not derived — the row
-        // must stop wearing the "≈" and its tooltip. This applies to every
-        // editable row, Boya included: it was still showing its weight-share
-        // marker over a duration somebody had keyed in by hand.
+        target.duration_wd = num;
+        target.entered_duration_wd = num;
         target.duration_is_derived = false;
         target.duration_source = null;
-        target.start_is_actual = false;
-        target.end_is_actual = false;
-        target.date_source = null;
-        if (row.kind === 'dept') {
-            target.entered_start_date = result.start_date;
-            target.entered_end_date = result.end_date;
+        Object.assign(row, {
+            duration_wd: num,
+            duration_is_derived: false,
+            duration_source: null,
+        });
+        // Mirror of the server-side purge: asserting the İmalat number
+        // re-bases the WHOLE subtree on it, stray child entries included —
+        // cleared here too so the redistribution shows immediately, before
+        // any save (the save clears them in the DB).
+        if (num != null) {
+            const clearEntry = (vm) => {
+                if (!vm) return;
+                vm.entered_duration_wd = null;
+                vm.duration_is_derived = true;
+                vm.duration_source = 'weight_share';
+            };
+            clearEntry(deptOf(row.job_no, 'welding'));
+            clearEntry(deptOf(row.job_no, 'painting'));
+            resources.forEach(res => res.blocks.forEach(b => {
+                if (b.job_no !== row.job_no || b.deleted) return;
+                clearEntry(b.subtask);
+                b.stages.forEach(s => { if (!s.deleted) clearEntry(s); });
+            }));
+        }
+    } else if (field === 'start_date' || field === 'end_date') {
+        // Dates are PURE SCHEDULING — they never derive a duration and no
+        // duration ever derives them (decoupled, 2026-08-28).
+        const start = field === 'start_date'
+            ? (newValue || null) : (target.start_date || null);
+        const end = field === 'end_date'
+            ? (newValue || null) : (target.end_date || null);
+        if (start && end && end < start) {
+            throw new Error('Bitiş tarihi başlangıç tarihinden önce olamaz.');
         }
 
         if (row.kind === 'dept' && row.slot !== 'painting') {
             const cover = childCoverage(row.job_no, row.slot);
-            if (cover.start && result.start_date && result.start_date > cover.start) {
+            if (cover.start && start && start > cover.start) {
                 throw new Error(
                     `Alt görevler ${fmtDate(cover.start)} tarihinde başlıyor; ` +
                     'ana görev daha geç başlayamaz.');
             }
-            if (cover.end && result.end_date && result.end_date < cover.end) {
+            if (cover.end && end && end < cover.end) {
                 throw new Error(
                     `Alt görevler ${fmtDate(cover.end)} tarihinde bitiyor; ` +
                     'ana görev daha erken bitemez.');
@@ -1416,21 +1504,24 @@ function onCellEdit(row, field, newValue) {
             target.start_from_children = false;
             target.end_from_children = false;
         }
-        target.duration_wd = result.duration_wd;
-        target.start_date = result.start_date;
-        target.end_date = result.end_date;
-        // Re-activate a cancelled default stage when it gets duration again.
-        if (row.kind === 'stage' && target.status === 'cancelled'
-            && ((result.duration_wd && result.duration_wd > 0) || result.start_date)) {
+
+        target.start_date = start;
+        target.end_date = end;
+        target.start_is_actual = false;
+        target.end_is_actual = false;
+        target.date_source = null;
+        if (row.kind === 'dept') {
+            target.entered_start_date = start;
+            target.entered_end_date = end;
+        }
+        // Scheduling a cancelled default stage brings it back.
+        if (row.kind === 'stage' && target.status === 'cancelled' && start) {
             target.status = 'pending';
         }
         Object.assign(row, {
-            duration_wd: result.duration_wd,
-            start_date: result.start_date,
-            end_date: result.end_date,
+            start_date: start,
+            end_date: end,
             status: target.status ?? row.status,
-            duration_is_derived: false,
-            duration_source: null,
             start_is_actual: false,
             end_is_actual: false,
             date_source: null,
@@ -1963,13 +2054,15 @@ function pushNewBlock(draft) {
 // ---- save ----------------------------------------------------------------
 
 function stagePayload(s) {
+    // No duration_wd on purpose: a stage's size IS its weight-share slice
+    // of the İmalat entry (top-down model) — the sheet never writes stage
+    // durations, and saving the İmalat number purges legacy ones.
     const item = {
         title: s.title,
         weight: s.weight,
         status: s.status,
         progress: s.progress,
         note: s.note || '',
-        duration_wd: s.duration_wd,
         start_date: s.start_date,
         end_date: s.end_date,
     };
@@ -2026,10 +2119,11 @@ function buildPayload() {
         if (stageItems.length) item.stages = stageItems;
 
         if (!hasStages) {
+            // No duration_wd — the block sizes from its weight-share slice
+            // of the İmalat entry (top-down model); only dates travel.
             item.subtask_schedule = {
                 status: b.subtask.status,
                 progress: b.subtask.progress,
-                duration_wd: b.subtask.duration_wd,
                 start_date: b.subtask.start_date,
                 end_date: b.subtask.end_date,
             };
@@ -2045,8 +2139,10 @@ function buildPayload() {
         // An absent key means "unchanged" to the server, so the schedule trio
         // only travels when the planner actually touched one of them —
         // otherwise a status edit would freeze the derived start/duration in.
+        // Only İmalat — the single duration entry point — sends a duration;
+        // Kaynaklı İmalat / Boya size from their weight-share slice.
         if (SCHEDULE_FIELDS.some(f => fields.has(f))) {
-            item.duration_wd = vm.duration_wd;
+            if (slot === 'manufacturing') item.duration_wd = vm.duration_wd;
             item.start_date = vm.start_date;
             item.end_date = vm.end_date;
         }

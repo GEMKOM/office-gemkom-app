@@ -3654,7 +3654,9 @@ function getConsultationsTableRows() {
             const deadlineStr = deadlineVal ? formatDate(deadlineVal) : null;
             const sharedFiles = t.shared_files || [];
             const completionFiles = t.completion_files || [];
-            const descText = (t.notes ?? t.description ?? '').toString();
+            const requestNote = (t.description ?? '').toString();
+            const responseNote = (t.notes ?? '').toString();
+            const truncate = (v) => v.substring(0, 80) + (v.length > 80 ? '…' : '');
             rows.push({
                 task_id: t.id,
                 discussion_topic_id: t.discussion_topic?.id || null,
@@ -3664,7 +3666,8 @@ function getConsultationsTableRows() {
                 status_display: getTaskStatusBadge(t.status),
                 assigned_to_name: t.assigned_to_name || '',
                 deadline: deadlineStr || '',
-                notes: descText.substring(0, 80) + (descText.length > 80 ? '…' : ''),
+                notes: truncate(requestNote),
+                response_notes: truncate(responseNote),
                 shared_files_count: sharedFiles.length,
                 shared_files: sharedFiles,
                 completion_files: completionFiles
@@ -3693,6 +3696,7 @@ function renderConsultationsTable() {
             { field: 'assigned_to_name', label: 'Atanan', sortable: true, formatter: (v) => v || '-' },
             { field: 'deadline', label: 'Hedef Tarih', sortable: true, formatter: (v) => v || '-' },
             { field: 'notes', label: 'Not', sortable: false, formatter: (v) => (v || '-').replace(/</g, '&lt;') },
+            { field: 'response_notes', label: 'Yanıt Notu', sortable: false, formatter: (v) => (v || '-').replace(/</g, '&lt;') },
             {
                 field: 'shared_files',
                 label: 'Paylaşılan dosyalar',
@@ -6204,14 +6208,14 @@ async function showEditConsultationModal(taskId, onSuccess) {
     }
     const sharedFileIds = new Set((task.shared_files || []).map(f => f.id));
     const titleVal = task.title ?? task.request_title ?? '';
-    const notesVal = task.notes ?? task.request_description ?? task.description ?? '';
+    const notesVal = task.description ?? '';
     const deadlineRaw = task.target_completion_date ?? task.deadline ?? task.due_date ?? task.target_date ?? task.hedef_tarih;
     const deadlineVal = toDateInputValue(deadlineRaw);
     const modal = new EditModal('edit-consultation-modal-container', { title: 'Danışma Görevini Düzenle', icon: 'fas fa-edit', size: 'lg', showEditButton: false });
     modal.clearAll();
     modal.addSection({ title: 'Görev Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-info' });
     modal.addField({ id: 'title', name: 'title', label: 'Başlık', type: 'text', value: titleVal, icon: 'fas fa-heading', colSize: 12 });
-    modal.addField({ id: 'notes', name: 'notes', label: 'Notlar', type: 'textarea', value: notesVal, placeholder: 'İsteğe bağlı', icon: 'fas fa-sticky-note', colSize: 12 });
+    modal.addField({ id: 'notes', name: 'notes', label: 'Notlar', type: 'textarea', value: notesVal, placeholder: 'Departmana iletmek istediğiniz notlar (isteğe bağlı)', icon: 'fas fa-sticky-note', colSize: 12 });
     modal.addField({ id: 'deadline', name: 'deadline', label: 'Hedef Tarih', type: 'date', value: deadlineVal, icon: 'fas fa-calendar', colSize: 6 });
     modal.onSaveCallback(async (formData) => {
         const payload = {};

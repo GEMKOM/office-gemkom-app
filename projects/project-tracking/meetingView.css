@@ -1224,6 +1224,13 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     font-weight: 600;
 }
 
+.pp-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
 .pp-modal-close {
     border: 1px solid #d3d9e1;
     background: #ffffff;
@@ -1237,6 +1244,40 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
 .pp-modal-close:hover {
     background: #f1f4f8;
     color: #1f2530;
+}
+
+.pp-modal-pdf {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #d3d9e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #3a4150;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.pp-modal-pdf:hover:not(:disabled) {
+    background: #f1f4f8;
+    color: #1f2530;
+}
+
+.pp-modal-pdf:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.pp-modal-pdf i {
+    color: #c0392b;
+}
+
+.pp-modal-pdf:disabled i {
+    color: inherit;
 }
 
 .pp-modal-body {
@@ -1798,3 +1839,61 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     }
 }
 
+
+
+/* --------------------------------------------------------------------------
+   PDF export — the modal cloned off-screen, unclipped, and captured
+   -------------------------------------------------------------------------- */
+
+/* Off-screen but laid out: html2canvas paints the element subtree and
+   translates by its own offset, so a negative left is invisible to the user
+   and harmless to the capture. display:none would give an empty canvas. */
+.pp-pdf-stage {
+    pointer-events: none;
+}
+
+/* On screen the modal is a flex column with a scrolling body clipped to the
+   viewport; on paper there is no viewport, so both give way and the whole
+   length renders in one pass. */
+.pp-pdf-capture {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    animation: none !important;
+}
+
+.pp-pdf-capture .pp-modal-body {
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+/* Ellipsis is a screen affordance backed by a hover tooltip. Paper has no
+   hover, so every task label, group header and "neden bu tarih?" sentence
+   wraps out in full instead of being cut at the column edge. */
+.pp-pdf-capture .pp-modal-table .pp-td-main,
+.pp-pdf-capture .pp-modal-table .pp-td-muted,
+.pp-pdf-capture .pp-modal-table .pp-td-basis,
+.pp-pdf-capture .pp-modal-table .pp-modal-group td {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: none !important;
+}
+
+/* html2canvas does not render box-shadow, and the driver row is marked with
+   an inset one — the same 3px bar, drawn as a border, survives the capture. */
+.pp-pdf-capture .pp-modal-table .pp-modal-driver td:first-child {
+    box-shadow: none !important;
+    border-left: 3px solid #7c3aed;
+}
+
+.pp-pdf-meta {
+    padding: 10px 20px 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #8a919c;
+}

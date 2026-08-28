@@ -12,6 +12,7 @@
  */
 import { showNotification } from '../../components/notification/notification.js';
 import { escapeHtml } from '../../utils/text.js';
+import { exportElementToPdf } from '../../utils/pdfExport.js';
 import {
     getJobOrderProductionPlan,
     getProductionPlanOverview,
@@ -367,13 +368,21 @@ function ensureMeetingModalHost() {
         <div class="pp-modal" role="dialog" aria-modal="true">
             <div class="pp-modal-head">
                 <span class="pp-modal-title" id="pp-modal-title"></span>
-                <button type="button" class="pp-modal-close" data-modal-close aria-label="Kapat">
-                    <i class="fas fa-xmark"></i>
-                </button>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-modal-pdf" data-modal-pdf
+                            title="Detayın tamamını PDF olarak indir">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </button>
+                    <button type="button" class="pp-modal-close" data-modal-close aria-label="Kapat">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
             </div>
             <div class="pp-modal-body" id="pp-modal-body"></div>
         </div>`;
     host.addEventListener('click', (e) => {
+        const pdfBtn = e.target.closest('[data-modal-pdf]');
+        if (pdfBtn) { downloadModalPdf(pdfBtn); return; }
         if (e.target === host || e.target.closest('[data-modal-close]')) closeMeetingModal();
     });
     host.addEventListener('change', (e) => {
@@ -404,6 +413,63 @@ function closeMeetingModal() {
 
 const MODAL_LOADING_HTML =
     '<div class="pp-modal-loading"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</div>';
+
+// The open modal, downloaded as it looks on screen — same colours, badges and
+// sentences — but unclipped: the whole scroll length, not the visible window.
+// Plan Detayı is the wide one (seven columns and a paragraph per row), so it
+// goes to landscape; the narrower section modals read better upright.
+async function downloadModalPdf(btn) {
+    const modal = document.querySelector('#pp-meeting-modal .pp-modal');
+    const context = meetingModalContext;
+    if (!modal || !context) return;
+    if (modal.querySelector('.pp-modal-loading')) {
+        showNotification('Detay henüz yükleniyor, birazdan tekrar deneyin.', 'info');
+        return;
+    }
+
+    const plan = context.kind === 'plan';
+    const kindLabel = plan ? 'Plan Detayı'
+        : (context.kind === 'welding' ? 'Kaynak Detayı'
+            : (SECTION_MODAL_TITLES[context.kind] || 'Detay'));
+    const item = meetingItems[meetingIndex] || {};
+    const now = new Date();
+    const stamp = now.toLocaleDateString('tr-TR');
+    const fileStamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const subtitle = [item.title, item.customer_name, `GEMKOM · ${stamp}`]
+        .filter(Boolean).join(' · ');
+
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> PDF';
+    try {
+        await exportElementToPdf(modal, {
+            fileName: `${context.jobNo} ${kindLabel} ${fileStamp}`,
+            orientation: plan ? 'landscape' : 'portrait',
+            captureWidth: plan ? 1400 : 1000,
+            captureClass: 'pp-pdf-capture',
+            stageClass: 'pp-pdf-stage',
+            footerText: context.jobNo,
+            prepare: (clone) => {
+                clone.querySelectorAll('[data-modal-pdf], [data-modal-close]')
+                    .forEach(el => el.remove());
+                // Who and when — the slide carries it on screen, the sheet
+                // has to say it itself.
+                const head = clone.querySelector('.pp-modal-head');
+                if (head && subtitle) {
+                    head.insertAdjacentHTML(
+                        'afterend', `<div class="pp-pdf-meta">${escapeHtml(subtitle)}</div>`);
+                }
+            }
+        });
+        showNotification('PDF indirildi.', 'success');
+    } catch (error) {
+        console.error('PDF export failed:', error);
+        showNotification('PDF oluşturulamadı.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
 
 const SECTION_MODAL_TITLES = {
     machining: 'Talaşlı İmalat Detayı',
@@ -576,7 +642,19 @@ async function openPlanModal(item) {
                 const slower = rem > b.entered_remaining_wd;
                 compare = ` Girilen süre ${formatWd(b.entered_total_wd)} g (kalan ~${formatWd(b.entered_remaining_wd)} g) — tempo ${slower ? 'daha yavaş' : 'daha hızlı'}.`;
             }
-            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
+            // Hand-entered %: the tempo window closes at the last progress
+            // entry — the idle tail after it measures typing, not pace.
+            const lastEntry = b.last_entry
+                ? ` (son ilerleme girişi ${fmtShortDate(b.last_entry)})` : '';
+            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi${lastEntry}; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
+        }
+        // All progress arrived in ONE entry: a milestone, not a pace — no
+        // tempo to extrapolate, so the duration chain projects the remaining
+        // share as a calendar budget (293-03: "1 of 2 painted" entered as
+        // 50% must not read as half the paint time).
+        if ((s.projection_basis || {}).term === 'single_entry') {
+            const b = s.projection_basis;
+            return `%${Math.round(t.completion_percentage)} tek girişte kaydedildi (${fmtShortDate(b.last_entry)}) — tempo ölçülemiyor; ${formatWd(b.total_wd)} iş günlük süre başlangıçtan itibaren bütçe olarak sayılıyor (~${formatWd(rem)} iş günü kaldı).`;
         }
         // Slow progress never stretches an entered duration — it is a
         // calendar budget from the task's real start; overruns surface as
@@ -619,6 +697,13 @@ async function openPlanModal(item) {
             const cutNote = b.cut_ratio !== undefined && b.cut_ratio !== null
                 ? ` (kesilen: %${Math.round(b.cut_ratio * 100)})` : '';
             return `Kesim bittikçe ilerleyebilir — kesim öngörüsü ${fmtShortDate(b.base_end)} + son parti için ~${formatWd(b.tail_wd)} iş günü${cutNote}.`;
+        }
+        if (s.projection_kind === 'chained') {
+            // Remaining work of a chained task runs after its predecessor's
+            // projected close — the % records the overlap that already
+            // happened, but the overlap of what is LEFT is unproven.
+            const b = s.projection_basis || {};
+            return `Kalan iş (~${formatWd(b.work_wd)} iş günü), "${b.pred_label}" bittikten (${fmtShortDate(b.pred_end)}) sonra sayılıyor.`;
         }
         if (s.projection_kind === 'floored') {
             const b = s.projection_basis || {};

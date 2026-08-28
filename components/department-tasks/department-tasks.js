@@ -1015,11 +1015,22 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
                     const cursorStyle = isEditable ? 'cursor: pointer;' : '';
-                    const display = (value !== null && value !== undefined && value !== '')
-                        ? `${parseFloat(value).toLocaleString('tr-TR')} g`
-                        : '-';
+                    const hasOwn = value !== null && value !== undefined && value !== '';
+                    const derived = row.derived_duration_wd;
+                    let display;
+                    if (hasOwn) {
+                        display = `${parseFloat(value).toLocaleString('tr-TR')} g`;
+                    } else if (derived !== null && derived !== undefined) {
+                        // Weight-share slice inherited from the nearest ancestor
+                        // with an entered duration — a hint, not an entry: the
+                        // click-to-edit input stays empty (data-duration-value).
+                        display = `<span class="text-muted" title="Üst göreve girilen süreden ağırlık payıyla türetildi — girilmiş bir değer değil">≈${parseFloat(derived).toLocaleString('tr-TR')} g</span>`;
+                    } else {
+                        display = '-';
+                    }
+                    const isDerived = !hasOwn && derived !== null && derived !== undefined;
                     return `
-                        <div class="editable-duration" data-task-id="${row.id}" data-duration-value="${value ?? ''}" style="${cursorStyle}" ${isEditable ? 'title="Tahmini süreyi (iş günü) değiştirmek için tıklayın"' : ''}>
+                        <div class="editable-duration" data-task-id="${row.id}" data-duration-value="${value ?? ''}" data-duration-derived="${isDerived ? '1' : ''}" style="${isDerived ? '' : cursorStyle}" ${isEditable && !isDerived ? 'title="Tahmini süreyi (iş günü) değiştirmek için tıklayın"' : ''}>
                             ${display}
                         </div>
                     `;
@@ -3102,6 +3113,17 @@ function setupDurationEditListeners() {
         const originalContent = durationCell.innerHTML;
         if (!taskIdAttr) return;
 
+        // Top-down durations (Kural 1): a derived (≈) cell is read-only —
+        // the ancestor's entered figure governs this row. Changing it means
+        // changing the top entry (or entering nothing there at all).
+        if (durationCell.getAttribute('data-duration-derived') === '1') {
+            showNotification(
+                'Bu satırın süresi üst göreve girilen süreden ağırlık payıyla '
+                + 'türetiliyor — değiştirmek için üst görevin süresini güncelleyin.',
+                'info');
+            return;
+        }
+
         const input = document.createElement('input');
         input.type = 'number';
         input.min = '0.5';
@@ -3997,8 +4019,18 @@ async function renderEditActionForm(task) {
                     <input type="date" class="form-control" id="edit-target-completion-date" value="${task.target_completion_date ? task.target_completion_date.split('T')[0] : ''}">
                 </div>
                 <div class="col-md-6">
-                    <label class="form-label">Tahmini Süre (iş günü)</label>
-                    <input type="number" class="form-control" id="edit-estimated-duration-wd" min="0.5" step="0.5" value="${task.estimated_duration_wd ?? ''}">
+                    <label class="form-label">Tahmini Süre (iş günü)${
+                        task.estimated_duration_wd == null
+                        && task.derived_durations
+                        && task.derived_durations[task.id] != null
+                            ? ' <span class="text-muted">(türetilmiş — üst görevden)</span>' : ''}</label>
+                    <input type="number" class="form-control" id="edit-estimated-duration-wd" min="0.5" step="0.5"
+                        value="${task.estimated_duration_wd ?? ''}"
+                        ${task.estimated_duration_wd == null
+                          && task.derived_durations
+                          && task.derived_durations[task.id] != null
+                            ? `readonly placeholder="≈${task.derived_durations[task.id]} g (ağırlık payı)" title="Üst göreve girilen süreden türetiliyor — değiştirmek için üst görevin süresini güncelleyin"`
+                            : ''}>
                 </div>
                 <div class="col-md-12">
                     <label class="form-label">Notlar</label>
@@ -5472,18 +5504,26 @@ async function renderConsultationTab(task) {
         </div>
     `;
 
-    // Initial consultation notes (task.notes), shown read-only in details
-    if (task.notes) {
-        const safeNotes = task.notes
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-
+    // Request note written by sales when the consultation was sent (task.description)
+    if (task.description) {
         html += `
             <div class="card mb-3">
                 <div class="card-header bg-light"><i class="fas fa-sticky-note me-2"></i>Danışma Notu</div>
                 <div class="card-body">
-                    <pre class="mb-0" style="white-space: pre-wrap; font-family: inherit;">${safeNotes}</pre>
+                    <pre class="mb-0" style="white-space: pre-wrap; font-family: inherit;">${escapeHtml(task.description)}</pre>
+                </div>
+            </div>
+        `;
+    }
+
+    // This department's own response note (task.notes) — while in_progress it is
+    // rendered as an editable textarea further down, so only show it read-only here.
+    if (task.notes && task.status !== 'in_progress') {
+        html += `
+            <div class="card mb-3">
+                <div class="card-header bg-light"><i class="fas fa-reply me-2"></i>Yanıt Notu</div>
+                <div class="card-body">
+                    <pre class="mb-0" style="white-space: pre-wrap; font-family: inherit;">${escapeHtml(task.notes)}</pre>
                 </div>
             </div>
         `;
@@ -5686,7 +5726,7 @@ function buildSiblingConsultationOverlayBody(sibling) {
     if (sibling.notes) {
         body += `
             <div class="card mb-3">
-                <div class="card-header bg-light"><i class="fas fa-sticky-note me-2"></i>Danışma Notu</div>
+                <div class="card-header bg-light"><i class="fas fa-reply me-2"></i>Yanıt Notu</div>
                 <div class="card-body">
                     <pre style="white-space:pre-wrap;font-family:inherit;margin:0;">${escapeHtml(sibling.notes)}</pre>
                 </div>
