@@ -736,17 +736,40 @@ async function openPlanModal(item) {
     };
 
     // Started tasks are never held by their conditions, but open waits must
-    // stay visible ("Üretim başladı ama kritik borular Eylül'de gelecek") —
-    // append them to whatever the core sentence says. Gate rows already
+    // stay visible ("Üretim başladı ama kritik borular Eylül'de gelecek").
+    // The table renders them as separate note lines under the core sentence;
+    // prose consumers (driver box) get them joined. Gate rows already
     // narrate their binding condition.
-    const basisSentence = (t) => {
+    const basisNotes = (t) => {
         const s = t.schedule;
+        if (s.projection_kind === 'gate' || t.status === 'completed') return [];
+        return (s.projection_gates || [])
+            .filter(g => g.open && !g.binding)
+            .map(g => g.date ? `${g.label}: ${fmtShortDate(g.date)}` : g.label);
+    };
+    const basisSentence = (t) => {
         const core = coreBasisSentence(t);
-        if (s.projection_kind === 'gate' || t.status === 'completed') return core;
-        const open = (s.projection_gates || []).filter(g => g.open && !g.binding);
-        if (!open.length) return core;
-        const notes = open.map(g => g.date ? `${g.label}: ${fmtShortDate(g.date)}` : g.label);
-        return `${core} Açık koşul — ${notes.join(' · ')}.`;
+        const notes = basisNotes(t);
+        return notes.length ? `${core} Açık koşul — ${notes.join(' · ')}.` : core;
+    };
+
+    // One glyph per projection family so the column scans without reading:
+    // tempo is measured, budgets are entered, chains are ordering, floors are
+    // external constraints. The legend above the table names them.
+    const BASIS_ICONS = {
+        rate: ['fa-gauge-high', 'Ölçülen tempo'],
+        duration: ['fa-ruler-horizontal', 'Girilen süre (takvim bütçesi)'],
+        parent_duration: ['fa-ruler-horizontal', 'Üst görevden ağırlık payı (bütçe)'],
+        parent_window: ['fa-ruler-horizontal', 'Plan penceresinden ağırlık payı'],
+        start: ['fa-ruler-horizontal', 'Plan penceresi'],
+        subtasks: ['fa-sitemap', 'Alt görevlerin en geç biteni'],
+        push: ['fa-link', 'Sıra: önceki görev bitince başlar'],
+        chained: ['fa-link', 'Sıra: kalan iş öncekinden sonra sayılır'],
+        gate: ['fa-hourglass-half', 'Başlama koşulu bekliyor'],
+        floored: ['fa-anchor', 'Bitiş tabanı (teslimat / koşul)'],
+        coupled: ['fa-anchor', 'Kesim ilerledikçe ilerleyebilir'],
+        weight: ['fa-scale-balanced', 'Ağırlık payından tahmin'],
+        done: ['fa-check', 'Kapanış bekleniyor'],
     };
 
     const MINI_THEME = {
@@ -763,7 +786,7 @@ async function openPlanModal(item) {
             </div>`;
     };
 
-    const taskRow = (t, depth = 0) => {
+    const taskRow = (t, depth = 0, isParent = false) => {
         const s = t.schedule;
         const completed = t.status === 'completed';
         // "Plansız" on a finished row reads as a problem — a completed task
@@ -775,23 +798,38 @@ async function openPlanModal(item) {
         const variance = s.projected_variance_wd ?? s.end_variance_wd ?? s.overdue_wd;
         const varianceHtml = variance === null || variance === undefined ? ''
             : (variance > 0
-                ? ` <span class="pp-num-red">${formatWd(variance)} g geç</span>`
-                : (variance < 0 ? ` <span class="pp-num-green">${formatWd(variance)} g erken</span>` : ''));
+                ? ` <span class="pp-var-chip pp-var-late">${formatWd(variance)} g geç</span>`
+                : (variance < 0 ? ` <span class="pp-var-chip pp-var-early">${formatWd(variance)} g erken</span>` : ''));
         const materialWaitHtml = s.material_wait ? ` ${materialWaitBadgeHtml(s.material_wait)}` : '';
         const driver = s.drives_completion;
         const conflict = conflictSentence(t);
         const warnIcon = conflict
             ? `<i class="fas fa-triangle-exclamation pp-warn-flag" title="${escapeHtml(conflict)}"></i> ` : '';
+        const branch = depth > 0 ? '<span class="pp-tree-branch">└</span>' : '';
+        const icon = completed ? null : BASIS_ICONS[s.projection_kind];
+        const notes = basisNotes(t);
+        const basisCell = `
+            <div class="pp-basis">
+                ${icon ? `<i class="fas ${icon[0]} pp-basis-icon" title="${escapeHtml(icon[1])}"></i>` : ''}
+                <div class="pp-basis-text">
+                    <div class="pp-basis-core">${escapeHtml(coreBasisSentence(t))}</div>
+                    ${notes.map(n => `<div class="pp-basis-note"><i class="far fa-clock"></i>Açık koşul · ${escapeHtml(n)}</div>`).join('')}
+                    ${conflict ? `<div class="pp-td-conflict"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(conflict)}</div>` : ''}
+                </div>
+            </div>`;
+        const rowClasses = [
+            driver ? 'pp-modal-driver' : '',
+            (isParent || depth === 0) ? 'pp-row-parent' : '',
+        ].filter(Boolean).join(' ');
         return `
-            <tr${driver ? ' class="pp-modal-driver"' : ''}>
-                <td class="pp-td-main" style="padding-left: ${8 + depth * 16}px" title="${escapeHtml(label(t))}">${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${warnIcon}${escapeHtml(rowLabel(t))}</td>
+            <tr${rowClasses ? ` class="${rowClasses}"` : ''}>
+                <td class="pp-td-main" style="padding-left: ${8 + depth * 18}px" title="${escapeHtml(label(t))}">${branch}${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${warnIcon}${escapeHtml(rowLabel(t))}</td>
                 <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
                 <td>${progressCell(t)}</td>
                 <td class="pp-td-date">${startCell(t)}</td>
-                <td>${fmtShortDate(t.target_completion_date)}</td>
-                <td>${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
-                <td class="pp-td-basis">${escapeHtml(basisSentence(t))}${conflict
-                    ? `<div class="pp-td-conflict">${escapeHtml(conflict)}</div>` : ''}</td>
+                <td class="pp-td-date">${fmtShortDate(t.target_completion_date)}</td>
+                <td class="pp-td-date pp-td-proj">${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
+                <td class="pp-td-basis">${basisCell}</td>
             </tr>`;
     };
 
@@ -834,7 +872,8 @@ async function openPlanModal(item) {
         const out = [];
         const walk = (key, depth) => {
             for (const t of byParent.get(key) || []) {
-                out.push({ task: t, depth });
+                const kids = byParent.get(t.id);
+                out.push({ task: t, depth, isParent: !!(kids && kids.length) });
                 walk(t.id, depth + 1);
             }
         };
@@ -867,7 +906,10 @@ async function openPlanModal(item) {
                     </td>
                 </tr>`);
         }
-        if (!collapse) rows.push(...asTree(tasks).map(({ task, depth }) => taskRow(task, depth)));
+        if (!collapse) {
+            rows.push(...asTree(tasks).map(
+                ({ task, depth, isParent }) => taskRow(task, depth, isParent)));
+        }
     }
 
     // The story, top-down: verdict sentence → the three dates → the task that
@@ -967,7 +1009,22 @@ async function openPlanModal(item) {
         ${driverBox}
         ${countsHtml}
         ${conflictBanner}
-        ${multiNode ? '<div class="pp-modal-note">Görevler alt iş emirlerine göre gruplu.</div>' : ''}
+        <div class="pp-plan-section">
+            Görev bazında öngörü
+            <span>— her satır kendi verisinden hesaplanır; bir ana görev, en geç
+            biten alt görevinde biter${multiNode ? '. Görevler alt iş emirlerine göre gruplu' : ''}.</span>
+        </div>
+        <div class="pp-plan-legend">
+            <span><i class="fas fa-flag pp-driver-flag"></i>bitişi belirleyen görev</span>
+            <span><i class="fas fa-gauge-high"></i>ölçülen tempo</span>
+            <span><i class="fas fa-ruler-horizontal"></i>süre bütçesi</span>
+            <span><i class="fas fa-sitemap"></i>en geç alt görev</span>
+            <span><i class="fas fa-link"></i>sıra bağımlılığı</span>
+            <span><i class="fas fa-anchor"></i>bitiş tabanı</span>
+            <span><i class="fas fa-scale-balanced"></i>ağırlık payı</span>
+            <span><i class="far fa-clock"></i>açık koşul</span>
+            <span class="pp-plan-legend-tilde">~ öngörülen değer</span>
+        </div>
         ${modalTableHtml(['Görev', 'Durum', 'İlerleme', 'Başlangıç', 'Hedef', 'Öngörülen Bitiş', 'Neden bu tarih?'], rows)}`;
 }
 
