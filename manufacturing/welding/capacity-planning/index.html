@@ -59,6 +59,25 @@
                         </span>
                     </div>
                 </div>
+                <!-- Client-side view filters. Everything the board needs is
+                     already in memory, so they narrow the sheet on the spot
+                     instead of round-tripping. -->
+                <div class="planning-filters">
+                    <span class="pf-title"><i class="fas fa-filter"></i>Filtre</span>
+                    <div class="pf-field">
+                        <span class="pf-label">İş Emri</span>
+                        <div id="filter-job"></div>
+                    </div>
+                    <div class="pf-field">
+                        <span class="pf-label">Sorumlu</span>
+                        <div id="filter-assignee"></div>
+                    </div>
+                    <button type="button" class="pf-clear d-none" id="filter-clear"
+                            title="Filtreleri temizle">
+                        <i class="fas fa-times"></i>Temizle
+                    </button>
+                    <span class="pf-summary" id="filter-summary"></span>
+                </div>
                 <div class="card-body p-0">
                     <div id="planning-grid" class="pg"></div>
                 </div>

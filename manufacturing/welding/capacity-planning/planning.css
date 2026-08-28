@@ -115,6 +115,129 @@
 
 
 
+/* ---- filter strip -------------------------------------------------------
+   A thin band between the tab strip and the grid. Deliberately not the shared
+   FiltersComponent card: these filter what is already in memory, so there is
+   no Apply button to justify a card's worth of vertical space above a sheet
+   that is already tall. */
+.planning-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 8px 16px;
+    background: #fafafa;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.planning-filters .pf-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .76rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #9ca3af;
+}
+
+.planning-filters .pf-title .fas { font-size: .7rem; }
+
+.planning-filters .pf-field {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.planning-filters .pf-label {
+    font-size: .78rem;
+    font-weight: 500;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+/* ModernDropdown hard-sets height: 46px on both the shell and the collapsed
+   field, so a compact variant has to override height, not just min-height.
+   Scoped by the strip because the component replaces the container's own
+   class on init. */
+/* Width goes on the container: the component writes width:100% as an INLINE
+   style on .modern-dropdown, which no stylesheet rule can outrank. */
+.planning-filters .modern-dropdown-container {
+    height: 30px;
+    width: 240px;
+}
+
+.planning-filters #filter-assignee.modern-dropdown-container { width: 200px; }
+
+.planning-filters .modern-dropdown {
+    height: 30px;
+    min-height: 30px;
+}
+
+.planning-filters .modern-dropdown .dropdown-selected {
+    height: 30px;
+    min-height: 30px;
+    padding: 0 .55rem;
+    font-size: .8rem;
+    border-width: 1px;
+    border-radius: 6px;
+    border-color: #e5e7eb;
+    box-shadow: none;
+}
+
+/* Long job titles and full names must ellipsize, not push the 30px field
+   into a second line. */
+.planning-filters .modern-dropdown .selected-text {
+    font-size: .8rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.planning-filters .modern-dropdown .dropdown-arrow { font-size: .7rem; }
+
+.planning-filters .modern-dropdown.open .dropdown-selected,
+.planning-filters .modern-dropdown .dropdown-selected:hover {
+    border-color: #8b0000;
+}
+
+.planning-filters .pf-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    font-size: .76rem;
+    color: #8b0000;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    cursor: pointer;
+}
+
+.planning-filters .pf-clear:hover {
+    border-color: #8b0000;
+    background: rgba(139, 0, 0, .06);
+}
+
+.planning-filters .pf-summary {
+    font-size: .76rem;
+    color: #6b7280;
+    margin-left: auto;
+}
+
+.planning-filters .pf-summary.pf-empty {
+    color: #b45309;
+    font-weight: 500;
+}
+
+@media (max-width: 767.98px) {
+    .planning-filters .pf-field { flex: 1 1 100%; }
+    .planning-filters .modern-dropdown-container,
+    .planning-filters #filter-assignee.modern-dropdown-container { width: 100%; }
+    .planning-filters .pf-summary { margin-left: 0; }
+}
+
 /* A real date standing in for a missing planned one. */
 /* Borrowed from a level down (a machining operation's plan), not entered on
    this task — distinct from .date-actual, which is work that really happened. */

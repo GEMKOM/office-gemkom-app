@@ -16,6 +16,7 @@ import { PlanningGrid } from './grid.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
+import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import {
     getWeldingPlanningBoard,
     bulkSaveWeldingPlanning,
@@ -64,6 +65,16 @@ let collapsedJobs = new Set();    // job_no -> collapsed in the grid
 let showCompleted = false;
 let showEmptyResources = false;   // empty-resource tabs tucked behind a toggle
 let newCounter = 0;
+
+// View filters. Purely client-side — the whole board is already in memory, so
+// they narrow what is drawn without touching the working copy or the edits in
+// it. '' means "no filter".
+const UNASSIGNED = '__none__';
+let filterJobNo = '';
+let filterAssignee = '';          // user id as a string, or UNASSIGNED
+let jobFilterDropdown = null;
+let assigneeFilterDropdown = null;
+let filterOptionsSig = '';        // rebuild the dropdowns only when the choices change
 
 let grid = null;
 let sheetRows = [];
@@ -282,6 +293,10 @@ function deptVM(row) {
     return {
         task_id: row.task_id,
         status: row.status,
+        // Only the manufacturing main task carries these — it is the job's
+        // owner, and what the Sorumlu filter matches on.
+        assigned_to: row.assigned_to ?? null,
+        assigned_to_name: row.assigned_to_name || '',
         // How much of its parent's progress this task is worth. Kaynaklı
         // İmalat is 97 of 100 on a typical job, Boya 2 — the split that
         // decides what "İmalat %94" actually means.
@@ -418,6 +433,170 @@ function allocatedForTask(weldingTaskId) {
     return round2(total);
 }
 
+// ---- filters -------------------------------------------------------------
+
+// Job orders that are actually on the board — a job is "available" here only
+// because somebody handed part of it to a team or a subcontractor.
+function boardJobs() {
+    const seen = new Map();       // job_no -> job_order_title
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (b.deleted || !b.job_no) return;
+        if (!seen.has(b.job_no)) seen.set(b.job_no, b.job_order_title || '');
+    }));
+    return seen;
+}
+
+// The job's owner: whoever holds its İmalat main task. NOT the resource the
+// welding was handed to — that is the tab strip's job.
+function jobAssignee(jobNo) {
+    const mfg = deptOf(jobNo, 'manufacturing');
+    const id = mfg ? mfg.assigned_to : null;
+    return (id === null || id === undefined) ? null : String(id);
+}
+
+function hasActiveFilter() {
+    return !!(filterJobNo || filterAssignee);
+}
+
+function jobMatchesFilters(jobNo) {
+    if (filterJobNo && String(jobNo) !== filterJobNo) return false;
+    if (filterAssignee) {
+        const assignee = jobAssignee(jobNo);
+        return filterAssignee === UNASSIGNED ? assignee === null : assignee === filterAssignee;
+    }
+    return true;
+}
+
+// A resource's live blocks that survive the filters. Deleted blocks are gone
+// from every count; filtered-out ones are only hidden, so nothing about the
+// working copy or the save payload changes.
+function visibleBlocks(res) {
+    return res.blocks.filter(b => !b.deleted && jobMatchesFilters(b.job_no));
+}
+
+function jobFilterOptions() {
+    // Some job titles run to 200 characters (the EBT panels carry their whole
+    // part spec). The option shows enough to recognise the job, the collapsed
+    // field shows the number alone, and the search still reads the full title.
+    const shorten = (title) => (title.length > 44 ? `${title.slice(0, 43)}…` : title);
+    const options = [...boardJobs().entries()]
+        .sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'tr',
+            { numeric: true, sensitivity: 'base' }))
+        .map(([jobNo, title]) => ({
+            value: jobNo,
+            text: title ? `${jobNo} — ${shorten(title)}` : jobNo,
+            searchText: title ? `${jobNo} ${title}` : jobNo,
+            selectedText: jobNo,
+        }));
+    return [{ value: '', text: 'Tüm iş emirleri' }, ...options];
+}
+
+function assigneeFilterOptions() {
+    const byId = new Map();
+    let anyUnassigned = false;
+    boardJobs().forEach((_title, jobNo) => {
+        const id = jobAssignee(jobNo);
+        if (id === null) { anyUnassigned = true; return; }
+        if (!byId.has(id)) {
+            const mfg = deptOf(jobNo, 'manufacturing');
+            byId.set(id, (mfg && mfg.assigned_to_name) || `#${id}`);
+        }
+    });
+    const options = [...byId.entries()]
+        .sort((a, b) => a[1].localeCompare(b[1], 'tr'))
+        .map(([id, name]) => ({ value: id, text: name }));
+    if (anyUnassigned) options.push({ value: UNASSIGNED, text: 'Atanmamış' });
+    return [{ value: '', text: 'Tüm sorumlular' }, ...options];
+}
+
+// The dropdowns are rebuilt only when the choices themselves change — a board
+// reload or a newly added block. Rebuilding on every grid refresh would drop
+// the menu out from under an open dropdown.
+function renderFilters() {
+    const jobOptions = jobFilterOptions();
+    const assigneeOptions = assigneeFilterOptions();
+    const sig = JSON.stringify([jobOptions, assigneeOptions]);
+
+    if (sig !== filterOptionsSig) {
+        filterOptionsSig = sig;
+        // A filtered-out value that no longer exists (the job finished, its
+        // owner changed) would hide the whole board with no way back.
+        if (filterJobNo && !jobOptions.some(o => o.value === filterJobNo)) filterJobNo = '';
+        if (filterAssignee && !assigneeOptions.some(o => o.value === filterAssignee)) {
+            filterAssignee = '';
+        }
+        buildFilterDropdown('job', jobOptions);
+        buildFilterDropdown('assignee', assigneeOptions);
+    }
+    renderFilterChrome();
+}
+
+function buildFilterDropdown(which, options) {
+    const container = document.getElementById(`filter-${which}`);
+    if (!container) return;
+    const isJob = which === 'job';
+    const existing = isJob ? jobFilterDropdown : assigneeFilterDropdown;
+    if (existing) existing.destroy();
+
+    const dropdown = new ModernDropdown(container, {
+        placeholder: isJob ? 'Tüm iş emirleri' : 'Tüm sorumlular',
+        // Job numbers run to dozens; the owner list is a handful of names.
+        searchable: options.length > 8,
+    });
+    dropdown.setItems(options);
+    const current = isJob ? filterJobNo : filterAssignee;
+    if (current) dropdown.setValue(current);
+    if (isJob) jobFilterDropdown = dropdown; else assigneeFilterDropdown = dropdown;
+}
+
+function clearFilters() {
+    if (!hasActiveFilter()) return;
+    filterJobNo = '';
+    filterAssignee = '';
+    if (jobFilterDropdown) jobFilterDropdown.setValue('');
+    if (assigneeFilterDropdown) assigneeFilterDropdown.setValue('');
+    onFilterChange();
+}
+
+// Filtering to a job that is not on the open sheet would leave the planner
+// staring at an empty grid, so the strip moves to a tab that has it.
+function onFilterChange() {
+    const res = activeResource();
+    if (hasActiveFilter() && (!res || !visibleBlocks(res).length)) {
+        const next = resources.find(r => visibleBlocks(r).length);
+        if (next) activeResourceKey = resourceKeyOf(next);
+    }
+    renderFilterChrome();
+    renderTabs();
+    renderGrid();
+}
+
+function renderFilterChrome() {
+    const clearBtn = document.getElementById('filter-clear');
+    if (clearBtn) clearBtn.classList.toggle('d-none', !hasActiveFilter());
+
+    const summary = document.getElementById('filter-summary');
+    if (!summary) return;
+    if (!hasActiveFilter()) {
+        summary.textContent = '';
+        summary.classList.remove('pf-empty');
+        return;
+    }
+    const jobs = new Set();
+    let resourceCount = 0;
+    resources.forEach(res => {
+        const blocks = visibleBlocks(res);
+        if (!blocks.length) return;
+        resourceCount += 1;
+        blocks.forEach(b => jobs.add(b.job_no));
+    });
+    const empty = !jobs.size;
+    summary.classList.toggle('pf-empty', empty);
+    summary.textContent = empty
+        ? 'Filtreye uyan iş bulunamadı'
+        : `${jobs.size} iş emri · ${resourceCount} kaynak`;
+}
+
 // ---- rendering: tabs, warnings, jobs list --------------------------------
 
 function renderTabs() {
@@ -427,19 +606,22 @@ function renderTabs() {
     // class with !important white text/backgrounds meant for the top navbar.
     const tabHTML = (res) => {
         const key = resourceKeyOf(res);
-        const blockCount = res.blocks.filter(b => !b.deleted).length;
-        const totalKg = res.blocks
-            .filter(b => !b.deleted)
-            .reduce((sum, b) => sum + Number(b.allocated_weight_kg || 0), 0);
+        // Counts follow the filters, so the strip itself answers "who is on
+        // this job" — the resources without it drop behind the +N toggle.
+        const blocks = visibleBlocks(res);
+        const blockCount = blocks.length;
+        const totalKg = blocks.reduce((sum, b) => sum + Number(b.allocated_weight_kg || 0), 0);
+        // Unsaved work is never hidden by a view filter.
         const dirty = res.blocks.some(b => dirtyBlocks.has(b.key))
             || deletedBlocks.some(d => d.resourceKey === key);
         const icon = res.resource_type === 'team' ? 'fa-users' : 'fa-industry';
         const classes = ['planning-tab'];
         if (key === activeResourceKey) classes.push('active');
         if (!blockCount) classes.push('empty');
+        const emptyHint = hasActiveFilter() ? ' — filtreye uyan iş yok' : ' — atanmış iş yok';
         return `
             <button type="button" class="${classes.join(' ')}" data-resource-key="${esc(key)}"
-                    title="${esc(res.name)}${blockCount ? ` — ${blockCount} iş, ${fmtKg(totalKg)} kg` : ' — atanmış iş yok'}">
+                    title="${esc(res.name)}${blockCount ? ` — ${blockCount} iş, ${fmtKg(totalKg)} kg` : emptyHint}">
                 <i class="fas ${icon}"></i>
                 <span class="tab-label">${esc(res.display_name || res.name)}</span>
                 ${blockCount ? `<span class="resource-kg">${fmtKg(totalKg)} kg</span>` : ''}
@@ -447,7 +629,7 @@ function renderTabs() {
             </button>`;
     };
 
-    const hasBlocks = (res) => res.blocks.some(b => !b.deleted);
+    const hasBlocks = (res) => visibleBlocks(res).length > 0;
     const filled = resources.filter(hasBlocks);
     // Empty resources stay reachable but don't eat rows of the strip; the
     // active one is always shown even when empty.
@@ -614,7 +796,7 @@ function hasStages(blockRef) {
 // by job, so a job with two assignments here is still one group.
 function jobNosOf(res) {
     const seen = [];
-    res.blocks.filter(b => !b.deleted).forEach(b => {
+    visibleBlocks(res).forEach(b => {
         if (!seen.includes(b.job_no)) seen.push(b.job_no);
     });
     // Always by iş emri number. Assignment order is an accident of when the
@@ -1354,6 +1536,9 @@ function onToggleAll() {
 function scheduleRefresh() {
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
+        // Adding or deleting a block changes which jobs are on the board, so
+        // the filter choices and the match summary are refreshed with it.
+        renderFilters();
         renderGrid();
         renderWarnings();
     }, 0);
@@ -2045,8 +2230,16 @@ function pushNewBlock(draft) {
     res.blocks.push(block);
     collapsedJobs.delete(block.job_no);
     markBlockDirty(key);
+    // Adding a job the active filters hide would look like the add silently
+    // failed, so the filters step aside for it.
+    const hidden = !jobMatchesFilters(block.job_no);
+    if (hidden) clearFilters();
     scheduleRefresh();
-    showNotification('Blok eklendi — Kaydet ile kalıcılaşır.', 'info');
+    showNotification(
+        hidden
+            ? 'Blok eklendi — filtre dışında kaldığı için filtreler temizlendi.'
+            : 'Blok eklendi — Kaydet ile kalıcılaşır.',
+        'info');
 }
 
 // ---- gantt ---------------------------------------------------------------
@@ -2187,6 +2380,7 @@ async function onSave() {
 // ---- init ----------------------------------------------------------------
 
 function renderAll() {
+    renderFilters();
     renderTabs();
     renderWarnings();
     renderGrid();
@@ -2250,6 +2444,18 @@ function init() {
         const tab = e.target.closest('[data-resource-key]');
         if (tab) switchResource(tab.dataset.resourceKey);
     });
+    // Bound on the containers, not the dropdown instances: the instances are
+    // rebuilt whenever the choices change, and destroy() leaves container-level
+    // listeners alone — so registering per instance would stack duplicates.
+    document.getElementById('filter-job').addEventListener('dropdown:select', (e) => {
+        filterJobNo = e.detail.value || '';
+        onFilterChange();
+    });
+    document.getElementById('filter-assignee').addEventListener('dropdown:select', (e) => {
+        filterAssignee = e.detail.value || '';
+        onFilterChange();
+    });
+    document.getElementById('filter-clear').addEventListener('click', clearFilters);
     document.getElementById('save-btn').addEventListener('click', onSave);
     document.getElementById('add-job-btn').addEventListener('click', () => openAddJobModal());
 
