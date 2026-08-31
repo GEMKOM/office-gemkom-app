@@ -304,6 +304,20 @@ body.pg-resizing * {
     color: #dc2626;
 }
 
+/* "+2 gün / −2 gün" — how far the projection sits from the hedef */
+.pg-target-delta {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    z-index: 3;
+}
+
+.pg-delta-late { color: #dc2626; }
+.pg-delta-early { color: #16a34a; }
+
 /* The group's promised end turns red when the projection overshoots it */
 .pg-group-late .pg-cell[data-field="end_date"] {
     color: #b91c1c;

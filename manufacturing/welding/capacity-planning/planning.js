@@ -79,6 +79,8 @@ let newCounter = 0;
 const UNASSIGNED = '__none__';
 let filterJobNos = [];            // job_no strings; a job passes if it is any of them
 let filterAssignee = '';          // user id as a string, or UNASSIGNED
+let filterText = '';              // free text over job no + title + customer
+let filterTextTimer = null;
 let jobFilterDropdown = null;
 let assigneeFilterDropdown = null;
 let filterOptionsSig = '';        // rebuild the dropdowns only when the choices change
@@ -128,6 +130,25 @@ function fmtDuration(wd) {
 
 function activeResource() {
     return resources.find(r => resourceKeyOf(r) === activeResourceKey) || null;
+}
+
+// Signed working-day gap between the job's promised end (hedef) and its
+// projection: positive = the projection lands N workdays AFTER the hedef
+// (geride), negative = ahead of it (ileride). Null when either side is
+// unknown — 0 means exactly on target.
+function targetDeltaWd(target, forecast) {
+    if (!target || !forecast) return null;
+    if (target === forecast) return 0;
+    const [from, to] = forecast > target ? [target, forecast] : [forecast, target];
+    let n = 0;
+    let cur = from;
+    for (let i = 0; i < 1000 && cur < to; i++) {
+        const d = new Date(`${cur}T00:00:00`);
+        d.setDate(d.getDate() + 1);
+        cur = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        if (!calendar.isNonWorkingDay(cur)) n++;
+    }
+    return forecast > target ? n : -n;
 }
 
 function onAllTab() {
@@ -260,6 +281,7 @@ function hydrate(boardData) {
     board = boardData;
     // Fresh server truth supersedes every live client approximation.
     liveForecastJobs.clear();
+    jobHayCache.clear();
     calendar = createWorkdayCalendar(boardData.holidays || []);
     weldingTasks = boardData.welding_tasks || [];
     jobInfo = boardData.job_info || {};
@@ -486,15 +508,48 @@ function allocatedForTask(weldingTaskId) {
 
 // ---- filters -------------------------------------------------------------
 
-// Job orders that are actually on the board — a job is "available" here only
-// because somebody handed part of it to a team or a subcontractor.
+// Every job order the board can display: assigned blocks AND the assignable
+// (welding-task) jobs the "Tümü" tab lists — the filter must be able to name
+// an unassigned job too, or searching for it comes up empty.
 function boardJobs() {
     const seen = new Map();       // job_no -> job_order_title
     resources.forEach(res => res.blocks.forEach(b => {
         if (b.deleted || !b.job_no) return;
         if (!seen.has(b.job_no)) seen.set(b.job_no, b.job_order_title || '');
     }));
+    weldingTasks.forEach(t => {
+        if (t.job_no && !seen.has(t.job_no)) {
+            seen.set(t.job_no, t.job_order_title || '');
+        }
+    });
     return seen;
+}
+
+// Turkish-aware lowering: 'İ' -> 'i', 'I' -> 'ı'. Plain toLowerCase maps 'İ'
+// to 'i' + a combining dot, which never matches a typed 'i'.
+function trLower(s) {
+    return String(s || '').toLocaleLowerCase('tr');
+}
+
+// Everything the free-text search can match for one job. Titles never change
+// client-side, so the fold is cached until the next hydrate.
+const jobHayCache = new Map();
+function jobSearchHay(jobNo) {
+    let hay = jobHayCache.get(jobNo);
+    if (hay !== undefined) return hay;
+    const parts = [String(jobNo)];
+    const jo = (jobInfo[jobNo] || {}).job_order;
+    if (jo && jo.title) parts.push(jo.title);
+    const wt = weldingTasks.find(t => t.job_no === jobNo);
+    if (wt) parts.push(wt.job_order_title || '', wt.customer_name || '');
+    resources.some(res => res.blocks.some(b => {
+        if (b.deleted || b.job_no !== jobNo) return false;
+        parts.push(b.job_order_title || '', b.customer_name || '');
+        return true;
+    }));
+    hay = trLower(parts.filter(Boolean).join(' '));
+    jobHayCache.set(jobNo, hay);
+    return hay;
 }
 
 // The job's owner: whoever holds its İmalat main task. NOT the resource the
@@ -506,11 +561,13 @@ function jobAssignee(jobNo) {
 }
 
 function hasActiveFilter() {
-    return !!(filterJobNos.length || filterAssignee);
+    return !!(filterJobNos.length || filterAssignee || filterText.trim());
 }
 
 function jobMatchesFilters(jobNo) {
     if (filterJobNos.length && !filterJobNos.includes(String(jobNo))) return false;
+    const text = trLower(filterText.trim());
+    if (text && !jobSearchHay(jobNo).includes(text)) return false;
     if (filterAssignee) {
         const assignee = jobAssignee(jobNo);
         return filterAssignee === UNASSIGNED ? assignee === null : assignee === filterAssignee;
@@ -616,18 +673,24 @@ function clearFilters() {
     if (!hasActiveFilter()) return;
     filterJobNos = [];
     filterAssignee = '';
+    filterText = '';
+    const textInput = document.getElementById('filter-text');
+    if (textInput) textInput.value = '';
     if (jobFilterDropdown) jobFilterDropdown.setValue([]);
     if (assigneeFilterDropdown) assigneeFilterDropdown.setValue('');
     onFilterChange();
 }
 
 // Filtering to a job that is not on the open sheet would leave the planner
-// staring at an empty grid, so the strip moves to a tab that has it.
+// staring at an empty grid, so the strip moves to a tab that has it. The
+// "Tümü" tab shows everything already — never hop away from it; hop TO it
+// when the only matches are unassigned rows no team sheet can show.
 function onFilterChange() {
     const res = activeResource();
-    if (hasActiveFilter() && (!res || !visibleBlocks(res).length)) {
+    if (hasActiveFilter() && activeResourceKey !== 'all'
+            && (!res || !visibleBlocks(res).length)) {
         const next = resources.find(r => visibleBlocks(r).length);
-        if (next) activeResourceKey = resourceKeyOf(next);
+        activeResourceKey = next ? resourceKeyOf(next) : 'all';
     }
     renderFilterChrome();
     renderTabs();
@@ -813,6 +876,19 @@ function withEngineDates(row, vm) {
     return row;
 }
 
+// The Bitiş cell of a row that carries the job hedef says, on hover, how far
+// the projection sits from it: "2 gün geride" (late) / "2 gün ileride" (ahead).
+function endDateCell(value, row) {
+    const d = row.job_target_delta_wd;
+    if ((row.kind === 'group' || row.unassignedRow) && value && d != null && d !== 0) {
+        const text = d > 0
+            ? `Öngörülen bitiş hedeften ${d} gün geride`
+            : `Öngörülen bitiş hedeften ${Math.abs(d)} gün ileride`;
+        return `<span title="${esc(text)}">${fmtDate(value)}</span>`;
+    }
+    return dateCell(value, row.end_is_actual, row);
+}
+
 function dateCell(value, isActual, row) {
     if (!value) return '<span class="text-muted">—</span>';
     const derived = row && DATE_SOURCE_TITLES[row.date_source];
@@ -959,6 +1035,9 @@ function buildSheetRows(res, sortJobs = false) {
             groupKey: jobNo,
             job_target: jo ? jo.end_date : null,
             job_target_late: jobLate,
+            // How far the projection sits from the hedef, in workdays —
+            // the "+2 gün / −2 gün" label on the gantt.
+            job_target_delta_wd: targetDeltaWd(jo ? jo.end_date : null, mfgForecast),
         };
 
         // The job order frames everything under it. It is not a department
@@ -1272,7 +1351,7 @@ const GRID_COLUMNS = [
       formatter: (v, row) => cellOverride(row, 'start_date') ?? dateCell(v, row.start_is_actual, row) },
     { field: 'end_date', label: 'Bitiş', width: '96px', type: 'date',
       headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
-      formatter: (v, row) => cellOverride(row, 'end_date') ?? dateCell(v, row.end_is_actual, row) },
+      formatter: (v, row) => cellOverride(row, 'end_date') ?? endDateCell(v, row) },
     { field: 'duration_wd', label: 'Süre', width: '76px', type: 'number', min: 0, step: 0.5,
       headerClass: 'col-center', cellClass: 'col-center col-num', always: true,
       formatter: (v, row) => cellOverride(row, 'duration_wd') ?? durationCell(v, row.duration_is_derived, row) },
@@ -1283,7 +1362,11 @@ const GRID_COLUMNS = [
       formatter: (v, row) => cellOverride(row, 'weight') ?? (v == null
           ? '<span class="text-muted">—</span>'
           : (row.weight_is_kg
-              ? `<span class="weight-readonly">${fmtKg(v)} kg</span>`
+              // A partially assigned job says how much is out right in the
+              // weight cell — the note column is usually hidden.
+              ? (row.allocated_kg != null
+                  ? `<span class="weight-readonly" title="Atanan ${fmtKg(row.allocated_kg)} kg — Kalan ${fmtKg(round2(v - row.allocated_kg))} kg">${fmtKg(row.allocated_kg)} / ${fmtKg(v)} kg</span>`
+                  : `<span class="weight-readonly">${fmtKg(v)} kg</span>`)
               : (['stage', 'dept', 'machining'].includes(row.kind)
                   ? String(v)
                   : `<span class="weight-readonly">${v}</span>`))) },
@@ -1739,6 +1822,8 @@ function buildAllRows() {
                 has_subtasks: vm.has_subtasks,
                 weight: t.total_weight_kg ?? (jo ? jo.total_weight_kg : null),
                 weight_is_kg: true,
+                allocated_kg: partly && t.total_weight_kg != null
+                    ? round2(allocatedForTask(t.welding_task_id)) : null,
                 progress: vm.progress,
                 status: vm.status,
                 completed_at: vm.completed_at,
@@ -1747,6 +1832,9 @@ function buildAllRows() {
                 job_target: (jo && jo.end_date) || t.target_completion_date || null,
                 job_target_late: !!(jo && jo.end_date && vm.forecast_date
                     && vm.forecast_date > jo.end_date),
+                job_target_delta_wd: targetDeltaWd(
+                    (jo && jo.end_date) || t.target_completion_date || null,
+                    vm.forecast_date),
                 note: noteParts.join(' — '),
             }, vm));
         });
@@ -1836,6 +1924,18 @@ const GRID_ACTIONS = [
         disabled: (row) => !!findBlock(row.blockRef)?.is_billed,
     },
     {
+        key: 'move-block',
+        icon: 'fas fa-people-arrows',
+        title: 'Atamayı değiştir',
+        visible: (row) => row.kind === 'block',
+        // A new block is not saved yet (delete and re-add it instead), and a
+        // billed one is immutable history.
+        disabled: (row) => {
+            const b = findBlock(row.blockRef);
+            return !b || b.isNew || !!b.is_billed;
+        },
+    },
+    {
         key: 'delete-block',
         icon: 'fas fa-trash',
         title: 'Atamayı sil',
@@ -1866,6 +1966,7 @@ function onGridAction(action, row) {
     else if (action === 'delete-block') onDeleteBlock(row.blockRef);
     else if (action === 'delete-stage') onDeleteCustomStage(row);
     else if (action === 'assign-job') openAssignModal(row);
+    else if (action === 'move-block') openMoveModal(row.blockRef);
 }
 
 function toggleJob(jobNo) {
@@ -2500,6 +2601,112 @@ function openAssignModal(row) {
     blockModal.show();
 }
 
+// "Atamayı değiştir": move a saved block to another team/subcontractor. The
+// subtask (stages, progress, schedule) travels with it — the server re-homes
+// the assignment on Kaydet.
+function openMoveModal(blockRef) {
+    const block = findBlock(blockRef);
+    if (!block || block.isNew || block.is_billed) return;
+    const currentKey = `${block.resource_type}-${block.resource_id}`;
+    const currentRes = resources.find(r => resourceKeyOf(r) === currentKey);
+    const resourceOptions = resources
+        .filter(r => resourceKeyOf(r) !== currentKey)
+        .map(r => ({
+            value: resourceKeyOf(r),
+            text: `${r.resource_type === 'team' ? 'Ekip' : 'Taşeron'} — ${r.display_name || r.name}`,
+            searchText: r.name,
+            selectedText: r.display_name || r.name,
+        }));
+    if (!resourceOptions.length) return;
+    blockModalMode = { mode: 'move', blockRef };
+
+    blockModal.clearAll();
+    blockModal.setTitle(`Atamayı değiştir — ${block.job_no}`);
+    blockModal.setIcon('fas fa-people-arrows');
+    blockModal.setSaveButtonText('Taşı');
+    blockModal.addSection({
+        title: 'Yeni Ekip / Taşeron',
+        icon: 'fas fa-people-arrows',
+        iconColor: 'text-primary',
+        fields: [{
+            id: 'resource_key', name: 'resource_key',
+            label: 'Ekip / Taşeron', type: 'dropdown', required: true,
+            searchable: true, icon: 'fas fa-users', colSize: 12,
+            maxHeight: 460,
+            options: resourceOptions, value: resourceOptions[0]?.value,
+            help: `Şu an: ${currentRes ? (currentRes.display_name || currentRes.name) : '—'}`
+                + ` · ${fmtKg(block.allocated_weight_kg)} kg. Aşamalar ve ilerleme`
+                + ' atamayla birlikte taşınır. (Taşeron seçilirse bir sonraki'
+                + ' adımda fiyat kademesi sorulur.)',
+        }],
+    });
+    blockModal.onSaveCallback(onBlockModalSave);
+    blockModal.render();
+    blockModal.show();
+}
+
+async function openMoveTierModal(block, res) {
+    try {
+        const tiersResp = await fetchPriceTiers({ job_order: block.job_no, ordering: 'name' });
+        const tiers = (tiersResp.results || tiersResp || [])
+            .filter(t => t.tier_type === 'welding')
+            .map(t => ({
+                value: String(t.id),
+                label: `${t.name} — ${t.price_per_kg} ${t.currency}/kg (kalan ${t.remaining_weight_kg} kg)`,
+            }));
+        if (!tiers.length) {
+            showNotification('Bu iş için kaynak fiyat kademesi bulunamadı. Önce planlamadan fiyat kademesi tanımlayın.', 'error');
+            return;
+        }
+        tierModal.clearAll();
+        tierModal.addSection({
+            title: 'Fiyat Kademesi',
+            icon: 'fas fa-tags',
+            iconColor: 'text-success',
+            fields: [{
+                id: 'price_tier', name: 'price_tier', label: 'Fiyat Kademesi',
+                type: 'dropdown', required: true, searchable: true,
+                icon: 'fas fa-tag', colSize: 12,
+                help: 'Taşeron ataması hakedişe dahildir; fiyat kademesi zorunludur.',
+                options: tiers, value: tiers[0].value,
+            }],
+        });
+        tierModal.onSaveCallback((formData) => {
+            const tierId = Number(formData.price_tier);
+            if (!tierId) {
+                showNotification('Fiyat kademesi seçin.', 'error');
+                return;
+            }
+            tierModal.hide();
+            applyMove(block, res, tierId);
+        });
+        tierModal.render();
+        tierModal.show();
+    } catch (e) {
+        showNotification(e.message, 'error');
+    }
+}
+
+// Working copy only — the server applies the move on Kaydet.
+function applyMove(block, res, tierId) {
+    const from = resources.find(r =>
+        r.resource_type === block.resource_type && r.id === block.resource_id);
+    if (from) from.blocks = from.blocks.filter(b => b.key !== block.key);
+    block.resource_type = res.resource_type;
+    block.resource_id = res.id;
+    block.moveTo = {
+        resource_type: res.resource_type,
+        resource_id: res.id,
+        ...(tierId ? { price_tier: tierId } : {}),
+    };
+    res.blocks.push(block);
+    markBlockDirty(block.key);
+    revealJob(block.job_no);
+    scheduleRefresh();
+    showNotification(
+        `${block.job_no} → ${res.display_name || res.name} (kaydedilmedi)`, 'info');
+}
+
 function openAddJobModal(prefillTaskId = null) {
     const res = activeResource();
     if (!res) {
@@ -2660,6 +2867,20 @@ async function onBlockModalSave(formData) {
         markBlockDirty(block.key);
         blockModal.hide();
         scheduleRefresh();
+        return;
+    }
+
+    if (mode.mode === 'move') {
+        const block = findBlock(mode.blockRef);
+        const res = resources.find(r => resourceKeyOf(r) === formData.resource_key);
+        if (!block || !res) { blockModal.hide(); return; }
+        blockModal.hide();
+        if (res.resource_type === 'subcontractor') {
+            // A subcontractor destination re-prices the work — tier first.
+            await openMoveTierModal(block, res);
+            return;
+        }
+        applyMove(block, res, null);
         return;
     }
 
@@ -2864,6 +3085,9 @@ function buildPayload() {
 
         const snap = snapBlocks.get(b.key) || {};
         const item = { assignment_type: b.assignment_type, assignment_id: b.assignment_id };
+        // "Atamayı değiştir" — the server re-homes the block, keeping its
+        // subtask (stages, progress) with it.
+        if (b.moveTo) item.move_to = b.moveTo;
         if (Number(snap.allocated_weight_kg) !== Number(b.allocated_weight_kg)) {
             item.allocated_weight_kg = b.allocated_weight_kg;
         }
@@ -3045,6 +3269,14 @@ function init() {
     document.getElementById('filter-assignee').addEventListener('dropdown:select', (e) => {
         filterAssignee = e.detail.value || '';
         onFilterChange();
+    });
+    // Debounced: re-rendering 700 rows per keystroke would make typing lag.
+    document.getElementById('filter-text')?.addEventListener('input', (e) => {
+        clearTimeout(filterTextTimer);
+        filterTextTimer = setTimeout(() => {
+            filterText = e.target.value || '';
+            onFilterChange();
+        }, 200);
     });
     document.getElementById('filter-clear').addEventListener('click', clearFilters);
     document.getElementById('save-btn').addEventListener('click', onSave);

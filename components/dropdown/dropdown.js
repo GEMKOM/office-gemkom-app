@@ -699,7 +699,9 @@ export class ModernDropdown {
     }
 
     filterItems(searchTerm) {
-        const term = (searchTerm || '').toLowerCase().trim();
+        // Turkish-aware lowering: plain toLowerCase maps 'İ' to 'i' plus a
+        // combining dot, so a typed 'i' never matched 'İMALAT'-style labels.
+        const term = (searchTerm || '').toLocaleLowerCase('tr').trim();
         const source = Array.isArray(this.allItems) ? this.allItems : [];
 
         if (!term) {
@@ -709,7 +711,8 @@ export class ModernDropdown {
                 // searchText lets a caller render a rich label without the
                 // markup polluting what the user is matching against.
                 const hay = String(
-                    it?.searchText ?? it?.text ?? it?.label ?? it?.value ?? '').toLowerCase();
+                    it?.searchText ?? it?.text ?? it?.label ?? it?.value ?? '')
+                    .toLocaleLowerCase('tr');
                 return hay.includes(term);
             });
         }

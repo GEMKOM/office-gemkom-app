@@ -157,6 +157,25 @@
     white-space: nowrap;
 }
 
+/* Free-text search over job no + title + customer — same compact height as
+   the dropdowns beside it. */
+.planning-filters .pf-search {
+    width: 200px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: .82rem;
+    border: 1px solid #d8dee6;
+    border-radius: 8px;
+    background: #fff;
+    color: #1f2530;
+}
+
+.planning-filters .pf-search:focus {
+    outline: none;
+    border-color: #8bb4e8;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, .12);
+}
+
 /* ModernDropdown hard-sets height: 46px on both the shell and the collapsed
    field, so a compact variant has to override height, not just min-height.
    Scoped by the strip because the component replaces the container's own

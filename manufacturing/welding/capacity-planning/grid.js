@@ -423,6 +423,18 @@ export class PlanningGrid {
                             <i class="fas fa-bullseye"></i>
                         </div>`);
                 }
+                // "+2 gün / −2 gün": how far the projection sits from the
+                // hedef, in workdays — after whichever marker is rightmost.
+                const delta = Number(row.job_target_delta_wd || 0);
+                if (delta && (row.kind === 'group' || row.unassignedRow)) {
+                    const fx = timeline.xOf(row.forecast_date);
+                    const x = Math.max(tx, fx === null ? tx : fx) + oneUnit + 5;
+                    const late = delta > 0;
+                    parts.push(`
+                        <div class="pg-target-delta ${late ? 'pg-delta-late' : 'pg-delta-early'}"
+                             style="left:${x}px"
+                             title="Öngörülen bitiş hedeften ${Math.abs(delta)} gün ${late ? 'geride' : 'ileride'}">${late ? '+' : '−'}${Math.abs(delta)} gün</div>`);
+                }
             }
         }
 
