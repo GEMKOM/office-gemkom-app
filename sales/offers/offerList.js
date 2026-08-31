@@ -3656,7 +3656,6 @@ function getConsultationsTableRows() {
             const completionFiles = t.completion_files || [];
             const requestNote = (t.description ?? '').toString();
             const responseNote = (t.notes ?? '').toString();
-            const truncate = (v) => v.substring(0, 80) + (v.length > 80 ? '…' : '');
             rows.push({
                 task_id: t.id,
                 discussion_topic_id: t.discussion_topic?.id || null,
@@ -3666,8 +3665,8 @@ function getConsultationsTableRows() {
                 status_display: getTaskStatusBadge(t.status),
                 assigned_to_name: t.assigned_to_name || '',
                 deadline: deadlineStr || '',
-                notes: truncate(requestNote),
-                response_notes: truncate(responseNote),
+                notes: requestNote,
+                response_notes: responseNote,
                 shared_files_count: sharedFiles.length,
                 shared_files: sharedFiles,
                 completion_files: completionFiles
@@ -3679,9 +3678,66 @@ function getConsultationsTableRows() {
 
 let consultationsTableInstance = null;
 
+// Truncated cell that keeps the full note reachable: hover shows it, the copy
+// button puts it on the clipboard.
+function formatConsultationNoteCell(value) {
+    const full = (value ?? '').toString().trim();
+    if (!full) return '-';
+    const truncated = full.length > 80 ? full.substring(0, 80) + '…' : full;
+    return `<span title="${escapeHtml(full)}">${escapeHtml(truncated)}</span>`
+        + `<button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline text-secondary consultation-note-copy" data-note="${encodeURIComponent(full)}" title="Notu panoya kopyala"><i class="fas fa-copy"></i></button>`;
+}
+
+let consultationNoteCopyListenerAttached = false;
+
+function attachConsultationNoteCopyListener() {
+    if (consultationNoteCopyListenerAttached) return;
+    consultationNoteCopyListenerAttached = true;
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.consultation-note-copy');
+        if (!btn) return;
+        e.preventDefault();
+        copyConsultationNoteToClipboard(decodeURIComponent(btn.dataset.note || ''));
+    });
+}
+
+function copyConsultationNoteToClipboard(text) {
+    if (!text) {
+        showNotification('Kopyalanacak not yok', 'warning');
+        return;
+    }
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text)
+            .then(() => showNotification('Not panoya kopyalandı', 'success'))
+            .catch(() => copyConsultationNoteFallback(text));
+        return;
+    }
+    copyConsultationNoteFallback(text);
+}
+
+function copyConsultationNoteFallback(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (err) {
+        console.error('Copy failed:', err);
+    }
+    document.body.removeChild(textarea);
+    showNotification(copied ? 'Not panoya kopyalandı' : 'Not kopyalanamadı', copied ? 'success' : 'error');
+}
+
 function renderConsultationsTable() {
     const container = document.getElementById('consultations-table-container');
     if (!container) return;
+    attachConsultationNoteCopyListener();
     const canSendConsultations = !['won', 'lost', 'cancelled'].includes(offer?.status || '');
     const rows = getConsultationsTableRows();
     const refreshOffer = () => window.viewOffer(offerId);
@@ -3695,8 +3751,8 @@ function renderConsultationsTable() {
             { field: 'status_display', label: 'Durum', sortable: false, align: 'center', formatter: (v) => v || '-' },
             { field: 'assigned_to_name', label: 'Atanan', sortable: true, formatter: (v) => v || '-' },
             { field: 'deadline', label: 'Hedef Tarih', sortable: true, formatter: (v) => v || '-' },
-            { field: 'notes', label: 'Not', sortable: false, formatter: (v) => (v || '-').replace(/</g, '&lt;') },
-            { field: 'response_notes', label: 'Yanıt Notu', sortable: false, formatter: (v) => (v || '-').replace(/</g, '&lt;') },
+            { field: 'notes', label: 'Not', sortable: false, formatter: (v) => formatConsultationNoteCell(v) },
+            { field: 'response_notes', label: 'Yanıt Notu', sortable: false, formatter: (v) => formatConsultationNoteCell(v) },
             {
                 field: 'shared_files',
                 label: 'Paylaşılan dosyalar',
@@ -6209,6 +6265,7 @@ async function showEditConsultationModal(taskId, onSuccess) {
     const sharedFileIds = new Set((task.shared_files || []).map(f => f.id));
     const titleVal = task.title ?? task.request_title ?? '';
     const notesVal = task.description ?? '';
+    const responseNotesVal = (task.notes ?? '').toString();
     const deadlineRaw = task.target_completion_date ?? task.deadline ?? task.due_date ?? task.target_date ?? task.hedef_tarih;
     const deadlineVal = toDateInputValue(deadlineRaw);
     const modal = new EditModal('edit-consultation-modal-container', { title: 'Danışma Görevini Düzenle', icon: 'fas fa-edit', size: 'lg', showEditButton: false });
@@ -6216,6 +6273,9 @@ async function showEditConsultationModal(taskId, onSuccess) {
     modal.addSection({ title: 'Görev Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-info' });
     modal.addField({ id: 'title', name: 'title', label: 'Başlık', type: 'text', value: titleVal, icon: 'fas fa-heading', colSize: 12 });
     modal.addField({ id: 'notes', name: 'notes', label: 'Notlar', type: 'textarea', value: notesVal, placeholder: 'Departmana iletmek istediğiniz notlar (isteğe bağlı)', icon: 'fas fa-sticky-note', colSize: 12 });
+    if (responseNotesVal.trim()) {
+        modal.addField({ id: 'response_notes', name: 'response_notes', label: 'Yanıt Notu (departmanın yanıtı, düzenlenemez)', type: 'textarea', value: responseNotesVal, readonly: true, rows: 4, icon: 'fas fa-reply', colSize: 12 });
+    }
     modal.addField({ id: 'deadline', name: 'deadline', label: 'Hedef Tarih', type: 'date', value: deadlineVal, icon: 'fas fa-calendar', colSize: 6 });
     modal.onSaveCallback(async (formData) => {
         const payload = {};
@@ -6237,6 +6297,7 @@ async function showEditConsultationModal(taskId, onSuccess) {
     modal.render();
     modal.setFieldValue('title', titleVal);
     modal.setFieldValue('notes', notesVal);
+    if (responseNotesVal.trim()) modal.setFieldValue('response_notes', responseNotesVal);
     modal.setFieldValue('deadline', deadlineVal);
     const container = document.getElementById('edit-consultation-modal-container');
     const form = container.querySelector('#edit-modal-form');

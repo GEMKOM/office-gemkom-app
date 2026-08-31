@@ -1188,6 +1188,36 @@ function procurementModalHtml(brief, detail) {
     const criticalStat = procurement.critical_waiting
         ? `<span>Kritik bekleyen <strong class="pp-num-red">${fmtInt(procurement.critical_waiting)}</strong></span>`
         : '';
+    // Depodan çekilen malzemeler — one row per pulled item line, so the
+    // slide answers "what left the warehouse, to whom, when" directly.
+    const pullRequests = (detail && detail.pull_requests) || [];
+    const pullRows = pullRequests.flatMap((p) => {
+        const kindBadge = p.kind === 'subcontractor'
+            ? '<span class="status-badge status-purple">Taşeron</span>'
+            : '<span class="status-badge status-blue">Ekip</span>';
+        const statusBadge = p.status === 'transferred'
+            ? `<span class="status-badge status-green">${escapeHtml(p.status_label || 'Teslim Edildi')}</span>`
+            : `<span class="status-badge status-orange">${escapeHtml(p.status_label || 'Beklemede')}</span>`;
+        const who = p.status === 'transferred' && p.confirmed_by
+            ? `${escapeHtml(p.confirmed_by)} · ${fmtShortDate(p.confirmed_at || p.requested_at)}`
+            : `${escapeHtml(p.requested_by || '—')} · ${fmtShortDate(p.requested_at)}`;
+        return (p.items || []).map((item) => `
+            <tr>
+                <td class="pp-td-muted"><strong>${escapeHtml(p.number)}</strong></td>
+                <td class="pp-td-main" title="${escapeHtml(p.destination || '')}">${escapeHtml(p.destination || '—')} ${kindBadge}</td>
+                <td class="pp-td-main" title="${escapeHtml(item.item_name || '')}">${escapeHtml(item.item_name || '—')}
+                    <span class="text-muted">${escapeHtml(item.item_code || '')}</span></td>
+                <td>${escapeHtml(item.job_no || '')}</td>
+                <td class="pp-td-num">${fmtInt(item.quantity)} ${escapeHtml(item.item_unit || '')}</td>
+                <td>${statusBadge}</td>
+                <td class="pp-td-date">${who}</td>
+            </tr>`);
+    });
+    const pulls = procurement.material_pulls || {};
+    const pullSection = pullRows.length ? `
+        <div class="pp-modal-section">Depodan Çekilen Malzemeler
+            <span class="text-muted">· ${fmtInt(pulls.transferred)} talep teslim edildi / ${fmtInt(pulls.pending)} bekliyor</span></div>
+        ${modalTableHtml(['Talep', 'Hedef', 'Malzeme', 'İş Emri', { label: 'Miktar', num: true }, 'Durum', 'Kim · Tarih'], pullRows)}` : '';
     const body = `
         <div class="pp-modal-stats">
             <span>Bekleyen <strong>${fmtInt(procurement.items_waiting)}</strong></span>
@@ -1196,7 +1226,8 @@ function procurementModalHtml(brief, detail) {
             <span>Teslim edildi <strong class="pp-num-green">${fmtInt(procurement.items_delivered)} / ${fmtInt(procurement.items_total)}</strong></span>
             ${criticalStat}
         </div>
-        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Teslim Tarihi', 'Kritik'], rows)}`;
+        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Teslim Tarihi', 'Kritik'], rows)}
+        ${pullSection}`;
     return { title: 'Satın Alma Detayı', body };
 }
 
@@ -1734,8 +1765,19 @@ function procurementPanelHtml(procurement) {
         <div class="pp-panel-sub">Talebe dönüşmedi: <strong>${fmtInt(procurement.not_yet_requested)}</strong></div>
         <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
         <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong> / ${fmtInt(total)} kalem</div>
+        ${pullsLine(procurement.material_pulls)}
         ${procurement.critical_waiting ? `<div class="pp-panel-sub"><span class="pp-num-red">Kritik bekleyen: <strong>${fmtInt(procurement.critical_waiting)}</strong> — imalatı tutuyor</span></div>` : ''}`;
     return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-area-procurement', 'procurement');
+}
+
+// Warehouse pull requests — material handed out of the warehouse to a
+// subcontractor or internal team. Absent on cached/older briefs.
+function pullsLine(pulls) {
+    if (!pulls || !(pulls.items_pulled > 0)) return '';
+    const pendingPart = pulls.pending > 0
+        ? ` · <span class="pp-num-orange"><strong>${fmtInt(pulls.pending)}</strong> talep bekliyor</span>`
+        : '';
+    return `<div class="pp-panel-sub"><i class="fas fa-dolly me-1"></i>Depodan çekilen: <strong>${fmtInt(pulls.items_pulled)}</strong> kalem${pendingPart}</div>`;
 }
 
 function cuttingPanelHtml(cutting) {

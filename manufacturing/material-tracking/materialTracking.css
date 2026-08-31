@@ -1,0 +1,37 @@
+/* Pull-request create modal: render each item as one horizontal row —
+   item label + job/unit info on the left, quantity input on the right. */
+#pull-request-create-modal-container [data-field-id^="item_qty_"] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 130px;
+    grid-template-areas:
+        "label input"
+        "help input"
+        "error error";
+    align-items: center;
+    column-gap: 0.75rem;
+    margin-bottom: 0;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+#pull-request-create-modal-container .row > div:last-child [data-field-id^="item_qty_"] {
+    border-bottom: 0;
+}
+
+#pull-request-create-modal-container [data-field-id^="item_qty_"] .field-label {
+    grid-area: label;
+    margin-bottom: 0;
+}
+
+#pull-request-create-modal-container [data-field-id^="item_qty_"] .field-help {
+    grid-area: help;
+    margin-top: 0;
+}
+
+#pull-request-create-modal-container [data-field-id^="item_qty_"] .field-input {
+    grid-area: input;
+}
+
+#pull-request-create-modal-container [data-field-id^="item_qty_"] .field-error {
+    grid-area: error;
+}

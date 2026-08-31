@@ -1036,7 +1036,7 @@ export class TableComponent {
                 const tbody = this.container.querySelector(`#${this.containerId}-tbody`);
                 if (tbody) {
                     tbody.innerHTML = this.renderBody();
-                    this.setupSelectionListeners();
+                    this._setupRowCheckboxListeners();
                     if (this.options.editable) {
                         this.setupInlineEditing();
                     }
@@ -1044,6 +1044,10 @@ export class TableComponent {
             }, this._sig());
         }
 
+        this._setupRowCheckboxListeners();
+    }
+
+    _setupRowCheckboxListeners() {
         const rowCheckboxes = this.container.querySelectorAll('.row-select-checkbox');
         rowCheckboxes.forEach((checkbox) => {
             checkbox.addEventListener('change', (e) => {
