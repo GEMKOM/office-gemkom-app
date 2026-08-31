@@ -1944,6 +1944,13 @@ function rowClasses(row) {
     return classes.join(' ');
 }
 
+// Two different billing locks (mirroring welding/services/planning.py): a
+// billed baseline freezes the weight, while ANY statement line — a draft
+// statement already makes one, nothing billed yet — blocks a move.
+function isMoveLocked(block) {
+    return !!(block.is_billed || block.has_statement_line);
+}
+
 const GRID_ACTIONS = [
     {
         key: 'create-stages',
@@ -1972,7 +1979,7 @@ const GRID_ACTIONS = [
         icon: 'fas fa-people-arrows',
         title: (row) => {
             const b = findBlock(row.blockRef);
-            if (b?.is_billed) {
+            if (b && isMoveLocked(b)) {
                 return 'Hakedişe girmiş atama taşınamaz — kalan işi yeni bir'
                     + ' atamayla verin';
             }
@@ -1981,10 +1988,10 @@ const GRID_ACTIONS = [
         },
         visible: (row) => row.kind === 'block',
         // A new block is not saved yet (delete and re-add it instead), and a
-        // billed one is immutable history.
+        // block that has entered billing is immutable history.
         disabled: (row) => {
             const b = findBlock(row.blockRef);
-            return !b || b.isNew || !!b.is_billed;
+            return !b || b.isNew || isMoveLocked(b);
         },
     },
     {
@@ -2671,7 +2678,7 @@ function openMoveModal(blockRef) {
             'Bu blok henüz kaydedilmedi — önce Kaydet, sonra taşıyın.', 'info');
         return;
     }
-    if (block.is_billed) {
+    if (isMoveLocked(block)) {
         showNotification(
             'Hakedişe girmiş atama taşınamaz — kalan işi yeni bir atamayla verin.',
             'error');
@@ -2729,13 +2736,15 @@ async function openMoveTierModal(block, res) {
                 const free = Number(t.remaining_weight_kg)
                     + (Number(t.id) === currentTierId ? kg : 0);
                 const short = round2(kg - free);
+                // An over-used tier has negative room; "-200 kg boş" is noise.
+                const shown = Math.max(free, 0);
                 return {
                     value: String(t.id),
                     fits: short <= 0,
                     label: `${t.name} — ${t.price_per_kg} ${t.currency}/kg`
                         + (short <= 0
-                            ? ` (${fmtKg(free)} kg boş)`
-                            : ` (${fmtKg(free)} kg boş — ${fmtKg(short)} kg eksik)`),
+                            ? ` (${fmtKg(shown)} kg boş)`
+                            : ` (${fmtKg(shown)} kg boş — ${fmtKg(short)} kg eksik)`),
                 };
             });
         if (!tiers.length) {
