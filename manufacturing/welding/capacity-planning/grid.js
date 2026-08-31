@@ -404,19 +404,39 @@ export class PlanningGrid {
     }
 
     _barHtml(row, timeline) {
-        const bar = this.options.bar(row);
-        if (!bar) return '';
-        const startX = timeline.xOf(bar.start || bar.end);
-        const endX = timeline.xOf(bar.end || bar.start);
-        if (startX === null || endX === null) return '';
-        // The end date is inclusive — a task that starts and ends the same day
-        // is one day long, not zero — so the bar runs to the END of that unit.
         const oneUnit = timeline.unit === 'day' ? timeline.colWidth
             : timeline.colWidth / (timeline.unit === 'week' ? 7 : 30);
+
+        const parts = [];
+        // İş emri hedef bitişi: the same vertical tick on every row of the
+        // job, so the group reads as one continuous target line down the
+        // sheet. Red when the job's projected end overshoots it.
+        if (row.job_target) {
+            const tx = timeline.xOf(row.job_target);
+            if (tx !== null) {
+                const lateCls = row.job_target_late ? ' pg-target-late' : '';
+                parts.push(`<div class="pg-target-line${lateCls}" style="left:${tx + oneUnit}px"></div>`);
+                if (row.kind === 'group') {
+                    parts.push(`
+                        <div class="pg-target-flag${lateCls}" style="left:${tx + oneUnit}px"
+                             title="İş emri hedef bitişi: ${esc(row.job_target)}${row.job_target_late ? ' — öngörülen bitiş bu tarihi aşıyor' : ''}">
+                            <i class="fas fa-bullseye"></i>
+                        </div>`);
+                }
+            }
+        }
+
+        const bar = this.options.bar(row);
+        if (!bar) return parts.join('');
+        const startX = timeline.xOf(bar.start || bar.end);
+        const endX = timeline.xOf(bar.end || bar.start);
+        if (startX === null || endX === null) return parts.join('');
+        // The end date is inclusive — a task that starts and ends the same day
+        // is one day long, not zero — so the bar runs to the END of that unit.
         const width = Math.max(6, endX - startX + oneUnit);
         const pct = Math.max(0, Math.min(100, Number(bar.progress || 0)));
 
-        return `
+        return `${parts.join('')}
             <div class="pg-bar pg-bar-${esc(bar.state || 'on-time')}"
                  style="left:${startX}px;width:${width}px"
                  title="${esc(bar.title || '')}">

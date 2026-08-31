@@ -263,6 +263,55 @@ body.pg-resizing * {
     pointer-events: none;
 }
 
+/* İş emri hedef bitişi: dashed so it never reads as the solid "today" line.
+   The same tick on every row of the job draws one continuous target line;
+   the bullseye flag on the group row names it. Red = the İmalat engine
+   projection overshoots the promise. */
+.pg-target-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 2px dashed rgba(37, 99, 235, 0.55);
+    z-index: 2;
+    pointer-events: none;
+}
+
+.pg-target-line.pg-target-late {
+    border-left-color: rgba(220, 38, 38, 0.6);
+}
+
+.pg-target-flag {
+    position: absolute;
+    top: 1px;
+    transform: translateX(-50%);
+    color: #2563eb;
+    font-size: 11px;
+    z-index: 4;
+    background: #ffffff;
+    border-radius: 50%;
+    line-height: 1;
+}
+
+.pg-target-flag.pg-target-late {
+    color: #dc2626;
+}
+
+/* The group's promised end turns red when the projection overshoots it */
+.pg-group-late .pg-cell[data-field="end_date"] {
+    color: #b91c1c;
+    font-weight: 700;
+}
+
+/* "Tümü" tab: unassigned jobs — visibly waiting for an owner */
+.pg-row-unassigned .pg-cell {
+    color: #6b7280;
+}
+
+.pg-row-unassigned .pg-cell:first-of-type {
+    color: #3a4150;
+}
+
 .pg-bar {
     position: absolute;
     top: 50%;

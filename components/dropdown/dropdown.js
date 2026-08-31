@@ -596,6 +596,14 @@ export class ModernDropdown {
                 item: item
             }
         }));
+
+        // A multi-select tick leaves the menu open while the select handler
+        // above may have re-rendered the page and shifted the trigger; the
+        // fixed-position portal only follows window scroll/resize on its own,
+        // so re-anchor it to wherever the trigger ended up.
+        if (this.options.multiple && this.isOpen && this.portalWrapper) {
+            this.updatePortalPosition();
+        }
     }
     
     // A label may be markup (see `searchText`), and the collapsed field is
@@ -642,8 +650,10 @@ export class ModernDropdown {
         if (this.selectedValues.length === 0) {
             selectedTextElement.textContent = this.options.placeholder;
         } else if (this.selectedValues.length === 1) {
-            const item = this.items.find(i => i.value === this.selectedValues[0]);
-            selectedTextElement.textContent = (item && this.plainLabel(item.value))
+            // Resolve against ALL items, not the search-filtered list — the
+            // active search may hide the one selected item, and falling back
+            // to the placeholder would claim nothing is selected.
+            selectedTextElement.textContent = this.plainLabel(this.selectedValues[0])
                 || this.options.placeholder;
         } else {
             selectedTextElement.textContent = `${this.selectedValues.length} seçenek`;

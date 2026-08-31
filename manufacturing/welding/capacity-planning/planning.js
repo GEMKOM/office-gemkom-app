@@ -60,6 +60,7 @@ let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
 let dirtyMachining = new Map();   // job_no -> Set of edited field names
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
 
+let liveForecastJobs = new Set(); // jobs edited this session -> live client projections
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
 let collapsedJobs = new Set();    // job_no -> collapsed in the grid
 let showCompleted = false;
@@ -68,9 +69,9 @@ let newCounter = 0;
 
 // View filters. Purely client-side — the whole board is already in memory, so
 // they narrow what is drawn without touching the working copy or the edits in
-// it. '' means "no filter".
+// it. An empty selection means "no filter".
 const UNASSIGNED = '__none__';
-let filterJobNo = '';
+let filterJobNos = [];            // job_no strings; a job passes if it is any of them
 let filterAssignee = '';          // user id as a string, or UNASSIGNED
 let jobFilterDropdown = null;
 let assigneeFilterDropdown = null;
@@ -166,6 +167,8 @@ function stageVM(s) {
         entered_duration_wd: s.entered_duration_wd == null ? null : s.entered_duration_wd,
         start_date: s.start_date,
         end_date: s.end_date,
+        projected_start_date: s.projected_start_date || null,
+        projected_end_date: s.projected_end_date || null,
         completed_at: s.completed_at || null,
         forecast_date: s.forecast_date || null,
         forecast_kind: s.forecast_kind || null,
@@ -202,6 +205,8 @@ function blockVM(b, res) {
             completed_at: b.subtask.completed_at || null,
             forecast_date: b.subtask.forecast_date || null,
             forecast_kind: b.subtask.forecast_kind || null,
+            projected_start_date: b.subtask.projected_start_date || null,
+            projected_end_date: b.subtask.projected_end_date || null,
         },
         stages: (b.stages || []).map(stageVM),
         createDefaultStages: false,
@@ -214,6 +219,8 @@ function blockVM(b, res) {
 
 function hydrate(boardData) {
     board = boardData;
+    // Fresh server truth supersedes every live client approximation.
+    liveForecastJobs.clear();
     calendar = createWorkdayCalendar(boardData.holidays || []);
     weldingTasks = boardData.welding_tasks || [];
     jobInfo = boardData.job_info || {};
@@ -274,6 +281,8 @@ async function loadBoard() {
 
 function markBlockDirty(blockRef) {
     dirtyBlocks.add(blockRef);
+    const block = findBlock(blockRef);
+    if (block && block.job_no) liveForecastJobs.add(block.job_no);
     updateSaveState();
 }
 
@@ -322,6 +331,8 @@ function deptVM(row) {
         // The stored plan, before any widening — the floor the union keeps.
         entered_start_date: row.entered_start_date || null,
         entered_end_date: row.entered_end_date || null,
+        projected_start_date: row.projected_start_date || null,
+        projected_end_date: row.projected_end_date || null,
     };
 }
 
@@ -333,6 +344,7 @@ function markMachiningDirty(jobNo, field) {
     const fields = dirtyMachining.get(jobNo) || new Set();
     if (field) fields.add(field);
     dirtyMachining.set(jobNo, fields);
+    liveForecastJobs.add(jobNo);
     updateSaveState();
 }
 
@@ -341,6 +353,7 @@ function markDeptDirty(jobNo, slot, field) {
     const fields = dirtyDept.get(key) || new Set();
     if (field) fields.add(field);
     dirtyDept.set(key, fields);
+    liveForecastJobs.add(jobNo);
     updateSaveState();
 }
 
@@ -455,11 +468,11 @@ function jobAssignee(jobNo) {
 }
 
 function hasActiveFilter() {
-    return !!(filterJobNo || filterAssignee);
+    return !!(filterJobNos.length || filterAssignee);
 }
 
 function jobMatchesFilters(jobNo) {
-    if (filterJobNo && String(jobNo) !== filterJobNo) return false;
+    if (filterJobNos.length && !filterJobNos.includes(String(jobNo))) return false;
     if (filterAssignee) {
         const assignee = jobAssignee(jobNo);
         return filterAssignee === UNASSIGNED ? assignee === null : assignee === filterAssignee;
@@ -479,16 +492,17 @@ function jobFilterOptions() {
     // part spec). The option shows enough to recognise the job, the collapsed
     // field shows the number alone, and the search still reads the full title.
     const shorten = (title) => (title.length > 44 ? `${title.slice(0, 43)}…` : title);
-    const options = [...boardJobs().entries()]
+    // No "all" head option: the dropdown is multi-select, so an empty
+    // selection already means every job, and the placeholder says so.
+    return [...boardJobs().entries()]
         .sort((a, b) => String(a[0]).localeCompare(String(b[0]), 'tr',
             { numeric: true, sensitivity: 'base' }))
         .map(([jobNo, title]) => ({
-            value: jobNo,
-            text: title ? `${jobNo} — ${shorten(title)}` : jobNo,
-            searchText: title ? `${jobNo} ${title}` : jobNo,
-            selectedText: jobNo,
+            value: String(jobNo),
+            text: title ? `${jobNo} — ${shorten(title)}` : String(jobNo),
+            searchText: title ? `${jobNo} ${title}` : String(jobNo),
+            selectedText: String(jobNo),
         }));
-    return [{ value: '', text: 'Tüm iş emirleri' }, ...options];
 }
 
 function assigneeFilterOptions() {
@@ -521,7 +535,7 @@ function renderFilters() {
         filterOptionsSig = sig;
         // A filtered-out value that no longer exists (the job finished, its
         // owner changed) would hide the whole board with no way back.
-        if (filterJobNo && !jobOptions.some(o => o.value === filterJobNo)) filterJobNo = '';
+        filterJobNos = filterJobNos.filter(v => jobOptions.some(o => o.value === v));
         if (filterAssignee && !assigneeOptions.some(o => o.value === filterAssignee)) {
             filterAssignee = '';
         }
@@ -541,19 +555,30 @@ function buildFilterDropdown(which, options) {
     const dropdown = new ModernDropdown(container, {
         placeholder: isJob ? 'Tüm iş emirleri' : 'Tüm sorumlular',
         // Job numbers run to dozens; the owner list is a handful of names.
-        searchable: options.length > 8,
+        // Both cutoffs mean "more than 7 real choices" — the assignee list
+        // still carries a "Tüm sorumlular" head row, the job list does not.
+        searchable: options.length > (isJob ? 7 : 8),
+        // Planners compare a handful of jobs side by side, so the job filter
+        // takes any number of them.
+        multiple: isJob,
     });
     dropdown.setItems(options);
-    const current = isJob ? filterJobNo : filterAssignee;
-    if (current) dropdown.setValue(current);
-    if (isJob) jobFilterDropdown = dropdown; else assigneeFilterDropdown = dropdown;
+    if (isJob) {
+        // Copy: setValue keeps the array it is handed, and the dropdown
+        // mutates its own copy as boxes are ticked.
+        dropdown.setValue([...filterJobNos]);
+        jobFilterDropdown = dropdown;
+    } else {
+        if (filterAssignee) dropdown.setValue(filterAssignee);
+        assigneeFilterDropdown = dropdown;
+    }
 }
 
 function clearFilters() {
     if (!hasActiveFilter()) return;
-    filterJobNo = '';
+    filterJobNos = [];
     filterAssignee = '';
-    if (jobFilterDropdown) jobFilterDropdown.setValue('');
+    if (jobFilterDropdown) jobFilterDropdown.setValue([]);
     if (assigneeFilterDropdown) assigneeFilterDropdown.setValue('');
     onFilterChange();
 }
@@ -639,7 +664,20 @@ function renderTabs() {
         : empty.filter(res => resourceKeyOf(res) === activeResourceKey);
     const hiddenCount = empty.length - visibleEmpty.length;
 
+    // "Tümü": every resource's jobs plus the unassigned ones on one sheet.
+    const totalBlocks = resources.reduce(
+        (acc, res) => acc + visibleBlocks(res).length, 0);
+    const allTab = `
+        <button type="button" class="planning-tab${activeResourceKey === 'all' ? ' active' : ''}"
+                data-resource-key="all"
+                title="Bütün iş emirleri — atanmışlar kaynak sırasıyla, atanmamışlar sonda">
+            <i class="fas fa-table-list"></i>
+            <span class="tab-label">Tümü</span>
+            ${totalBlocks ? `<span class="resource-kg">${totalBlocks} atama</span>` : ''}
+        </button>`;
+
     container.innerHTML = [
+        allTab,
         ...filled.map(tabHTML),
         ...visibleEmpty.map(tabHTML),
         ((hiddenCount > 0 || showEmptyResources) ? `
@@ -720,7 +758,22 @@ function statusBadge(status, overdue) {
 const DATE_SOURCE_TITLES = {
     operations_plan: 'Operasyon planından hesaplandı — bu göreve girilmiş bir tarih değil',
     operations_actual: 'Operasyonlardaki gerçek çalışmadan alındı',
+    engine: 'Üretim planı öngörüsü (proje takibi ile aynı hesap) — bu göreve girilmiş bir tarih değil',
 };
+
+// Derived rows borrow the forecast engine's projected window for display and
+// for their gantt bar — nothing here is written back.
+function withEngineDates(row, vm) {
+    if (row.start_date == null && vm.projected_start_date) {
+        row.start_date = vm.projected_start_date;
+        row.date_source = row.date_source || 'engine';
+    }
+    if (row.end_date == null && vm.projected_end_date) {
+        row.end_date = vm.projected_end_date;
+        row.date_source = row.date_source || 'engine';
+    }
+    return row;
+}
 
 function dateCell(value, isActual, row) {
     if (!value) return '<span class="text-muted">—</span>';
@@ -758,21 +811,48 @@ function durationCell(value, isDerived, row) {
     return `<span class="duration-derived" title="${esc(title)}">≈${fmtDuration(value)}</span>`;
 }
 
-// Actual completion date for finished rows, projected finish for open ones.
+// Actual completion date for finished rows, the ENGINE's projected finish for
+// open ones — the same arithmetic project tracking shows, per row (user
+// decision 2026-08-28: one forecast, not two).
+const FORECAST_KIND_TITLES = {
+    rate: 'ölçülen tempoya göre',
+    duration: 'girilen sürenin bütçesine göre',
+    parent_duration: 'üst görevden inen süre payına göre',
+    parent_window: 'plan penceresi payına göre',
+    start: 'plan penceresine göre',
+    subtasks: 'en geç biten alt görevine göre',
+    push: 'önceki görevin bitişine göre',
+    chained: 'kalan işin önceki görevden sonra sayılmasıyla',
+    gate: 'başlama koşuluna göre',
+    floored: 'bitiş tabanına (teslimat/koşul) göre',
+    coupled: 'kesim ilerleyişine göre',
+    weight: 'ağırlık payı tahminiyle',
+    done: 'kapanış bekleniyor',
+};
+
 function forecastCell(row) {
     if (!row.forecast_date) return '<span class="text-muted">—</span>';
     const isActual = row.forecast_kind === 'actual';
-    const late = !isActual && row.end_date && row.forecast_date > row.end_date;
+    // Lateness is measured against the JOB ORDER's promised end (the target
+    // line on the gantt) — falling back to the row's own end where the job
+    // has no promise.
+    const jobLate = !isActual && row.job_target
+        && row.forecast_date > row.job_target;
+    const ownLate = !isActual && !row.job_target && row.end_date
+        && row.forecast_date > row.end_date;
+    const late = jobLate || ownLate;
     const cls = ['forecast-cell'];
     if (isActual) cls.push('actual');
     if (late) cls.push('late');
+    const how = FORECAST_KIND_TITLES[row.forecast_kind];
     const title = isActual
         ? 'Gerçekleşen tamamlanma tarihi'
-        : (row.forecast_kind === 'rate'
-            ? 'Tahmini bitiş — mevcut ilerleme hızına göre'
-            : 'Tahmini bitiş — planlanan tarihe göre');
+        : `Üretim planı öngörüsü${how ? ` — ${how}` : ''} (proje takibi ile aynı hesap)`;
+    const lateNote = jobLate
+        ? ` — iş emri hedefinden (${fmtDate(row.job_target)}) sonra`
+        : (ownLate ? ' (hedefin gerisinde)' : '');
     return `
-        <span class="${cls.join(' ')}" title="${title}${late ? ' (hedefin gerisinde)' : ''}">
+        <span class="${cls.join(' ')}" title="${title}${lateNote}">
             <i class="fas ${isActual ? 'fa-circle-check' : 'fa-clock'}"></i>${fmtDate(row.forecast_date)}
         </span>`;
 }
@@ -819,15 +899,29 @@ function jobNosOf(res) {
 //         HARUN METAL BAKIR         ← a subcontractor/team assignment
 //           Montaj, Kaynak ve Taşlama
 //       Boya                        ← editable
-function buildSheetRows(res) {
+function buildSheetRows(res, sortJobs = false) {
     const rows = [];
 
-    jobNosOf(res).forEach(jobNo => {
+    const jobList = sortJobs
+        ? jobNosOf(res).slice().sort((a, b) =>
+            String(a).localeCompare(String(b), 'tr', { numeric: true }))
+        : jobNosOf(res);
+    jobList.forEach(jobNo => {
         const blocks = res.blocks.filter(b => !b.deleted && b.job_no === jobNo);
         const first = blocks[0] || {};
         const info = jobInfo[jobNo] || {};
-        const base = { job_no: jobNo, groupKey: jobNo };
         const jo = info.job_order || null;
+        // The job order's promised end rides on EVERY row of the group: the
+        // gantt draws it as one continuous target line, and forecast cells
+        // compare against it. Late = the İmalat engine projection overshoots.
+        const mfgForecast = (deptOf(jobNo, 'manufacturing') || {}).forecast_date || null;
+        const jobLate = !!(jo && jo.end_date && mfgForecast && mfgForecast > jo.end_date);
+        const base = {
+            job_no: jobNo,
+            groupKey: jobNo,
+            job_target: jo ? jo.end_date : null,
+            job_target_late: jobLate,
+        };
 
         // The job order frames everything under it. It is not a department
         // task and nothing here edits it — its dates are when the order was
@@ -852,12 +946,14 @@ function buildSheetRows(res) {
             progress: jo?.progress ?? 0,
             status: jo?.status || 'active',
             completed_at: jo?.completed_at || null,
-            forecast_date: null,
-            forecast_kind: null,
+            // The job's Öngörü is İmalat's engine projection — comparing it
+            // with end_date (the promised date) is the group's whole story.
+            forecast_date: mfgForecast,
+            forecast_kind: (deptOf(jobNo, 'manufacturing') || {}).forecast_kind || null,
             note: '',
         });
 
-        const infoRow = (item, label, kind, indent) => ({
+        const infoRow = (item, label, kind, indent) => withEngineDates({
             ...base,
             key: `${jobNo}-info-${item.task_id}`,
             kind: kind || 'info',
@@ -880,12 +976,12 @@ function buildSheetRows(res) {
             forecast_date: item.forecast_date || null,
             forecast_kind: item.forecast_kind || null,
             note: '',
-        });
+        }, item);
 
         const deptRow = (slot, label, indent) => {
             const vm = deptOf(jobNo, slot);
             if (!vm) return null;
-            return {
+            return withEngineDates({
                 ...base,
                 key: `${jobNo}-${slot}`,
                 kind: 'dept',
@@ -909,7 +1005,7 @@ function buildSheetRows(res) {
                 forecast_date: vm.forecast_date,
                 forecast_kind: vm.forecast_kind,
                 note: '',
-            };
+            }, vm);
         };
 
         // Other departments first: material supply and cutting run before any
@@ -956,7 +1052,7 @@ function buildSheetRows(res) {
             // Without them, it IS the schedule and takes the edits directly —
             // which is also the only shape the server accepts a subtask
             // schedule for.
-            rows.push({
+            rows.push(withEngineDates({
                 ...base,
                 key: `${b.key}-block`,
                 blockRef: b.key,
@@ -985,9 +1081,9 @@ function buildSheetRows(res) {
                 forecast_date: staged.length ? rollup.forecastDate : b.subtask.forecast_date,
                 forecast_kind: staged.length ? rollup.forecastKind : b.subtask.forecast_kind,
                 note: b.notes,
-            });
+            }, b.subtask));
 
-            staged.forEach(s => rows.push({
+            staged.forEach(s => rows.push(withEngineDates({
                 ...base,
                 key: `${b.key}-stage-${s.cid}`,
                 blockRef: b.key,
@@ -1009,7 +1105,7 @@ function buildSheetRows(res) {
                 forecast_date: s.forecast_date,
                 forecast_kind: s.forecast_kind,
                 note: s.note,
-            }));
+            }, s)));
         });
 
         const painting = deptRow('painting', 'Boya', 2);
@@ -1171,7 +1267,7 @@ const GRID_COLUMNS = [
 // which is a summary of the stages beneath it.
 // Rows that only ever report: the job order (its dates come from the order
 // record), other departments' work, and Talaşlı İmalat.
-const READ_ONLY_KINDS = ['group', 'info', 'band'];
+const READ_ONLY_KINDS = ['group', 'info', 'band', 'unassigned'];
 const SCHEDULE_ONLY = ['start_date', 'end_date', 'duration_wd', 'status'];
 
 // Per cell, not per row. Showing a cell as editable and then throwing when it
@@ -1186,6 +1282,15 @@ function isCellEditable(row, field) {
     if (field === 'duration_wd'
             && !(row.kind === 'dept' && row.slot === 'manufacturing')) {
         return false;
+    }
+    // ONE date entry point too (user decision 2026-08-28): the İmalat START.
+    // Every other date on the sheet is DERIVED — the forecast engine projects
+    // the schedule from that start, the entered duration and the progress,
+    // with the same arithmetic project tracking uses. İmalat's own end is
+    // the engine's projection; its Hedef lives on project tracking.
+    if (field === 'start_date' || field === 'end_date') {
+        return field === 'start_date'
+            && row.kind === 'dept' && row.slot === 'manufacturing';
     }
     // Talaşlı İmalat's share of the manufacturing rollup is set here; its dates
     // are not — those come from the operations underneath it.
@@ -1321,12 +1426,257 @@ function rederiveDerivedDurations() {
     });
 }
 
+// Live parent-progress rollup (user: "when a subtask's progress changes,
+// the parents don't change before saving"): a stage edit re-weights its
+// block, the Kaynaklı İmalat row and İmalat immediately — display only;
+// parent progress is never sent, the server recomputes the same rollup.
+function rederiveProgress() {
+    const cap99 = (p) => Math.min(Number(p || 0), 99);
+    const jobBlocks = {};
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (b.deleted) return;
+        (jobBlocks[b.job_no] = jobBlocks[b.job_no] || []).push(b);
+    }));
+    Object.entries(deptByJob).forEach(([jobNo, slots]) => {
+        const weld = slots.welding;
+        const blocks = jobBlocks[jobNo] || [];
+        if (weld && weld.status !== 'completed' && blocks.length) {
+            let wSum = 0;
+            let earned = 0;
+            blocks.forEach(b => {
+                if (['cancelled', 'skipped'].includes(b.subtask.status)) return;
+                const hasStages = b.stages.some(s => !s.deleted);
+                const pct = b.subtask.status === 'completed' ? 100
+                    : cap99(hasStages ? blockRollup(b).progress : b.subtask.progress);
+                const w = Number(b.allocated_weight_kg || 0);
+                wSum += w;
+                earned += w * pct;
+            });
+            if (wSum > 0) weld.progress = Math.round(earned / wSum * 100) / 100;
+        }
+        const imalat = slots.manufacturing;
+        if (imalat && imalat.status !== 'completed') {
+            const machInfo = ((jobInfo[jobNo] || {}).machining || [])[0];
+            const parts = [];
+            if (weld) parts.push([weld.weight, weld.status, weld.progress]);
+            if (machInfo) parts.push([machInfo.weight, machInfo.status, machInfo.progress]);
+            if (slots.painting) {
+                parts.push([slots.painting.weight, slots.painting.status,
+                            slots.painting.progress]);
+            }
+            let wSum = 0;
+            let earned = 0;
+            parts.forEach(([w, st, p]) => {
+                if (['cancelled', 'skipped'].includes(st)) return;
+                const wp = Number(w || 0);
+                wSum += wp;
+                earned += wp * (st === 'completed' ? 100 : cap99(p));
+            });
+            if (wSum > 0) imalat.progress = Math.round(earned / wSum * 100) / 100;
+        }
+    });
+}
+
+// LIVE projections for jobs the planner just edited (user asks 2026-08-29):
+// a client mini-SCHEDULER over the system's workday calendar — from the
+// İmalat start, stages lay out sequentially within each block, blocks run
+// in parallel, Kaynaklı İmalat is the latest block, Boya always starts the
+// next workday AFTER welding and machining finish, and İmalat ends with its
+// last child. Duration, progress and START edits all re-cascade instantly;
+// a started row keeps its real start and projects the remaining share of
+// its budget from today ("if it moves faster"). Measured tempo, material
+// floors and machining operations stay the server engine's job — the
+// save's fresh board restores the exact numbers, and untouched jobs keep
+// engine values verbatim.
+function rederiveEngineDates() {
+    if (!liveForecastJobs.size) return;
+    const today = todayStr();
+    const later = (a, b) => (a && b ? (a > b ? a : b) : (a || b));
+    const nextDay = (d) => {
+        const p = new Date(`${d}T00:00:00`);
+        p.setDate(p.getDate() + 1);
+        return `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}-${String(p.getDate()).padStart(2, '0')}`;
+    };
+    const nextWorkday = (d) => {
+        let c = nextDay(d);
+        for (let i = 0; i < 60 && calendar.isNonWorkingDay(c); i++) c = nextDay(c);
+        return c;
+    };
+    // One row's window: unstarted work spans its full duration from the
+    // chained anchor; started work keeps its real start and finishes at the
+    // EARLIER of the anchored budget and the remaining share from today —
+    // exactly Kural 1's calendar-budget clamp, on the workday calendar.
+    const layout = (vm, chainedStart, durationWd) => {
+        const d = Number(durationWd || 0);
+        const p = Math.min(Number(vm.progress || 0), 99);
+        if (d <= 0) return null;
+        if (p <= 0) {
+            const start = later(chainedStart, null) || today;
+            const from = start > today ? start : today;
+            vm.projected_start_date = from;
+            const end = calendar.spanEnd(from, d);
+            vm.projected_end_date = end;
+            vm.forecast_date = end;
+            return end;
+        }
+        const anchor = vm.start_date || vm.projected_start_date || chainedStart || today;
+        const full = calendar.spanEnd(anchor, d);
+        const scaled = calendar.spanEnd(today, Math.max(d * (100 - p) / 100, 0.1));
+        let end = full < scaled ? full : scaled;
+        if (end < today) end = today;
+        vm.projected_start_date = anchor;
+        vm.projected_end_date = end;
+        vm.forecast_date = end;
+        return end;
+    };
+    const jobBlocks = {};
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (b.deleted) return;
+        (jobBlocks[b.job_no] = jobBlocks[b.job_no] || []).push(b);
+    }));
+    liveForecastJobs.forEach(jobNo => {
+        const slots = deptByJob[jobNo] || {};
+        const imalat = slots.manufacturing;
+        const jobStart = (imalat && imalat.start_date) || today;
+
+        let weldEnd = null;
+        (jobBlocks[jobNo] || []).forEach(b => {
+            let blockEnd = null;
+            let cursor = jobStart;
+            const live = b.stages.filter(
+                s => !s.deleted && !['cancelled', 'skipped'].includes(s.status));
+            if (live.length) {
+                live.forEach(s => {
+                    if (s.status === 'completed') {
+                        blockEnd = later(blockEnd, s.projected_end_date || s.end_date);
+                        if (blockEnd) cursor = nextWorkday(blockEnd);
+                        return;
+                    }
+                    const e = layout(s, cursor, s.duration_wd);
+                    blockEnd = later(blockEnd, e || s.projected_end_date);
+                    if (blockEnd) cursor = nextWorkday(blockEnd);
+                });
+            } else if (b.subtask.status !== 'completed') {
+                blockEnd = layout(b.subtask, jobStart, b.subtask.duration_wd);
+            }
+            if (blockEnd && b.subtask.status !== 'completed') {
+                b.subtask.projected_end_date = blockEnd;
+                b.subtask.forecast_date = blockEnd;
+            }
+            weldEnd = later(weldEnd, blockEnd);
+        });
+        const weld = slots.welding;
+        if (weld && weld.status !== 'completed' && weldEnd) {
+            weld.projected_start_date = weld.start_date
+                || weld.projected_start_date || jobStart;
+            weld.projected_end_date = weldEnd;
+            weld.forecast_date = weldEnd;
+        }
+
+        const machEnd = ((jobInfo[jobNo] || {}).machining || [])
+            .reduce((acc, m) => later(acc, m.forecast_date || m.end_date), null);
+
+        // Boya is ALWAYS after the rest of the manufacturing work: it starts
+        // the next workday after welding and machining are both done.
+        let paintEnd = null;
+        const paint = slots.painting;
+        if (paint && paint.status !== 'completed') {
+            const preds = later(weldEnd, machEnd);
+            const paintStart = preds ? nextWorkday(preds) : jobStart;
+            paintEnd = layout(paint, paintStart, paint.duration_wd);
+        }
+
+        if (imalat && imalat.status !== 'completed') {
+            const kids = later(later(weldEnd, paintEnd), machEnd);
+            const end = kids || layout(
+                imalat, jobStart,
+                imalat.entered_duration_wd ?? imalat.duration_wd);
+            if (end) {
+                imalat.projected_end_date = end;
+                imalat.forecast_date = end;
+            }
+        }
+    });
+}
+
+// The "Tümü" tab: every resource's jobs on one sheet — ordered by
+// subcontractor/team first, job number second (user ask 2026-08-29) — with
+// an "Atanmamış" section at the end listing assignable jobs no one holds
+// yet, each carrying an assign action.
+function buildAllRows() {
+    const rows = [];
+    resources.forEach(res => {
+        const blocks = visibleBlocks(res);
+        if (!blocks.length) return;
+        const key = resourceKeyOf(res);
+        rows.push({
+            key: `all-head-${key}`,
+            kind: 'band',
+            indent: 0,
+            job_no: null,
+            title: `${res.resource_type === 'team' ? 'Ekip' : 'Taşeron'} — ${res.display_name || res.name}`,
+            start_date: null, end_date: null, duration_wd: null,
+            weight: null, progress: null, status: null, note: '',
+        });
+        const resRows = buildSheetRows(res, true);
+        // A job can sit under two resources on this sheet — namespace the
+        // row keys so the grid's key lookup stays unambiguous.
+        resRows.forEach(r => { r.key = `${key}::${r.key}`; });
+        rows.push(...resRows);
+    });
+
+    const assigned = new Set();
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (!b.deleted) assigned.add(b.job_no);
+    }));
+    const unassigned = weldingTasks
+        .filter(t => !assigned.has(t.job_no) && jobMatchesFilters(t.job_no))
+        .sort((a, b) => String(a.job_no).localeCompare(
+            String(b.job_no), 'tr', { numeric: true }));
+    if (unassigned.length) {
+        rows.push({
+            key: 'all-head-unassigned',
+            kind: 'band',
+            indent: 0,
+            job_no: null,
+            title: `Atanmamış — ${unassigned.length} iş`,
+            start_date: null, end_date: null, duration_wd: null,
+            weight: null, progress: null, status: null, note: '',
+        });
+        unassigned.forEach(t => rows.push({
+            key: `all-unassigned-${t.welding_task_id}`,
+            kind: 'unassigned',
+            welding_task_id: t.welding_task_id,
+            job_no: t.job_no,
+            indent: 1,
+            title: t.job_order_title
+                ? `${t.job_no} — ${t.job_order_title}` : String(t.job_no),
+            bar_label: String(t.job_no),
+            start_date: null,
+            end_date: t.target_completion_date || null,
+            job_target: t.target_completion_date || null,
+            job_target_late: false,
+            duration_wd: null,
+            weight: t.total_weight_kg,
+            weight_is_kg: true,
+            progress: null,
+            status: null,
+            note: '',
+        }));
+    }
+    return rows;
+}
+
 function renderGrid() {
     const container = document.getElementById('planning-grid');
     if (!container) return;
     rederiveDerivedDurations();
+    rederiveProgress();
+    rederiveEngineDates();
     const res = activeResource();
-    const rows = res ? buildSheetRows(res) : [];
+    const rows = activeResourceKey === 'all'
+        ? buildAllRows()
+        : (res ? buildSheetRows(res) : []);
     sheetRows = rows;
 
     if (!grid) {
@@ -1366,8 +1716,10 @@ function renderGrid() {
 function rowClasses(row) {
     const classes = [];
     if (row.kind === 'group') classes.push('pg-row-group');
+    if (row.kind === 'group' && row.job_target_late) classes.push('pg-group-late');
     if (row.kind === 'band') classes.push('pg-row-band');
     if (['info', 'machining'].includes(row.kind)) classes.push('pg-row-info');
+    if (row.kind === 'unassigned') classes.push('pg-row-info pg-row-unassigned');
     if (row.kind === 'dept') classes.push(`pg-row-dept pg-row-${row.slot}`);
     if (row.kind === 'block') classes.push('pg-row-block');
     if (row.status === 'cancelled') classes.push('pg-row-cancelled');
@@ -1405,8 +1757,16 @@ const GRID_ACTIONS = [
     {
         key: 'delete-stage',
         icon: 'fas fa-trash',
-        title: 'Özel aşamayı sil',
-        visible: (row) => row.kind === 'stage' && !row.is_default,
+        // Delete is as available as add (user decision 2026-08-29) —
+        // default stages included; the block can re-create them by title.
+        title: 'Aşamayı sil',
+        visible: (row) => row.kind === 'stage',
+    },
+    {
+        key: 'assign-job',
+        icon: 'fas fa-user-plus',
+        title: 'Ekibe / taşerona ata',
+        visible: (row) => row.kind === 'unassigned',
     },
 ];
 
@@ -1416,6 +1776,7 @@ function onGridAction(action, row) {
     else if (action === 'edit-weight') onEditWeight(row.blockRef);
     else if (action === 'delete-block') onDeleteBlock(row.blockRef);
     else if (action === 'delete-stage') onDeleteCustomStage(row);
+    else if (action === 'assign-job') openAssignModal(row);
 }
 
 function toggleJob(jobNo) {
@@ -1716,6 +2077,11 @@ function onCellEdit(row, field, newValue) {
     }
 
     markDirty();
+    // Any edit that can move a projection switches the job to live client
+    // projections until the next save/reload brings server truth.
+    if (['duration_wd', 'progress', 'start_date', 'status', 'weight'].includes(field)) {
+        liveForecastJobs.add(row.job_no);
+    }
     if (SCHEDULE_FIELDS.includes(field)
             && (row.kind !== 'dept' || row.slot !== 'manufacturing')) {
         reflowParents(row.job_no);
@@ -1809,10 +2175,16 @@ function onDeleteCustomStage(row) {
     const block = findBlock(row.blockRef);
     if (!block) return;
     const stage = block.stages.find(s => s.cid === row.stageCid);
-    if (!stage || stage.is_default) return;
+    if (!stage) return;
     confirmModal.show({
         title: 'Aşama Sil',
-        message: `"${stage.title}" aşamasını silmek istediğinize emin misiniz?`,
+        message: `"${stage.title}" aşamasını silmek istediğinize emin misiniz?`
+            + (Number(stage.progress || 0) > 0
+                ? ` (Üzerinde %${stage.progress} ilerleme var — silinince blok yüzdesinden düşer.)`
+                : '')
+            + (stage.is_default
+                ? ' Varsayılan aşama gerekirse bloktan yeniden oluşturulabilir.'
+                : ''),
         confirmText: 'Sil',
         onConfirm: () => {
             if (stage.id == null) {
@@ -1958,9 +2330,69 @@ function jobAllocInfoHTML(weldingTaskId) {
         </div>`;
 }
 
+// Assign from the "Tümü" tab: the job is fixed (the unassigned row), the
+// planner picks the resource — the rest (kg, notes, subcontractor tier)
+// rides the exact same draft flow as a resource-tab add.
+function openAssignModal(row) {
+    const task = weldingTasks.find(
+        t => t.welding_task_id === Number(row.welding_task_id));
+    if (!task) return;
+    blockModalMode = { mode: 'assign', weldingTaskId: task.welding_task_id };
+
+    const resourceOptions = resources.map(r => ({
+        value: resourceKeyOf(r),
+        text: `${r.resource_type === 'team' ? 'Ekip' : 'Taşeron'} — ${r.display_name || r.name}`,
+        searchText: r.name,
+        selectedText: r.display_name || r.name,
+    }));
+    const remaining = remainingForTask(task.welding_task_id, task.total_weight_kg);
+
+    blockModal.clearAll();
+    blockModal.setTitle(`Ata — ${task.job_no}${task.job_order_title ? ` · ${task.job_order_title}` : ''}`);
+    blockModal.setIcon('fas fa-user-plus');
+    blockModal.setSaveButtonText('Ata');
+    blockModal.addSection({
+        title: 'Atama',
+        icon: 'fas fa-fire',
+        iconColor: 'text-danger',
+        fields: [
+            {
+                id: 'resource_key', name: 'resource_key',
+                label: 'Ekip / Taşeron', type: 'dropdown', required: true,
+                searchable: true, icon: 'fas fa-users', colSize: 12,
+                maxHeight: 460,
+                options: resourceOptions, value: resourceOptions[0]?.value,
+            },
+            {
+                id: 'allocated_weight_kg', name: 'allocated_weight_kg',
+                label: 'Ağırlık (kg)', type: 'number', required: true,
+                min: 0.01, step: 0.01, icon: 'fas fa-weight-hanging', colSize: 12,
+                value: remaining != null && remaining > 0 ? remaining : '',
+                help: 'Bu ekibin/taşeronun yapacağı ekipman ağırlığı. '
+                    + '(Taşeron seçilirse bir sonraki adımda fiyat kademesi sorulur.)',
+            },
+            {
+                id: 'notes', name: 'notes', label: 'Not', type: 'textarea',
+                rows: 2, icon: 'fas fa-sticky-note', colSize: 12, value: '',
+            },
+        ],
+    });
+    blockModal.onSaveCallback(onBlockModalSave);
+    blockModal.render();
+    blockModal.show();
+}
+
 function openAddJobModal(prefillTaskId = null) {
     const res = activeResource();
-    if (!res) return;
+    if (!res) {
+        if (activeResourceKey === 'all') {
+            showNotification(
+                'Tümü sekmesinde atama, "Atanmamış" bölümündeki satırların '
+                + 'ata düğmesiyle yapılır — ya da önce bir kaynak sekmesi seçin.',
+                'info');
+        }
+        return;
+    }
     blockModalMode = { mode: 'add', prefillTaskId };
 
     const options = weldingTaskOptions();
@@ -2113,6 +2545,39 @@ async function onBlockModalSave(formData) {
         return;
     }
 
+    if (mode.mode === 'assign') {
+        // From the "Tümü" tab: the job came from the row, the resource from
+        // the form; from here on it is the same draft as a resource-tab add.
+        const res = resources.find(
+            r => resourceKeyOf(r) === formData.resource_key);
+        const task = weldingTasks.find(
+            t => t.welding_task_id === Number(mode.weldingTaskId));
+        const weight = Number(formData.allocated_weight_kg);
+        if (!res) {
+            showNotification('Ekip veya taşeron seçin.', 'error');
+            return;
+        }
+        if (!task || !Number.isFinite(weight) || weight <= 0) {
+            showNotification('Geçerli bir ağırlık girin.', 'error');
+            return;
+        }
+        const draft = {
+            resource: res,
+            welding_task: task,
+            allocated_weight_kg: weight,
+            notes: formData.notes || '',
+            price_tier: null,
+        };
+        blockModal.hide();
+        if (res.resource_type === 'subcontractor') {
+            pendingNewBlock = draft;
+            await openTierModal(draft);
+            return;
+        }
+        pushNewBlock(draft);
+        return;
+    }
+
     // mode === 'add'
     const res = activeResource();
     if (!res) { blockModal.hide(); return; }
@@ -2208,21 +2673,11 @@ function pushNewBlock(draft) {
         price_tier: draft.price_tier ? { id: draft.price_tier } : null,
         notes: draft.notes,
         subtask: { status: 'in_progress', progress: 0, start_date: null, end_date: null, duration_wd: null },
-        stages: DEFAULT_STAGE_TITLES.map(title => ({
-            cid: `new-${++newCounter}`,
-            id: null,
-            title,
-            is_default: true,
-            weight: 10,
-            status: 'pending',
-            progress: 0,
-            duration_wd: null,
-            start_date: null,
-            end_date: null,
-            note: '',
-            deleted: false,
-        })),
-        createDefaultStages: false,   // server creates them for new blocks anyway
+        // NO auto-stages (user decision 2026-08-29): a new assignment is ONE
+        // task. The Montaj / Kaynak ve Taşlama pair is added on demand via
+        // the block's create-stages action.
+        stages: [],
+        createDefaultStages: false,
         deleted: false,
         resource_type: res.resource_type,
         resource_id: res.id,
@@ -2329,15 +2784,14 @@ function buildPayload() {
         const vm = deptOf(jobNo, slot);
         if (!vm) return;
         const item = { task_id: vm.task_id, status: vm.status };
-        // An absent key means "unchanged" to the server, so the schedule trio
-        // only travels when the planner actually touched one of them —
-        // otherwise a status edit would freeze the derived start/duration in.
-        // Only İmalat — the single duration entry point — sends a duration;
-        // Kaynaklı İmalat / Boya size from their weight-share slice.
-        if (SCHEDULE_FIELDS.some(f => fields.has(f))) {
-            if (slot === 'manufacturing') item.duration_wd = vm.duration_wd;
+        // An absent key means "unchanged" to the server. ONLY İmalat carries
+        // schedule inputs now — its start (the single date entry) and its
+        // duration (the single sizing entry); everything else derives and
+        // never travels. No end_date: İmalat's end is the engine's
+        // projection, its Hedef lives on project tracking.
+        if (slot === 'manufacturing' && SCHEDULE_FIELDS.some(f => fields.has(f))) {
+            item.duration_wd = vm.duration_wd;
             item.start_date = vm.start_date;
-            item.end_date = vm.end_date;
         }
         // Leaf dept progress is omitted unless edited — except
         // completed, which always means 100 and is set as a side effect
@@ -2448,7 +2902,8 @@ function init() {
     // rebuilt whenever the choices change, and destroy() leaves container-level
     // listeners alone — so registering per instance would stack duplicates.
     document.getElementById('filter-job').addEventListener('dropdown:select', (e) => {
-        filterJobNo = e.detail.value || '';
+        // Copy: multi-select hands out its live selectedValues array.
+        filterJobNos = Array.isArray(e.detail.value) ? [...e.detail.value] : [];
         onFilterChange();
     });
     document.getElementById('filter-assignee').addEventListener('dropdown:select', (e) => {

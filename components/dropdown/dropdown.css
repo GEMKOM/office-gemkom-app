@@ -221,8 +221,11 @@
     margin-left: 0.5rem;
 }
 
-/* Checkbox Container for Multiple Selection */
-.modern-dropdown .checkbox-container {
+/* Checkbox Container for Multiple Selection.
+   The open menu lives in a .modern-dropdown-portal on <body>, outside the
+   .modern-dropdown subtree — so every rule must match in both places. */
+.modern-dropdown .checkbox-container,
+.modern-dropdown-portal .checkbox-container {
     display: flex;
     align-items: center;
     width: 100%;
@@ -231,7 +234,8 @@
     padding-left: 0;
 }
 
-.modern-dropdown .checkbox-container input[type="checkbox"] {
+.modern-dropdown .checkbox-container input[type="checkbox"],
+.modern-dropdown-portal .checkbox-container input[type="checkbox"] {
     position: absolute;
     opacity: 0;
     cursor: pointer;
@@ -239,9 +243,11 @@
     width: 0;
 }
 
-.modern-dropdown .checkmark {
+.modern-dropdown .checkmark,
+.modern-dropdown-portal .checkmark {
     height: 18px;
     width: 18px;
+    flex: 0 0 18px;
     background-color: var(--white);
     border: 2px solid #e9ecef;
     border-radius: 4px;
@@ -250,17 +256,20 @@
     transition: all 0.3s ease;
 }
 
-.modern-dropdown .checkbox-container:hover .checkmark {
+.modern-dropdown .checkbox-container:hover .checkmark,
+.modern-dropdown-portal .checkbox-container:hover .checkmark {
     border-color: var(--secondary-color);
     background-color: rgba(220, 20, 60, 0.05);
 }
 
-.modern-dropdown .checkbox-container input:checked ~ .checkmark {
+.modern-dropdown .checkbox-container input:checked ~ .checkmark,
+.modern-dropdown-portal .checkbox-container input:checked ~ .checkmark {
     background: var(--gradient-primary);
     border-color: var(--secondary-color);
 }
 
-.modern-dropdown .checkmark:after {
+.modern-dropdown .checkmark:after,
+.modern-dropdown-portal .checkmark:after {
     content: "";
     position: absolute;
     display: none;
@@ -273,7 +282,8 @@
     transform: rotate(45deg);
 }
 
-.modern-dropdown .checkbox-container input:checked ~ .checkmark:after {
+.modern-dropdown .checkbox-container input:checked ~ .checkmark:after,
+.modern-dropdown-portal .checkbox-container input:checked ~ .checkmark:after {
     display: block;
 }
 
