@@ -23,6 +23,7 @@ import {
 } from '../../../apis/welding/planning.js';
 import { fetchPriceTiers } from '../../../apis/subcontracting/priceTiers.js';
 import { createWorkdayCalendar, reconcileScheduleEdit } from '../../../utils/workdays.js';
+import { deptSchedulePatch } from './deptSchedulePatch.js';
 
 // ---- constants -----------------------------------------------------------
 
@@ -41,7 +42,8 @@ const STATUS_META = {
 const EDITABLE_STATUS_OPTIONS = ['pending', 'in_progress', 'completed', 'on_hold', 'cancelled']
     .map(s => ({ value: s, label: STATUS_META[s].label }));
 
-// Editing any one of these reconciles all three, so they travel together.
+// Date edits reflow parent windows. Duration is independent İmalat sizing
+// (top-down model, 2026-08-28) and must not travel with dates on save.
 const SCHEDULE_FIELDS = ['start_date', 'end_date', 'duration_wd'];
 
 // ---- state ---------------------------------------------------------------
@@ -380,13 +382,12 @@ function childCoverage(jobNo, slot) {
 
 // A parent's window must cover everything under it, live — dragging a welding
 // stage past its end is the usual way that window moves, and the planner should
-// watch it happen rather than discover it after a save. Widen only: a child
-// pulling inwards leaves the parent where the planner put it. Duration follows
-// the span, never a sum — the children overlap.
+// watch it happen rather than discover it after a save.
 // A parent's window is the UNION of what the planner entered on it and what
 // its children occupy. That tracks in both directions: lengthen a stage and
 // the parent grows, shorten it and the parent pulls back — but never inside
 // the dates somebody actually typed on the parent, which stay a floor.
+// Duration stays out of this: it is İmalat sizing, not the date span.
 //
 // Widen-only was the first cut, and it left a phantom window behind after a
 // stage was shortened: İmalat still claimed 16.10 when nothing under it ran
@@ -407,11 +408,9 @@ function reflowParents(jobNo) {
         target.end_date = end;
         target.start_from_children = !!(child.start && child.start !== target.entered_start_date);
         target.end_from_children = !!(child.end && child.end !== target.entered_end_date);
-        if (start && end) {
-            target.duration_wd = calendar.workingDaysInclusive(start, end);
-            target.duration_is_derived = !(
-                start === target.entered_start_date && end === target.entered_end_date);
-        }
+        // Duration is sizing, not the date span — rewriting it here made a
+        // child-date save persist workingDaysInclusive() over the İmalat
+        // number the planner entered.
         markDeptDirty(jobNo, slot, 'start_date');
     });
 }
@@ -2329,16 +2328,7 @@ function buildPayload() {
         const vm = deptOf(jobNo, slot);
         if (!vm) return;
         const item = { task_id: vm.task_id, status: vm.status };
-        // An absent key means "unchanged" to the server, so the schedule trio
-        // only travels when the planner actually touched one of them —
-        // otherwise a status edit would freeze the derived start/duration in.
-        // Only İmalat — the single duration entry point — sends a duration;
-        // Kaynaklı İmalat / Boya size from their weight-share slice.
-        if (SCHEDULE_FIELDS.some(f => fields.has(f))) {
-            if (slot === 'manufacturing') item.duration_wd = vm.duration_wd;
-            item.start_date = vm.start_date;
-            item.end_date = vm.end_date;
-        }
+        Object.assign(item, deptSchedulePatch(slot, fields, vm));
         // Leaf dept progress is omitted unless edited — except
         // completed, which always means 100 and is set as a side effect
         // of the status change (see onCellEdit).
