@@ -237,15 +237,22 @@
     background: #f8f9fb;
 }
 
-/* Unread is a left rail plus a faint tint rather than a background wash, so a
-   long archive does not turn into a wall of colour. */
+/* Unread carries a left rail, a brand tint and a dot on the title. The tint is
+   deliberately strong enough to read as a different row at a glance — a faint
+   wash was indistinguishable from the read rows next to it. */
 .notif-row.unread {
     border-left-color: var(--notif-brand);
-    background: #fdf8f8;
+    background: #fbecec;
 }
 
 .notif-row.unread:hover {
-    background: #fbf1f1;
+    background: #f7e2e2;
+}
+
+/* Read rows keep the plain white ground and step back a weight, so the two
+   states differ in tone and in emphasis rather than in colour alone. */
+.notif-row.read .notif-icon {
+    opacity: 0.65;
 }
 
 .notif-icon {
@@ -282,6 +289,25 @@
 
 .notif-row.unread .notif-row-title {
     color: #7a0b0b;
+    font-weight: 700;
+}
+
+/* A shape cue next to the colour one, for anyone who cannot separate the two
+   tints. */
+.notif-row.unread .notif-row-title::before {
+    content: '';
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--notif-brand);
+    margin-right: 0.45rem;
+    vertical-align: 0.08em;
+}
+
+.notif-row.read .notif-row-title {
+    color: #52606d;
+    font-weight: 500;
 }
 
 .notif-row-time {
@@ -306,6 +332,12 @@
     margin-top: 0.15rem;
 }
 
+/* The muted grey drops to ~4.1:1 on the unread tint, so unread bodies use the
+   darker body colour — which doubles as the emphasis those rows want anyway. */
+.notif-row.unread .notif-row-body {
+    color: #495057;
+}
+
 .notif-row-meta {
     display: flex;
     flex-wrap: wrap;
@@ -328,6 +360,17 @@
     background: transparent;
     border: 1px solid #e3e7ec;
     color: #7b8794;
+}
+
+/* Same reason as the body copy: the light greys lose too much contrast once
+   the row is tinted. */
+.notif-row.unread .notif-row-time,
+.notif-row.unread .notif-tag-category {
+    color: #52606d;
+}
+
+.notif-row.unread .notif-tag-category {
+    border-color: #e8d8d8;
 }
 
 /* Actions stay out of the way until the row is hovered, so the archive reads

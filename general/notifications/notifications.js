@@ -382,7 +382,7 @@ function renderGroupedRows(notifications) {
 
 function renderRow(notification) {
     const meta = categoryMeta(notification.category);
-    const unreadClass = notification.is_read ? '' : 'unread';
+    const unreadClass = notification.is_read ? 'read' : 'unread';
     const hasLink = notification.link && notification.link !== '#';
     return `
         <div class="notif-row ${unreadClass}" data-id="${notification.id}">
