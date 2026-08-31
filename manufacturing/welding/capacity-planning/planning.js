@@ -863,17 +863,40 @@ const DATE_SOURCE_TITLES = {
 };
 
 // Derived rows borrow the forecast engine's projected window for display and
-// for their gantt bar — nothing here is written back.
+// for their gantt bar — nothing here is written back. Sources are tracked
+// PER FIELD: an İmalat row's entered start must not carry the "engine"
+// styling its projected end earns.
 function withEngineDates(row, vm) {
     if (row.start_date == null && vm.projected_start_date) {
         row.start_date = vm.projected_start_date;
-        row.date_source = row.date_source || 'engine';
+        row.start_date_source = row.start_date_source || 'engine';
     }
     if (row.end_date == null && vm.projected_end_date) {
         row.end_date = vm.projected_end_date;
-        row.date_source = row.date_source || 'engine';
+        row.end_date_source = row.end_date_source || 'engine';
     }
     return row;
+}
+
+// Derived rows — everything under İmalat, and İmalat's own end: the
+// projection IS the date. Stored values are last-save snapshots the server
+// materialized for the tracking pages (user decision 2026-08-31); letting
+// them mask a fresher projection would freeze the sheet's dates until the
+// next save, so here the projection wins and stored only fills the gaps.
+// `keepStart` is for the İmalat row itself: its start is the planner's
+// single date input and must show exactly as typed.
+function withDerivedDates(row, vm, { keepStart = false } = {}) {
+    if (!['completed', 'cancelled', 'skipped'].includes(row.status)) {
+        if (!keepStart && vm.projected_start_date) {
+            row.start_date = vm.projected_start_date;
+            row.start_date_source = row.start_date_source || 'engine';
+        }
+        if (vm.projected_end_date) {
+            row.end_date = vm.projected_end_date;
+            row.end_date_source = row.end_date_source || 'engine';
+        }
+    }
+    return withEngineDates(row, vm);
 }
 
 // The Bitiş cell of a row that carries the job hedef says, on hover, how far
@@ -886,12 +909,13 @@ function endDateCell(value, row) {
             : `Öngörülen bitiş hedeften ${Math.abs(d)} gün ileride`;
         return `<span title="${esc(text)}">${fmtDate(value)}</span>`;
     }
-    return dateCell(value, row.end_is_actual, row);
+    return dateCell(value, row.end_is_actual, row, 'end_date');
 }
 
-function dateCell(value, isActual, row) {
+function dateCell(value, isActual, row, field) {
     if (!value) return '<span class="text-muted">—</span>';
-    const derived = row && DATE_SOURCE_TITLES[row.date_source];
+    const source = row && ((field && row[`${field}_source`]) ?? row.date_source);
+    const derived = row && DATE_SOURCE_TITLES[source];
     if (derived) {
         return `<span class="date-derived" title="${esc(derived)}">${fmtDate(value)}</span>`;
     }
@@ -1098,7 +1122,9 @@ function buildSheetRows(res, sortJobs = false) {
         const deptRow = (slot, label, indent) => {
             const vm = deptOf(jobNo, slot);
             if (!vm) return null;
-            return withEngineDates({
+            // İmalat keeps its entered start (the single date input); its
+            // end and every other dept row's window are projections.
+            return withDerivedDates({
                 ...base,
                 key: `${jobNo}-${slot}`,
                 kind: 'dept',
@@ -1122,7 +1148,7 @@ function buildSheetRows(res, sortJobs = false) {
                 forecast_date: vm.forecast_date,
                 forecast_kind: vm.forecast_kind,
                 note: '',
-            }, vm);
+            }, vm, { keepStart: slot === 'manufacturing' });
         };
 
         // Other departments first: material supply and cutting run before any
@@ -1169,7 +1195,7 @@ function buildSheetRows(res, sortJobs = false) {
             // Without them, it IS the schedule and takes the edits directly —
             // which is also the only shape the server accepts a subtask
             // schedule for.
-            rows.push(withEngineDates({
+            rows.push(withDerivedDates({
                 ...base,
                 key: `${b.key}-block`,
                 blockRef: b.key,
@@ -1200,7 +1226,7 @@ function buildSheetRows(res, sortJobs = false) {
                 note: b.notes,
             }, b.subtask));
 
-            staged.forEach(s => rows.push(withEngineDates({
+            staged.forEach(s => rows.push(withDerivedDates({
                 ...base,
                 key: `${b.key}-stage-${s.cid}`,
                 blockRef: b.key,
@@ -1257,8 +1283,10 @@ function blockRollup(b) {
     const dated = hasStages
         ? b.stages.filter(s => !s.deleted && s.status !== 'cancelled')
         : [b.subtask];
-    const starts = dated.map(s => s.start_date).filter(Boolean).sort();
-    const ends = dated.map(s => s.end_date).filter(Boolean).sort();
+    // Projection-first (2026-08-31): stored dates are last-save snapshots,
+    // so the rollup window follows the live projections when they exist.
+    const starts = dated.map(s => s.projected_start_date || s.start_date).filter(Boolean).sort();
+    const ends = dated.map(s => s.projected_end_date || s.end_date).filter(Boolean).sort();
     const windowStart = starts[0] || null;
     const windowEnd = ends[ends.length - 1] || null;
     const totalDays = windowStart && windowEnd
@@ -1348,7 +1376,7 @@ const GRID_COLUMNS = [
       formatter: (v, row) => titleCell(v, row) },
     { field: 'start_date', label: 'Başlangıç', width: '96px', type: 'date',
       headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
-      formatter: (v, row) => cellOverride(row, 'start_date') ?? dateCell(v, row.start_is_actual, row) },
+      formatter: (v, row) => cellOverride(row, 'start_date') ?? dateCell(v, row.start_is_actual, row, 'start_date') },
     { field: 'end_date', label: 'Bitiş', width: '96px', type: 'date',
       headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
       formatter: (v, row) => cellOverride(row, 'end_date') ?? endDateCell(v, row) },
@@ -1685,6 +1713,17 @@ function rederiveEngineDates() {
                 blockEnd = layout(b.subtask, jobStart, b.subtask.duration_wd);
             }
             if (blockEnd && b.subtask.status !== 'completed') {
+                if (live.length) {
+                    // The header window must track its re-laid stages — a
+                    // stale projected start would show the parent starting
+                    // after its own first child.
+                    const stageStarts = live
+                        .map(s => s.projected_start_date || s.start_date)
+                        .filter(Boolean).sort();
+                    if (stageStarts.length) {
+                        b.subtask.projected_start_date = stageStarts[0];
+                    }
+                }
                 b.subtask.projected_end_date = blockEnd;
                 b.subtask.forecast_date = blockEnd;
             }
@@ -1796,7 +1835,7 @@ function buildAllRows() {
                     + ` / ${fmtKg(t.total_weight_kg)} kg`
                     + (remaining != null ? ` · Kalan ${fmtKg(remaining)} kg` : ''));
             }
-            rows.push(withEngineDates({
+            rows.push(withDerivedDates({
                 key: `all-unassigned-${t.welding_task_id}`,
                 kind: 'dept',
                 slot: 'manufacturing',
@@ -1836,7 +1875,9 @@ function buildAllRows() {
                     (jo && jo.end_date) || t.target_completion_date || null,
                     vm.forecast_date),
                 note: noteParts.join(' — '),
-            }, vm));
+                // keepStart: this IS an İmalat row — its start is the
+                // planner's entry and must show (and edit) as typed.
+            }, vm, { keepStart: true }));
         });
     }
     return rows;
@@ -1919,14 +1960,25 @@ const GRID_ACTIONS = [
     {
         key: 'edit-weight',
         icon: 'fas fa-weight-hanging',
-        title: 'Ağırlığı düzenle',
+        // A greyed-out button has to say why it is greyed out.
+        title: (row) => (findBlock(row.blockRef)?.is_billed
+            ? 'Hakediş kesilmiş atamanın ağırlığı değiştirilemez'
+            : 'Ağırlığı düzenle'),
         visible: (row) => row.kind === 'block',
         disabled: (row) => !!findBlock(row.blockRef)?.is_billed,
     },
     {
         key: 'move-block',
         icon: 'fas fa-people-arrows',
-        title: 'Atamayı değiştir',
+        title: (row) => {
+            const b = findBlock(row.blockRef);
+            if (b?.is_billed) {
+                return 'Hakedişe girmiş atama taşınamaz — kalan işi yeni bir'
+                    + ' atamayla verin';
+            }
+            if (b?.isNew) return 'Önce kaydedin — kaydedilmemiş blok taşınamaz';
+            return 'Atamayı değiştir';
+        },
         visible: (row) => row.kind === 'block',
         // A new block is not saved yet (delete and re-add it instead), and a
         // billed one is immutable history.
@@ -2278,6 +2330,8 @@ function onCellEdit(row, field, newValue) {
             start_is_actual: false,
             end_is_actual: false,
             date_source: null,
+            start_date_source: null,
+            end_date_source: null,
         });
     } else {
         return;
@@ -2432,6 +2486,9 @@ function onDeleteBlock(blockRef) {
                     resourceKey: res ? resourceKeyOf(res) : activeResourceKey,
                 });
             }
+            // The deletion moves the job's projection (the deleted block's
+            // window no longer counts) — recompute live like any other edit.
+            liveForecastJobs.add(block.job_no);
             updateSaveState();
             scheduleRefresh();
         },
@@ -2606,7 +2663,20 @@ function openAssignModal(row) {
 // the assignment on Kaydet.
 function openMoveModal(blockRef) {
     const block = findBlock(blockRef);
-    if (!block || block.isNew || block.is_billed) return;
+    if (!block) return;
+    // Say why instead of doing nothing: both refusals are also the server's
+    // (a billed block is immutable history there too).
+    if (block.isNew) {
+        showNotification(
+            'Bu blok henüz kaydedilmedi — önce Kaydet, sonra taşıyın.', 'info');
+        return;
+    }
+    if (block.is_billed) {
+        showNotification(
+            'Hakedişe girmiş atama taşınamaz — kalan işi yeni bir atamayla verin.',
+            'error');
+        return;
+    }
     const currentKey = `${block.resource_type}-${block.resource_id}`;
     const currentRes = resources.find(r => resourceKeyOf(r) === currentKey);
     const resourceOptions = resources
@@ -2648,16 +2718,31 @@ function openMoveModal(blockRef) {
 async function openMoveTierModal(block, res) {
     try {
         const tiersResp = await fetchPriceTiers({ job_order: block.job_no, ordering: 'name' });
+        const kg = Number(block.allocated_weight_kg || 0);
+        const currentTierId = block.price_tier ? Number(block.price_tier.id) : null;
+        // Whether the block fits is the decision here, so each tier says so —
+        // the capacity refusal used to arrive only at Kaydet.
         const tiers = (tiersResp.results || tiersResp || [])
             .filter(t => t.tier_type === 'welding')
-            .map(t => ({
-                value: String(t.id),
-                label: `${t.name} — ${t.price_per_kg} ${t.currency}/kg (kalan ${t.remaining_weight_kg} kg)`,
-            }));
+            .map(t => {
+                // A block that already sits on this tier frees its own kg.
+                const free = Number(t.remaining_weight_kg)
+                    + (Number(t.id) === currentTierId ? kg : 0);
+                const short = round2(kg - free);
+                return {
+                    value: String(t.id),
+                    fits: short <= 0,
+                    label: `${t.name} — ${t.price_per_kg} ${t.currency}/kg`
+                        + (short <= 0
+                            ? ` (${fmtKg(free)} kg boş)`
+                            : ` (${fmtKg(free)} kg boş — ${fmtKg(short)} kg eksik)`),
+                };
+            });
         if (!tiers.length) {
             showNotification('Bu iş için kaynak fiyat kademesi bulunamadı. Önce planlamadan fiyat kademesi tanımlayın.', 'error');
             return;
         }
+        tiers.sort((a, b) => (b.fits ? 1 : 0) - (a.fits ? 1 : 0));
         tierModal.clearAll();
         tierModal.addSection({
             title: 'Fiyat Kademesi',
@@ -2667,7 +2752,12 @@ async function openMoveTierModal(block, res) {
                 id: 'price_tier', name: 'price_tier', label: 'Fiyat Kademesi',
                 type: 'dropdown', required: true, searchable: true,
                 icon: 'fas fa-tag', colSize: 12,
-                help: 'Taşeron ataması hakedişe dahildir; fiyat kademesi zorunludur.',
+                help: `Taşınan iş ${fmtKg(kg)} kg. Taşeron ataması hakedişe`
+                    + ' dahildir; fiyat kademesi zorunludur.'
+                    + (tiers.some(t => t.fits) ? ''
+                        : ' Hiçbir kademede bu blok kadar yer yok — iş emrinin'
+                          + ' fiyatlanmamış ağırlığı yetiyorsa kademe kaydederken'
+                          + ' büyütülür, yetmiyorsa taşıma reddedilir.'),
                 options: tiers, value: tiers[0].value,
             }],
         });
@@ -3044,14 +3134,15 @@ function stagePayload(s) {
     // No duration_wd on purpose: a stage's size IS its weight-share slice
     // of the İmalat entry (top-down model) — the sheet never writes stage
     // durations, and saving the İmalat number purges legacy ones.
+    // No dates either: a stage's dates are the engine's projection — the
+    // SERVER materializes them onto the task at save time (user decision
+    // 2026-08-31), so the sheet sends neither sizing nor schedule.
     const item = {
         title: s.title,
         weight: s.weight,
         status: s.status,
         progress: s.progress,
         note: s.note || '',
-        start_date: s.start_date,
-        end_date: s.end_date,
     };
     if (s.id != null) item.id = s.id;
     return item;
@@ -3109,13 +3200,12 @@ function buildPayload() {
         if (stageItems.length) item.stages = stageItems;
 
         if (!hasStages) {
-            // No duration_wd — the block sizes from its weight-share slice
-            // of the İmalat entry (top-down model); only dates travel.
+            // No duration_wd and no dates — the block sizes from its
+            // weight-share slice of the İmalat entry, and the server
+            // materializes its projected dates at save time.
             item.subtask_schedule = {
                 status: b.subtask.status,
                 progress: b.subtask.progress,
-                start_date: b.subtask.start_date,
-                end_date: b.subtask.end_date,
             };
         }
         payload.blocks.push(item);
@@ -3156,7 +3246,7 @@ async function onSave() {
     const btn = document.getElementById('save-btn');
     if (btn) btn.disabled = true;
     try {
-        await bulkSaveWeldingPlanning(buildPayload());
+        const resp = await bulkSaveWeldingPlanning(buildPayload());
         // The save no longer waits for the board rebuild (the engine pass
         // alone costs seconds): writes are confirmed, the sheet stays
         // usable with its live values, and server truth swaps in when the
@@ -3167,6 +3257,9 @@ async function onSave() {
         deletedBlocks = [];
         updateSaveState();
         showNotification('Plan kaydedildi.', 'success');
+        // What the save changed on its own — a move shifting price-tier
+        // capacity — must not go unseen.
+        (resp && resp.messages || []).forEach(m => showNotification(m, 'info'));
         refreshBoardInBackground();
     } catch (e) {
         if (btn) btn.disabled = false;

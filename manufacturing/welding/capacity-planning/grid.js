@@ -388,7 +388,9 @@ export class PlanningGrid {
             .filter(a => !a.visible || a.visible(row))
             .map(a => `
                 <button class="pg-action-btn ${a.class || ''}" data-pg-action="${esc(a.key)}"
-                        data-row="${esc(row.key)}" title="${esc(a.title || '')}"
+                        data-row="${esc(row.key)}"
+                        title="${esc((typeof a.title === 'function'
+                                      ? a.title(row) : a.title) || '')}"
                         ${a.disabled && a.disabled(row) ? 'disabled' : ''}>
                     <i class="${esc(a.icon)}"></i>
                 </button>`).join('');

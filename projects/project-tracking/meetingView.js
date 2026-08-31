@@ -642,11 +642,15 @@ async function openPlanModal(item) {
                 const slower = rem > b.entered_remaining_wd;
                 compare = ` Girilen süre ${formatWd(b.entered_total_wd)} g (kalan ~${formatWd(b.entered_remaining_wd)} g) — tempo ${slower ? 'daha yavaş' : 'daha hızlı'}.`;
             }
-            // Hand-entered %: the tempo window closes at the last progress
-            // entry — the idle tail after it measures typing, not pace.
-            const lastEntry = b.last_entry
-                ? ` (son ilerleme girişi ${fmtShortDate(b.last_entry)})` : '';
-            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi${lastEntry}; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
+            // Hand-entered %: the window OPENS at the task's real start
+            // (window_start = the chain's start when the task's own log is
+            // its only start signal) and CLOSES at the last progress entry —
+            // the idle tail after it measures typing, not pace.
+            const windowText = b.window_start
+                ? ` (görev başlangıcı ${fmtShortDate(b.window_start)} → son giriş ${fmtShortDate(b.last_entry)})`
+                : (b.last_entry
+                    ? ` (son ilerleme girişi ${fmtShortDate(b.last_entry)})` : '');
+            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi${windowText}; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
         }
         // All progress arrived in ONE entry: a milestone, not a pace — no
         // tempo to extrapolate, so the duration chain projects the remaining
