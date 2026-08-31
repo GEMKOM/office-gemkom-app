@@ -167,6 +167,13 @@ body.pg-resizing * {
     display: flex;
     height: var(--pg-row-h);
     border-bottom: 1px solid var(--pg-line);
+    /* Off-screen rows skip layout and paint entirely — the "Tümü" tab puts
+       700+ rows (each with a painted timeline lane) in one sheet, and
+       scrolling stuttered while the browser rendered all of them. The fixed
+       row height makes the intrinsic size exact, so the scrollbar stays
+       stable. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto var(--pg-row-h);
 }
 
 .pg-row:hover .pg-row-grid { background: #eef4fb; }
@@ -310,6 +317,16 @@ body.pg-resizing * {
 
 .pg-row-unassigned .pg-cell:first-of-type {
     color: #3a4150;
+}
+
+/* Skipped or cancelled work stays on the sheet to say what happened to it —
+   muted, struck through, never editable. */
+.pg-row-skipped .pg-cell {
+    color: #9ca3af;
+}
+
+.pg-row-skipped .pg-cell:first-of-type {
+    text-decoration: line-through;
 }
 
 .pg-bar {

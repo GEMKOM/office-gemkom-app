@@ -65,6 +65,10 @@ let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKe
 let liveForecastJobs = new Set(); // jobs edited this session -> live client projections
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
 let collapsedJobs = new Set();    // job_no -> collapsed in the grid
+// The "Tümü" tab starts with every job folded — open, it is 700+ task rows —
+// so it tracks the OPPOSITE state: the jobs the user explicitly opened.
+// Separate from collapsedJobs so folding there doesn't fold the team sheets.
+let expandedJobsAll = new Set();
 let showCompleted = false;
 let showEmptyResources = false;   // empty-resource tabs tucked behind a toggle
 let newCounter = 0;
@@ -124,6 +128,39 @@ function fmtDuration(wd) {
 
 function activeResource() {
     return resources.find(r => resourceKeyOf(r) === activeResourceKey) || null;
+}
+
+function onAllTab() {
+    return activeResourceKey === 'all';
+}
+
+function isJobCollapsed(jobNo) {
+    return onAllTab() ? !expandedJobsAll.has(jobNo) : collapsedJobs.has(jobNo);
+}
+
+// Make a job's rows visible on whichever tab the user is looking at — used
+// after creating something under it, so the result doesn't land folded away.
+function revealJob(jobNo) {
+    collapsedJobs.delete(jobNo);
+    expandedJobsAll.add(jobNo);
+}
+
+// Every job with a visible block anywhere — the group rows of the "Tümü" tab.
+function allSheetJobNos() {
+    const seen = new Set();
+    resources.forEach(res => visibleBlocks(res).forEach(b => seen.add(b.job_no)));
+    return seen;
+}
+
+// The grid hides rows via a collapsed-job set. The team sheets hand it
+// collapsedJobs directly; the "Tümü" tab materialises its inverse state.
+function collapsedForGrid() {
+    if (!onAllTab()) return collapsedJobs;
+    const out = new Set();
+    allSheetJobNos().forEach(jobNo => {
+        if (!expandedJobsAll.has(jobNo)) out.add(jobNo);
+    });
+    return out;
 }
 
 function findBlock(blockRef) {
@@ -263,7 +300,9 @@ function hydrate(boardData) {
     dirtyMachining = new Map();
     deletedBlocks = [];
 
-    if (!activeResourceKey || !resources.some(r => resourceKeyOf(r) === activeResourceKey)) {
+    if (activeResourceKey !== 'all'
+            && (!activeResourceKey
+                || !resources.some(r => resourceKeyOf(r) === activeResourceKey))) {
         activeResourceKey = resources.length ? resourceKeyOf(resources[0]) : null;
     }
 
@@ -931,7 +970,7 @@ function buildSheetRows(res, sortJobs = false) {
             kind: 'group',
             groupKey: null,
             indent: 0,
-            collapsed: collapsedJobs.has(jobNo),
+            collapsed: isJobCollapsed(jobNo),
             title: jobNo,
             job_order_title: jo?.title || first.job_order_title || '',
             customer_name: first.customer_name || '',
@@ -1274,6 +1313,10 @@ const SCHEDULE_ONLY = ['start_date', 'end_date', 'duration_wd', 'status'];
 // rule from the cursor instead of from an error.
 function isCellEditable(row, field) {
     if (READ_ONLY_KINDS.includes(row.kind)) return false;
+    // Skipped work is display-only — the row exists to say what happened to
+    // it, not to be planned. (Cancelled stays editable: scheduling a
+    // cancelled stage is how it is brought back.)
+    if (row.status === 'skipped') return false;
     // ONE duration entry point (top-down model, 2026-08-28): the İmalat
     // row. Everything under it — Kaynaklı İmalat, Boya, blocks, stages —
     // sizes as a live weight-share slice of that number; weights are the
@@ -1600,8 +1643,10 @@ function rederiveEngineDates() {
 
 // The "Tümü" tab: every resource's jobs on one sheet — ordered by
 // subcontractor/team first, job number second (user ask 2026-08-29) — with
-// an "Atanmamış" section at the end listing assignable jobs no one holds
-// yet, each carrying an assign action.
+// an "Atanmamış / Eksik Atanan" section at the end: each row is the job's
+// İmalat department task (editable start + duration, job-order weight),
+// listed while any of the job's welding weight is still unassigned, with
+// an assign action.
 function buildAllRows() {
     const rows = [];
     resources.forEach(res => {
@@ -1628,40 +1673,83 @@ function buildAllRows() {
     resources.forEach(res => res.blocks.forEach(b => {
         if (!b.deleted) assigned.add(b.job_no);
     }));
-    const unassigned = weldingTasks
-        .filter(t => !assigned.has(t.job_no) && jobMatchesFilters(t.job_no))
-        .sort((a, b) => String(a.job_no).localeCompare(
-            String(b.job_no), 'tr', { numeric: true }));
-    if (unassigned.length) {
+    // The pending section lists the İMALAT DEPARTMENT TASK, not a bare job
+    // number (user decision 2026-08-29): its start and duration edit the real
+    // task, its weight is the job order's, and a job stays listed while any
+    // of its welding weight is still unhanded — showing exactly how much.
+    // Jobs with no manufacturing task have nothing to plan here.
+    const pending = weldingTasks
+        .filter(t => jobMatchesFilters(t.job_no))
+        .map(t => ({
+            t,
+            vm: deptOf(t.job_no, 'manufacturing'),
+            remaining: remainingForTask(t.welding_task_id, t.total_weight_kg),
+        }))
+        .filter(({ t, vm, remaining }) => {
+            if (!vm) return false;
+            if (!assigned.has(t.job_no)) return true;
+            return remaining != null && remaining > 0.05;
+        })
+        .sort((a, b) => String(a.t.job_no).localeCompare(
+            String(b.t.job_no), 'tr', { numeric: true }));
+    if (pending.length) {
         rows.push({
             key: 'all-head-unassigned',
             kind: 'band',
             indent: 0,
             job_no: null,
-            title: `Atanmamış — ${unassigned.length} iş`,
+            title: `Atanmamış / Eksik Atanan — ${pending.length} iş`,
             start_date: null, end_date: null, duration_wd: null,
             weight: null, progress: null, status: null, note: '',
         });
-        unassigned.forEach(t => rows.push({
-            key: `all-unassigned-${t.welding_task_id}`,
-            kind: 'unassigned',
-            welding_task_id: t.welding_task_id,
-            job_no: t.job_no,
-            indent: 1,
-            title: t.job_order_title
-                ? `${t.job_no} — ${t.job_order_title}` : String(t.job_no),
-            bar_label: String(t.job_no),
-            start_date: null,
-            end_date: t.target_completion_date || null,
-            job_target: t.target_completion_date || null,
-            job_target_late: false,
-            duration_wd: null,
-            weight: t.total_weight_kg,
-            weight_is_kg: true,
-            progress: null,
-            status: null,
-            note: '',
-        }));
+        pending.forEach(({ t, vm, remaining }) => {
+            const jo = (jobInfo[t.job_no] || {}).job_order || null;
+            const partly = assigned.has(t.job_no);
+            const noteParts = [];
+            if (vm.status === 'skipped') noteParts.push('İmalat görevi atlandı');
+            if (partly) {
+                noteParts.push(
+                    `Atanan ${fmtKg(allocatedForTask(t.welding_task_id))}`
+                    + ` / ${fmtKg(t.total_weight_kg)} kg`
+                    + (remaining != null ? ` · Kalan ${fmtKg(remaining)} kg` : ''));
+            }
+            rows.push(withEngineDates({
+                key: `all-unassigned-${t.welding_task_id}`,
+                kind: 'dept',
+                slot: 'manufacturing',
+                unassignedRow: true,
+                welding_task_id: t.welding_task_id,
+                job_no: t.job_no,
+                // No group row above these — never folded away.
+                groupKey: null,
+                indent: 1,
+                title: t.job_order_title
+                    ? `${t.job_no} — ${t.job_order_title}` : String(t.job_no),
+                bar_label: String(t.job_no),
+                customer_name: t.customer_name || '',
+                task_id: vm.task_id,
+                start_date: vm.start_date,
+                end_date: vm.end_date,
+                duration_wd: vm.duration_wd,
+                entered_duration_wd: vm.entered_duration_wd,
+                duration_is_derived: vm.duration_is_derived,
+                duration_source: vm.duration_source,
+                start_is_actual: vm.start_is_actual,
+                end_is_actual: vm.end_is_actual,
+                has_subtasks: vm.has_subtasks,
+                weight: t.total_weight_kg ?? (jo ? jo.total_weight_kg : null),
+                weight_is_kg: true,
+                progress: vm.progress,
+                status: vm.status,
+                completed_at: vm.completed_at,
+                forecast_date: vm.forecast_date,
+                forecast_kind: vm.forecast_kind,
+                job_target: (jo && jo.end_date) || t.target_completion_date || null,
+                job_target_late: !!(jo && jo.end_date && vm.forecast_date
+                    && vm.forecast_date > jo.end_date),
+                note: noteParts.join(' — '),
+            }, vm));
+        });
     }
     return rows;
 }
@@ -1684,7 +1772,7 @@ function renderGrid() {
             rows,
             zoom: localStorage.getItem(ZOOM_KEY) || 'week',
             gridWidth: Number(localStorage.getItem(GRIDW_KEY)) || 560,
-            collapsed: collapsedJobs,
+            collapsed: collapsedForGrid(),
             isCellEditable,
             rowAttributes: (row) => ({ class: rowClasses(row) }),
             bar: rowBar,
@@ -1701,7 +1789,7 @@ function renderGrid() {
         });
     } else {
         grid.options.columns = activeColumns();
-        grid.options.collapsed = collapsedJobs;
+        grid.options.collapsed = collapsedForGrid();
         grid.options.rows = rows;
     }
     grid.options.allCollapsed = expandedJobCount() === 0;
@@ -1718,7 +1806,8 @@ function rowClasses(row) {
     if (row.kind === 'group' && row.job_target_late) classes.push('pg-group-late');
     if (row.kind === 'band') classes.push('pg-row-band');
     if (['info', 'machining'].includes(row.kind)) classes.push('pg-row-info');
-    if (row.kind === 'unassigned') classes.push('pg-row-info pg-row-unassigned');
+    if (row.kind === 'unassigned' || row.unassignedRow) classes.push('pg-row-unassigned');
+    if (row.status === 'skipped') classes.push('pg-row-skipped');
     if (row.kind === 'dept') classes.push(`pg-row-dept pg-row-${row.slot}`);
     if (row.kind === 'block') classes.push('pg-row-block');
     if (row.status === 'cancelled') classes.push('pg-row-cancelled');
@@ -1765,7 +1854,8 @@ const GRID_ACTIONS = [
         key: 'assign-job',
         icon: 'fas fa-user-plus',
         title: 'Ekibe / taşerona ata',
-        visible: (row) => row.kind === 'unassigned',
+        // Not on a skipped İmalat — there is no manufacturing to hand out.
+        visible: (row) => !!row.unassignedRow && row.status !== 'skipped',
     },
 ];
 
@@ -1779,8 +1869,14 @@ function onGridAction(action, row) {
 }
 
 function toggleJob(jobNo) {
-    if (collapsedJobs.has(jobNo)) collapsedJobs.delete(jobNo);
-    else collapsedJobs.add(jobNo);
+    if (onAllTab()) {
+        if (expandedJobsAll.has(jobNo)) expandedJobsAll.delete(jobNo);
+        else expandedJobsAll.add(jobNo);
+    } else if (collapsedJobs.has(jobNo)) {
+        collapsedJobs.delete(jobNo);
+    } else {
+        collapsedJobs.add(jobNo);
+    }
     renderGrid();
 }
 
@@ -1877,15 +1973,26 @@ function bindColumnPicker() {
 }
 
 function expandedJobCount() {
+    if (onAllTab()) {
+        let open = 0;
+        allSheetJobNos().forEach(jobNo => { if (expandedJobsAll.has(jobNo)) open++; });
+        return open;
+    }
     const res = activeResource();
     if (!res) return 0;
     return jobNosOf(res).filter(jobNo => !collapsedJobs.has(jobNo)).length;
 }
 
 function onToggleAll() {
+    const collapse = expandedJobCount() > 0;
+    if (onAllTab()) {
+        if (collapse) expandedJobsAll.clear();
+        else allSheetJobNos().forEach(jobNo => expandedJobsAll.add(jobNo));
+        renderGrid();
+        return;
+    }
     const res = activeResource();
     if (!res) return;
-    const collapse = expandedJobCount() > 0;
     jobNosOf(res).forEach(jobNo => {
         if (collapse) collapsedJobs.add(jobNo);
         else collapsedJobs.delete(jobNo);
@@ -2112,7 +2219,7 @@ function onCreateStages(blockRef) {
         });
     });
     block.createDefaultStages = true;
-    collapsedJobs.delete(block.job_no);   // show what was just created
+    revealJob(block.job_no);   // show what was just created
     markBlockDirty(block.key);
     scheduleRefresh();
 }
@@ -2161,7 +2268,7 @@ function onAddCustomStage(blockRef) {
             note: '',
             deleted: false,
         });
-        collapsedJobs.delete(block.job_no);   // show what was just created
+        revealJob(block.job_no);   // show what was just created
         markBlockDirty(block.key);
         customStageModal.hide();
         scheduleRefresh();
@@ -2345,6 +2452,17 @@ function openAssignModal(row) {
         selectedText: r.display_name || r.name,
     }));
     const remaining = remainingForTask(task.welding_task_id, task.total_weight_kg);
+    // What the decision needs, next to where the kg is typed: the job's total,
+    // how much of it is already out and with whom, and what is left.
+    const assignedKg = round2(allocatedForTask(task.welding_task_id));
+    const holders = holdersForTask(task.welding_task_id);
+    const holderText = holders.length
+        ? ` (${holders.map(h => `${h.name}: ${fmtKg(h.kg)} kg`).join(', ')})`
+        : '';
+    const weightSummary = task.total_weight_kg != null
+        ? `Toplam ${fmtKg(task.total_weight_kg)} kg · Atanan ${fmtKg(assignedKg)} kg${holderText}`
+            + ` · Kalan ${fmtKg(remaining)} kg. `
+        : (assignedKg > 0 ? `Atanan ${fmtKg(assignedKg)} kg${holderText}. ` : '');
 
     blockModal.clearAll();
     blockModal.setTitle(`Ata — ${task.job_no}${task.job_order_title ? ` · ${task.job_order_title}` : ''}`);
@@ -2367,7 +2485,8 @@ function openAssignModal(row) {
                 label: 'Ağırlık (kg)', type: 'number', required: true,
                 min: 0.01, step: 0.01, icon: 'fas fa-weight-hanging', colSize: 12,
                 value: remaining != null && remaining > 0 ? remaining : '',
-                help: 'Bu ekibin/taşeronun yapacağı ekipman ağırlığı. '
+                help: weightSummary
+                    + 'Bu ekibin/taşeronun yapacağı ekipman ağırlığı. '
                     + '(Taşeron seçilirse bir sonraki adımda fiyat kademesi sorulur.)',
             },
             {
@@ -2682,7 +2801,7 @@ function pushNewBlock(draft) {
         resource_id: res.id,
     };
     res.blocks.push(block);
-    collapsedJobs.delete(block.job_no);
+    revealJob(block.job_no);
     markBlockDirty(key);
     // Adding a job the active filters hide would look like the add silently
     // failed, so the filters step aside for it.
@@ -2813,12 +2932,38 @@ async function onSave() {
     const btn = document.getElementById('save-btn');
     if (btn) btn.disabled = true;
     try {
-        const resp = await bulkSaveWeldingPlanning(buildPayload());
+        await bulkSaveWeldingPlanning(buildPayload());
+        // The save no longer waits for the board rebuild (the engine pass
+        // alone costs seconds): writes are confirmed, the sheet stays
+        // usable with its live values, and server truth swaps in when the
+        // background fetch lands — unless new edits arrived meanwhile.
+        dirtyBlocks = new Set();
+        dirtyDept = new Map();
+        dirtyMachining = new Map();
+        deletedBlocks = [];
+        updateSaveState();
         showNotification('Plan kaydedildi.', 'success');
-        hydrate(resp.board);
+        refreshBoardInBackground();
     } catch (e) {
         if (btn) btn.disabled = false;
         showNotification(e.message, 'error');
+    }
+}
+
+async function refreshBoardInBackground() {
+    try {
+        const data = await getWeldingPlanningBoard(showCompleted);
+        if (hasUnsavedChanges()) {
+            // hydrate would wipe edits made while the fetch was in flight —
+            // the next save's refresh will carry them.
+            return;
+        }
+        hydrate(data);
+    } catch (e) {
+        console.error('Board refresh failed:', e);
+        showNotification(
+            'Tablo arka planda güncellenemedi — gerekirse Yenile\'ye basın.',
+            'error');
     }
 }
 
