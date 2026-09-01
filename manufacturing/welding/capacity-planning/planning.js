@@ -24,6 +24,16 @@ import {
 import { fetchPriceTiers } from '../../../apis/subcontracting/priceTiers.js';
 import { createWorkdayCalendar, reconcileScheduleEdit } from '../../../utils/workdays.js';
 import { deptSchedulePatch } from './deptSchedulePatch.js';
+import {
+    assignmentKey,
+    knownAssignmentKeys,
+    createdBlocksFromBoard,
+    matchCreatedBlock,
+    adoptStageIds,
+    leftoverDeleted,
+    shouldPostNewBlock,
+    shouldHydrateAfterSave,
+} from './saveReconcile.js';
 
 // ---- constants -----------------------------------------------------------
 
@@ -61,6 +71,11 @@ let dirtyBlocks = new Set();      // block.key
 let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
 let dirtyMachining = new Map();   // job_no -> Set of edited field names
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
+// Bumped on every working-copy mutation. Save + background board rebuild
+// compare this to the value at send time: a later bump means the planner
+// edited during the wait, so hydrate must not replace the working copy.
+let mutationClock = 0;
+let saveInFlight = false;
 
 let liveForecastJobs = new Set(); // jobs edited this session -> live client projections
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
@@ -250,6 +265,7 @@ function blockVM(b, res) {
         customer_name: b.customer_name,
         allocated_weight_kg: Number(b.allocated_weight_kg),
         is_billed: !!b.is_billed,
+        has_statement_line: !!b.has_statement_line,
         price_tier: b.price_tier,
         notes: b.notes || '',
         subtask: {
@@ -342,8 +358,13 @@ async function loadBoard() {
 
 // ---- dirty tracking ------------------------------------------------------
 
+function bumpMutation() {
+    mutationClock += 1;
+}
+
 function markBlockDirty(blockRef) {
     dirtyBlocks.add(blockRef);
+    bumpMutation();
     const block = findBlock(blockRef);
     if (block && block.job_no) liveForecastJobs.add(block.job_no);
     updateSaveState();
@@ -408,6 +429,7 @@ function markMachiningDirty(jobNo, field) {
     if (field) fields.add(field);
     dirtyMachining.set(jobNo, fields);
     liveForecastJobs.add(jobNo);
+    bumpMutation();
     updateSaveState();
 }
 
@@ -417,6 +439,7 @@ function markDeptDirty(jobNo, slot, field) {
     if (field) fields.add(field);
     dirtyDept.set(key, fields);
     liveForecastJobs.add(jobNo);
+    bumpMutation();
     updateSaveState();
 }
 
@@ -2493,6 +2516,7 @@ function onDeleteBlock(blockRef) {
                     resourceKey: res ? resourceKeyOf(res) : activeResourceKey,
                 });
             }
+            bumpMutation();
             // The deletion moves the job's projection (the deleted block's
             // window no longer counts) — recompute live like any other edit.
             liveForecastJobs.add(block.job_no);
@@ -3108,6 +3132,7 @@ function pushNewBlock(draft) {
         customer_name: draft.welding_task.customer_name,
         allocated_weight_kg: draft.allocated_weight_kg,
         is_billed: false,
+        has_statement_line: false,
         price_tier: draft.price_tier ? { id: draft.price_tier } : null,
         notes: draft.notes,
         subtask: { status: 'in_progress', progress: 0, start_date: null, end_date: null, duration_wd: null },
@@ -3169,7 +3194,7 @@ function buildPayload() {
 
     resources.forEach(res => res.blocks.forEach(b => {
         if (b.deleted) return;
-        if (b.isNew) {
+        if (shouldPostNewBlock(b)) {
             payload.new_blocks.push({
                 resource_type: res.resource_type,
                 resource_id: res.id,
@@ -3181,6 +3206,9 @@ function buildPayload() {
             });
             return;
         }
+        // Created on the last save but the board refresh has not given us
+        // an assignment_id yet — posting again would duplicate the row.
+        if (b.isNew) return;
         if (!dirtyBlocks.has(b.key)) return;
 
         const snap = snapBlocks.get(b.key) || {};
@@ -3248,43 +3276,115 @@ function buildPayload() {
 }
 
 async function onSave() {
+    if (saveInFlight) return;
     if (!hasUnsavedChanges()) {
         showNotification('Kaydedilecek değişiklik yok.', 'info');
         return;
     }
     const btn = document.getElementById('save-btn');
     if (btn) btn.disabled = true;
+    saveInFlight = true;
+    const payload = buildPayload();
+    const clockAtSend = mutationClock;
+    const knownIds = knownAssignmentKeys(resources);
+    const sentNewKeys = [];
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (shouldPostNewBlock(b)) sentNewKeys.push(b.key);
+    }));
     try {
-        const resp = await bulkSaveWeldingPlanning(buildPayload());
-        // The save no longer waits for the board rebuild (the engine pass
-        // alone costs seconds): writes are confirmed, the sheet stays
-        // usable with its live values, and server truth swaps in when the
-        // background fetch lands — unless new edits arrived meanwhile.
-        dirtyBlocks = new Set();
-        dirtyDept = new Map();
-        dirtyMachining = new Map();
-        deletedBlocks = [];
-        updateSaveState();
+        const resp = await bulkSaveWeldingPlanning(payload);
         showNotification('Plan kaydedildi.', 'success');
         // What the save changed on its own — a move shifting price-tier
         // capacity — must not go unseen.
         (resp && resp.messages || []).forEach(m => showNotification(m, 'info'));
-        refreshBoardInBackground();
+        // Neutralize one-shot creates/moves/deletes immediately so a second
+        // save (or a skipped hydrate) cannot recreate them. Cell-level dirty
+        // stays until hydrate so an edit typed during this request is not
+        // dropped.
+        finalizeSavedStructuralOps(payload, sentNewKeys);
+        const board = resp && resp.board;
+        if (shouldHydrateAfterSave(clockAtSend, mutationClock)) {
+            // This payload is fully committed and nobody typed during the
+            // request. Drop its dirty flags so Kaydet goes idle; a later
+            // edit during the board rebuild bumps the clock and is kept.
+            dirtyBlocks = new Set();
+            dirtyDept = new Map();
+            dirtyMachining = new Map();
+            updateSaveState();
+            if (board) {
+                hydrate(board);
+                return;
+            }
+        }
+        refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys });
     } catch (e) {
         if (btn) btn.disabled = false;
         showNotification(e.message, 'error');
+    } finally {
+        saveInFlight = false;
+        if (hasUnsavedChanges()) updateSaveState();
     }
 }
 
-async function refreshBoardInBackground() {
+function finalizeSavedStructuralOps(payload, sentNewKeys) {
+    (sentNewKeys || []).forEach((key) => {
+        const b = findBlock(key);
+        if (!b) return;
+        b.createdOnServer = true;
+        b.createDefaultStages = false;
+        delete b.moveTo;
+    });
+    const sentBlockIds = new Set(
+        (payload.blocks || []).map((b) => assignmentKey(b.assignment_type, b.assignment_id)),
+    );
+    resources.forEach((res) => res.blocks.forEach((b) => {
+        if (b.isNew || b.assignment_id == null) return;
+        if (sentBlockIds.has(assignmentKey(b.assignment_type, b.assignment_id))) {
+            b.createDefaultStages = false;
+            delete b.moveTo;
+        }
+    }));
+    deletedBlocks = leftoverDeleted(deletedBlocks, payload.deleted_blocks || []);
+}
+
+function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
+    const created = createdBlocksFromBoard(board, knownIds);
+    const used = new Set();
+    (sentNewKeys || []).forEach((key) => {
+        const client = findBlock(key);
+        if (!client || !client.isNew) return;
+        const idx = matchCreatedBlock(client, created, used);
+        if (idx < 0) return;
+        const matched = created[idx];
+        used.add(assignmentKey(matched.block.assignment_type, matched.block.assignment_id));
+        client.isNew = false;
+        client.createdOnServer = false;
+        client.assignment_type = matched.block.assignment_type;
+        client.assignment_id = matched.block.assignment_id;
+        client.subtask_id = matched.block.subtask_id;
+        client.createDefaultStages = false;
+        delete client.moveTo;
+        adoptStageIds(client.stages, matched.block.stages);
+        snapBlocks.set(client.key, {
+            allocated_weight_kg: client.allocated_weight_kg,
+            notes: client.notes,
+        });
+    });
+}
+
+async function refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys } = {}) {
     try {
         const data = await getWeldingPlanningBoard(showCompleted);
-        if (hasUnsavedChanges()) {
-            // hydrate would wipe edits made while the fetch was in flight —
-            // the next save's refresh will carry them.
+        if (shouldHydrateAfterSave(clockAtSend, mutationClock)) {
+            hydrate(data);
             return;
         }
-        hydrate(data);
+        // Planner typed during the rebuild: keep the working copy, but stitch
+        // server identities onto the blocks this save created so the next
+        // save updates them instead of posting duplicates.
+        adoptCreatedBlockIdentities(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
+        updateSaveState();
+        scheduleRefresh();
     } catch (e) {
         console.error('Board refresh failed:', e);
         showNotification(
