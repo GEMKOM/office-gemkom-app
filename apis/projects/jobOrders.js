@@ -935,3 +935,53 @@ export async function getMeetingBriefSection(jobNo, section) {
         throw error;
     }
 }
+
+
+/**
+ * Flat list of every job order for the Bilgi Islem force-completion page.
+ * Endpoint: GET /projects/job-orders/completion-tree/
+ *
+ * Deliberately unfiltered server-side: rows are nested into a tree on this end,
+ * and dropping completed rows on the backend would orphan their open children.
+ * Requires the access_it_job_completion permission.
+ * @returns {Promise<Array>} rows of {job_no, parent, title, status, task_count, ...}
+ */
+export async function getJobCompletionTree() {
+    const response = await authedFetch(`${backendBase}/projects/job-orders/completion-tree/`);
+
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    return await response.json();
+}
+
+/**
+ * Force-complete job orders and all of their department tasks, overriding every
+ * workflow gate (QC approval, ERP product entry, procurement delivery, open
+ * NCRs, subtask and dependency ordering).
+ * Endpoint: POST /projects/job-orders/force-complete/
+ * Requires the access_it_job_completion permission.
+ *
+ * @param {string[]} jobNos - Job order numbers to complete
+ * @param {Object} [options]
+ * @param {boolean} [options.includeDescendants=true] - Also complete the whole subtree
+ * @returns {Promise<Object>} summary of what was completed, skipped and overridden
+ */
+export async function forceCompleteJobOrders(jobNos, { includeDescendants = true } = {}) {
+    const response = await authedFetch(`${backendBase}/projects/job-orders/force-complete/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            job_nos: jobNos,
+            include_descendants: includeDescendants,
+        }),
+    });
+
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+        throw new Error(data?.error || data?.detail || `HTTP error! status: ${response.status}`);
+    }
+
+    return data;
+}
