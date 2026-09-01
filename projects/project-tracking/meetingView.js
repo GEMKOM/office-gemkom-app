@@ -897,17 +897,21 @@ async function openPlanModal(item) {
                 <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
                 <td>${progressCell(t)}</td>
                 <td class="pp-td-date">${startCell(t)}</td>
-                <td class="pp-td-date">${fmtShortDate(t.target_completion_date)}</td>
+                <td class="pp-td-date">${fmtShortDate(t.plan_end_date || t.target_completion_date)}</td>
                 <td class="pp-td-date pp-td-proj">${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
                 <td class="pp-td-basis">${basisCell}</td>
             </tr>`;
     };
 
-    // Başlangıç: the actual (evidence/entered) start when the task has one,
-    // otherwise the forecast's projected start with a ~ prefix — gates and
-    // pushes are start stories, and the column makes them visible.
+    // Başlangıç: the PLAN the welding board laid out (user 2026-09-01 —
+    // "display the entered start and end dates, the only difference is that
+    // we display the end date by the tempo there"), then the actual
+    // (evidence/entered) start, then the forecast's projected start with a ~
+    // prefix — gates and pushes are start stories, and the column makes them
+    // visible.
     function startCell(t) {
         const s = t.schedule;
+        if (t.plan_start_date) return fmtShortDate(t.plan_start_date);
         if (s.actual_start_date) return fmtShortDate(s.actual_start_date);
         if (s.projected_start_date) {
             return `<span title="Öngörülen başlangıç">~${fmtShortDate(s.projected_start_date)}</span>`;

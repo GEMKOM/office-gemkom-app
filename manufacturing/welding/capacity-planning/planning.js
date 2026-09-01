@@ -297,6 +297,9 @@ function hydrate(boardData) {
             machiningByJob[jobNo] = {
                 task_id: machining.task_id,
                 weight: machining.weight ?? null,
+                // The weight split has to know when this row is out of scope
+                // — a skipped Talaşlı takes no share of the İmalat number.
+                status: machining.status,
             };
         }
     });
@@ -418,75 +421,6 @@ function markDeptDirty(jobNo, slot, field) {
     dirtyDept.set(key, fields);
     liveForecastJobs.add(jobNo);
     updateSaveState();
-}
-
-// Everything scheduled under a task, as the grid currently holds it. Used both
-// to widen a parent when a child moves and to refuse a parent edit that would
-// cut into its children.
-function childCoverage(jobNo, slot) {
-    const dated = [];
-    if (slot === 'welding' || slot === 'manufacturing') {
-        resources.forEach(res => res.blocks
-            .filter(b => !b.deleted && b.job_no === jobNo)
-            .forEach(b => {
-                const staged = b.stages.filter(x => !x.deleted && x.status !== 'cancelled');
-                (staged.length ? staged : [b.subtask]).forEach(x => dated.push(x));
-            }));
-    }
-    if (slot === 'manufacturing') {
-        const painting = deptOf(jobNo, 'painting');
-        if (painting) dated.push(painting);
-        (jobInfo[jobNo]?.machining || []).forEach(m => dated.push(m));
-    }
-    // Only dates somebody planned widen a parent. A machining row borrows its
-    // operations' schedule and a paint row may be showing first-progress
-    // evidence; widening from those and then saving would write an estimate
-    // onto a real task as though it had been typed there.
-    const planned = (x, field) => {
-        if (!x[field]) return null;
-        if (x.date_source) return null;
-        if (field === 'start_date' && x.start_is_actual) return null;
-        if (field === 'end_date' && x.end_is_actual) return null;
-        return x[field];
-    };
-    const starts = dated.map(x => planned(x, 'start_date')).filter(Boolean).sort();
-    const ends = dated.map(x => planned(x, 'end_date')).filter(Boolean).sort();
-    return { start: starts[0] || null, end: ends[ends.length - 1] || null };
-}
-
-// A parent's window must cover everything under it, live — dragging a welding
-// stage past its end is the usual way that window moves, and the planner should
-// watch it happen rather than discover it after a save.
-// A parent's window is the UNION of what the planner entered on it and what
-// its children occupy. That tracks in both directions: lengthen a stage and
-// the parent grows, shorten it and the parent pulls back — but never inside
-// the dates somebody actually typed on the parent, which stay a floor.
-// Duration stays out of this: it is İmalat sizing, not the date span.
-//
-// Widen-only was the first cut, and it left a phantom window behind after a
-// stage was shortened: İmalat still claimed 16.10 when nothing under it ran
-// past 25.08.
-function reflowParents(jobNo) {
-    ['welding', 'manufacturing'].forEach(slot => {
-        const target = deptOf(jobNo, slot);
-        if (!target) return;
-        const child = childCoverage(jobNo, slot);
-        const earliest = (a, b) => (a && b) ? (a < b ? a : b) : (a || b);
-        const latest = (a, b) => (a && b) ? (a > b ? a : b) : (a || b);
-
-        const start = earliest(target.entered_start_date, child.start);
-        const end = latest(target.entered_end_date, child.end);
-        if (start === target.start_date && end === target.end_date) return;
-
-        target.start_date = start;
-        target.end_date = end;
-        target.start_from_children = !!(child.start && child.start !== target.entered_start_date);
-        target.end_from_children = !!(child.end && child.end !== target.entered_end_date);
-        // Duration is sizing, not the date span — rewriting it here made a
-        // child-date save persist workingDaysInclusive() over the İmalat
-        // number the planner entered.
-        markDeptDirty(jobNo, slot, 'start_date');
-    });
 }
 
 function updateSaveState() {
@@ -878,20 +812,28 @@ function withEngineDates(row, vm) {
     return row;
 }
 
-// Derived rows — everything under İmalat, and İmalat's own end: the
-// projection IS the date. Stored values are last-save snapshots the server
-// materialized for the tracking pages (user decision 2026-08-31); letting
-// them mask a fresher projection would freeze the sheet's dates until the
-// next save, so here the projection wins and stored only fills the gaps.
-// `keepStart` is for the İmalat row itself: its start is the planner's
-// single date input and must show exactly as typed.
+// Başlangıç and Bitiş on this sheet are the PLAN (user 2026-09-01: "we enter
+// start date and duration, then all other dates and durations should
+// propagate based on the weight; on save, save them as the actual data of
+// each task"). The server lays that plan out from the İmalat entry by weight
+// and stores it on every row, so here the STORED value is what shows — the
+// forecast has its own column (Gerçek./Tahmini) and its own home on project
+// tracking. Before 2026-09-01 both cells showed the engine's projection,
+// which is how Kaynaklı İmalat came to display 12.08 (two welders' 3 hours)
+// against an İmalat start of 31.08.
+//
+// The projection still fills a gap — a row the plan has nothing to say about
+// — and while a job carries unsaved edits the client's own cascade owns both
+// columns (`live`), so typing a start or a duration re-lays the rows below it
+// before saving. `keepStart` is for the İmalat row: its start is the
+// planner's single date input and must show exactly as typed.
 function withDerivedDates(row, vm, { keepStart = false } = {}) {
     if (!['completed', 'cancelled', 'skipped'].includes(row.status)) {
-        if (!keepStart && vm.projected_start_date) {
+        if (!keepStart && row.start_date == null && vm.projected_start_date) {
             row.start_date = vm.projected_start_date;
             row.start_date_source = row.start_date_source || 'engine';
         }
-        if (vm.projected_end_date) {
+        if (row.end_date == null && vm.projected_end_date) {
             row.end_date = vm.projected_end_date;
             row.end_date_source = row.end_date_source || 'engine';
         }
@@ -1144,6 +1086,9 @@ function buildSheetRows(res, sortJobs = false) {
                 duration_is_derived: vm.duration_is_derived,
                 duration_source: vm.duration_source,
                 entered_duration_wd: vm.entered_duration_wd,
+                // What the last save actually stored — the container rule
+                // below only fills in when there is nothing stored.
+                entered_start_date: vm.entered_start_date,
                 completed_at: vm.completed_at,
                 forecast_date: vm.forecast_date,
                 forecast_kind: vm.forecast_kind,
@@ -1187,6 +1132,7 @@ function buildSheetRows(res, sortJobs = false) {
 
         const welding = deptRow('welding', 'Kaynaklı İmalat', 2);
         if (welding) rows.push(welding);
+        const weldingBlockStarts = [];
 
         blocks.forEach(b => {
             const staged = b.stages.filter(s => !s.deleted);
@@ -1225,6 +1171,8 @@ function buildSheetRows(res, sortJobs = false) {
                 forecast_kind: staged.length ? rollup.forecastKind : b.subtask.forecast_kind,
                 note: b.notes,
             }, b.subtask));
+            const blockStart = rows[rows.length - 1].start_date;
+            if (blockStart) weldingBlockStarts.push(blockStart);
 
             staged.forEach(s => rows.push(withDerivedDates({
                 ...base,
@@ -1250,6 +1198,22 @@ function buildSheetRows(res, sortJobs = false) {
                 note: s.note,
             }, s)));
         });
+
+        // Kaynaklı İmalat is a container: its start is where its blocks
+        // start. Without this it fell back to the job's first welding time
+        // entry — real evidence, but not a plan — so the row sat 12.08 while
+        // the İmalat entry above it said 31.08 and the blocks below said
+        // 31.08, and it never moved when the İmalat start was re-typed
+        // (user 2026-09-01, 009-37). A stored start still wins: after a save
+        // the row shows exactly what was written.
+        if (welding && !welding.entered_start_date && weldingBlockStarts.length) {
+            const earliest = weldingBlockStarts.reduce((a, b) => (a < b ? a : b));
+            if (welding.start_date !== earliest) {
+                welding.start_date = earliest;
+                welding.start_date_source = 'engine';
+                welding.start_is_actual = false;
+            }
+        }
 
         const painting = deptRow('painting', 'Boya', 2);
         if (painting) rows.push(painting);
@@ -1547,9 +1511,12 @@ function rederiveDerivedDurations() {
                 ? Number(imalat.duration_wd) : null);
         if (top == null || top <= 0) return;
 
-        const weld = slots.welding;
-        const paint = slots.painting;
-        const mach = machiningByJob[jobNo];
+        const skipped = (vm) => !vm || ['cancelled', 'skipped'].includes(vm.status);
+        const weld = skipped(slots.welding) ? null : slots.welding;
+        const paint = skipped(slots.painting) ? null : slots.painting;
+        // A skipped row takes no share of the İmalat number — the server's
+        // plan split drops it the same way (plan_windows.live()).
+        const mach = skipped(machiningByJob[jobNo]) ? null : machiningByJob[jobNo];
         const sibSum = w(weld && weld.weight) + w(paint && paint.weight)
             + w(mach && mach.weight);
         if (sibSum <= 0) return;
@@ -1576,6 +1543,101 @@ function rederiveDerivedDurations() {
             if (stageSum <= 0) return;
             live.forEach(s => setSlice(s, blockSlice * w(s.weight) / stageSum));
         });
+    });
+}
+
+// The PLAN, laid out live for a job the planner is editing — the client
+// mirror of projects/services/plan_windows.py, so typing an İmalat start or
+// duration moves every row under it before the save does (user 2026-09-01:
+// the sheet showed İmalat on 01.09 with Kaynaklı İmalat still on 31.08 until
+// Kaydet). Same shape as the server: Kaynaklı and Talaşlı run side by side
+// from the start, Boya follows them, blocks are parallel and stages
+// sequential, and machining keeps the operations' dates.
+function rederivePlanWindows() {
+    if (!liveForecastJobs.size) return;
+    const w = (x) => Number(x || 0);
+    const live = (vm) => vm && !['cancelled', 'skipped'].includes(vm.status);
+    const spanEnd = (start, days) => calendar.spanEnd(start, Math.max(days, 0.1));
+    const nextWorkday = (d) => {
+        const p = new Date(`${d}T00:00:00`);
+        do {
+            p.setDate(p.getDate() + 1);
+        } while (calendar.isNonWorkingDay(
+            `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}-${String(p.getDate()).padStart(2, '0')}`));
+        return `${p.getFullYear()}-${String(p.getMonth() + 1).padStart(2, '0')}-${String(p.getDate()).padStart(2, '0')}`;
+    };
+    const later = (a, b) => (a && b ? (a > b ? a : b) : (a || b));
+
+    const jobBlocks = {};
+    resources.forEach(res => res.blocks.forEach(b => {
+        if (b.deleted) return;
+        (jobBlocks[b.job_no] = jobBlocks[b.job_no] || []).push(b);
+    }));
+
+    liveForecastJobs.forEach(jobNo => {
+        const slots = deptByJob[jobNo] || {};
+        const imalat = slots.manufacturing;
+        if (!imalat || !imalat.start_date) return;
+        const total = imalat.entered_duration_wd != null
+            ? Number(imalat.entered_duration_wd)
+            : (imalat.duration_wd != null ? Number(imalat.duration_wd) : null);
+        if (!total || total <= 0) return;
+
+        const start = imalat.start_date;
+        const weld = live(slots.welding) ? slots.welding : null;
+        const paint = live(slots.painting) ? slots.painting : null;
+        // A skipped Talaşlı takes no share — the server's split drops it the
+        // same way, and counting it here shrank every other row's slice.
+        const machRow = machiningByJob[jobNo];
+        const mach = live(machRow) ? machRow : null;
+        const sibSum = w(weld && weld.weight) + w(paint && paint.weight) + w(mach && mach.weight);
+        if (sibSum <= 0) return;
+
+        const set = (vm, from, days) => {
+            if (!vm) return null;
+            const end = spanEnd(from, days);
+            vm.start_date = from;
+            vm.end_date = end;
+            vm.start_is_actual = false;
+            vm.end_is_actual = false;
+            return end;
+        };
+
+        let parallelEnd = null;
+        if (mach) parallelEnd = later(parallelEnd, spanEnd(start, total * w(mach.weight) / sibSum));
+        if (weld) {
+            const weldDays = total * w(weld.weight) / sibSum;
+            let weldEnd = set(weld, start, weldDays);
+            const blocks = jobBlocks[jobNo] || [];
+            const kgSum = blocks.reduce((acc, b) => acc + w(b.allocated_weight_kg), 0);
+            blocks.forEach(b => {
+                if (kgSum <= 0) return;
+                const blockDays = weldDays * w(b.allocated_weight_kg) / kgSum;
+                const blockEnd = set(b.subtask, start, blockDays);
+                const stages = b.stages.filter(s => !s.deleted && s.status !== 'cancelled');
+                const stageSum = stages.reduce((acc, s) => acc + w(s.weight), 0);
+                let cursor = start, deepest = null;
+                stages.forEach(s => {
+                    if (stageSum <= 0) return;
+                    const e = set(s, cursor, blockDays * w(s.weight) / stageSum);
+                    deepest = later(deepest, e);
+                    cursor = nextWorkday(e);
+                });
+                if (deepest && deepest > blockEnd) b.subtask.end_date = deepest;
+                weldEnd = later(weldEnd, b.subtask.end_date);
+            });
+            weld.end_date = weldEnd;
+            parallelEnd = later(parallelEnd, weldEnd);
+        }
+        let latest = parallelEnd;
+        if (paint) {
+            const paintStart = parallelEnd ? nextWorkday(parallelEnd) : start;
+            latest = later(latest, set(paint, paintStart, total * w(paint.weight) / sibSum));
+        }
+        // The İmalat row covers what it contains — its own span, extended if
+        // the paint tail spills past it.
+        imalat.end_date = later(spanEnd(start, total), latest);
+        imalat.end_is_actual = false;
     });
 }
 
@@ -1887,6 +1949,7 @@ function renderGrid() {
     const container = document.getElementById('planning-grid');
     if (!container) return;
     rederiveDerivedDurations();
+    rederivePlanWindows();
     rederiveProgress();
     rederiveEngineDates();
     const res = activeResource();
@@ -2299,20 +2362,13 @@ function onCellEdit(row, field, newValue) {
             throw new Error('Bitiş tarihi başlangıç tarihinden önce olamaz.');
         }
 
+        // NO child-coverage check any more (user 2026-09-01: "I can't edit
+        // subtasks anyway"). It came from the days when a planner scheduled
+        // stages by hand and a parent had to cover them; today every date
+        // below İmalat is derived from this very entry, so the children move
+        // WITH the start being typed — refusing it left the sheet's only date
+        // input unusable, blocked by dates nobody could reach.
         if (row.kind === 'dept' && row.slot !== 'painting') {
-            const cover = childCoverage(row.job_no, row.slot);
-            if (cover.start && start && start > cover.start) {
-                throw new Error(
-                    `Alt görevler ${fmtDate(cover.start)} tarihinde başlıyor; ` +
-                    'ana görev daha geç başlayamaz.');
-            }
-            if (cover.end && end && end < cover.end) {
-                throw new Error(
-                    `Alt görevler ${fmtDate(cover.end)} tarihinde bitiyor; ` +
-                    'ana görev daha erken bitemez.');
-            }
-            // Typing on the parent moves the floor, so a later child change
-            // unions against what was just entered, not the stale value.
             target.start_from_children = false;
             target.end_from_children = false;
         }
@@ -2349,10 +2405,6 @@ function onCellEdit(row, field, newValue) {
     // projections until the next save/reload brings server truth.
     if (['duration_wd', 'progress', 'start_date', 'status', 'weight'].includes(field)) {
         liveForecastJobs.add(row.job_no);
-    }
-    if (SCHEDULE_FIELDS.includes(field)
-            && (row.kind !== 'dept' || row.slot !== 'manufacturing')) {
-        reflowParents(row.job_no);
     }
     scheduleRefresh();
 }
