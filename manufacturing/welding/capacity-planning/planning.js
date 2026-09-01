@@ -24,6 +24,7 @@ import {
 import { fetchPriceTiers } from '../../../apis/subcontracting/priceTiers.js';
 import { createWorkdayCalendar, reconcileScheduleEdit } from '../../../utils/workdays.js';
 import { deptSchedulePatch } from './deptSchedulePatch.js';
+import { exportPlanningPdf } from './pdf.js';
 
 // ---- constants -----------------------------------------------------------
 
@@ -2111,6 +2112,63 @@ function applyZoom(zoom) {
     if (grid) grid.setZoom(zoom);
 }
 
+// What narrows the printed sheet, said on the sheet itself: a filtered export
+// that does not admit to being filtered reads as the whole plan.
+function exportContextText() {
+    const parts = [];
+    if (filterJobNos.length) {
+        parts.push(`İş emri: ${filterJobNos.slice(0, 4).join(', ')}`
+            + (filterJobNos.length > 4 ? ` +${filterJobNos.length - 4}` : ''));
+    }
+    if (filterAssignee) {
+        const opt = assigneeFilterOptions().find(o => o.value === filterAssignee);
+        parts.push(`Sorumlu: ${opt ? opt.text : filterAssignee}`);
+    }
+    if (filterText.trim()) parts.push(`Ara: "${filterText.trim()}"`);
+    if (showCompleted) parts.push('Tamamlananlar dahil');
+    return parts.length ? `Filtre — ${parts.join(' · ')}` : '';
+}
+
+// Exports exactly what is on screen — this tab, these filters, these open
+// groups, these columns. Re-scaled to the page, not screenshotted: see pdf.js.
+async function onExportPdf() {
+    const btn = document.getElementById('pdf-btn');
+    if (!btn || btn.disabled) return;
+    const res = activeResource();
+    const tab = onAllTab() ? 'Tümü' : (res ? (res.display_name || res.name) : '');
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        + `-${String(now.getDate()).padStart(2, '0')}`;
+
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>PDF';
+    try {
+        const out = await exportPlanningPdf({
+            grid,
+            title: 'İmalat Planlama',
+            subtitle: tab,
+            context: exportContextText(),
+            legend: document.querySelector('.pg-legend'),
+            fileName: `İmalat Planlama - ${tab || 'Plan'} - ${stamp}`,
+            // A 20-page board takes a moment per page; the button counts them
+            // off rather than sitting there looking hung.
+            onProgress: (done, total) => {
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1">'
+                    + `</span>${done}/${total}`;
+            },
+        });
+        showNotification(
+            `PDF indirildi — ${out.pages} sayfa, ${out.rows} satır.`, 'success');
+    } catch (error) {
+        console.error('PDF export failed:', error);
+        showNotification(error?.message || 'PDF oluşturulamadı.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
+
 function initGridToolbar() {
     const zoomWrap = document.getElementById('zoom-buttons');
     if (zoomWrap) {
@@ -3435,6 +3493,7 @@ function init() {
     document.getElementById('filter-clear').addEventListener('click', clearFilters);
     document.getElementById('save-btn').addEventListener('click', onSave);
     document.getElementById('add-job-btn').addEventListener('click', () => openAddJobModal());
+    document.getElementById('pdf-btn')?.addEventListener('click', onExportPdf);
 
     const completedToggle = document.getElementById('show-completed-toggle');
     if (completedToggle) {

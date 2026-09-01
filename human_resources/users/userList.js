@@ -2327,9 +2327,15 @@ async function createUser(formData) {
             last_name: String(rawUserPayload?.last_name ?? '').trim(),
             is_active: rawUserPayload?.is_active !== false
         };
+        // The backend's UserCreateSerializer writes `position` (the profile FK).
+        // Renaming it to `position_id` here made DRF drop it silently, so new
+        // employees were created with no position — and therefore no user group.
         const positionRaw = String(rawUserPayload?.position ?? '').trim();
-        delete userPayload.position;
-        userPayload.position_id = positionRaw ? Number(positionRaw) : null;
+        if (positionRaw) {
+            userPayload.position = Number(positionRaw);
+        } else {
+            delete userPayload.position;
+        }
         const email = String(rawUserPayload?.email ?? '').trim();
         if (email) {
             userPayload.email = email;

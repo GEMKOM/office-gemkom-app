@@ -476,3 +476,120 @@
 .jp-holder .fas { font-size: .62rem; opacity: .7; }
 .jp-holder.jp-more { font-weight: 600; }
 .jp-holder.jp-none { background: transparent; color: #adb5bd; font-style: italic; padding-left: 0; }
+
+/* ---- PDF export ---------------------------------------------------------
+   The export renders a second grid and its pages off-screen. They need real
+   layout (html2canvas measures boxes, it does not guess), so they are moved
+   out of view rather than hidden. */
+
+.pg-pdf-stage {
+    position: fixed;
+    top: 0;
+    left: -20000px;
+    width: 0;
+    height: 0;
+    background: #ffffff;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* The source grid is measured whole, not through its scrollbox. */
+.pg-pdf-src .pg-scroll {
+    overflow: visible;
+    max-height: none;
+    min-height: 0;
+}
+
+.pg-pdf-page {
+    background: #ffffff;
+    border: 0;
+    border-radius: 0;
+    /* Clipped, like the sheet's own scroll extent: a "+11 gün" flag that runs
+       past the last column would otherwise widen that one page, and pages of
+       unequal width print at unequal scale. */
+    overflow: hidden;
+    /* Stage spacing only — each page is captured on its own. */
+    margin-bottom: 40px;
+}
+
+/* Paper does not scroll, so nothing sticks and nothing is skipped:
+   content-visibility keeps off-screen rows out of the capture, and sticky
+   boxes land in the wrong place. `relative` holds the z-index that paints the
+   frozen columns over the timeline; `static` would drop it. */
+.pg-pdf-page .pg-header,
+.pg-pdf-page .pg-header-grid,
+.pg-pdf-page .pg-row-grid {
+    position: relative;
+}
+
+.pg-pdf-page .pg-row {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
+}
+
+/* The timeline domain is built from BARS, so a job order whose hedef sits
+   months past the last bar draws its marker outside the columns — reachable
+   on screen by scrolling, off the page here. Clipping the lane keeps every
+   page exactly one canvas wide, and pages of equal width print at equal
+   scale. */
+.pg-pdf-page .pg-row-time { overflow: hidden; }
+
+.pg-pdf-head {
+    padding: 0 2px 7px;
+    border-bottom: 2px solid #c9ced4;
+    margin-bottom: 6px;
+}
+
+.pg-pdf-head-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.pg-pdf-head-title {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: #212529;
+}
+
+.pg-pdf-head-sub {
+    margin-left: 10px;
+    font-size: .84rem;
+    font-weight: 600;
+    color: #8b0000;
+}
+
+.pg-pdf-head-right,
+.pg-pdf-meta {
+    font-size: .72rem;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.pg-pdf-meta { margin-top: 3px; }
+
+.pg-pdf-legend { margin-top: 5px; }
+
+/* Column rules and weekend shading, drawn once per page behind the rows —
+   see rulesLayer() for why they cannot stay a background gradient here. */
+.pg-pdf-rules {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.pg-pdf-rules .pg-pdf-rule,
+.pg-pdf-rules .pg-pdf-shade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+}
+
+.pg-pdf-rules .pg-pdf-rule {
+    width: 1px;
+    background: var(--pg-line);
+}
+
+.pg-pdf-rules .pg-pdf-shade { background: var(--pg-nonwork); }

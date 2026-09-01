@@ -1,15 +1,21 @@
 /**
- * Element → PDF, as a screenshot.
+ * DOM → PDF, as a screenshot.
  *
  * The point is fidelity, not re-layout: whatever is on screen — colours,
- * badges, progress bars, wording — is what lands on the page. The element is
- * cloned off-screen first so the capture covers its FULL height, not just the
- * part inside its scrollbox, then the single tall canvas is sliced into A4
- * pages. Cuts snap up to the nearest row/block top, so nothing is halved
- * across a page break.
+ * badges, progress bars, wording — is what lands on the page.
  *
- * html2canvas + jsPDF load from the CDN on first use only — the deck itself
- * never pays for them.
+ * Two ways in, depending on who paginates:
+ *
+ *   exportElementToPdf  — hand it ONE element. It is cloned off-screen so the
+ *                         capture covers its full height, not just the part
+ *                         inside its scrollbox, and the single tall canvas is
+ *                         sliced into pages at row boundaries.
+ *   exportPagesToPdf    — hand it pages you have already built to fit. Needed
+ *                         when every page must repeat something (a table
+ *                         header), which no slicing of one image can produce.
+ *
+ * html2canvas + jsPDF load from the CDN on first use only — pages that never
+ * export never pay for them.
  */
 
 const HTML2CANVAS_SRC = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
@@ -201,4 +207,105 @@ export async function exportElementToPdf(element, options = {}) {
     } finally {
         stage.remove();
     }
+}
+
+
+/**
+ * A pre-paginated document → PDF, one captured element per page.
+ *
+ * The sibling above slices ONE tall capture; this one takes pages that were
+ * already built to fit — which is what a sheet with a repeating header needs,
+ * since a repeated header cannot be cut out of a single image. It also keeps
+ * every canvas small enough to capture at full scale, so a 300-row plan stays
+ * as crisp as a 10-row one.
+ *
+ * Pages must already be in the document (an off-screen stage) so they have
+ * layout; the caller owns that stage and removes it afterwards.
+ *
+ * ONE scale for the whole document: the widest page defines it, and every
+ * other page is drawn at the same mm-per-pixel. Fitting each page on its own
+ * would silently magnify a short last page.
+ *
+ * @param {HTMLElement[]} pages
+ * @param {Object}   options
+ * @param {string}   options.fileName
+ * @param {string}   options.orientation  'landscape' | 'portrait'
+ * @param {string}   options.format       jsPDF page format, e.g. 'a4'
+ * @param {number}   options.marginMm
+ * @param {string}   options.footerText   ASCII only — jsPDF core fonts cannot
+ *                                        encode ı/ş/ğ, so Turkish belongs in
+ *                                        the captured image, not here
+ * @param {Function} options.onProgress   (done, total) => void
+ */
+export async function exportPagesToPdf(pages, options = {}) {
+    const {
+        fileName = 'export.pdf',
+        orientation = 'landscape',
+        format = 'a4',
+        marginMm = 8,
+        footerText = '',
+        onProgress = null
+    } = options;
+
+    if (!pages.length) throw new Error('Dışa aktarılacak sayfa yok.');
+
+    const { html2canvas, jsPDF } = await loadPdfLibs();
+    // Icons are pseudo-element glyphs; capturing before the webfont is ready
+    // leaves empty boxes where the flags and status marks should be.
+    if (document.fonts && document.fonts.ready) await document.fonts.ready;
+
+    const pdf = new jsPDF({ orientation, unit: 'mm', format, compress: true });
+    const pageW = pdf.internal.pageSize.getWidth();
+    const pageH = pdf.internal.pageSize.getHeight();
+    const footerH = footerText ? 5 : 0;
+    const contentW = pageW - marginMm * 2;
+    const contentH = pageH - marginMm * 2 - footerH;
+
+    // The RENDERED box, not the scroll extent: a page that clips something is
+    // captured at the size it is drawn, and pages stay the same width as each
+    // other — differing widths would print at differing scales.
+    const box = el => el.getBoundingClientRect();
+    const widest = Math.max(...pages.map(el => Math.ceil(box(el).width) || 1));
+    const mmPerPx = contentW / widest;
+
+    for (let i = 0; i < pages.length; i++) {
+        const el = pages[i];
+        const rect = box(el);
+        const width = Math.ceil(rect.width) || widest;
+        const height = Math.ceil(rect.height) || 1;
+        const scale = Math.max(1, Math.min(
+            TARGET_SCALE,
+            MAX_CANVAS_SIDE / Math.max(width, height),
+            Math.sqrt(MAX_CANVAS_PIXELS / (width * height))
+        ));
+
+        const canvas = await html2canvas(el, {
+            backgroundColor: '#ffffff',
+            scale,
+            useCORS: true,
+            logging: false,
+            windowWidth: width,
+            windowHeight: height
+        });
+
+        if (i > 0) pdf.addPage();
+        // A page built taller than the content box (a stray long row) is let
+        // down proportionally rather than spilling off the paper.
+        const drawScale = Math.min(mmPerPx, contentH / height);
+        pdf.addImage(
+            canvas.toDataURL('image/png'), 'PNG',
+            marginMm, marginMm, width * drawScale, height * drawScale,
+            undefined, 'FAST');
+        if (footerText) {
+            pdf.setFontSize(8);
+            pdf.setTextColor(150);
+            pdf.text(`${footerText}   ${i + 1} / ${pages.length}`,
+                pageW - marginMm, pageH - marginMm + 2, { align: 'right' });
+        }
+        if (typeof onProgress === 'function') onProgress(i + 1, pages.length);
+    }
+
+    const name = sanitizeFileName(fileName);
+    pdf.save(name.toLowerCase().endsWith('.pdf') ? name : `${name}.pdf`);
+    return pages.length;
 }
