@@ -864,13 +864,19 @@ export async function getJobOrderProductionPlan(jobNo) {
 /**
  * Portfolio overview: schedule verdict per ROOT job order (weekly review).
  * Endpoint: GET /projects/job-orders/production-plan-overview/?status=...
+ * Served from a ~15-minute server-side snapshot unless `refresh` is set, which
+ * forces the recompute (a few seconds) — `generated_at` says which one you got.
  * @param {string} status - Job order status filter ('active' default, or 'all')
+ * @param {Object} [options]
+ * @param {boolean} [options.refresh] - Recompute instead of serving the snapshot
  * @returns {Promise<Object>} {items: [...], today, generated_at}
  */
-export async function getProductionPlanOverview(status = 'active') {
+export async function getProductionPlanOverview(status = 'active', { refresh = false } = {}) {
     try {
+        const params = new URLSearchParams({ status });
+        if (refresh) params.set('refresh', '1');
         const response = await authedFetch(
-            `${backendBase}/projects/job-orders/production-plan-overview/?status=${encodeURIComponent(status)}`);
+            `${backendBase}/projects/job-orders/production-plan-overview/?${params.toString()}`);
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);

@@ -376,6 +376,15 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     margin-right: 6px;
 }
 
+/* Age of the numbers on the slide — quiet, but always on screen. */
+.pp-strip-stamp {
+    color: #9aa3b2;
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    margin-right: 2px;
+}
+
 .pp-strip-btn {
     border: 1px solid #d3d9e1;
     background: #ffffff;

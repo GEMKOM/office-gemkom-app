@@ -28,7 +28,8 @@ import {
 // retired portfolio page, so the deck is the default view: active projects,
 // natural job-no order.
 let overviewData = null;                // last fetched overview payload
-const overviewStatus = 'active';        // status the cached overview was fetched with
+let overviewFetchedAt = 0;              // Date.now() of that fetch
+const overviewStatus = 'active';        // status the overview was fetched with
 const portfolioSort = 'job_no';         // 'job_no' | 'risk'
 
 // Meeting (Sunum Modu) state
@@ -49,8 +50,42 @@ const meetingBriefCache = new Map();    // job_no -> meeting brief payload
 const meetingBriefPromises = new Map(); // job_no -> in-flight fetch promise
 const meetingPlanCache = new Map();     // job_no -> production plan (hero modal)
 const meetingSectionCache = new Map();  // `${job_no}:${section}` -> detail payload
+
 let meetingModalOpen = false;
 let meetingModalContext = null;         // {jobNo, kind} of the open modal
+let meetingRefreshing = false;          // a manual "Yenile" is in flight
+
+// Nothing is PRESENTED from a cache older than this. The deck is read while
+// the numbers behind it are being edited — someone fixes a target date during
+// the meeting and the slide has to show it on the way back — so every cache
+// here is a paint-instantly buffer, not a source of truth: a stale entry still
+// renders (never a blank slide) and its refetch swaps in over it.
+const MEETING_MAX_AGE_MS = 60 * 1000;
+const meetingCachedAt = new Map();      // cache key -> Date.now() of the write
+
+function cacheStamp(key) {
+    meetingCachedAt.set(key, Date.now());
+}
+
+function cacheIsStale(key) {
+    const at = meetingCachedAt.get(key);
+    return at === undefined || Date.now() - at > MEETING_MAX_AGE_MS;
+}
+
+// Every cached payload for one job order — brief, section details, plan — so
+// the next read of each goes back to the server.
+function dropJobCaches(jobNo) {
+    meetingBriefCache.delete(jobNo);
+    meetingPlanCache.delete(jobNo);
+    meetingCachedAt.delete(`brief:${jobNo}`);
+    meetingCachedAt.delete(`plan:${jobNo}`);
+    [...meetingSectionCache.keys()]
+        .filter(key => key.startsWith(`${jobNo}:`))
+        .forEach((key) => {
+            meetingSectionCache.delete(key);
+            meetingCachedAt.delete(key);
+        });
+}
 
 // House badge component classes (components/badges/badges.css) — no yellow.
 const CLASSIFICATION_BADGES = {
@@ -156,14 +191,31 @@ function ensureMeetingContainer() {
     return container;
 }
 
+// The hero figures (hedef/öngörülen bitiş, sapma, ilerleme) come from the
+// portfolio endpoint, which serves a ~15-minute server-side snapshot by
+// default. Those figures get read out loud in a meeting, so the deck always
+// asks for the recompute instead — the few extra seconds behind the spinner
+// is exactly what opening Sunum Modu is for.
 async function fetchOverview() {
     try {
-        overviewData = await getProductionPlanOverview(overviewStatus);
+        overviewData = await getProductionPlanOverview(overviewStatus, { refresh: true });
+        overviewFetchedAt = Date.now();
     } catch (error) {
         console.error('Overview load failed:', error);
         overviewData = null;
         showNotification('Proje portföyü yüklenemedi', 'error');
     }
+}
+
+// Server-side computation time of the portfolio on screen, as "Veri 14:32" —
+// the presenter must be able to say how old the numbers are without taking
+// the deck's word for it. Falls back to our own fetch time if the payload
+// carries no stamp.
+function overviewStampText() {
+    const raw = overviewData && overviewData.generated_at;
+    const at = raw ? new Date(raw) : (overviewFetchedAt ? new Date(overviewFetchedAt) : null);
+    if (!at || isNaN(at.getTime())) return '';
+    return `Veri ${at.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 // Current portfolio items in slide order.
@@ -192,30 +244,35 @@ async function enterMeeting(jobNo) {
     // (fullscreen with no controls would be an exit trap).
     bindMeetingControls();
     const container = ensureMeetingContainer();
-    if (!overviewData) {
-        // The overview is a multi-second fetch; the deck opens on a spinner
-        // rather than leaving the presenter staring at the job-order table.
+    // Every entry into the deck re-pulls the portfolio: the previous one may
+    // be from before lunch. Only a return within the freshness window reuses
+    // it, so Back/Forward through the slides cannot cost a recompute per
+    // keypress. The fetch is multi-second, so the deck opens on a spinner
+    // rather than leaving the presenter staring at the job-order table.
+    if (!overviewData || Date.now() - overviewFetchedAt > MEETING_MAX_AGE_MS) {
         if (container) container.innerHTML = meetingLoadingHtml();
         await fetchOverview();
         if (currentMode !== 'meeting') return;
     }
     meetingItems = sortedPortfolioItems();
     if (!meetingItems.length) {
-        if (container) {
-            container.innerHTML = `
-                <div class="pp-slide-empty">
-                    <i class="fas fa-folder-open fa-2x mb-3"></i>
-                    <p>Sunulacak proje bulunamadı.</p>
-                    <button type="button" class="btn btn-outline-secondary" data-action="exit">
-                        <i class="fas fa-xmark me-1"></i>Çık
-                    </button>
-                </div>`;
-        }
+        if (container) container.innerHTML = meetingEmptyHtml();
         return;
     }
     const index = jobNo ? meetingItems.findIndex(i => i.job_no === jobNo) : 0;
     meetingIndex = index >= 0 ? index : 0;
     renderMeetingSlide();
+}
+
+function meetingEmptyHtml() {
+    return `
+        <div class="pp-slide-empty">
+            <i class="fas fa-folder-open fa-2x mb-3"></i>
+            <p>Sunulacak proje bulunamadı.</p>
+            <button type="button" class="btn btn-outline-secondary" data-action="exit">
+                <i class="fas fa-xmark me-1"></i>Çık
+            </button>
+        </div>`;
 }
 
 function meetingLoadingHtml() {
@@ -256,6 +313,7 @@ function bindMeetingControls() {
                 const action = control.dataset.action;
                 if (action === 'prev') meetingStep(-1);
                 else if (action === 'next') meetingStep(1);
+                else if (action === 'refresh') refreshCurrentSlide(control);
                 else if (action === 'exit') exitMeeting();
                 return;
             }
@@ -283,6 +341,12 @@ function bindMeetingControls() {
         if (e.key === 'ArrowLeft') { e.preventDefault(); meetingStep(-1); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); meetingStep(1); }
         else if (e.key === 'Escape') { e.preventDefault(); exitMeeting(); }
+        // Someone fixes the data while the slide is up; R brings it back
+        // without leaving the deck.
+        else if (e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+            refreshCurrentSlide(document.querySelector('.pp-strip [data-action="refresh"]'));
+        }
     });
 
     // The page cannot scroll in fullscreen, so a decisive wheel gesture turns
@@ -515,11 +579,12 @@ async function openSectionModal(kind) {
         MODAL_LOADING_HTML, { jobNo: item.job_no, kind });
 
     const cacheKey = `${item.job_no}:${kind}`;
-    let detail = meetingSectionCache.get(cacheKey);
+    let detail = cacheIsStale(cacheKey) ? null : meetingSectionCache.get(cacheKey);
     if (!detail) {
         try {
             detail = await getMeetingBriefSection(item.job_no, kind);
             meetingSectionCache.set(cacheKey, detail);
+            cacheStamp(cacheKey);
         } catch (error) {
             console.error(`Section ${kind} failed for ${item.job_no}:`, error);
             if (meetingModalOpen && meetingModalContext
@@ -558,11 +623,12 @@ async function openPlanModal(item) {
         MODAL_LOADING_HTML, { jobNo: item.job_no, kind: 'plan' });
     const stillCurrent = () => meetingModalOpen && meetingModalContext
         && meetingModalContext.jobNo === item.job_no && meetingModalContext.kind === 'plan';
-    let planData = meetingPlanCache.get(item.job_no);
+    let planData = cacheIsStale(`plan:${item.job_no}`) ? null : meetingPlanCache.get(item.job_no);
     if (!planData) {
         try {
             planData = await getJobOrderProductionPlan(item.job_no);
             meetingPlanCache.set(item.job_no, planData);
+            cacheStamp(`plan:${item.job_no}`);
         } catch (error) {
             console.error(`Plan fetch failed for ${item.job_no}:`, error);
             if (stillCurrent()) {
@@ -1259,6 +1325,7 @@ async function onCriticalToggle(box) {
                 }
             }
             meetingPlanCache.delete(jobNo);
+            meetingCachedAt.delete(`plan:${jobNo}`);
         }
         showNotification(makeCritical
             ? 'Kalem kritik olarak işaretlendi — imalat öngörüsü bu teslimatı bekleyecek'
@@ -1331,6 +1398,51 @@ function jumpToJob(query) {
     renderMeetingSlide();
 }
 
+// "Yenile" (and the R key): everything on screen comes back from the server —
+// the portfolio is recomputed and this slide's brief, section details and plan
+// are dropped. The slide stays on its job order across the refetch, because a
+// recomputed portfolio can reorder rows or lose one (a project completed
+// between two passes) under the index we were sitting on.
+async function refreshCurrentSlide(btn) {
+    const item = meetingItems[meetingIndex];
+    if (!item || meetingRefreshing) return;
+    const jobNo = item.job_no;
+    meetingRefreshing = true;
+    const original = btn ? btn.innerHTML : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    }
+    try {
+        dropJobCaches(jobNo);
+        await fetchOverview();
+        if (currentMode !== 'meeting') return;
+        if (overviewData) {
+            meetingItems = sortedPortfolioItems();
+            const found = meetingItems.findIndex(i => i.job_no === jobNo);
+            meetingIndex = found >= 0
+                ? found
+                : Math.max(0, Math.min(meetingIndex, meetingItems.length - 1));
+        }
+        if (!meetingItems.length) {
+            const container = document.getElementById('pp-meeting-container');
+            if (container) container.innerHTML = meetingEmptyHtml();
+            return;
+        }
+        // The brief refetch is the settle timer's job (renderMeetingSlide
+        // schedules it); dropJobCaches above guarantees it goes to the server.
+        renderMeetingSlide();
+    } finally {
+        meetingRefreshing = false;
+        // The strip this button lives in was replaced by the render above, so
+        // restoring it only matters on the paths that did not re-render.
+        if (btn && original !== null && btn.isConnected) {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+}
+
 function meetingStep(delta) {
     const target = meetingIndex + delta;
     if (target < 0 || target >= meetingItems.length) return;
@@ -1365,7 +1477,10 @@ function renderMeetingSlide() {
     meetingFetchTimer = setTimeout(() => {
         const current = meetingItems[meetingIndex];
         if (currentMode !== 'meeting' || !current) return;
-        if (!meetingBriefCache.has(current.job_no)) {
+        // Stale-while-revalidate: a cached brief has already painted above,
+        // but one older than the freshness window is refetched and swapped in
+        // place — a meeting must not read out numbers from earlier in itself.
+        if (cacheIsStale(`brief:${current.job_no}`)) {
             ensureBrief(current.job_no).then((loaded) => {
                 const still = meetingItems[meetingIndex];
                 if (currentMode === 'meeting' && loaded && still && still.job_no === current.job_no) {
@@ -1405,6 +1520,12 @@ function meetingStripHtml(item) {
                 <input type="text" id="pp-meeting-search" class="pp-strip-search"
                        placeholder="İş no + Enter" autocomplete="off" spellcheck="false">
                 <span class="pp-strip-hint d-none d-lg-inline">← → gezin · Esc çık</span>
+                <span class="pp-strip-stamp d-none d-xl-inline"
+                      title="Portföy verisinin sunucuda hesaplandığı an">${escapeHtml(overviewStampText())}</span>
+                <button type="button" class="btn btn-sm pp-strip-btn" data-action="refresh"
+                        title="Bu slaydın verisini sunucudan yeniden çek (R)">
+                    <i class="fas fa-rotate me-1"></i>Yenile
+                </button>
                 <button type="button" class="btn btn-sm pp-strip-btn" data-modal="plan">
                     <i class="fas fa-table-list me-1"></i>Planı Aç
                 </button>
@@ -1584,7 +1705,8 @@ function ensureBrief(jobNo) {
     // neighbour prefetching — the caller must get THAT promise (resolving when
     // the data arrives), not an immediately-resolved void. Returning early
     // here was exactly the "response arrived but the page never rendered" bug.
-    if (meetingBriefCache.has(jobNo)) {
+    const key = `brief:${jobNo}`;
+    if (meetingBriefCache.has(jobNo) && !cacheIsStale(key)) {
         return Promise.resolve(meetingBriefCache.get(jobNo));
     }
     if (meetingBriefPromises.has(jobNo)) {
@@ -1593,10 +1715,15 @@ function ensureBrief(jobNo) {
     const promise = getJobOrderMeetingBrief(jobNo)
         .then((brief) => {
             meetingBriefCache.set(jobNo, brief);
+            cacheStamp(key);
             return brief;
         })
         .catch((error) => {
             console.error(`Meeting brief failed for ${jobNo}:`, error);
+            // A failed REVALIDATION must not wipe the slide it was refreshing:
+            // last-known numbers on screen beat an error panel. Only a slide
+            // with nothing to show gets one.
+            if (meetingBriefCache.has(jobNo)) return meetingBriefCache.get(jobNo);
             const item = meetingItems[meetingIndex];
             if (currentMode === 'meeting' && item && item.job_no === jobNo) {
                 const panels = document.getElementById('pp-meeting-panels');
@@ -1989,11 +2116,15 @@ export function summarizePlanTasks(tasks) {
 const planFetchPromises = new Map();
 
 export function getCachedProductionPlan(jobNo) {
-    if (meetingPlanCache.has(jobNo)) return Promise.resolve(meetingPlanCache.get(jobNo));
+    const key = `plan:${jobNo}`;
+    if (meetingPlanCache.has(jobNo) && !cacheIsStale(key)) {
+        return Promise.resolve(meetingPlanCache.get(jobNo));
+    }
     if (planFetchPromises.has(jobNo)) return planFetchPromises.get(jobNo);
     const promise = getJobOrderProductionPlan(jobNo)
         .then((plan) => {
             meetingPlanCache.set(jobNo, plan);
+            cacheStamp(key);
             return plan;
         })
         .finally(() => planFetchPromises.delete(jobNo));
