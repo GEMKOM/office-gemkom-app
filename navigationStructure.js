@@ -646,6 +646,11 @@ export const NAVIGATION_STRUCTURE = {
                 icon: 'fas fa-user-shield',
                 children: {}
             },
+            '/it/job-completion': {
+                label: 'İş Emri Tamamlama',
+                icon: 'fas fa-check-double',
+                children: {}
+            },
             '/it/notifications': {
                 label: 'Bildirim Yönlendirmeleri',
                 icon: 'fas fa-bell',

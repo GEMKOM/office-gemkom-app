@@ -430,10 +430,67 @@
     align-items: center;
 }
 
+/* Custom radio styling — the generic .field-input rule (padding, radius,
+   white background) hides the native/Bootstrap checked dot, so draw our own
+   like .custom-checkbox does. */
 .edit-modal-container .radio-field .field-input {
-    width: auto;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 2px solid #ced4da;
+    border-radius: 50%;
+    background-color: #fff;
+    background-image: none;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
     margin-right: 0.5rem;
     margin-bottom: 0;
+    transition: all 0.2s ease;
+}
+
+.edit-modal-container .radio-field .field-input:checked {
+    border-color: #8B0000;
+}
+
+.edit-modal-container .radio-field .field-input:checked::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #8B0000;
+}
+
+.edit-modal-container .radio-field .field-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.25rem rgba(139, 0, 0, 0.25);
+}
+
+.edit-modal-container .radio-field .field-label {
+    cursor: pointer;
+}
+
+/* Validation borders don't apply to radios — the checked dot carries the state */
+.edit-modal-container .field-group.has-success .radio-field .field-input,
+.edit-modal-container .field-group.has-error .radio-field .field-input {
+    border-color: #ced4da;
+}
+
+.edit-modal-container .field-group.has-success .radio-field .field-input:checked,
+.edit-modal-container .field-group.has-error .radio-field .field-input:checked {
+    border-color: #8B0000;
+}
+
+.edit-modal-container .field-group.has-success .radio-field .field-input:focus,
+.edit-modal-container .field-group.has-error .radio-field .field-input:focus {
+    box-shadow: 0 0 0 0.25rem rgba(139, 0, 0, 0.25);
 }
 
 .edit-modal-container .radio-field .field-label {

@@ -50,6 +50,10 @@
                         <button class="btn btn-sm btn-success" id="save-btn" disabled>
                             <i class="fas fa-save me-1"></i>Kaydet
                         </button>
+                        <button class="btn btn-sm btn-outline-secondary" id="pdf-btn"
+                                title="Görünen tabloyu ve zaman çizelgesini PDF olarak indir">
+                            <i class="fas fa-file-pdf me-1"></i>PDF
+                        </button>
                         <span class="btn-group pg-zoom" id="zoom-buttons" role="group"
                               aria-label="Zaman ölçeği"
                               title="Zaman ölçeği — zaman çizelgesi üzerinde Ctrl + fare tekerleği ile de değiştirebilirsiniz">
@@ -58,6 +62,30 @@
                             <button class="btn btn-outline-secondary" data-zoom="month">Ay</button>
                         </span>
                     </div>
+                </div>
+                <!-- Client-side view filters. Everything the board needs is
+                     already in memory, so they narrow the sheet on the spot
+                     instead of round-tripping. -->
+                <div class="planning-filters">
+                    <span class="pf-title"><i class="fas fa-filter"></i>Filtre</span>
+                    <div class="pf-field">
+                        <span class="pf-label">Ara</span>
+                        <input type="text" id="filter-text" class="pf-search"
+                               placeholder="İş emri, başlık, müşteri…" autocomplete="off">
+                    </div>
+                    <div class="pf-field">
+                        <span class="pf-label">İş Emri</span>
+                        <div id="filter-job"></div>
+                    </div>
+                    <div class="pf-field">
+                        <span class="pf-label">Sorumlu</span>
+                        <div id="filter-assignee"></div>
+                    </div>
+                    <button type="button" class="pf-clear d-none" id="filter-clear"
+                            title="Filtreleri temizle">
+                        <i class="fas fa-times"></i>Temizle
+                    </button>
+                    <span class="pf-summary" id="filter-summary"></span>
                 </div>
                 <div class="card-body p-0">
                     <div id="planning-grid" class="pg"></div>

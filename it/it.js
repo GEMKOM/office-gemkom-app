@@ -88,6 +88,13 @@ async function handleITPage() {
                 link: '/it/groups'
             },
             {
+                title: 'İş Emri Tamamlama',
+                description: 'Seçilen iş emirlerini ve tüm departman görevlerini kontrolleri atlayarak toplu tamamlayın.',
+                icon: 'fas fa-check-double',
+                iconColor: 'danger',
+                link: '/it/job-completion'
+            },
+            {
                 title: 'Neo Kullanımı',
                 description: 'Neo asistanın kullanım analizleri: kim neyi sordu, konu dağılımı, maliyet ve soru kayıtları.',
                 icon: 'fas fa-robot',

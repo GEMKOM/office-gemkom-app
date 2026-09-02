@@ -596,6 +596,14 @@ export class ModernDropdown {
                 item: item
             }
         }));
+
+        // A multi-select tick leaves the menu open while the select handler
+        // above may have re-rendered the page and shifted the trigger; the
+        // fixed-position portal only follows window scroll/resize on its own,
+        // so re-anchor it to wherever the trigger ended up.
+        if (this.options.multiple && this.isOpen && this.portalWrapper) {
+            this.updatePortalPosition();
+        }
     }
     
     // A label may be markup (see `searchText`), and the collapsed field is
@@ -642,8 +650,10 @@ export class ModernDropdown {
         if (this.selectedValues.length === 0) {
             selectedTextElement.textContent = this.options.placeholder;
         } else if (this.selectedValues.length === 1) {
-            const item = this.items.find(i => i.value === this.selectedValues[0]);
-            selectedTextElement.textContent = (item && this.plainLabel(item.value))
+            // Resolve against ALL items, not the search-filtered list — the
+            // active search may hide the one selected item, and falling back
+            // to the placeholder would claim nothing is selected.
+            selectedTextElement.textContent = this.plainLabel(this.selectedValues[0])
                 || this.options.placeholder;
         } else {
             selectedTextElement.textContent = `${this.selectedValues.length} seçenek`;
@@ -689,7 +699,9 @@ export class ModernDropdown {
     }
 
     filterItems(searchTerm) {
-        const term = (searchTerm || '').toLowerCase().trim();
+        // Turkish-aware lowering: plain toLowerCase maps 'İ' to 'i' plus a
+        // combining dot, so a typed 'i' never matched 'İMALAT'-style labels.
+        const term = (searchTerm || '').toLocaleLowerCase('tr').trim();
         const source = Array.isArray(this.allItems) ? this.allItems : [];
 
         if (!term) {
@@ -699,7 +711,8 @@ export class ModernDropdown {
                 // searchText lets a caller render a rich label without the
                 // markup polluting what the user is matching against.
                 const hay = String(
-                    it?.searchText ?? it?.text ?? it?.label ?? it?.value ?? '').toLowerCase();
+                    it?.searchText ?? it?.text ?? it?.label ?? it?.value ?? '')
+                    .toLocaleLowerCase('tr');
                 return hay.includes(term);
             });
         }
