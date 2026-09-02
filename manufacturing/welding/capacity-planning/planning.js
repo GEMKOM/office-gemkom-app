@@ -13,6 +13,7 @@ import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { PlanningGrid } from './grid.js';
+import { defaultStagesFrom } from './defaultStages.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
@@ -27,8 +28,6 @@ import { deptSchedulePatch } from './deptSchedulePatch.js';
 import { exportPlanningPdf } from './pdf.js';
 
 // ---- constants -----------------------------------------------------------
-
-const DEFAULT_STAGE_TITLES = ['Montaj', 'Kaynak ve Taşlama'];
 
 const STATUS_META = {
     pending:     { label: 'Başlamadı',     badge: 'status-grey' },
@@ -2472,25 +2471,14 @@ function onCellEdit(row, field, newValue) {
 function onCreateStages(blockRef) {
     const block = findBlock(blockRef);
     if (!block) return;
-    const seed = Number(block.subtask.progress || 0);
-    DEFAULT_STAGE_TITLES.forEach(title => {
-        if (block.stages.some(s => !s.deleted && s.title === title)) return;
-        block.stages.push({
-            cid: `new-${++newCounter}`,
-            id: null,
-            title,
-            is_default: true,
-            weight: 10,
-            status: seed > 0 ? 'in_progress' : 'pending',
-            progress: seed,
-            duration_wd: null,
-            start_date: null,
-            end_date: null,
-            note: '',
-            deleted: false,
-        });
-    });
-    block.createDefaultStages = true;
+    const existing = new Set(
+        block.stages.filter(s => !s.deleted).map(s => s.title));
+    defaultStagesFrom(block.subtask, () => `new-${++newCounter}`)
+        .filter(s => !existing.has(s.title))
+        .forEach(s => block.stages.push(s));
+    // Stages travel in the payload (same as a new block / custom stage).
+    // create_default_stages would ask the server to insert them again.
+    block.createDefaultStages = false;
     revealJob(block.job_no);   // show what was just created
     markBlockDirty(block.key);
     scheduleRefresh();
