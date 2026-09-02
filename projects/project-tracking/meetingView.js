@@ -12,6 +12,7 @@
  */
 import { showNotification } from '../../components/notification/notification.js';
 import { escapeHtml } from '../../utils/text.js';
+import { exportElementToPdf } from '../../utils/pdfExport.js';
 import {
     getJobOrderProductionPlan,
     getProductionPlanOverview,
@@ -27,7 +28,8 @@ import {
 // retired portfolio page, so the deck is the default view: active projects,
 // natural job-no order.
 let overviewData = null;                // last fetched overview payload
-const overviewStatus = 'active';        // status the cached overview was fetched with
+let overviewFetchedAt = 0;              // Date.now() of that fetch
+const overviewStatus = 'active';        // status the overview was fetched with
 const portfolioSort = 'job_no';         // 'job_no' | 'risk'
 
 // Meeting (Sunum Modu) state
@@ -48,8 +50,42 @@ const meetingBriefCache = new Map();    // job_no -> meeting brief payload
 const meetingBriefPromises = new Map(); // job_no -> in-flight fetch promise
 const meetingPlanCache = new Map();     // job_no -> production plan (hero modal)
 const meetingSectionCache = new Map();  // `${job_no}:${section}` -> detail payload
+
 let meetingModalOpen = false;
 let meetingModalContext = null;         // {jobNo, kind} of the open modal
+let meetingRefreshing = false;          // a manual "Yenile" is in flight
+
+// Nothing is PRESENTED from a cache older than this. The deck is read while
+// the numbers behind it are being edited — someone fixes a target date during
+// the meeting and the slide has to show it on the way back — so every cache
+// here is a paint-instantly buffer, not a source of truth: a stale entry still
+// renders (never a blank slide) and its refetch swaps in over it.
+const MEETING_MAX_AGE_MS = 60 * 1000;
+const meetingCachedAt = new Map();      // cache key -> Date.now() of the write
+
+function cacheStamp(key) {
+    meetingCachedAt.set(key, Date.now());
+}
+
+function cacheIsStale(key) {
+    const at = meetingCachedAt.get(key);
+    return at === undefined || Date.now() - at > MEETING_MAX_AGE_MS;
+}
+
+// Every cached payload for one job order — brief, section details, plan — so
+// the next read of each goes back to the server.
+function dropJobCaches(jobNo) {
+    meetingBriefCache.delete(jobNo);
+    meetingPlanCache.delete(jobNo);
+    meetingCachedAt.delete(`brief:${jobNo}`);
+    meetingCachedAt.delete(`plan:${jobNo}`);
+    [...meetingSectionCache.keys()]
+        .filter(key => key.startsWith(`${jobNo}:`))
+        .forEach((key) => {
+            meetingSectionCache.delete(key);
+            meetingCachedAt.delete(key);
+        });
+}
 
 // House badge component classes (components/badges/badges.css) — no yellow.
 const CLASSIFICATION_BADGES = {
@@ -155,14 +191,31 @@ function ensureMeetingContainer() {
     return container;
 }
 
+// The hero figures (hedef/öngörülen bitiş, sapma, ilerleme) come from the
+// portfolio endpoint, which serves a ~15-minute server-side snapshot by
+// default. Those figures get read out loud in a meeting, so the deck always
+// asks for the recompute instead — the few extra seconds behind the spinner
+// is exactly what opening Sunum Modu is for.
 async function fetchOverview() {
     try {
-        overviewData = await getProductionPlanOverview(overviewStatus);
+        overviewData = await getProductionPlanOverview(overviewStatus, { refresh: true });
+        overviewFetchedAt = Date.now();
     } catch (error) {
         console.error('Overview load failed:', error);
         overviewData = null;
         showNotification('Proje portföyü yüklenemedi', 'error');
     }
+}
+
+// Server-side computation time of the portfolio on screen, as "Veri 14:32" —
+// the presenter must be able to say how old the numbers are without taking
+// the deck's word for it. Falls back to our own fetch time if the payload
+// carries no stamp.
+function overviewStampText() {
+    const raw = overviewData && overviewData.generated_at;
+    const at = raw ? new Date(raw) : (overviewFetchedAt ? new Date(overviewFetchedAt) : null);
+    if (!at || isNaN(at.getTime())) return '';
+    return `Veri ${at.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
 // Current portfolio items in slide order.
@@ -191,30 +244,35 @@ async function enterMeeting(jobNo) {
     // (fullscreen with no controls would be an exit trap).
     bindMeetingControls();
     const container = ensureMeetingContainer();
-    if (!overviewData) {
-        // The overview is a multi-second fetch; the deck opens on a spinner
-        // rather than leaving the presenter staring at the job-order table.
+    // Every entry into the deck re-pulls the portfolio: the previous one may
+    // be from before lunch. Only a return within the freshness window reuses
+    // it, so Back/Forward through the slides cannot cost a recompute per
+    // keypress. The fetch is multi-second, so the deck opens on a spinner
+    // rather than leaving the presenter staring at the job-order table.
+    if (!overviewData || Date.now() - overviewFetchedAt > MEETING_MAX_AGE_MS) {
         if (container) container.innerHTML = meetingLoadingHtml();
         await fetchOverview();
         if (currentMode !== 'meeting') return;
     }
     meetingItems = sortedPortfolioItems();
     if (!meetingItems.length) {
-        if (container) {
-            container.innerHTML = `
-                <div class="pp-slide-empty">
-                    <i class="fas fa-folder-open fa-2x mb-3"></i>
-                    <p>Sunulacak proje bulunamadı.</p>
-                    <button type="button" class="btn btn-outline-secondary" data-action="exit">
-                        <i class="fas fa-xmark me-1"></i>Çık
-                    </button>
-                </div>`;
-        }
+        if (container) container.innerHTML = meetingEmptyHtml();
         return;
     }
     const index = jobNo ? meetingItems.findIndex(i => i.job_no === jobNo) : 0;
     meetingIndex = index >= 0 ? index : 0;
     renderMeetingSlide();
+}
+
+function meetingEmptyHtml() {
+    return `
+        <div class="pp-slide-empty">
+            <i class="fas fa-folder-open fa-2x mb-3"></i>
+            <p>Sunulacak proje bulunamadı.</p>
+            <button type="button" class="btn btn-outline-secondary" data-action="exit">
+                <i class="fas fa-xmark me-1"></i>Çık
+            </button>
+        </div>`;
 }
 
 function meetingLoadingHtml() {
@@ -255,6 +313,7 @@ function bindMeetingControls() {
                 const action = control.dataset.action;
                 if (action === 'prev') meetingStep(-1);
                 else if (action === 'next') meetingStep(1);
+                else if (action === 'refresh') refreshCurrentSlide(control);
                 else if (action === 'exit') exitMeeting();
                 return;
             }
@@ -282,6 +341,12 @@ function bindMeetingControls() {
         if (e.key === 'ArrowLeft') { e.preventDefault(); meetingStep(-1); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); meetingStep(1); }
         else if (e.key === 'Escape') { e.preventDefault(); exitMeeting(); }
+        // Someone fixes the data while the slide is up; R brings it back
+        // without leaving the deck.
+        else if (e.key === 'r' || e.key === 'R') {
+            e.preventDefault();
+            refreshCurrentSlide(document.querySelector('.pp-strip [data-action="refresh"]'));
+        }
     });
 
     // The page cannot scroll in fullscreen, so a decisive wheel gesture turns
@@ -367,13 +432,21 @@ function ensureMeetingModalHost() {
         <div class="pp-modal" role="dialog" aria-modal="true">
             <div class="pp-modal-head">
                 <span class="pp-modal-title" id="pp-modal-title"></span>
-                <button type="button" class="pp-modal-close" data-modal-close aria-label="Kapat">
-                    <i class="fas fa-xmark"></i>
-                </button>
+                <div class="pp-modal-actions">
+                    <button type="button" class="pp-modal-pdf" data-modal-pdf
+                            title="Detayın tamamını PDF olarak indir">
+                        <i class="fas fa-file-pdf"></i> PDF
+                    </button>
+                    <button type="button" class="pp-modal-close" data-modal-close aria-label="Kapat">
+                        <i class="fas fa-xmark"></i>
+                    </button>
+                </div>
             </div>
             <div class="pp-modal-body" id="pp-modal-body"></div>
         </div>`;
     host.addEventListener('click', (e) => {
+        const pdfBtn = e.target.closest('[data-modal-pdf]');
+        if (pdfBtn) { downloadModalPdf(pdfBtn); return; }
         if (e.target === host || e.target.closest('[data-modal-close]')) closeMeetingModal();
     });
     host.addEventListener('change', (e) => {
@@ -404,6 +477,63 @@ function closeMeetingModal() {
 
 const MODAL_LOADING_HTML =
     '<div class="pp-modal-loading"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</div>';
+
+// The open modal, downloaded as it looks on screen — same colours, badges and
+// sentences — but unclipped: the whole scroll length, not the visible window.
+// Plan Detayı is the wide one (seven columns and a paragraph per row), so it
+// goes to landscape; the narrower section modals read better upright.
+async function downloadModalPdf(btn) {
+    const modal = document.querySelector('#pp-meeting-modal .pp-modal');
+    const context = meetingModalContext;
+    if (!modal || !context) return;
+    if (modal.querySelector('.pp-modal-loading')) {
+        showNotification('Detay henüz yükleniyor, birazdan tekrar deneyin.', 'info');
+        return;
+    }
+
+    const plan = context.kind === 'plan';
+    const kindLabel = plan ? 'Plan Detayı'
+        : (context.kind === 'welding' ? 'Kaynak Detayı'
+            : (SECTION_MODAL_TITLES[context.kind] || 'Detay'));
+    const item = meetingItems[meetingIndex] || {};
+    const now = new Date();
+    const stamp = now.toLocaleDateString('tr-TR');
+    const fileStamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    const subtitle = [item.title, item.customer_name, `GEMKOM · ${stamp}`]
+        .filter(Boolean).join(' · ');
+
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> PDF';
+    try {
+        await exportElementToPdf(modal, {
+            fileName: `${context.jobNo} ${kindLabel} ${fileStamp}`,
+            orientation: plan ? 'landscape' : 'portrait',
+            captureWidth: plan ? 1400 : 1000,
+            captureClass: 'pp-pdf-capture',
+            stageClass: 'pp-pdf-stage',
+            footerText: context.jobNo,
+            prepare: (clone) => {
+                clone.querySelectorAll('[data-modal-pdf], [data-modal-close]')
+                    .forEach(el => el.remove());
+                // Who and when — the slide carries it on screen, the sheet
+                // has to say it itself.
+                const head = clone.querySelector('.pp-modal-head');
+                if (head && subtitle) {
+                    head.insertAdjacentHTML(
+                        'afterend', `<div class="pp-pdf-meta">${escapeHtml(subtitle)}</div>`);
+                }
+            }
+        });
+        showNotification('PDF indirildi.', 'success');
+    } catch (error) {
+        console.error('PDF export failed:', error);
+        showNotification('PDF oluşturulamadı.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
+    }
+}
 
 const SECTION_MODAL_TITLES = {
     machining: 'Talaşlı İmalat Detayı',
@@ -449,11 +579,12 @@ async function openSectionModal(kind) {
         MODAL_LOADING_HTML, { jobNo: item.job_no, kind });
 
     const cacheKey = `${item.job_no}:${kind}`;
-    let detail = meetingSectionCache.get(cacheKey);
+    let detail = cacheIsStale(cacheKey) ? null : meetingSectionCache.get(cacheKey);
     if (!detail) {
         try {
             detail = await getMeetingBriefSection(item.job_no, kind);
             meetingSectionCache.set(cacheKey, detail);
+            cacheStamp(cacheKey);
         } catch (error) {
             console.error(`Section ${kind} failed for ${item.job_no}:`, error);
             if (meetingModalOpen && meetingModalContext
@@ -492,11 +623,12 @@ async function openPlanModal(item) {
         MODAL_LOADING_HTML, { jobNo: item.job_no, kind: 'plan' });
     const stillCurrent = () => meetingModalOpen && meetingModalContext
         && meetingModalContext.jobNo === item.job_no && meetingModalContext.kind === 'plan';
-    let planData = meetingPlanCache.get(item.job_no);
+    let planData = cacheIsStale(`plan:${item.job_no}`) ? null : meetingPlanCache.get(item.job_no);
     if (!planData) {
         try {
             planData = await getJobOrderProductionPlan(item.job_no);
             meetingPlanCache.set(item.job_no, planData);
+            cacheStamp(`plan:${item.job_no}`);
         } catch (error) {
             console.error(`Plan fetch failed for ${item.job_no}:`, error);
             if (stillCurrent()) {
@@ -576,7 +708,23 @@ async function openPlanModal(item) {
                 const slower = rem > b.entered_remaining_wd;
                 compare = ` Girilen süre ${formatWd(b.entered_total_wd)} g (kalan ~${formatWd(b.entered_remaining_wd)} g) — tempo ${slower ? 'daha yavaş' : 'daha hızlı'}.`;
             }
-            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
+            // Hand-entered %: the window OPENS at the task's real start
+            // (window_start = the chain's start when the task's own log is
+            // its only start signal) and CLOSES at the last progress entry —
+            // the idle tail after it measures typing, not pace.
+            const windowText = b.window_start
+                ? ` (görev başlangıcı ${fmtShortDate(b.window_start)} → son giriş ${fmtShortDate(b.last_entry)})`
+                : (b.last_entry
+                    ? ` (son ilerleme girişi ${fmtShortDate(b.last_entry)})` : '');
+            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi${windowText}; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
+        }
+        // All progress arrived in ONE entry: a milestone, not a pace — no
+        // tempo to extrapolate, so the duration chain projects the remaining
+        // share as a calendar budget (293-03: "1 of 2 painted" entered as
+        // 50% must not read as half the paint time).
+        if ((s.projection_basis || {}).term === 'single_entry') {
+            const b = s.projection_basis;
+            return `%${Math.round(t.completion_percentage)} tek girişte kaydedildi (${fmtShortDate(b.last_entry)}) — tempo ölçülemiyor; ${formatWd(b.total_wd)} iş günlük süre başlangıçtan itibaren bütçe olarak sayılıyor (~${formatWd(rem)} iş günü kaldı).`;
         }
         // Slow progress never stretches an entered duration — it is a
         // calendar budget from the task's real start; overruns surface as
@@ -620,6 +768,13 @@ async function openPlanModal(item) {
                 ? ` (kesilen: %${Math.round(b.cut_ratio * 100)})` : '';
             return `Kesim bittikçe ilerleyebilir — kesim öngörüsü ${fmtShortDate(b.base_end)} + son parti için ~${formatWd(b.tail_wd)} iş günü${cutNote}.`;
         }
+        if (s.projection_kind === 'chained') {
+            // Remaining work of a chained task runs after its predecessor's
+            // projected close — the % records the overlap that already
+            // happened, but the overlap of what is LEFT is unproven.
+            const b = s.projection_basis || {};
+            return `Kalan iş (~${formatWd(b.work_wd)} iş günü), "${b.pred_label}" bittikten (${fmtShortDate(b.pred_end)}) sonra sayılıyor.`;
+        }
         if (s.projection_kind === 'floored') {
             const b = s.projection_basis || {};
             return `${b.label || 'Bitiş koşulu'} — öngörü: ${fmtShortDate(s.projected_end_date)}.`;
@@ -651,17 +806,40 @@ async function openPlanModal(item) {
     };
 
     // Started tasks are never held by their conditions, but open waits must
-    // stay visible ("Üretim başladı ama kritik borular Eylül'de gelecek") —
-    // append them to whatever the core sentence says. Gate rows already
+    // stay visible ("Üretim başladı ama kritik borular Eylül'de gelecek").
+    // The table renders them as separate note lines under the core sentence;
+    // prose consumers (driver box) get them joined. Gate rows already
     // narrate their binding condition.
-    const basisSentence = (t) => {
+    const basisNotes = (t) => {
         const s = t.schedule;
+        if (s.projection_kind === 'gate' || t.status === 'completed') return [];
+        return (s.projection_gates || [])
+            .filter(g => g.open && !g.binding)
+            .map(g => g.date ? `${g.label}: ${fmtShortDate(g.date)}` : g.label);
+    };
+    const basisSentence = (t) => {
         const core = coreBasisSentence(t);
-        if (s.projection_kind === 'gate' || t.status === 'completed') return core;
-        const open = (s.projection_gates || []).filter(g => g.open && !g.binding);
-        if (!open.length) return core;
-        const notes = open.map(g => g.date ? `${g.label}: ${fmtShortDate(g.date)}` : g.label);
-        return `${core} Açık koşul — ${notes.join(' · ')}.`;
+        const notes = basisNotes(t);
+        return notes.length ? `${core} Açık koşul — ${notes.join(' · ')}.` : core;
+    };
+
+    // One glyph per projection family so the column scans without reading:
+    // tempo is measured, budgets are entered, chains are ordering, floors are
+    // external constraints. The legend above the table names them.
+    const BASIS_ICONS = {
+        rate: ['fa-gauge-high', 'Ölçülen tempo'],
+        duration: ['fa-ruler-horizontal', 'Girilen süre (takvim bütçesi)'],
+        parent_duration: ['fa-ruler-horizontal', 'Üst görevden ağırlık payı (bütçe)'],
+        parent_window: ['fa-ruler-horizontal', 'Plan penceresinden ağırlık payı'],
+        start: ['fa-ruler-horizontal', 'Plan penceresi'],
+        subtasks: ['fa-sitemap', 'Alt görevlerin en geç biteni'],
+        push: ['fa-link', 'Sıra: önceki görev bitince başlar'],
+        chained: ['fa-link', 'Sıra: kalan iş öncekinden sonra sayılır'],
+        gate: ['fa-hourglass-half', 'Başlama koşulu bekliyor'],
+        floored: ['fa-anchor', 'Bitiş tabanı (teslimat / koşul)'],
+        coupled: ['fa-anchor', 'Kesim ilerledikçe ilerleyebilir'],
+        weight: ['fa-scale-balanced', 'Ağırlık payından tahmin'],
+        done: ['fa-check', 'Kapanış bekleniyor'],
     };
 
     const MINI_THEME = {
@@ -678,7 +856,7 @@ async function openPlanModal(item) {
             </div>`;
     };
 
-    const taskRow = (t, depth = 0) => {
+    const taskRow = (t, depth = 0, isParent = false) => {
         const s = t.schedule;
         const completed = t.status === 'completed';
         // "Plansız" on a finished row reads as a problem — a completed task
@@ -690,31 +868,50 @@ async function openPlanModal(item) {
         const variance = s.projected_variance_wd ?? s.end_variance_wd ?? s.overdue_wd;
         const varianceHtml = variance === null || variance === undefined ? ''
             : (variance > 0
-                ? ` <span class="pp-num-red">${formatWd(variance)} g geç</span>`
-                : (variance < 0 ? ` <span class="pp-num-green">${formatWd(variance)} g erken</span>` : ''));
+                ? ` <span class="pp-var-chip pp-var-late">${formatWd(variance)} g geç</span>`
+                : (variance < 0 ? ` <span class="pp-var-chip pp-var-early">${formatWd(variance)} g erken</span>` : ''));
         const materialWaitHtml = s.material_wait ? ` ${materialWaitBadgeHtml(s.material_wait)}` : '';
         const driver = s.drives_completion;
         const conflict = conflictSentence(t);
         const warnIcon = conflict
             ? `<i class="fas fa-triangle-exclamation pp-warn-flag" title="${escapeHtml(conflict)}"></i> ` : '';
+        const branch = depth > 0 ? '<span class="pp-tree-branch">└</span>' : '';
+        const icon = completed ? null : BASIS_ICONS[s.projection_kind];
+        const notes = basisNotes(t);
+        const basisCell = `
+            <div class="pp-basis">
+                ${icon ? `<i class="fas ${icon[0]} pp-basis-icon" title="${escapeHtml(icon[1])}"></i>` : ''}
+                <div class="pp-basis-text">
+                    <div class="pp-basis-core">${escapeHtml(coreBasisSentence(t))}</div>
+                    ${notes.map(n => `<div class="pp-basis-note"><i class="far fa-clock"></i>Açık koşul · ${escapeHtml(n)}</div>`).join('')}
+                    ${conflict ? `<div class="pp-td-conflict"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(conflict)}</div>` : ''}
+                </div>
+            </div>`;
+        const rowClasses = [
+            driver ? 'pp-modal-driver' : '',
+            (isParent || depth === 0) ? 'pp-row-parent' : '',
+        ].filter(Boolean).join(' ');
         return `
-            <tr${driver ? ' class="pp-modal-driver"' : ''}>
-                <td class="pp-td-main" style="padding-left: ${8 + depth * 16}px" title="${escapeHtml(label(t))}">${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${warnIcon}${escapeHtml(rowLabel(t))}</td>
+            <tr${rowClasses ? ` class="${rowClasses}"` : ''}>
+                <td class="pp-td-main" style="padding-left: ${8 + depth * 18}px" title="${escapeHtml(label(t))}">${branch}${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${warnIcon}${escapeHtml(rowLabel(t))}</td>
                 <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
                 <td>${progressCell(t)}</td>
                 <td class="pp-td-date">${startCell(t)}</td>
-                <td>${fmtShortDate(t.target_completion_date)}</td>
-                <td>${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
-                <td class="pp-td-basis">${escapeHtml(basisSentence(t))}${conflict
-                    ? `<div class="pp-td-conflict">${escapeHtml(conflict)}</div>` : ''}</td>
+                <td class="pp-td-date">${fmtShortDate(t.plan_end_date || t.target_completion_date)}</td>
+                <td class="pp-td-date pp-td-proj">${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
+                <td class="pp-td-basis">${basisCell}</td>
             </tr>`;
     };
 
-    // Başlangıç: the actual (evidence/entered) start when the task has one,
-    // otherwise the forecast's projected start with a ~ prefix — gates and
-    // pushes are start stories, and the column makes them visible.
+    // Başlangıç: the PLAN the welding board laid out (user 2026-09-01 —
+    // "display the entered start and end dates, the only difference is that
+    // we display the end date by the tempo there"), then the actual
+    // (evidence/entered) start, then the forecast's projected start with a ~
+    // prefix — gates and pushes are start stories, and the column makes them
+    // visible.
     function startCell(t) {
         const s = t.schedule;
+        if (t.plan_start_date) return fmtShortDate(t.plan_start_date);
         if (s.actual_start_date) return fmtShortDate(s.actual_start_date);
         if (s.projected_start_date) {
             return `<span title="Öngörülen başlangıç">~${fmtShortDate(s.projected_start_date)}</span>`;
@@ -749,7 +946,8 @@ async function openPlanModal(item) {
         const out = [];
         const walk = (key, depth) => {
             for (const t of byParent.get(key) || []) {
-                out.push({ task: t, depth });
+                const kids = byParent.get(t.id);
+                out.push({ task: t, depth, isParent: !!(kids && kids.length) });
                 walk(t.id, depth + 1);
             }
         };
@@ -782,7 +980,10 @@ async function openPlanModal(item) {
                     </td>
                 </tr>`);
         }
-        if (!collapse) rows.push(...asTree(tasks).map(({ task, depth }) => taskRow(task, depth)));
+        if (!collapse) {
+            rows.push(...asTree(tasks).map(
+                ({ task, depth, isParent }) => taskRow(task, depth, isParent)));
+        }
     }
 
     // The story, top-down: verdict sentence → the three dates → the task that
@@ -882,7 +1083,22 @@ async function openPlanModal(item) {
         ${driverBox}
         ${countsHtml}
         ${conflictBanner}
-        ${multiNode ? '<div class="pp-modal-note">Görevler alt iş emirlerine göre gruplu.</div>' : ''}
+        <div class="pp-plan-section">
+            Görev bazında öngörü
+            <span>— her satır kendi verisinden hesaplanır; bir ana görev, en geç
+            biten alt görevinde biter${multiNode ? '. Görevler alt iş emirlerine göre gruplu' : ''}.</span>
+        </div>
+        <div class="pp-plan-legend">
+            <span><i class="fas fa-flag pp-driver-flag"></i>bitişi belirleyen görev</span>
+            <span><i class="fas fa-gauge-high"></i>ölçülen tempo</span>
+            <span><i class="fas fa-ruler-horizontal"></i>süre bütçesi</span>
+            <span><i class="fas fa-sitemap"></i>en geç alt görev</span>
+            <span><i class="fas fa-link"></i>sıra bağımlılığı</span>
+            <span><i class="fas fa-anchor"></i>bitiş tabanı</span>
+            <span><i class="fas fa-scale-balanced"></i>ağırlık payı</span>
+            <span><i class="far fa-clock"></i>açık koşul</span>
+            <span class="pp-plan-legend-tilde">~ öngörülen değer</span>
+        </div>
         ${modalTableHtml(['Görev', 'Durum', 'İlerleme', 'Başlangıç', 'Hedef', 'Öngörülen Bitiş', 'Neden bu tarih?'], rows)}`;
 }
 
@@ -1046,6 +1262,36 @@ function procurementModalHtml(brief, detail) {
     const criticalStat = procurement.critical_waiting
         ? `<span>Kritik bekleyen <strong class="pp-num-red">${fmtInt(procurement.critical_waiting)}</strong></span>`
         : '';
+    // Depodan çekilen malzemeler — one row per pulled item line, so the
+    // slide answers "what left the warehouse, to whom, when" directly.
+    const pullRequests = (detail && detail.pull_requests) || [];
+    const pullRows = pullRequests.flatMap((p) => {
+        const kindBadge = p.kind === 'subcontractor'
+            ? '<span class="status-badge status-purple">Taşeron</span>'
+            : '<span class="status-badge status-blue">Ekip</span>';
+        const statusBadge = p.status === 'transferred'
+            ? `<span class="status-badge status-green">${escapeHtml(p.status_label || 'Teslim Edildi')}</span>`
+            : `<span class="status-badge status-orange">${escapeHtml(p.status_label || 'Beklemede')}</span>`;
+        const who = p.status === 'transferred' && p.confirmed_by
+            ? `${escapeHtml(p.confirmed_by)} · ${fmtShortDate(p.confirmed_at || p.requested_at)}`
+            : `${escapeHtml(p.requested_by || '—')} · ${fmtShortDate(p.requested_at)}`;
+        return (p.items || []).map((item) => `
+            <tr>
+                <td class="pp-td-muted"><strong>${escapeHtml(p.number)}</strong></td>
+                <td class="pp-td-main" title="${escapeHtml(p.destination || '')}">${escapeHtml(p.destination || '—')} ${kindBadge}</td>
+                <td class="pp-td-main" title="${escapeHtml(item.item_name || '')}">${escapeHtml(item.item_name || '—')}
+                    <span class="text-muted">${escapeHtml(item.item_code || '')}</span></td>
+                <td>${escapeHtml(item.job_no || '')}</td>
+                <td class="pp-td-num">${fmtInt(item.quantity)} ${escapeHtml(item.item_unit || '')}</td>
+                <td>${statusBadge}</td>
+                <td class="pp-td-date">${who}</td>
+            </tr>`);
+    });
+    const pulls = procurement.material_pulls || {};
+    const pullSection = pullRows.length ? `
+        <div class="pp-modal-section">Depodan Çekilen Malzemeler
+            <span class="text-muted">· ${fmtInt(pulls.transferred)} talep teslim edildi / ${fmtInt(pulls.pending)} bekliyor</span></div>
+        ${modalTableHtml(['Talep', 'Hedef', 'Malzeme', 'İş Emri', { label: 'Miktar', num: true }, 'Durum', 'Kim · Tarih'], pullRows)}` : '';
     const body = `
         <div class="pp-modal-stats">
             <span>Bekleyen <strong>${fmtInt(procurement.items_waiting)}</strong></span>
@@ -1054,7 +1300,8 @@ function procurementModalHtml(brief, detail) {
             <span>Teslim edildi <strong class="pp-num-green">${fmtInt(procurement.items_delivered)} / ${fmtInt(procurement.items_total)}</strong></span>
             ${criticalStat}
         </div>
-        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Teslim Tarihi', 'Kritik'], rows)}`;
+        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Teslim Tarihi', 'Kritik'], rows)}
+        ${pullSection}`;
     return { title: 'Satın Alma Detayı', body };
 }
 
@@ -1082,6 +1329,7 @@ async function onCriticalToggle(box) {
                 }
             }
             meetingPlanCache.delete(jobNo);
+            meetingCachedAt.delete(`plan:${jobNo}`);
         }
         showNotification(makeCritical
             ? 'Kalem kritik olarak işaretlendi — imalat öngörüsü bu teslimatı bekleyecek'
@@ -1154,6 +1402,51 @@ function jumpToJob(query) {
     renderMeetingSlide();
 }
 
+// "Yenile" (and the R key): everything on screen comes back from the server —
+// the portfolio is recomputed and this slide's brief, section details and plan
+// are dropped. The slide stays on its job order across the refetch, because a
+// recomputed portfolio can reorder rows or lose one (a project completed
+// between two passes) under the index we were sitting on.
+async function refreshCurrentSlide(btn) {
+    const item = meetingItems[meetingIndex];
+    if (!item || meetingRefreshing) return;
+    const jobNo = item.job_no;
+    meetingRefreshing = true;
+    const original = btn ? btn.innerHTML : null;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    }
+    try {
+        dropJobCaches(jobNo);
+        await fetchOverview();
+        if (currentMode !== 'meeting') return;
+        if (overviewData) {
+            meetingItems = sortedPortfolioItems();
+            const found = meetingItems.findIndex(i => i.job_no === jobNo);
+            meetingIndex = found >= 0
+                ? found
+                : Math.max(0, Math.min(meetingIndex, meetingItems.length - 1));
+        }
+        if (!meetingItems.length) {
+            const container = document.getElementById('pp-meeting-container');
+            if (container) container.innerHTML = meetingEmptyHtml();
+            return;
+        }
+        // The brief refetch is the settle timer's job (renderMeetingSlide
+        // schedules it); dropJobCaches above guarantees it goes to the server.
+        renderMeetingSlide();
+    } finally {
+        meetingRefreshing = false;
+        // The strip this button lives in was replaced by the render above, so
+        // restoring it only matters on the paths that did not re-render.
+        if (btn && original !== null && btn.isConnected) {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
+}
+
 function meetingStep(delta) {
     const target = meetingIndex + delta;
     if (target < 0 || target >= meetingItems.length) return;
@@ -1188,7 +1481,10 @@ function renderMeetingSlide() {
     meetingFetchTimer = setTimeout(() => {
         const current = meetingItems[meetingIndex];
         if (currentMode !== 'meeting' || !current) return;
-        if (!meetingBriefCache.has(current.job_no)) {
+        // Stale-while-revalidate: a cached brief has already painted above,
+        // but one older than the freshness window is refetched and swapped in
+        // place — a meeting must not read out numbers from earlier in itself.
+        if (cacheIsStale(`brief:${current.job_no}`)) {
             ensureBrief(current.job_no).then((loaded) => {
                 const still = meetingItems[meetingIndex];
                 if (currentMode === 'meeting' && loaded && still && still.job_no === current.job_no) {
@@ -1228,6 +1524,12 @@ function meetingStripHtml(item) {
                 <input type="text" id="pp-meeting-search" class="pp-strip-search"
                        placeholder="İş no + Enter" autocomplete="off" spellcheck="false">
                 <span class="pp-strip-hint d-none d-lg-inline">← → gezin · Esc çık</span>
+                <span class="pp-strip-stamp d-none d-xl-inline"
+                      title="Portföy verisinin sunucuda hesaplandığı an">${escapeHtml(overviewStampText())}</span>
+                <button type="button" class="btn btn-sm pp-strip-btn" data-action="refresh"
+                        title="Bu slaydın verisini sunucudan yeniden çek (R)">
+                    <i class="fas fa-rotate me-1"></i>Yenile
+                </button>
                 <button type="button" class="btn btn-sm pp-strip-btn" data-modal="plan">
                     <i class="fas fa-table-list me-1"></i>Planı Aç
                 </button>
@@ -1407,7 +1709,8 @@ function ensureBrief(jobNo) {
     // neighbour prefetching — the caller must get THAT promise (resolving when
     // the data arrives), not an immediately-resolved void. Returning early
     // here was exactly the "response arrived but the page never rendered" bug.
-    if (meetingBriefCache.has(jobNo)) {
+    const key = `brief:${jobNo}`;
+    if (meetingBriefCache.has(jobNo) && !cacheIsStale(key)) {
         return Promise.resolve(meetingBriefCache.get(jobNo));
     }
     if (meetingBriefPromises.has(jobNo)) {
@@ -1416,10 +1719,15 @@ function ensureBrief(jobNo) {
     const promise = getJobOrderMeetingBrief(jobNo)
         .then((brief) => {
             meetingBriefCache.set(jobNo, brief);
+            cacheStamp(key);
             return brief;
         })
         .catch((error) => {
             console.error(`Meeting brief failed for ${jobNo}:`, error);
+            // A failed REVALIDATION must not wipe the slide it was refreshing:
+            // last-known numbers on screen beat an error panel. Only a slide
+            // with nothing to show gets one.
+            if (meetingBriefCache.has(jobNo)) return meetingBriefCache.get(jobNo);
             const item = meetingItems[meetingIndex];
             if (currentMode === 'meeting' && item && item.job_no === jobNo) {
                 const panels = document.getElementById('pp-meeting-panels');
@@ -1592,8 +1900,19 @@ function procurementPanelHtml(procurement) {
         <div class="pp-panel-sub">Talebe dönüşmedi: <strong>${fmtInt(procurement.not_yet_requested)}</strong></div>
         <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
         <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong> / ${fmtInt(total)} kalem</div>
+        ${pullsLine(procurement.material_pulls)}
         ${procurement.critical_waiting ? `<div class="pp-panel-sub"><span class="pp-num-red">Kritik bekleyen: <strong>${fmtInt(procurement.critical_waiting)}</strong> — imalatı tutuyor</span></div>` : ''}`;
     return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-area-procurement', 'procurement');
+}
+
+// Warehouse pull requests — material handed out of the warehouse to a
+// subcontractor or internal team. Absent on cached/older briefs.
+function pullsLine(pulls) {
+    if (!pulls || !(pulls.items_pulled > 0)) return '';
+    const pendingPart = pulls.pending > 0
+        ? ` · <span class="pp-num-orange"><strong>${fmtInt(pulls.pending)}</strong> talep bekliyor</span>`
+        : '';
+    return `<div class="pp-panel-sub"><i class="fas fa-dolly me-1"></i>Depodan çekilen: <strong>${fmtInt(pulls.items_pulled)}</strong> kalem${pendingPart}</div>`;
 }
 
 function cuttingPanelHtml(cutting) {
@@ -1801,11 +2120,15 @@ export function summarizePlanTasks(tasks) {
 const planFetchPromises = new Map();
 
 export function getCachedProductionPlan(jobNo) {
-    if (meetingPlanCache.has(jobNo)) return Promise.resolve(meetingPlanCache.get(jobNo));
+    const key = `plan:${jobNo}`;
+    if (meetingPlanCache.has(jobNo) && !cacheIsStale(key)) {
+        return Promise.resolve(meetingPlanCache.get(jobNo));
+    }
     if (planFetchPromises.has(jobNo)) return planFetchPromises.get(jobNo);
     const promise = getJobOrderProductionPlan(jobNo)
         .then((plan) => {
             meetingPlanCache.set(jobNo, plan);
+            cacheStamp(key);
             return plan;
         })
         .finally(() => planFetchPromises.delete(jobNo));

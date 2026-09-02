@@ -376,6 +376,15 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     margin-right: 6px;
 }
 
+/* Age of the numbers on the slide — quiet, but always on screen. */
+.pp-strip-stamp {
+    color: #9aa3b2;
+    font-size: 0.74rem;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.04em;
+    margin-right: 2px;
+}
+
 .pp-strip-btn {
     border: 1px solid #d3d9e1;
     background: #ffffff;
@@ -1224,6 +1233,13 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     font-weight: 600;
 }
 
+.pp-modal-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+}
+
 .pp-modal-close {
     border: 1px solid #d3d9e1;
     background: #ffffff;
@@ -1237,6 +1253,40 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
 .pp-modal-close:hover {
     background: #f1f4f8;
     color: #1f2530;
+}
+
+.pp-modal-pdf {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #d3d9e1;
+    border-radius: 8px;
+    background: #ffffff;
+    color: #3a4150;
+    font-size: 0.82rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.pp-modal-pdf:hover:not(:disabled) {
+    background: #f1f4f8;
+    color: #1f2530;
+}
+
+.pp-modal-pdf:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.pp-modal-pdf i {
+    color: #c0392b;
+}
+
+.pp-modal-pdf:disabled i {
+    color: inherit;
 }
 
 .pp-modal-body {
@@ -1361,6 +1411,148 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
 
 .pp-modal-table tr:last-child td {
     border-bottom: none;
+}
+
+/* --------------------------------------------------------------------------
+   Plan Detayı v2 (2026-08-28): structured basis column, tree affordance,
+   legend, variance chips — the table reads as an explained schedule, not a
+   log dump.
+   -------------------------------------------------------------------------- */
+
+.pp-plan-section {
+    margin: 14px 0 4px;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #1f2530;
+}
+
+.pp-plan-section span {
+    font-weight: 400;
+    font-size: 0.84rem;
+    color: #8a919c;
+}
+
+.pp-plan-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+    margin: 6px 0 10px;
+    font-size: 0.78rem;
+    color: #8a919c;
+}
+
+.pp-plan-legend i {
+    margin-right: 5px;
+    color: #98a1ad;
+    width: 14px;
+    text-align: center;
+}
+
+.pp-plan-legend .pp-driver-flag {
+    color: #7c3aed;
+}
+
+.pp-plan-legend-tilde {
+    font-variant-numeric: tabular-nums;
+}
+
+/* The explanation cell: kind glyph + core sentence, with open conditions and
+   conflicts as their OWN small lines instead of one run-on paragraph. */
+.pp-modal-table .pp-td-basis {
+    max-width: 460px;
+}
+
+.pp-basis {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+
+.pp-basis-icon {
+    flex: none;
+    width: 15px;
+    margin-top: 3px;
+    text-align: center;
+    color: #98a1ad;
+}
+
+.pp-basis-text {
+    min-width: 0;
+}
+
+.pp-basis-core {
+    line-height: 1.4;
+}
+
+.pp-basis-note {
+    margin-top: 2px;
+    font-size: 0.82rem;
+    color: #8a919c;
+    line-height: 1.35;
+}
+
+.pp-basis-note i {
+    margin-right: 5px;
+}
+
+.pp-td-conflict i {
+    margin-right: 4px;
+}
+
+/* Tree affordance: parents carry the weight, children hang off a branch */
+.pp-row-parent .pp-td-main {
+    font-weight: 600;
+    color: #1f2530;
+}
+
+.pp-tree-branch {
+    color: #b9c2cd;
+    margin-right: 6px;
+}
+
+/* Sapma as a chip so the date column scans */
+.pp-var-chip {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    white-space: nowrap;
+    vertical-align: 1px;
+}
+
+.pp-var-late {
+    background: #fdeaea;
+    color: #b91c1c;
+}
+
+.pp-var-early {
+    background: #e7f6ef;
+    color: #047857;
+}
+
+/* The answer column is the point of the table — let it lead the eye */
+.pp-modal-table .pp-td-proj {
+    font-weight: 600;
+    color: #1f2530;
+}
+
+.pp-modal-table tbody tr:hover td {
+    background: #f8fafc;
+}
+
+.pp-modal-table .pp-modal-group:hover td {
+    background: #f5f7fa;
+}
+
+/* Header stays put while the long table scrolls under it */
+.pp-modal-table thead th {
+    position: sticky;
+    top: -1px;
+    background: #ffffff;
+    z-index: 2;
+    box-shadow: 0 1px 0 #e2e6ec;
 }
 
 /* Job-order group headers inside the plan modal (subtree jobs) */
@@ -1798,3 +1990,61 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     }
 }
 
+
+
+/* --------------------------------------------------------------------------
+   PDF export — the modal cloned off-screen, unclipped, and captured
+   -------------------------------------------------------------------------- */
+
+/* Off-screen but laid out: html2canvas paints the element subtree and
+   translates by its own offset, so a negative left is invisible to the user
+   and harmless to the capture. display:none would give an empty canvas. */
+.pp-pdf-stage {
+    pointer-events: none;
+}
+
+/* On screen the modal is a flex column with a scrolling body clipped to the
+   viewport; on paper there is no viewport, so both give way and the whole
+   length renders in one pass. */
+.pp-pdf-capture {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    max-height: none !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    animation: none !important;
+}
+
+.pp-pdf-capture .pp-modal-body {
+    overflow: visible !important;
+    max-height: none !important;
+}
+
+/* Ellipsis is a screen affordance backed by a hover tooltip. Paper has no
+   hover, so every task label, group header and "neden bu tarih?" sentence
+   wraps out in full instead of being cut at the column edge. */
+.pp-pdf-capture .pp-modal-table .pp-td-main,
+.pp-pdf-capture .pp-modal-table .pp-td-muted,
+.pp-pdf-capture .pp-modal-table .pp-td-basis,
+.pp-pdf-capture .pp-modal-table .pp-modal-group td {
+    white-space: normal !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    max-width: none !important;
+}
+
+/* html2canvas does not render box-shadow, and the driver row is marked with
+   an inset one — the same 3px bar, drawn as a border, survives the capture. */
+.pp-pdf-capture .pp-modal-table .pp-modal-driver td:first-child {
+    box-shadow: none !important;
+    border-left: 3px solid #7c3aed;
+}
+
+.pp-pdf-meta {
+    padding: 10px 20px 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #8a919c;
+}

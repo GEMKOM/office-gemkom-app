@@ -115,6 +115,148 @@
 
 
 
+/* ---- filter strip -------------------------------------------------------
+   A thin band between the tab strip and the grid. Deliberately not the shared
+   FiltersComponent card: these filter what is already in memory, so there is
+   no Apply button to justify a card's worth of vertical space above a sheet
+   that is already tall. */
+.planning-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 14px;
+    padding: 8px 16px;
+    background: #fafafa;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.planning-filters .pf-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .76rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #9ca3af;
+}
+
+.planning-filters .pf-title .fas { font-size: .7rem; }
+
+.planning-filters .pf-field {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+}
+
+.planning-filters .pf-label {
+    font-size: .78rem;
+    font-weight: 500;
+    color: #6b7280;
+    white-space: nowrap;
+}
+
+/* Free-text search over job no + title + customer — same compact height as
+   the dropdowns beside it. */
+.planning-filters .pf-search {
+    width: 200px;
+    height: 34px;
+    padding: 0 10px;
+    font-size: .82rem;
+    border: 1px solid #d8dee6;
+    border-radius: 8px;
+    background: #fff;
+    color: #1f2530;
+}
+
+.planning-filters .pf-search:focus {
+    outline: none;
+    border-color: #8bb4e8;
+    box-shadow: 0 0 0 3px rgba(13, 110, 253, .12);
+}
+
+/* ModernDropdown hard-sets height: 46px on both the shell and the collapsed
+   field, so a compact variant has to override height, not just min-height.
+   Scoped by the strip because the component replaces the container's own
+   class on init. */
+/* Width goes on the container: the component writes width:100% as an INLINE
+   style on .modern-dropdown, which no stylesheet rule can outrank. */
+.planning-filters .modern-dropdown-container {
+    height: 30px;
+    width: 240px;
+}
+
+.planning-filters #filter-assignee.modern-dropdown-container { width: 200px; }
+
+.planning-filters .modern-dropdown {
+    height: 30px;
+    min-height: 30px;
+}
+
+.planning-filters .modern-dropdown .dropdown-selected {
+    height: 30px;
+    min-height: 30px;
+    padding: 0 .55rem;
+    font-size: .8rem;
+    border-width: 1px;
+    border-radius: 6px;
+    border-color: #e5e7eb;
+    box-shadow: none;
+}
+
+/* Long job titles and full names must ellipsize, not push the 30px field
+   into a second line. */
+.planning-filters .modern-dropdown .selected-text {
+    font-size: .8rem;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.planning-filters .modern-dropdown .dropdown-arrow { font-size: .7rem; }
+
+.planning-filters .modern-dropdown.open .dropdown-selected,
+.planning-filters .modern-dropdown .dropdown-selected:hover {
+    border-color: #8b0000;
+}
+
+.planning-filters .pf-clear {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    font-size: .76rem;
+    color: #8b0000;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    cursor: pointer;
+}
+
+.planning-filters .pf-clear:hover {
+    border-color: #8b0000;
+    background: rgba(139, 0, 0, .06);
+}
+
+.planning-filters .pf-summary {
+    font-size: .76rem;
+    color: #6b7280;
+    margin-left: auto;
+}
+
+.planning-filters .pf-summary.pf-empty {
+    color: #b45309;
+    font-weight: 500;
+}
+
+@media (max-width: 767.98px) {
+    .planning-filters .pf-field { flex: 1 1 100%; }
+    .planning-filters .modern-dropdown-container,
+    .planning-filters #filter-assignee.modern-dropdown-container { width: 100%; }
+    .planning-filters .pf-summary { margin-left: 0; }
+}
+
 /* A real date standing in for a missing planned one. */
 /* Borrowed from a level down (a machining operation's plan), not entered on
    this task — distinct from .date-actual, which is work that really happened. */
@@ -334,3 +476,120 @@
 .jp-holder .fas { font-size: .62rem; opacity: .7; }
 .jp-holder.jp-more { font-weight: 600; }
 .jp-holder.jp-none { background: transparent; color: #adb5bd; font-style: italic; padding-left: 0; }
+
+/* ---- PDF export ---------------------------------------------------------
+   The export renders a second grid and its pages off-screen. They need real
+   layout (html2canvas measures boxes, it does not guess), so they are moved
+   out of view rather than hidden. */
+
+.pg-pdf-stage {
+    position: fixed;
+    top: 0;
+    left: -20000px;
+    width: 0;
+    height: 0;
+    background: #ffffff;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* The source grid is measured whole, not through its scrollbox. */
+.pg-pdf-src .pg-scroll {
+    overflow: visible;
+    max-height: none;
+    min-height: 0;
+}
+
+.pg-pdf-page {
+    background: #ffffff;
+    border: 0;
+    border-radius: 0;
+    /* Clipped, like the sheet's own scroll extent: a "+11 gün" flag that runs
+       past the last column would otherwise widen that one page, and pages of
+       unequal width print at unequal scale. */
+    overflow: hidden;
+    /* Stage spacing only — each page is captured on its own. */
+    margin-bottom: 40px;
+}
+
+/* Paper does not scroll, so nothing sticks and nothing is skipped:
+   content-visibility keeps off-screen rows out of the capture, and sticky
+   boxes land in the wrong place. `relative` holds the z-index that paints the
+   frozen columns over the timeline; `static` would drop it. */
+.pg-pdf-page .pg-header,
+.pg-pdf-page .pg-header-grid,
+.pg-pdf-page .pg-row-grid {
+    position: relative;
+}
+
+.pg-pdf-page .pg-row {
+    content-visibility: visible;
+    contain-intrinsic-size: none;
+}
+
+/* The timeline domain is built from BARS, so a job order whose hedef sits
+   months past the last bar draws its marker outside the columns — reachable
+   on screen by scrolling, off the page here. Clipping the lane keeps every
+   page exactly one canvas wide, and pages of equal width print at equal
+   scale. */
+.pg-pdf-page .pg-row-time { overflow: hidden; }
+
+.pg-pdf-head {
+    padding: 0 2px 7px;
+    border-bottom: 2px solid #c9ced4;
+    margin-bottom: 6px;
+}
+
+.pg-pdf-head-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.pg-pdf-head-title {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: #212529;
+}
+
+.pg-pdf-head-sub {
+    margin-left: 10px;
+    font-size: .84rem;
+    font-weight: 600;
+    color: #8b0000;
+}
+
+.pg-pdf-head-right,
+.pg-pdf-meta {
+    font-size: .72rem;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.pg-pdf-meta { margin-top: 3px; }
+
+.pg-pdf-legend { margin-top: 5px; }
+
+/* Column rules and weekend shading, drawn once per page behind the rows —
+   see rulesLayer() for why they cannot stay a background gradient here. */
+.pg-pdf-rules {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    pointer-events: none;
+}
+
+.pg-pdf-rules .pg-pdf-rule,
+.pg-pdf-rules .pg-pdf-shade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+}
+
+.pg-pdf-rules .pg-pdf-rule {
+    width: 1px;
+    background: var(--pg-line);
+}
+
+.pg-pdf-rules .pg-pdf-shade { background: var(--pg-nonwork); }

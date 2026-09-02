@@ -25,7 +25,7 @@ let currentFilters = { status: '', search: '' };
 let pendingTable = null;
 let hasEntriesTable = null;
 let hasEntriesFiltersComponent = null;
-let hasEntriesFilters = { status: '', search: '' };
+let hasEntriesFilters = { status: '', search: '', cost_not_applicable: '' };
 let hasEntriesData = [];
 let hasEntriesTotal = 0;
 let hasEntriesPage = 1;
@@ -192,13 +192,14 @@ function initHasEntriesFilters() {
             hasEntriesPage = 1;
             hasEntriesFilters = {
                 status: values['has-status-filter'] ?? '',
-                search: values['has-search-filter'] ?? ''
+                search: values['has-search-filter'] ?? '',
+                cost_not_applicable: values['has-cost-na-filter'] ?? ''
             };
             loadHasEntries();
         },
         onClear: () => {
             hasEntriesPage = 1;
-            hasEntriesFilters = { status: '', search: '' };
+            hasEntriesFilters = { status: '', search: '', cost_not_applicable: '' };
             loadHasEntries();
         }
     });
@@ -217,6 +218,17 @@ function initHasEntriesFilters() {
             { value: 'draft', label: 'Taslak' },
             { value: 'on_hold', label: 'Beklemede' },
             { value: 'completed', label: 'Tamamlandı' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 2
+    });
+    hasEntriesFiltersComponent.addDropdownFilter({
+        id: 'has-cost-na-filter',
+        label: 'Maliyet Durumu',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'false', label: 'Maliyet Girilmiş' },
+            { value: 'true', label: 'Maliyet Uygulanamaz' }
         ],
         placeholder: 'Tümü',
         colSize: 2
@@ -280,6 +292,7 @@ function initHasEntriesTable() {
             { field: 'job_no', label: 'İş Emri No', sortable: true },
             { field: 'title', label: 'Başlık', sortable: true },
             { field: 'customer_name', label: 'Müşteri', sortable: false },
+            { field: 'cost_not_applicable', label: 'Maliyet', sortable: false, formatter: formatCostApplicability },
             { field: 'status', label: 'Durum', sortable: true, formatter: formatStatus },
             { field: 'target_completion_date', label: 'Hedef Bitiş', sortable: true, formatter: formatDate }
         ],
@@ -300,7 +313,8 @@ function initHasEntriesTable() {
         actions: [
             { key: 'open-lines', label: 'Satırları Aç', icon: 'fas fa-list', class: 'btn-outline-primary', onClick: (row) => openLinesModal(row.job_no) },
             { key: 'preview-lines', label: 'Önizle', title: 'Malzeme Maliyeti Önizlemesi', icon: 'fas fa-eye', class: 'btn-outline-secondary', onClick: (row) => openLinesModal(row.job_no, { usePreview: true }) },
-            { key: 'mark-cost-na', label: 'Maliyet Uygulanamaz', title: 'Maliyet Uygulanamaz Olarak İşaretle', icon: 'fas fa-ban', class: 'btn-outline-danger', onClick: (row) => confirmMarkCostNotApplicable(row.job_no) }
+            { key: 'mark-cost-na', label: 'Maliyet Uygulanamaz', title: 'Maliyet Uygulanamaz Olarak İşaretle', icon: 'fas fa-ban', class: 'btn-outline-danger', visible: (row) => !row.cost_not_applicable, onClick: (row) => confirmMarkCostNotApplicable(row.job_no) },
+            { key: 'unmark-cost-na', label: 'Maliyeti Uygula', title: 'Maliyet Uygulanamaz İşaretini Kaldır', icon: 'fas fa-rotate-left', class: 'btn-outline-success', visible: (row) => !!row.cost_not_applicable, onClick: (row) => confirmUnmarkCostNotApplicable(row.job_no) }
         ],
         emptyMessage: 'Listeyi yüklemek için Filtrele veya Yenile butonuna tıklayın.',
         emptyIcon: 'fas fa-filter',
@@ -314,6 +328,12 @@ function formatStatus(value) {
     const label = labels[value] || value || '–';
     const colorClass = value === 'active' ? 'status-green' : value === 'completed' ? 'status-blue' : value === 'on_hold' ? 'status-yellow' : value === 'cancelled' ? 'status-red' : 'status-grey';
     return `<span class="status-badge ${colorClass}">${label}</span>`;
+}
+
+function formatCostApplicability(value) {
+    return value
+        ? '<span class="status-badge status-red">Uygulanamaz</span>'
+        : '<span class="status-badge status-green">Girilmiş</span>';
 }
 
 function formatDate(value) {
@@ -432,7 +452,7 @@ async function markCostNotApplicable(jobNo) {
         showNotification('İş emri maliyet uygulanamaz olarak işaretlendi.', 'success');
 
         // Immediate UI feedback
-        removeJobOrderFromLocalLists(jobNo);
+        applyCostNotApplicableLocally(jobNo, true);
 
         // Ensure counts/pagination are correct
         await Promise.allSettled([loadPendingJobOrders(), loadHasEntries()]);
@@ -448,16 +468,59 @@ async function markCostNotApplicable(jobNo) {
     }
 }
 
-function removeJobOrderFromLocalLists(jobNo) {
-    let removedPending = 0;
-    let removedHas = 0;
+function confirmUnmarkCostNotApplicable(jobNo) {
+    if (!confirmationModal) return;
+    confirmationModal.show({
+        title: 'Maliyeti Uygula',
+        message: `${jobNo} için "maliyet uygulanamaz" işareti kaldırılsın mı?`,
+        description: 'İş emri yeniden maliyet tablosunda ve departman bekleyen listelerinde görünür.',
+        confirmText: 'Evet, kaldır',
+        onConfirm: () => unmarkCostNotApplicable(jobNo)
+    });
+}
 
-    if (Array.isArray(pendingJobOrders) && pendingJobOrders.length) {
+async function unmarkCostNotApplicable(jobNo) {
+    const confirmBtn = document.querySelector('#confirmationModal #confirm-action-btn');
+    const prevHtml = confirmBtn ? confirmBtn.innerHTML : null;
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gönderiliyor...';
+    }
+
+    try {
+        await patchJobCostSummary(jobNo, { cost_not_applicable: false });
+        showNotification('İş emri yeniden maliyet takibine alındı.', 'success');
+
+        // Immediate UI feedback
+        applyCostNotApplicableLocally(jobNo, false);
+
+        // Ensure counts/pagination are correct
+        await Promise.allSettled([loadPendingJobOrders(), loadHasEntries()]);
+    } catch (err) {
+        console.error(err);
+        showNotification(err.message || 'İşlem başarısız', 'error');
+        throw err; // keep modal open (ConfirmationModal respects rejected promises)
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            if (prevHtml != null) confirmBtn.innerHTML = prevHtml;
+        }
+    }
+}
+
+/**
+ * Immediate feedback for a cost_not_applicable change, before the reload lands.
+ * Flagged jobs leave the pending queue but stay in the has-entries list (badged
+ * 'Uygulanamaz'), which is where the flag gets lifted again — so that row is
+ * re-badged in place rather than removed.
+ */
+function applyCostNotApplicableLocally(jobNo, notApplicable) {
+    if (notApplicable && Array.isArray(pendingJobOrders) && pendingJobOrders.length) {
         const before = pendingJobOrders.length;
         pendingJobOrders = pendingJobOrders.filter(j => j.job_no !== jobNo);
-        removedPending = before - pendingJobOrders.length;
-        if (removedPending > 0) {
-            totalCount = Math.max(0, (totalCount || 0) - removedPending);
+        const removed = before - pendingJobOrders.length;
+        if (removed > 0) {
+            totalCount = Math.max(0, (totalCount || 0) - removed);
             if (pendingTable) {
                 pendingTable.options.data = pendingJobOrders;
                 pendingTable.options.totalItems = totalCount;
@@ -467,17 +530,17 @@ function removeJobOrderFromLocalLists(jobNo) {
     }
 
     if (Array.isArray(hasEntriesData) && hasEntriesData.length) {
-        const before = hasEntriesData.length;
-        hasEntriesData = hasEntriesData.filter(j => j.job_no !== jobNo);
-        removedHas = before - hasEntriesData.length;
-        if (removedHas > 0) {
-            hasEntriesTotal = Math.max(0, (hasEntriesTotal || 0) - removedHas);
-            if (hasEntriesTable) {
-                hasEntriesTable.options.data = hasEntriesData;
-                hasEntriesTable.options.totalItems = hasEntriesTotal;
-                hasEntriesTable.options.currentPage = hasEntriesPage;
-                hasEntriesTable.render();
+        let changed = false;
+        for (const row of hasEntriesData) {
+            if (row.job_no === jobNo) {
+                row.cost_not_applicable = notApplicable;
+                changed = true;
             }
+        }
+        if (changed && hasEntriesTable) {
+            hasEntriesTable.options.data = hasEntriesData;
+            hasEntriesTable.options.currentPage = hasEntriesPage;
+            hasEntriesTable.render();
         }
     }
 }
@@ -1149,6 +1212,7 @@ async function loadHasEntries(options = {}) {
         page_size: options.page_size ?? hasEntriesPageSize,
         status: hasEntriesFilters.status,
         search: hasEntriesFilters.search,
+        cost_not_applicable: hasEntriesFilters.cost_not_applicable,
         ordering: options.ordering ?? 'job_no'
     };
     try {

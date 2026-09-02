@@ -75,6 +75,18 @@ function daysInMonth(date) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
+// Keep the current value in a <select> even when it is not in the editable
+// list (blocked/skipped on a department row). Otherwise the browser picks the
+// first option and a blur looks like a real edit.
+export function optionsWithCurrentValue(options, currentValue) {
+    const opts = Array.isArray(options) ? options.slice() : [];
+    if (currentValue != null && String(currentValue) !== ''
+        && !opts.some(o => String(o.value) === String(currentValue))) {
+        opts.unshift({ value: currentValue, label: String(currentValue) });
+    }
+    return opts;
+}
+
 // ---------------------------------------------------------------------------
 // Timeline model
 // ---------------------------------------------------------------------------
@@ -82,9 +94,11 @@ function daysInMonth(date) {
 // Maps dates to pixels. Positions are FRACTIONAL: a bar that ends mid-week
 // stops mid-column instead of snapping out to the week boundary, which is what
 // keeps a 3-day job from looking like a 5-day one under the week zoom.
-function buildTimeline(rows, zoom, today, barOf, minWidth = 0) {
+// `colWidthOverride` exists for the PDF export, which has to fit a whole plan
+// into a fixed page width instead of the screen's fixed column size.
+export function buildTimeline(rows, zoom, today, barOf, minWidth = 0, colWidthOverride = null) {
     const unit = ZOOMS[zoom] ? zoom : 'week';
-    const colWidth = ZOOMS[unit].colWidth;
+    const colWidth = colWidthOverride > 0 ? colWidthOverride : ZOOMS[unit].colWidth;
 
     // The domain has to come from the same accessor that draws the bars —
     // reading a `bar` property off the row instead left only "today" in range
@@ -198,6 +212,9 @@ export class PlanningGrid {
             rowHeight: 30,
             gridWidth: 560,
             zoom: 'week',
+            // Screen scale comes from the zoom preset; the PDF export sets its
+            // own so a whole plan fits the page width.
+            colWidth: null,
             collapsed: new Set(),
             editableColumns: [],
             // Editability is per CELL, not per row: a job-order row takes its
@@ -264,7 +281,8 @@ export class PlanningGrid {
         // is measured before the columns are built.
         const lane = Math.max(0, el.clientWidth - gridWidth - 2);
         const timeline = buildTimeline(
-            rows, this.options.zoom, this.options.today, this.options.bar, lane);
+            rows, this.options.zoom, this.options.today, this.options.bar, lane,
+            this.options.colWidth);
         this.timeline = timeline;
 
         el.style.setProperty('--pg-grid-w', `${gridWidth}px`);
@@ -388,7 +406,9 @@ export class PlanningGrid {
             .filter(a => !a.visible || a.visible(row))
             .map(a => `
                 <button class="pg-action-btn ${a.class || ''}" data-pg-action="${esc(a.key)}"
-                        data-row="${esc(row.key)}" title="${esc(a.title || '')}"
+                        data-row="${esc(row.key)}"
+                        title="${esc((typeof a.title === 'function'
+                                      ? a.title(row) : a.title) || '')}"
                         ${a.disabled && a.disabled(row) ? 'disabled' : ''}>
                     <i class="${esc(a.icon)}"></i>
                 </button>`).join('');
@@ -404,19 +424,51 @@ export class PlanningGrid {
     }
 
     _barHtml(row, timeline) {
-        const bar = this.options.bar(row);
-        if (!bar) return '';
-        const startX = timeline.xOf(bar.start || bar.end);
-        const endX = timeline.xOf(bar.end || bar.start);
-        if (startX === null || endX === null) return '';
-        // The end date is inclusive — a task that starts and ends the same day
-        // is one day long, not zero — so the bar runs to the END of that unit.
         const oneUnit = timeline.unit === 'day' ? timeline.colWidth
             : timeline.colWidth / (timeline.unit === 'week' ? 7 : 30);
+
+        const parts = [];
+        // İş emri hedef bitişi: the same vertical tick on every row of the
+        // job, so the group reads as one continuous target line down the
+        // sheet. Red when the job's projected end overshoots it.
+        if (row.job_target) {
+            const tx = timeline.xOf(row.job_target);
+            if (tx !== null) {
+                const lateCls = row.job_target_late ? ' pg-target-late' : '';
+                parts.push(`<div class="pg-target-line${lateCls}" style="left:${tx + oneUnit}px"></div>`);
+                if (row.kind === 'group') {
+                    parts.push(`
+                        <div class="pg-target-flag${lateCls}" style="left:${tx + oneUnit}px"
+                             title="İş emri hedef bitişi: ${esc(row.job_target)}${row.job_target_late ? ' — öngörülen bitiş bu tarihi aşıyor' : ''}">
+                            <i class="fas fa-bullseye"></i>
+                        </div>`);
+                }
+                // "+2 gün / −2 gün": how far the projection sits from the
+                // hedef, in workdays — after whichever marker is rightmost.
+                const delta = Number(row.job_target_delta_wd || 0);
+                if (delta && (row.kind === 'group' || row.unassignedRow)) {
+                    const fx = timeline.xOf(row.forecast_date);
+                    const x = Math.max(tx, fx === null ? tx : fx) + oneUnit + 5;
+                    const late = delta > 0;
+                    parts.push(`
+                        <div class="pg-target-delta ${late ? 'pg-delta-late' : 'pg-delta-early'}"
+                             style="left:${x}px"
+                             title="Öngörülen bitiş hedeften ${Math.abs(delta)} gün ${late ? 'geride' : 'ileride'}">${late ? '+' : '−'}${Math.abs(delta)} gün</div>`);
+                }
+            }
+        }
+
+        const bar = this.options.bar(row);
+        if (!bar) return parts.join('');
+        const startX = timeline.xOf(bar.start || bar.end);
+        const endX = timeline.xOf(bar.end || bar.start);
+        if (startX === null || endX === null) return parts.join('');
+        // The end date is inclusive — a task that starts and ends the same day
+        // is one day long, not zero — so the bar runs to the END of that unit.
         const width = Math.max(6, endX - startX + oneUnit);
         const pct = Math.max(0, Math.min(100, Number(bar.progress || 0)));
 
-        return `
+        return `${parts.join('')}
             <div class="pg-bar pg-bar-${esc(bar.state || 'on-time')}"
                  style="left:${startX}px;width:${width}px"
                  title="${esc(bar.title || '')}">
@@ -549,7 +601,8 @@ export class PlanningGrid {
         if (col.type === 'select') {
             editor = document.createElement('select');
             editor.className = 'pg-editor';
-            (col.options || []).forEach(opt => {
+            const opts = optionsWithCurrentValue(col.options, value);
+            opts.forEach(opt => {
                 const o = document.createElement('option');
                 o.value = opt.value;
                 o.textContent = opt.label;
@@ -589,7 +642,10 @@ export class PlanningGrid {
             }
         };
 
-        editor.addEventListener('blur', () => finish(true));
+        // Selects commit on change. Blur without a change must not commit:
+        // an unmatched current value used to look like "pending" and a click
+        // away would write that.
+        editor.addEventListener('blur', () => finish(col.type !== 'select'));
         editor.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); finish(true); }
             else if (e.key === 'Escape') { e.preventDefault(); finish(false); }

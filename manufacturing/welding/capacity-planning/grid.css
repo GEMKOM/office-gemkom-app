@@ -167,6 +167,13 @@ body.pg-resizing * {
     display: flex;
     height: var(--pg-row-h);
     border-bottom: 1px solid var(--pg-line);
+    /* Off-screen rows skip layout and paint entirely — the "Tümü" tab puts
+       700+ rows (each with a painted timeline lane) in one sheet, and
+       scrolling stuttered while the browser rendered all of them. The fixed
+       row height makes the intrinsic size exact, so the scrollbar stays
+       stable. */
+    content-visibility: auto;
+    contain-intrinsic-size: auto var(--pg-row-h);
 }
 
 .pg-row:hover .pg-row-grid { background: #eef4fb; }
@@ -261,6 +268,79 @@ body.pg-resizing * {
     background: #dc3545;
     z-index: 3;
     pointer-events: none;
+}
+
+/* İş emri hedef bitişi: dashed so it never reads as the solid "today" line.
+   The same tick on every row of the job draws one continuous target line;
+   the bullseye flag on the group row names it. Red = the İmalat engine
+   projection overshoots the promise. */
+.pg-target-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+    border-left: 2px dashed rgba(37, 99, 235, 0.55);
+    z-index: 2;
+    pointer-events: none;
+}
+
+.pg-target-line.pg-target-late {
+    border-left-color: rgba(220, 38, 38, 0.6);
+}
+
+.pg-target-flag {
+    position: absolute;
+    top: 1px;
+    transform: translateX(-50%);
+    color: #2563eb;
+    font-size: 11px;
+    z-index: 4;
+    background: #ffffff;
+    border-radius: 50%;
+    line-height: 1;
+}
+
+.pg-target-flag.pg-target-late {
+    color: #dc2626;
+}
+
+/* "+2 gün / −2 gün" — how far the projection sits from the hedef */
+.pg-target-delta {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 10.5px;
+    font-weight: 700;
+    white-space: nowrap;
+    z-index: 3;
+}
+
+.pg-delta-late { color: #dc2626; }
+.pg-delta-early { color: #16a34a; }
+
+/* The group's promised end turns red when the projection overshoots it */
+.pg-group-late .pg-cell[data-field="end_date"] {
+    color: #b91c1c;
+    font-weight: 700;
+}
+
+/* "Tümü" tab: unassigned jobs — visibly waiting for an owner */
+.pg-row-unassigned .pg-cell {
+    color: #6b7280;
+}
+
+.pg-row-unassigned .pg-cell:first-of-type {
+    color: #3a4150;
+}
+
+/* Skipped or cancelled work stays on the sheet to say what happened to it —
+   muted, struck through, never editable. */
+.pg-row-skipped .pg-cell {
+    color: #9ca3af;
+}
+
+.pg-row-skipped .pg-cell:first-of-type {
+    text-decoration: line-through;
 }
 
 .pg-bar {
