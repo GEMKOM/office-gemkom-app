@@ -75,6 +75,18 @@ function daysInMonth(date) {
     return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
+// Keep the current value in a <select> even when it is not in the editable
+// list (blocked/skipped on a department row). Otherwise the browser picks the
+// first option and a blur looks like a real edit.
+export function optionsWithCurrentValue(options, currentValue) {
+    const opts = Array.isArray(options) ? options.slice() : [];
+    if (currentValue != null && String(currentValue) !== ''
+        && !opts.some(o => String(o.value) === String(currentValue))) {
+        opts.unshift({ value: currentValue, label: String(currentValue) });
+    }
+    return opts;
+}
+
 // ---------------------------------------------------------------------------
 // Timeline model
 // ---------------------------------------------------------------------------
@@ -82,9 +94,11 @@ function daysInMonth(date) {
 // Maps dates to pixels. Positions are FRACTIONAL: a bar that ends mid-week
 // stops mid-column instead of snapping out to the week boundary, which is what
 // keeps a 3-day job from looking like a 5-day one under the week zoom.
-function buildTimeline(rows, zoom, today, barOf, minWidth = 0) {
+// `colWidthOverride` exists for the PDF export, which has to fit a whole plan
+// into a fixed page width instead of the screen's fixed column size.
+export function buildTimeline(rows, zoom, today, barOf, minWidth = 0, colWidthOverride = null) {
     const unit = ZOOMS[zoom] ? zoom : 'week';
-    const colWidth = ZOOMS[unit].colWidth;
+    const colWidth = colWidthOverride > 0 ? colWidthOverride : ZOOMS[unit].colWidth;
 
     // The domain has to come from the same accessor that draws the bars —
     // reading a `bar` property off the row instead left only "today" in range
@@ -198,6 +212,9 @@ export class PlanningGrid {
             rowHeight: 30,
             gridWidth: 560,
             zoom: 'week',
+            // Screen scale comes from the zoom preset; the PDF export sets its
+            // own so a whole plan fits the page width.
+            colWidth: null,
             collapsed: new Set(),
             editableColumns: [],
             // Editability is per CELL, not per row: a job-order row takes its
@@ -264,7 +281,8 @@ export class PlanningGrid {
         // is measured before the columns are built.
         const lane = Math.max(0, el.clientWidth - gridWidth - 2);
         const timeline = buildTimeline(
-            rows, this.options.zoom, this.options.today, this.options.bar, lane);
+            rows, this.options.zoom, this.options.today, this.options.bar, lane,
+            this.options.colWidth);
         this.timeline = timeline;
 
         el.style.setProperty('--pg-grid-w', `${gridWidth}px`);
@@ -583,7 +601,8 @@ export class PlanningGrid {
         if (col.type === 'select') {
             editor = document.createElement('select');
             editor.className = 'pg-editor';
-            (col.options || []).forEach(opt => {
+            const opts = optionsWithCurrentValue(col.options, value);
+            opts.forEach(opt => {
                 const o = document.createElement('option');
                 o.value = opt.value;
                 o.textContent = opt.label;
@@ -623,7 +642,10 @@ export class PlanningGrid {
             }
         };
 
-        editor.addEventListener('blur', () => finish(true));
+        // Selects commit on change. Blur without a change must not commit:
+        // an unmatched current value used to look like "pending" and a click
+        // away would write that.
+        editor.addEventListener('blur', () => finish(col.type !== 'select'));
         editor.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); finish(true); }
             else if (e.key === 'Escape') { e.preventDefault(); finish(false); }

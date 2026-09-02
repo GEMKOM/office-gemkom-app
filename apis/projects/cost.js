@@ -213,7 +213,8 @@ export async function getEstimatedCostBreakdown(jobNo) {
  * @param {Object} payload
  * @param {string} [payload.selling_price] - e.g. "90000.00"
  * @param {string} [payload.selling_price_currency] - One of "EUR", "USD", "GBP", "TRY"
- * @param {boolean} [payload.cost_not_applicable] - Mark job order cost tracking as not applicable (removes from pending lists / cost table)
+ * @param {boolean} [payload.cost_not_applicable] - true removes the job order from
+ *   the pending lists and cost table; false puts it back
  * @returns {Promise<Object>} Full updated cost summary object
  */
 export async function patchJobCostSummary(jobNo, payload) {
@@ -398,9 +399,14 @@ export async function getJobOrdersHasShipping(options = {}) {
 }
 
 /**
- * Job orders that have at least one procurement line.
+ * Job orders that have at least one procurement line, plus every job order
+ * flagged cost_not_applicable (those have no lines but are only reachable
+ * here, since the flag hides them from the pending queues and cost table).
+ * Each row carries a `cost_not_applicable` boolean.
  * GET /projects/job-orders/has_procurement/
- * @param {Object} options - Same as getJobOrdersHasQc
+ * @param {Object} options - Same as getJobOrdersHasQc, plus:
+ * @param {string} [options.cost_not_applicable] - 'true' = only flagged jobs,
+ *   'false' = only jobs with lines; omit for both
  * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
  */
 export async function getJobOrdersHasProcurement(options = {}) {
@@ -409,6 +415,9 @@ export async function getJobOrdersHasProcurement(options = {}) {
     if (options.search != null && options.search !== '') queryParams.append('search', options.search);
     if (options.customer != null && options.customer !== '') queryParams.append('customer', String(options.customer));
     if (options.ordering != null && options.ordering !== '') queryParams.append('ordering', options.ordering);
+    if (options.cost_not_applicable != null && options.cost_not_applicable !== '') {
+        queryParams.append('cost_not_applicable', String(options.cost_not_applicable));
+    }
     if (options.page != null) queryParams.append('page', String(options.page));
     if (options.page_size != null) queryParams.append('page_size', String(options.page_size));
 

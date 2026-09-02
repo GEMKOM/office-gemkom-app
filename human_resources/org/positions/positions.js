@@ -238,9 +238,13 @@ async function loadPositions(filters) {
 }
 
 function fillParentOptionsForEdit(excludeId = null) {
-    return positions
-        .filter(p => Number(p.id) !== Number(excludeId))
-        .map(p => ({ value: String(p.id), label: `${p.title} (L${p.level})` }));
+    // The dropdown has no clear button, so an explicit empty option is the
+    // only way to detach a position from its parent.
+    return [{ value: '', label: 'Yok (en üst seviye)' }].concat(
+        positions
+            .filter(p => Number(p.id) !== Number(excludeId))
+            .map(p => ({ value: String(p.id), label: `${p.title} (L${p.level})` }))
+    );
 }
 
 function buildPositionFormFields(position = null) {
@@ -333,7 +337,18 @@ async function savePosition(formData) {
             showNotification('Pozisyon güncellendi.', 'success');
             // Update the single row in memory — no full list reload.
             const idx = positions.findIndex(p => Number(p.id) === Number(wasEditingId));
-            if (idx !== -1) positions[idx] = { ...positions[idx], ...saved };
+            if (idx !== -1) {
+                // The write serializer returns no parent_title — derive it, or a
+                // detached position keeps showing its old parent in the list.
+                const savedParent = saved?.parent ?? null;
+                positions[idx] = {
+                    ...positions[idx],
+                    ...saved,
+                    parent_title: savedParent
+                        ? (positions.find(p => Number(p.id) === Number(savedParent))?.title || null)
+                        : null
+                };
+            }
         } else {
             saved = await createPosition(payload);
             showNotification('Pozisyon oluşturuldu.', 'success');

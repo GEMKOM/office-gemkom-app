@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - İş Emri Tamamlama</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../style.css">
+    <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/header/header.css">
+    <link rel="stylesheet" href="../../components/badges/badges.css">
+    <link rel="stylesheet" href="job-completion.css">
+    <link rel="icon" type="image/png" href="../../images/gemkom.png">
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <div id="header-placeholder"></div>
+
+            <div class="alert alert-danger jc-warning" role="alert">
+                <i class="fas fa-triangle-exclamation me-2"></i>
+                <strong>Bu işlem tüm kontrolleri atlar.</strong>
+                Seçilen iş emirleri ve bunlara bağlı <em>tüm</em> departman görevleri,
+                kalite kontrol onayı, ERP ürün girişi, satın alma teslimatı, alt görev ve
+                bağımlılık sırası gözetilmeden tamamlanmış olarak işaretlenir.
+                İşlem geri alınamaz.
+            </div>
+
+            <div class="jc-toolbar">
+                <div class="jc-toolbar__filters">
+                    <div class="jc-search">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="jc-search" class="form-control form-control-sm"
+                               placeholder="İş no, iş adı veya müşteri ara..." autocomplete="off">
+                    </div>
+                    <select id="jc-status-filter" class="form-select form-select-sm">
+                        <option value="open">Tamamlanmamışlar</option>
+                        <option value="all">Tüm durumlar</option>
+                        <option value="draft">Taslak</option>
+                        <option value="active">Aktif</option>
+                        <option value="on_hold">Beklemede</option>
+                        <option value="completed">Tamamlandı</option>
+                        <option value="cancelled">İptal Edildi</option>
+                    </select>
+                    <button type="button" id="jc-expand-all" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-angles-down me-1"></i>Tümünü Genişlet
+                    </button>
+                    <button type="button" id="jc-collapse-all" class="btn btn-sm btn-outline-secondary">
+                        <i class="fas fa-angles-up me-1"></i>Tümünü Daralt
+                    </button>
+                </div>
+                <div class="jc-toolbar__actions">
+                    <span class="jc-selection-summary" id="jc-selection-summary">Seçim yok</span>
+                    <button type="button" id="jc-clear-selection" class="btn btn-sm btn-outline-secondary" disabled>
+                        <i class="fas fa-eraser me-1"></i>Seçimi Temizle
+                    </button>
+                    <button type="button" id="jc-complete-btn" class="btn btn-sm btn-danger" disabled>
+                        <i class="fas fa-check-double me-1"></i>Seçilenleri Tamamla
+                    </button>
+                </div>
+            </div>
+
+            <div class="dashboard-card jc-card">
+                <div class="table-responsive">
+                    <table class="table table-hover jc-table mb-0">
+                        <thead>
+                            <tr>
+                                <th class="jc-col-check">
+                                    <input type="checkbox" class="form-check-input" id="jc-select-all"
+                                           title="Filtreye uyan tüm iş emirlerini seç">
+                                </th>
+                                <th class="jc-col-job">İş Emri</th>
+                                <th class="jc-col-customer">Müşteri</th>
+                                <th class="jc-col-status">Durum</th>
+                                <th class="jc-col-progress">İlerleme</th>
+                                <th class="jc-col-tasks">Açık Görev</th>
+                            </tr>
+                        </thead>
+                        <tbody id="jc-tree-body">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-5">
+                                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                                    Yükleniyor...
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="jc-confirm-modal-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="job-completion.js"></script>
+</body>
+</html>
