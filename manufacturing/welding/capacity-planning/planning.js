@@ -30,6 +30,7 @@ import {
     knownAssignmentKeys,
     createdBlocksFromBoard,
     matchCreatedBlock,
+    adoptedBlockSnap,
     adoptStageIds,
     leftoverDeleted,
     shouldPostNewBlock,
@@ -3463,10 +3464,7 @@ function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
         client.createDefaultStages = false;
         delete client.moveTo;
         adoptStageIds(client.stages, matched.block.stages);
-        snapBlocks.set(client.key, {
-            allocated_weight_kg: client.allocated_weight_kg,
-            notes: client.notes,
-        });
+        snapBlocks.set(client.key, adoptedBlockSnap(matched.block));
     });
 }
 
