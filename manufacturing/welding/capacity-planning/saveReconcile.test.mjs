@@ -10,6 +10,7 @@ import {
     knownAssignmentKeys,
     createdBlocksFromBoard,
     matchCreatedBlock,
+    adoptedBlockSnap,
     adoptStageIds,
     leftoverDeleted,
     shouldPostNewBlock,
@@ -72,6 +73,58 @@ check('match prefers unused server block with same resource/task/weight', () => 
     assert.equal(first, 0);
     used.add(assignmentKey('internal_team', 22));
     const second = matchCreatedBlock(client, created, used);
+    assert.equal(second, 1);
+});
+
+check('kg edited during save still matches the unique leftover server block', () => {
+    const created = [
+        { resource_type: 'team', resource_id: 3, block: { assignment_type: 'internal_team', assignment_id: 22, welding_task_id: 7, allocated_weight_kg: 40 } },
+    ];
+    const client = {
+        resource_type: 'team',
+        resource_id: 3,
+        welding_task_id: 7,
+        allocated_weight_kg: 55,
+    };
+    assert.equal(matchCreatedBlock(client, created, new Set()), 0);
+});
+
+check('ambiguous leftovers with different kg are not guessed', () => {
+    const created = [
+        { resource_type: 'team', resource_id: 3, block: { assignment_type: 'internal_team', assignment_id: 22, welding_task_id: 7, allocated_weight_kg: 40 } },
+        { resource_type: 'team', resource_id: 3, block: { assignment_type: 'internal_team', assignment_id: 23, welding_task_id: 7, allocated_weight_kg: 50 } },
+    ];
+    const client = {
+        resource_type: 'team',
+        resource_id: 3,
+        welding_task_id: 7,
+        allocated_weight_kg: 99,
+    };
+    assert.equal(matchCreatedBlock(client, created, new Set()), -1);
+});
+
+check('adopted snap is the server row so in-flight client edits still look dirty', () => {
+    const snap = adoptedBlockSnap({ allocated_weight_kg: 40, notes: '' });
+    const client = { allocated_weight_kg: 40, notes: 'typed during save' };
+    assert.equal(snap.notes, '');
+    assert.equal((snap.notes || '') !== (client.notes || ''), true);
+    assert.equal(Number(snap.allocated_weight_kg), 40);
+});
+
+check('after an exact kg match, the leftover unique sibling is still adoptable', () => {
+    const created = [
+        { resource_type: 'team', resource_id: 3, block: { assignment_type: 'internal_team', assignment_id: 22, welding_task_id: 7, allocated_weight_kg: 40 } },
+        { resource_type: 'team', resource_id: 3, block: { assignment_type: 'internal_team', assignment_id: 23, welding_task_id: 7, allocated_weight_kg: 50 } },
+    ];
+    const used = new Set();
+    const first = matchCreatedBlock({
+        resource_type: 'team', resource_id: 3, welding_task_id: 7, allocated_weight_kg: 40,
+    }, created, used);
+    assert.equal(first, 0);
+    used.add(assignmentKey('internal_team', 22));
+    const second = matchCreatedBlock({
+        resource_type: 'team', resource_id: 3, welding_task_id: 7, allocated_weight_kg: 80,
+    }, created, used);
     assert.equal(second, 1);
 });
 
