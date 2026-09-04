@@ -14,6 +14,7 @@ import {
     leftoverDeleted,
     shouldPostNewBlock,
     shouldHydrateAfterSave,
+    adoptExistingBlockStageIds,
 } from './saveReconcile.js';
 
 let failures = 0;
@@ -109,6 +110,89 @@ check('adoptStageIds copies server ids onto matching untitled-id client stages',
     assert.equal(client[0].id, 80);
     assert.equal(client[0].cid, 's80');
     assert.equal(client[1].id, 81);
+});
+
+check('existing assignment stages created during a skipped-hydrate save get server ids', () => {
+    const clientResources = [{
+        blocks: [{
+            isNew: false,
+            assignment_type: 'internal_team',
+            assignment_id: 9,
+            stages: [
+                { title: 'Montaj', id: null, cid: 'new-1', deleted: false },
+                { title: 'Kaynak ve Taşlama', id: null, cid: 'new-2', deleted: false },
+            ],
+        }],
+    }];
+    adoptExistingBlockStageIds(clientResources, {
+        resources: [{
+            blocks: [{
+                assignment_type: 'internal_team',
+                assignment_id: 9,
+                stages: [
+                    { id: 80, title: 'Montaj' },
+                    { id: 81, title: 'Kaynak ve Taşlama' },
+                ],
+            }],
+        }],
+    });
+    assert.equal(clientResources[0].blocks[0].stages[0].id, 80);
+    assert.equal(clientResources[0].blocks[0].stages[0].cid, 's80');
+    assert.equal(clientResources[0].blocks[0].stages[1].id, 81);
+});
+
+check('existing-block stage adopt leaves already-identified stages and new blocks alone', () => {
+    const existing = {
+        isNew: false,
+        assignment_type: 'internal_team',
+        assignment_id: 9,
+        stages: [
+            { title: 'Montaj', id: 80, cid: 's80', deleted: false },
+            { title: 'Final', id: null, cid: 'new-3', deleted: false },
+        ],
+    };
+    const created = {
+        isNew: true,
+        assignment_type: 'internal_team',
+        assignment_id: null,
+        stages: [{ title: 'Montaj', id: null, cid: 'new-1', deleted: false }],
+    };
+    const clientResources = [{ blocks: [existing, created] }];
+    adoptExistingBlockStageIds(clientResources, {
+        resources: [{
+            blocks: [
+                {
+                    assignment_type: 'internal_team',
+                    assignment_id: 9,
+                    stages: [
+                        { id: 80, title: 'Montaj' },
+                        { id: 91, title: 'Final' },
+                    ],
+                },
+                {
+                    assignment_type: 'internal_team',
+                    assignment_id: 22,
+                    stages: [{ id: 70, title: 'Montaj' }],
+                },
+            ],
+        }],
+    });
+    assert.equal(existing.stages[0].id, 80);
+    assert.equal(existing.stages[1].id, 91);
+    assert.equal(created.stages[0].id, null);
+});
+
+check('existing-block stage adopt is a no-op when the server row is missing', () => {
+    const stages = [{ title: 'Montaj', id: null, cid: 'new-1', deleted: false }];
+    adoptExistingBlockStageIds([{
+        blocks: [{
+            isNew: false,
+            assignment_type: 'internal_team',
+            assignment_id: 9,
+            stages,
+        }],
+    }], { resources: [] });
+    assert.equal(stages[0].id, null);
 });
 
 if (failures) {

@@ -34,6 +34,7 @@ import {
     leftoverDeleted,
     shouldPostNewBlock,
     shouldHydrateAfterSave,
+    adoptExistingBlockStageIds,
 } from './saveReconcile.js';
 import { exportPlanningPdf } from './pdf.js';
 
@@ -3413,6 +3414,13 @@ async function onSave() {
                 hydrate(board);
                 return;
             }
+        } else if (board) {
+            // Hydrate skipped: existing assignments that just created stages
+            // still have id: null. Stitch ids from this response NOW so a
+            // second Kaydet before the background refresh cannot duplicate
+            // Montaj / custom stages.
+            adoptExistingBlockStageIds(resources, board);
+            scheduleRefresh();
         }
         refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys });
     } catch (e) {
@@ -3481,6 +3489,7 @@ async function refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys } =
         // server identities onto the blocks this save created so the next
         // save updates them instead of posting duplicates.
         adoptCreatedBlockIdentities(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
+        adoptExistingBlockStageIds(resources, data);
         updateSaveState();
         scheduleRefresh();
     } catch (e) {
