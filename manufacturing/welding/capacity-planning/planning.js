@@ -34,6 +34,9 @@ import {
     leftoverDeleted,
     shouldPostNewBlock,
     shouldHydrateAfterSave,
+    shouldDiscardNewBlockLocally,
+    enqueueDeletedAssignment,
+    adoptDeletedCreateIdentities,
 } from './saveReconcile.js';
 import { exportPlanningPdf } from './pdf.js';
 
@@ -76,6 +79,9 @@ let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKe
 // edited during the wait, so hydrate must not replace the working copy.
 let mutationClock = 0;
 let saveInFlight = false;
+// Keys of new_blocks in the in-flight save. Delete must not treat those as
+// local-only — the server is about to create them.
+let inflightNewKeys = new Set();
 
 let liveForecastJobs = new Set(); // jobs edited this session -> live client projections
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
@@ -2587,6 +2593,62 @@ function onDeleteCustomStage(row) {
     });
 }
 
+function resourceOfBlock(block) {
+    if (!block) return null;
+    return resources.find(r =>
+        r.resource_type === block.resource_type && Number(r.id) === Number(block.resource_id))
+        || null;
+}
+
+function resolveBlockForDelete(stale) {
+    if (!stale) return null;
+    const byKey = findBlock(stale.key);
+    if (byKey) return byKey;
+    if (stale.assignment_id != null) {
+        const hydrated = findBlock(`${stale.assignment_type}-${stale.assignment_id}`);
+        if (hydrated) return hydrated;
+    }
+    const res = resourceOfBlock(stale);
+    if (!res) return null;
+    const matches = (res.blocks || []).filter(b =>
+        !b.deleted
+        && Number(b.welding_task_id) === Number(stale.welding_task_id)
+        && Number(b.allocated_weight_kg) === Number(stale.allocated_weight_kg));
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function queueDeletedBlock(block, res) {
+    deletedBlocks = enqueueDeletedAssignment(
+        deletedBlocks,
+        block,
+        res ? resourceKeyOf(res) : activeResourceKey,
+    );
+}
+
+function flushPendingDeletedCreates() {
+    resources.forEach((res) => {
+        (res.blocks || []).forEach((b) => {
+            if (b && b.deleted) queueDeletedBlock(b, res);
+        });
+    });
+}
+
+function adoptIdentitiesForDeletedCreates(board, knownIds, sentNewKeys) {
+    if (!board) return;
+    const created = createdBlocksFromBoard(board, knownIds);
+    const clients = (sentNewKeys || []).map((key) => findBlock(key)).filter((b) => b && b.deleted);
+    adoptDeletedCreateIdentities(clients, created, new Set());
+    flushPendingDeletedCreates();
+}
+
+function discardUnsentDeletedCreates() {
+    resources.forEach((res) => {
+        res.blocks = (res.blocks || []).filter((b) => !(
+            b.deleted && b.isNew && b.assignment_id == null && !b.createdOnServer
+        ));
+    });
+}
+
 function onDeleteBlock(blockRef) {
     const block = findBlock(blockRef);
     if (!block) return;
@@ -2600,24 +2662,22 @@ function onDeleteBlock(blockRef) {
         description: 'Atama, kaynak alt görevi ve tüm aşamaları birlikte silinir.',
         confirmText: 'Sil',
         onConfirm: () => {
-            const res = resources.find(r =>
-                r.resource_type === block.resource_type && r.id === block.resource_id);
-            if (block.isNew) {
-                if (res) res.blocks = res.blocks.filter(b => b.key !== block.key);
-                dirtyBlocks.delete(block.key);
+            // Hydrate may have replaced this object (new-N → type-id) while
+            // the confirm dialog was open.
+            const live = resolveBlockForDelete(block) || block;
+            const res = resourceOfBlock(live);
+            if (shouldDiscardNewBlockLocally(live, inflightNewKeys)) {
+                if (res) res.blocks = res.blocks.filter(b => b.key !== live.key);
+                dirtyBlocks.delete(live.key);
             } else {
-                block.deleted = true;
-                dirtyBlocks.delete(block.key);
-                deletedBlocks.push({
-                    assignment_type: block.assignment_type,
-                    assignment_id: block.assignment_id,
-                    resourceKey: res ? resourceKeyOf(res) : activeResourceKey,
-                });
+                live.deleted = true;
+                dirtyBlocks.delete(live.key);
+                queueDeletedBlock(live, res);
             }
             bumpMutation();
             // The deletion moves the job's projection (the deleted block's
             // window no longer counts) — recompute live like any other edit.
-            liveForecastJobs.add(block.job_no);
+            liveForecastJobs.add(live.job_no || block.job_no);
             updateSaveState();
             scheduleRefresh();
         },
@@ -3389,6 +3449,7 @@ async function onSave() {
     resources.forEach(res => res.blocks.forEach(b => {
         if (shouldPostNewBlock(b)) sentNewKeys.push(b.key);
     }));
+    inflightNewKeys = new Set(sentNewKeys);
     try {
         const resp = await bulkSaveWeldingPlanning(payload);
         showNotification('Plan kaydedildi.', 'success');
@@ -3414,11 +3475,17 @@ async function onSave() {
                 return;
             }
         }
+        // A delete during this request skipped hydrate and left the create
+        // marked deleted with no assignment_id. Stitch the id from resp.board
+        // now so Kaydet can send deleted_blocks without waiting on refresh.
+        adoptIdentitiesForDeletedCreates(board, knownIds, sentNewKeys);
         refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys });
     } catch (e) {
+        discardUnsentDeletedCreates();
         if (btn) btn.disabled = false;
         showNotification(e.message, 'error');
     } finally {
+        inflightNewKeys = new Set();
         saveInFlight = false;
         if (hasUnsavedChanges()) updateSaveState();
     }
@@ -3450,7 +3517,7 @@ function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
     const used = new Set();
     (sentNewKeys || []).forEach((key) => {
         const client = findBlock(key);
-        if (!client || !client.isNew) return;
+        if (!client || !client.isNew || client.deleted) return;
         const idx = matchCreatedBlock(client, created, used);
         if (idx < 0) return;
         const matched = created[idx];
@@ -3481,6 +3548,7 @@ async function refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys } =
         // server identities onto the blocks this save created so the next
         // save updates them instead of posting duplicates.
         adoptCreatedBlockIdentities(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
+        adoptIdentitiesForDeletedCreates(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
         updateSaveState();
         scheduleRefresh();
     } catch (e) {

@@ -79,3 +79,71 @@ export function shouldPostNewBlock(block) {
 export function shouldHydrateAfterSave(clockAtSend, clockNow) {
     return clockAtSend === clockNow;
 }
+
+/**
+ * A block is already on the server, or is in the in-flight create payload.
+ * Deleting it locally (as if it were never POSTed) would orphan the row.
+ */
+export function isBlockOnServerOrInflight(block, inflightNewKeys) {
+    if (!block) return false;
+    if (block.assignment_id != null) return true;
+    if (block.createdOnServer) return true;
+    return !!(inflightNewKeys && inflightNewKeys.has(block.key));
+}
+
+export function shouldDiscardNewBlockLocally(block, inflightNewKeys) {
+    return !!(block && block.isNew && !isBlockOnServerOrInflight(block, inflightNewKeys));
+}
+
+export function enqueueDeletedAssignment(deletedList, block, resourceKey) {
+    const list = Array.isArray(deletedList) ? deletedList.slice() : [];
+    if (!block || block.assignment_id == null) return list;
+    const key = assignmentKey(block.assignment_type, block.assignment_id);
+    if (list.some((d) => assignmentKey(d.assignment_type, d.assignment_id) === key)) {
+        return list;
+    }
+    const entry = {
+        assignment_type: block.assignment_type,
+        assignment_id: block.assignment_id,
+    };
+    if (resourceKey != null) entry.resourceKey = resourceKey;
+    list.push(entry);
+    return list;
+}
+
+function matchingCreatedIndexes(client, created, usedKeys) {
+    const indexes = [];
+    if (!client) return indexes;
+    (created || []).forEach((c, i) => {
+        const key = assignmentKey(c.block.assignment_type, c.block.assignment_id);
+        if (usedKeys.has(key)) return;
+        if (c.resource_type === client.resource_type
+            && Number(c.resource_id) === Number(client.resource_id)
+            && Number(c.block.welding_task_id) === Number(client.welding_task_id)
+            && Number(c.block.allocated_weight_kg) === Number(client.allocated_weight_kg)) {
+            indexes.push(i);
+        }
+    });
+    return indexes;
+}
+
+/**
+ * Copy server identities onto client creates that were deleted while save
+ * was in flight, so the next payload can send deleted_blocks. Only a unique
+ * leftover (same resource + task + kg) is adopted — two siblings are not guessed.
+ */
+export function adoptDeletedCreateIdentities(deletedClients, created, usedKeys) {
+    const used = usedKeys || new Set();
+    (deletedClients || []).forEach((client) => {
+        if (!client || client.assignment_id != null) return;
+        const matches = matchingCreatedIndexes(client, created, used);
+        if (matches.length !== 1) return;
+        const matched = created[matches[0]];
+        used.add(assignmentKey(matched.block.assignment_type, matched.block.assignment_id));
+        client.assignment_type = matched.block.assignment_type;
+        client.assignment_id = matched.block.assignment_id;
+        if (matched.block.subtask_id != null) client.subtask_id = matched.block.subtask_id;
+        client.createdOnServer = true;
+    });
+    return used;
+}
