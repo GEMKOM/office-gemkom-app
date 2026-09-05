@@ -14,6 +14,10 @@ import {
     leftoverDeleted,
     shouldPostNewBlock,
     shouldHydrateAfterSave,
+    isBlockOnServerOrInflight,
+    shouldDiscardNewBlockLocally,
+    enqueueDeletedAssignment,
+    adoptDeletedCreateIdentities,
 } from './saveReconcile.js';
 
 let failures = 0;
@@ -95,6 +99,86 @@ check('sent deletions drop from the queue; later deletions stay', () => {
         [{ assignment_type: 'internal_team', assignment_id: 1 }],
     );
     assert.deepEqual(leftover, [{ assignment_type: 'internal_team', assignment_id: 2 }]);
+});
+
+check('unsaved new blocks are discarded locally; inflight or created ones are not', () => {
+    const fresh = { key: 'new-1', isNew: true, assignment_id: null };
+    assert.equal(shouldDiscardNewBlockLocally(fresh, new Set()), true);
+    assert.equal(isBlockOnServerOrInflight(fresh, new Set()), false);
+    assert.equal(shouldDiscardNewBlockLocally(fresh, new Set(['new-1'])), false);
+    assert.equal(shouldDiscardNewBlockLocally({
+        key: 'new-2', isNew: true, assignment_id: null, createdOnServer: true,
+    }, new Set()), false);
+    assert.equal(shouldDiscardNewBlockLocally({
+        key: 'new-3', isNew: true, assignment_id: 22, createdOnServer: false,
+    }, new Set()), false);
+    assert.equal(shouldDiscardNewBlockLocally({
+        key: 'internal_team-9', isNew: false, assignment_id: 9,
+    }, new Set()), false);
+});
+
+check('enqueueDeletedAssignment waits for an id and does not duplicate', () => {
+    const empty = enqueueDeletedAssignment([], { assignment_type: 'internal_team', assignment_id: null }, 'team-3');
+    assert.deepEqual(empty, []);
+    const once = enqueueDeletedAssignment([], {
+        assignment_type: 'internal_team', assignment_id: 22,
+    }, 'team-3');
+    assert.deepEqual(once, [{
+        assignment_type: 'internal_team', assignment_id: 22, resourceKey: 'team-3',
+    }]);
+    const twice = enqueueDeletedAssignment(once, {
+        assignment_type: 'internal_team', assignment_id: 22,
+    }, 'team-3');
+    assert.equal(twice.length, 1);
+});
+
+check('deleted in-flight creates adopt the unique leftover server id', () => {
+    const client = {
+        resource_type: 'team',
+        resource_id: 3,
+        welding_task_id: 7,
+        allocated_weight_kg: 40,
+        assignment_id: null,
+        deleted: true,
+        isNew: true,
+    };
+    const created = [{
+        resource_type: 'team',
+        resource_id: 3,
+        block: {
+            assignment_type: 'internal_team',
+            assignment_id: 22,
+            subtask_id: 90,
+            welding_task_id: 7,
+            allocated_weight_kg: 40,
+        },
+    }];
+    adoptDeletedCreateIdentities([client], created, new Set());
+    assert.equal(client.assignment_id, 22);
+    assert.equal(client.subtask_id, 90);
+    assert.equal(client.createdOnServer, true);
+    const queued = enqueueDeletedAssignment([], client, 'team-3');
+    assert.deepEqual(queued, [{
+        assignment_type: 'internal_team', assignment_id: 22, resourceKey: 'team-3',
+    }]);
+});
+
+check('ambiguous leftovers are not guessed for a deleted create', () => {
+    const client = {
+        resource_type: 'team',
+        resource_id: 3,
+        welding_task_id: 7,
+        allocated_weight_kg: 40,
+        assignment_id: null,
+        deleted: true,
+    };
+    const created = [
+        { resource_type: 'team', resource_id: 3, block: { assignment_type: 'internal_team', assignment_id: 22, welding_task_id: 7, allocated_weight_kg: 40 } },
+        { resource_type: 'team', resource_id: 3, block: { assignment_type: 'internal_team', assignment_id: 23, welding_task_id: 7, allocated_weight_kg: 40 } },
+    ];
+    adoptDeletedCreateIdentities([client], created, new Set());
+    assert.equal(client.assignment_id, null);
+    assert.equal(client.createdOnServer, undefined);
 });
 
 check('adoptStageIds copies server ids onto matching untitled-id client stages', () => {
