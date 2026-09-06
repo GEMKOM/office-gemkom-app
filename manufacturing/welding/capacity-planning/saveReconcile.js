@@ -72,6 +72,34 @@ export function leftoverDeleted(currentDeleted, sentDeleted) {
     );
 }
 
+export function sentMoveToByAssignment(payloadBlocks) {
+    const map = new Map();
+    (payloadBlocks || []).forEach((item) => {
+        if (!item || !item.move_to || item.assignment_id == null) return;
+        map.set(assignmentKey(item.assignment_type, item.assignment_id), item.move_to);
+    });
+    return map;
+}
+
+function sameMoveTo(a, b) {
+    if (!a || !b) return false;
+    return a.resource_type === b.resource_type
+        && Number(a.resource_id) === Number(b.resource_id)
+        && Number(a.price_tier || 0) === Number(b.price_tier || 0);
+}
+
+/**
+ * Drop moveTo only when THIS payload actually sent that same destination.
+ * A move typed after buildPayload (notes-save then Atamayı değiştir, or a
+ * second move while the first is in flight) must survive finalize so the
+ * next Kaydet can re-home the assignment.
+ */
+export function shouldClearMoveTo(sentMoveTo, currentMoveTo) {
+    if (!sentMoveTo) return false;
+    if (!currentMoveTo) return true;
+    return sameMoveTo(sentMoveTo, currentMoveTo);
+}
+
 export function shouldPostNewBlock(block) {
     return !!(block && block.isNew && !block.deleted && !block.createdOnServer);
 }

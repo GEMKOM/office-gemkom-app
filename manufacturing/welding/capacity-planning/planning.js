@@ -32,6 +32,8 @@ import {
     matchCreatedBlock,
     adoptStageIds,
     leftoverDeleted,
+    sentMoveToByAssignment,
+    shouldClearMoveTo,
     shouldPostNewBlock,
     shouldHydrateAfterSave,
 } from './saveReconcile.js';
@@ -3432,14 +3434,22 @@ function finalizeSavedStructuralOps(payload, sentNewKeys) {
         b.createDefaultStages = false;
         delete b.moveTo;
     });
+    const sentMoves = sentMoveToByAssignment(payload.blocks);
     const sentBlockIds = new Set(
         (payload.blocks || []).map((b) => assignmentKey(b.assignment_type, b.assignment_id)),
     );
     resources.forEach((res) => res.blocks.forEach((b) => {
         if (b.isNew || b.assignment_id == null) return;
-        if (sentBlockIds.has(assignmentKey(b.assignment_type, b.assignment_id))) {
+        const key = assignmentKey(b.assignment_type, b.assignment_id);
+        if (sentBlockIds.has(key)) {
             b.createDefaultStages = false;
-            delete b.moveTo;
+            // Only drop a move this payload actually sent. An Atamayı
+            // değiştir typed while that same row's notes/kg/stages were
+            // saving (or a second move while the first is in flight)
+            // must stay so the next Kaydet can re-home the assignment.
+            if (shouldClearMoveTo(sentMoves.get(key), b.moveTo)) {
+                delete b.moveTo;
+            }
         }
     }));
     deletedBlocks = leftoverDeleted(deletedBlocks, payload.deleted_blocks || []);
