@@ -2436,10 +2436,23 @@ function onCellEdit(row, field, newValue) {
         // duration ever derives them (decoupled, 2026-08-28).
         const start = field === 'start_date'
             ? (newValue || null) : (target.start_date || null);
-        const end = field === 'end_date'
+        let end = field === 'end_date'
             ? (newValue || null) : (target.end_date || null);
+        // The İmalat START is the sheet's only date input (isCellEditable);
+        // every end shown is a PROJECTION, and reflowFromImalat rewrites it
+        // from this very start on the next render. Validating a newly typed
+        // start against the OLD projection refused any move past it — with no
+        // end cell anywhere on the sheet able to clear the blocker, the
+        // planner was stuck. Drop the stale end and let it re-derive; this
+        // mirrors the server, which nulls the stored end when a start arrives
+        // alone (planning_views._apply_department_task_item). A typed end is
+        // still a planner statement, so that direction keeps the refusal.
         if (start && end && end < start) {
-            throw new Error('Bitiş tarihi başlangıç tarihinden önce olamaz.');
+            if (field === 'start_date') {
+                end = null;
+            } else {
+                throw new Error('Bitiş tarihi başlangıç tarihinden önce olamaz.');
+            }
         }
 
         // NO child-coverage check any more (user 2026-09-01: "I can't edit
