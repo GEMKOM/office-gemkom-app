@@ -295,7 +295,9 @@ async function processReportData(data) {
     let processedData = [];
     
     if (groupBy === 'user') {
-        const users = await fetchUsers('machining_team');
+        // Timers in the period may belong to staff who have since left; the
+        // list only labels rows (users without timers are dropped below).
+        const users = await fetchUsers('machining_team', { is_active: 'all' });
         const findRowForUser = (user) => {
             const un = String(user.username ?? '').toLowerCase();
             const uid = user.id;

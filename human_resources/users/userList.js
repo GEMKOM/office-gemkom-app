@@ -2025,15 +2025,19 @@ function initializeFiltersComponent() {
         colSize: 3
     });
 
+    // The backend lists active accounts unless told otherwise, so "Tümü"
+    // has to be sent explicitly as is_active=all; a cleared filter ('')
+    // therefore also means "Aktif".
     userFilters.addDropdownFilter({
         id: 'is-active-filter',
         label: 'Durum',
         options: [
-            { value: '', label: 'Tümü' },
             { value: 'true', label: 'Aktif' },
-            { value: 'false', label: 'Pasif' }
+            { value: 'false', label: 'Pasif' },
+            { value: 'all', label: 'Tümü' }
         ],
-        placeholder: 'Tümü',
+        value: 'true',
+        placeholder: 'Aktif',
         colSize: 3
     });
 }

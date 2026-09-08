@@ -157,8 +157,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadUsers() {
     try {
+        // Pickers offer active staff only; imported rows may still reference
+        // someone who has since left, so matching falls back to every account.
         users = await fetchAllUsers();
-        allUsersForMatching = await fetchAllUsers({ is_active: 'true' });
+        allUsersForMatching = await fetchAllUsers({ is_active: 'all' });
     } catch (error) {
         console.error('Error loading users:', error);
         users = [];
