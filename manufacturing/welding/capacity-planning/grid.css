@@ -231,6 +231,18 @@ body.pg-resizing * {
     outline: none;
 }
 
+/* Dates are typed day-first as plain text (see formatDMY in grid.js), so the
+   editor must line the digits up the way the committed cell shows them. */
+.pg-editor-date {
+    font-variant-numeric: tabular-nums;
+    letter-spacing: .01em;
+}
+
+.pg-editor-date::placeholder {
+    color: #adb5bd;
+    letter-spacing: 0;
+}
+
 .pg-action-btn {
     border: 1px solid transparent;
     background: transparent;

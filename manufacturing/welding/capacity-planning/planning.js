@@ -25,6 +25,7 @@ import {
 import { fetchPriceTiers } from '../../../apis/subcontracting/priceTiers.js';
 import { createWorkdayCalendar, reconcileScheduleEdit } from '../../../utils/workdays.js';
 import { deptSchedulePatch } from './deptSchedulePatch.js';
+import { blockSchedulePatch } from './blockSchedulePatch.js';
 import {
     assignmentKey,
     knownAssignmentKeys,
@@ -66,7 +67,7 @@ let jobInfo = {};                 // job_no -> {material_supply, machining[], cu
 let deptByJob = {};               // job_no -> {manufacturing, welding, painting} VMs
 let machiningByJob = {};          // job_no -> Talaşlı İmalat VM (weight only)
 
-let snapBlocks = new Map();       // block.key -> {allocated_weight_kg, notes}
+let snapBlocks = new Map();       // block.key -> {allocated_weight_kg, notes, subtask: {actual_start_date}}
 let dirtyBlocks = new Set();      // block.key
 let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
 let dirtyMachining = new Map();   // job_no -> Set of edited field names
@@ -273,6 +274,10 @@ function blockVM(b, res) {
             progress: Number(b.subtask.progress ?? 0),
             start_date: b.subtask.start_date,
             end_date: b.subtask.end_date,
+            // Gerçek Başlangıç — the day this ASSIGNMENT actually started,
+            // entered per block (user decision 2026-09-08, 284-07). Evidence
+            // for the server forecast, never a plan date: nothing derives it.
+            actual_start_date: b.subtask.actual_start_date || null,
             duration_wd: b.subtask.duration_wd,
             duration_is_derived: !!b.subtask.duration_is_derived,
             duration_source: b.subtask.duration_source || null,
@@ -333,6 +338,7 @@ function hydrate(boardData) {
         snapBlocks.set(b.key, {
             allocated_weight_kg: b.allocated_weight_kg,
             notes: b.notes,
+            subtask: { actual_start_date: b.subtask.actual_start_date },
         });
     }));
 
@@ -365,11 +371,15 @@ function bumpMutation() {
     mutationClock += 1;
 }
 
-function markBlockDirty(blockRef) {
+// `live: false` keeps the job on the SERVER's projections. The client cascade
+// (rederivePlanWindows / rederiveEngineDates) does not model Gerçek Başlangıç,
+// so switching to it on that edit would show a forecast that ignores the very
+// date just typed, until Kaydet brought the server's back.
+function markBlockDirty(blockRef, { live = true } = {}) {
     dirtyBlocks.add(blockRef);
     bumpMutation();
     const block = findBlock(blockRef);
-    if (block && block.job_no) liveForecastJobs.add(block.job_no);
+    if (live && block && block.job_no) liveForecastJobs.add(block.job_no);
     updateSaveState();
 }
 
@@ -888,6 +898,17 @@ function dateCell(value, isActual, row, field) {
     return `<span class="date-actual" title="Gerçekleşen tarih (planlanmış tarih girilmemiş)">${fmtDate(value)}</span>`;
 }
 
+// Gerçek Başlangıç is PER ASSIGNMENT (user decision 2026-09-08 — 284-07: two
+// subcontractors built two units, one from 12.02.2026 and one from
+// 20.06.2026; the single İmalat start could not say so, and the forecast
+// measured the second one's tempo from the first one's calendar). Only the
+// block row carries it, and it prints plain: nothing on this column is ever
+// derived or borrowed, it is typed or it is empty.
+function actualStartCell(value, row) {
+    if (row.kind !== 'block' || !value) return '<span class="text-muted">—</span>';
+    return fmtDate(value);
+}
+
 // A derived duration is not a plan anyone entered, and the two derivations are
 // not interchangeable: a weight share is a guess at unplanned work, while a
 // children's span has OVERRULED an entered value — and the planner needs to see
@@ -1177,6 +1198,9 @@ function buildSheetRows(res, sortJobs = false) {
                 bar_label: b.resource_name || 'Kaynak İşi',
                 start_date: staged.length ? rollup.windowStart : b.subtask.start_date,
                 end_date: staged.length ? rollup.windowEnd : b.subtask.end_date,
+                // Per assignment, staged or not — the date is the block's,
+                // not any one stage's.
+                actual_start_date: b.subtask.actual_start_date ?? null,
                 duration_wd: staged.length ? rollup.totalDays : b.subtask.duration_wd,
                 duration_is_derived: staged.length
                     ? rollup.totalDays != null
@@ -1356,7 +1380,7 @@ function titleCell(value, row) {
 
 // ---- grid definition -----------------------------------------------------
 
-// Six columns earn their width next to a timeline; the rest are a click away.
+// Seven columns earn their width next to a timeline; the rest are a click away.
 // The choice is per user, so a planner who lives in Durum keeps it on.
 const GRID_COLUMNS = [
     { field: 'title', label: 'Görev', width: '250px', always: true,
@@ -1364,6 +1388,13 @@ const GRID_COLUMNS = [
     { field: 'start_date', label: 'Başlangıç', width: '96px', type: 'date',
       headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
       formatter: (v, row) => cellOverride(row, 'start_date') ?? dateCell(v, row.start_is_actual, row, 'start_date') },
+    // `always`, like the other dates: an ENTRY column, and one that a column
+    // set stored before 2026-09-08 would otherwise never show — activeColumns()
+    // keeps `always` columns whatever localStorage says.
+    { field: 'actual_start_date', label: 'Gerçek Başl.', width: '96px', type: 'date',
+      title: 'Gerçek Başlangıç — atamanın başladığı ya da başlayacağı tarih (geçmişse tempo bu tarihten ölçülür, ilerideyse öngörü bu tarihte başlar)',
+      headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
+      formatter: (v, row) => cellOverride(row, 'actual_start_date') ?? actualStartCell(v, row) },
     { field: 'end_date', label: 'Bitiş', width: '96px', type: 'date',
       headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
       formatter: (v, row) => cellOverride(row, 'end_date') ?? endDateCell(v, row) },
@@ -1432,6 +1463,13 @@ function isCellEditable(row, field) {
         return field === 'start_date'
             && row.kind === 'dept' && row.slot === 'manufacturing';
     }
+    // Gerçek Başlangıç is the one date typed BELOW İmalat, and it is typed per
+    // ASSIGNMENT (user decision 2026-09-08 — 284-07: two subcontractors, two
+    // start dates): the block row takes it whether or not it has stages, since
+    // the date is the assignment's, not any one stage's. Not on a block that is
+    // not saved yet — it posts through new_blocks, which carries no schedule,
+    // so the date would be lost: Kaydet first, then enter it.
+    if (field === 'actual_start_date') return row.kind === 'block' && !row.isNew;
     // Talaşlı İmalat's share of the manufacturing rollup is set here; its dates
     // are not — those come from the operations underneath it.
     if (row.kind === 'machining') return field === 'weight';
@@ -2431,6 +2469,24 @@ function onCellEdit(row, field, newValue) {
                 b.stages.forEach(s => { if (!s.deleted) clearEntry(s); });
             }));
         }
+    } else if (field === 'actual_start_date') {
+        // Gerçek Başlangıç (per assignment, 2026-09-08 — 284-07). It moves
+        // no start, end or duration here, and it skips the start-vs-end rule
+        // below — a start after the planned end is a true statement about a
+        // late job. A PAST date is the assignment's actual start (the server
+        // forecast measures its tempo from it); a FUTURE date is when the
+        // assignment WILL start (user 2026-09-08: "it should let me input a
+        // date later than today") — the forecast begins the row there. The
+        // client cascade models neither, so the job stays on server
+        // projections (live: false) rather than switching to a client
+        // forecast that would ignore the date.
+        if (row.kind !== 'block') throw new Error('Gerçek başlangıç yalnızca atama satırına girilir.');
+        const actual = newValue || null;
+        target.actual_start_date = actual;
+        row.actual_start_date = actual;
+        markBlockDirty(block.key, { live: false });
+        scheduleRefresh();
+        return;
     } else if (field === 'start_date' || field === 'end_date') {
         // Dates are PURE SCHEDULING — they never derive a duration and no
         // duration ever derives them (decoupled, 2026-08-28).
@@ -3246,7 +3302,10 @@ function pushNewBlock(draft) {
         has_statement_line: false,
         price_tier: draft.price_tier ? { id: draft.price_tier } : null,
         notes: draft.notes,
-        subtask: { status: 'in_progress', progress: 0, start_date: null, end_date: null, duration_wd: null },
+        subtask: {
+            status: 'in_progress', progress: 0, start_date: null, end_date: null,
+            duration_wd: null, actual_start_date: null,
+        },
         // NO auto-stages (user decision 2026-08-29): a new assignment is ONE
         // task. The Montaj / Kaynak ve Taşlama pair is added on demand via
         // the block's create-stages action.
@@ -3347,15 +3406,10 @@ function buildPayload() {
         });
         if (stageItems.length) item.stages = stageItems;
 
-        if (!hasStages) {
-            // No duration_wd and no dates — the block sizes from its
-            // weight-share slice of the İmalat entry, and the server
-            // materializes its projected dates at save time.
-            item.subtask_schedule = {
-                status: b.subtask.status,
-                progress: b.subtask.progress,
-            };
-        }
+        // Status + progress for an unstaged block, Gerçek Başlangıç for any
+        // block when it changed — the shapes are blockSchedulePatch's.
+        const schedule = blockSchedulePatch(snap.subtask, b.subtask, hasStages);
+        if (schedule) item.subtask_schedule = schedule;
         payload.blocks.push(item);
     }));
 
@@ -3479,6 +3533,7 @@ function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
         snapBlocks.set(client.key, {
             allocated_weight_kg: client.allocated_weight_kg,
             notes: client.notes,
+            subtask: { actual_start_date: client.subtask.actual_start_date ?? null },
         });
     });
 }

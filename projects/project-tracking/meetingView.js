@@ -112,16 +112,41 @@ const TASK_STATUS_BADGES = {
 // "Material wait" badge — the delay belongs to procurement, not the task.
 // CNC rows carry the plate keys (cuts_waiting / plate_items_pending); welding
 // and Üretim rows carry the manufacturing keys (pipe/profile + hand-marked
-// critical items).
-function materialWaitBadgeHtml(materialWait) {
-    if (!materialWait) return '';
+// critical items). Those keys say WHAT is missing; the schedule's
+// material_wait_wd says what it has COST — 266-13 cut its parts, then sat
+// ~44 working days on undelivered copper pipe while the forecast read the
+// idle weeks as slow tempo (user decision 2026-09-08). The badge dict only
+// exists while items are pending, so a wait that has closed (material
+// arrived, days still lost) renders from the figure alone, in the past
+// tense. Older plan payloads carry neither figure nor flags: bare label.
+function materialWaitBadgeHtml(materialWait, sched) {
+    const lost = sched?.material_wait_wd;
+    const hasLoss = typeof lost === 'number' && lost > 0;
+    if (!materialWait && !hasLoss) return '';
     const parts = [];
-    if (materialWait.cuts_waiting > 0) parts.push(`${materialWait.cuts_waiting} kesim plaka bekliyor`);
-    if (materialWait.plate_items_pending > 0) parts.push(`${materialWait.plate_items_pending} plaka kalemi teslim edilmedi`);
-    if (materialWait.pipe_profile_items_pending > 0) parts.push(`${materialWait.pipe_profile_items_pending} boru/profil kalemi teslim edilmedi`);
-    if (materialWait.critical_items_pending > 0) parts.push(`${materialWait.critical_items_pending} kritik kalem teslim edilmedi`);
-    const tooltip = `Satın alma kaynaklı bekleme: ${parts.join(' · ') || 'malzeme teslim edilmedi'}`;
-    return `<span class="status-badge status-orange" title="${escapeHtml(tooltip)}">Malzeme Bekliyor</span>`;
+    if (materialWait?.cuts_waiting > 0) parts.push(`${materialWait.cuts_waiting} kesim plaka bekliyor`);
+    if (materialWait?.plate_items_pending > 0) parts.push(`${materialWait.plate_items_pending} plaka kalemi teslim edilmedi`);
+    if (materialWait?.pipe_profile_items_pending > 0) parts.push(`${materialWait.pipe_profile_items_pending} boru/profil kalemi teslim edilmedi`);
+    if (materialWait?.critical_items_pending > 0) parts.push(`${materialWait.critical_items_pending} kritik kalem teslim edilmedi`);
+    const arrived = hasLoss && sched.material_wait_open === false;
+    const lines = [`Satın alma kaynaklı bekleme: ${parts.join(' · ') || (arrived ? 'kapandı' : 'malzeme teslim edilmedi')}`];
+    let label = arrived ? 'Malzeme Bekledi' : 'Malzeme Bekliyor';
+    if (hasLoss) {
+        label += ` · ${formatWd(lost)} g`;
+        // Headline = idle since the last progress entry (the undisputable
+        // share); the gross span since the task started with something
+        // undelivered is context only — 284-07 built two units through 130
+        // days of it (user decision 2026-09-08).
+        const exposure = sched.material_wait_exposure_wd;
+        let line = `Malzeme nedeniyle kaybedilen: ${formatWd(lost)} iş günü (son ilerleme girişinden beri)`;
+        if (typeof exposure === 'number' && exposure > lost) line += ` — başlangıçtan beri açık malzemeyle geçen: ${formatWd(exposure)} g`;
+        if (sched.material_wait_since) {
+            line += ` — ${fmtShortDate(sched.material_wait_since)} → ${sched.material_wait_until ? fmtShortDate(sched.material_wait_until) : 'teslim tarihi belirsiz'}`;
+        }
+        if (arrived) line += ' (malzeme geldi)';
+        lines.push(line);
+    }
+    return `<span class="status-badge status-orange" title="${escapeHtml(lines.join('\n'))}">${label}</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -712,11 +737,31 @@ async function openPlanModal(item) {
             // (window_start = the chain's start when the task's own log is
             // its only start signal) and CLOSES at the last progress entry —
             // the idle tail after it measures typing, not pace.
-            const windowText = b.window_start
+            let windowText = b.window_start
                 ? ` (görev başlangıcı ${fmtShortDate(b.window_start)} → son giriş ${fmtShortDate(b.last_entry)})`
                 : (b.last_entry
                     ? ` (son ilerleme girişi ${fmtShortDate(b.last_entry)})` : '');
+            // A closed material wait that sat inside the window came off it
+            // (275-11, user 2026-09-08): say so, or "2 iş gününde %10" reads
+            // like a typo next to a 21.08 → 08.09 window.
+            if (typeof b.wait_discount_wd === 'number' && b.wait_discount_wd > 0) {
+                windowText += `, ${formatWd(b.wait_discount_wd)} iş günü malzeme beklemesi düşüldü`;
+            }
             return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi${windowText}; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
+        }
+        // STARVED: the crew is waiting for material, so no budget is being
+        // spent on work and no tempo can be measured — the remaining share
+        // of the entered duration starts when the material lands (266-13,
+        // user 2026-09-08: "it cannot get 90% in 1 day"). A late PO is
+        // clamped to today by the server, so "en erken bugün" is honest.
+        if ((s.projection_basis || {}).term === 'material_wait') {
+            const b = s.projection_basis;
+            const what = b.blocking ? ` (${b.blocking})` : '';
+            // A rate that the wait explains: say what the tempo would have
+            // read, so the planner sees why the plan share was used.
+            const rateNote = typeof b.rate_wd === 'number'
+                ? ` Ölçülen tempoyla ~${formatWd(b.rate_wd)} iş günü çıkıyordu; bekleme tempoyu açıkladığı için plan payı esas alındı.` : '';
+            return `Malzeme bekleniyor${what} — %${Math.round(t.completion_percentage)} tamamlandı, kalan iş ~${formatWd(b.work_wd)} iş günü (${formatWd(b.total_wd)} iş günlük sürenin payı); malzeme geldiğinde, en erken ${fmtShortDate(b.resume)}'de başlar ve ~${formatWd(rem)} iş günü sonra biter.${rateNote}`;
         }
         // All progress arrived in ONE entry: a milestone, not a pace — no
         // tempo to extrapolate, so the duration chain projects the remaining
@@ -724,7 +769,24 @@ async function openPlanModal(item) {
         // 50% must not read as half the paint time).
         if ((s.projection_basis || {}).term === 'single_entry') {
             const b = s.projection_basis;
+            if (b.overrun) {
+                // Budget spent with work remaining — never "~0 kaldı"
+                // (user decision 2026-09-08): the remaining share runs
+                // from today, or from the resume date typed into Gerçek
+                // Başl.; the overrun is sapma.
+                const from = b.restart && b.restart > new Date().toISOString().slice(0, 10)
+                    ? `${fmtShortDate(b.restart)}'den itibaren` : 'bugünden itibaren';
+                return `%${Math.round(t.completion_percentage)} tek girişte kaydedildi (${fmtShortDate(b.last_entry)}) — tempo ölçülemiyor; ${formatWd(b.total_wd)} iş günlük süre bütçesi doldu, kalan %${Math.round(100 - t.completion_percentage)} (~${formatWd(b.work_wd)} iş günü) ${from} sayılıyor.`;
+            }
             return `%${Math.round(t.completion_percentage)} tek girişte kaydedildi (${fmtShortDate(b.last_entry)}) — tempo ölçülemiyor; ${formatWd(b.total_wd)} iş günlük süre başlangıçtan itibaren bütçe olarak sayılıyor (~${formatWd(rem)} iş günü kaldı).`;
+        }
+        // Budget spent (parents / procurement): the remaining share of the
+        // entered duration runs from today — never "~0 kaldı".
+        if ((s.projection_basis || {}).term === 'budget_overrun') {
+            const b = s.projection_basis;
+            const from = b.restart && b.restart > new Date().toISOString().slice(0, 10)
+                ? `${fmtShortDate(b.restart)}'den itibaren` : 'bugünden itibaren';
+            return `Girilen süre bütçesi doldu (${formatWd(b.total_wd)} iş günü, ${fmtShortDate(b.anchor)}'dan): kalan %${Math.round(100 - t.completion_percentage)} (~${formatWd(b.work_wd)} iş günü) ${from} sayılıyor — aşım, sapma olarak görünür.`;
         }
         // Slow progress never stretches an entered duration — it is a
         // calendar budget from the task's real start; overruns surface as
@@ -870,7 +932,8 @@ async function openPlanModal(item) {
             : (variance > 0
                 ? ` <span class="pp-var-chip pp-var-late">${formatWd(variance)} g geç</span>`
                 : (variance < 0 ? ` <span class="pp-var-chip pp-var-early">${formatWd(variance)} g erken</span>` : ''));
-        const materialWaitHtml = s.material_wait ? ` ${materialWaitBadgeHtml(s.material_wait)}` : '';
+        const materialWaitHtml = (s.material_wait || s.material_wait_wd > 0)
+            ? ` ${materialWaitBadgeHtml(s.material_wait, s)}` : '';
         const driver = s.drives_completion;
         const conflict = conflictSentence(t);
         const warnIcon = conflict
@@ -1012,6 +1075,21 @@ async function openPlanModal(item) {
         verdictSentence = forecast.verdict === 'late_risk'
             ? `En geç faz: <strong>Faz ${forecast.worst_phase}</strong> — kendi hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> görünüyor. Fazlar kendi sevk tarihlerine göre ayrı değerlendirilir.`
             : `Fazlar kendi sevk tarihlerine göre ayrı değerlendirilir — geciken faz yok.`;
+    }
+    // How much of the slip is procurement's — ONE sentence after the verdict,
+    // never inside the templates above, so every existing sentence stays as
+    // it was. "Bunun … iş günü" (of this) only when the loss fits inside the
+    // stated variance; a loss bigger than the slip (slack absorbed part of
+    // it) or a non-late verdict gets the neutral form, so the slide never
+    // says "30 days late, 44 of which…" (266-13, user decision 2026-09-08).
+    const lostWd = forecast.material_wait_wd;
+    if (typeof lostWd === 'number' && lostWd > 0) {
+        const stillWaiting = forecast.material_wait_open ? ' — hâlâ bekleniyor' : '';
+        const late = forecast.verdict === 'late_risk' || forecast.verdict === 'finished_late';
+        const withinSlip = late && typeof forecast.variance_wd === 'number' && lostWd <= forecast.variance_wd;
+        verdictSentence += withinSlip
+            ? ` Bunun <strong>${formatWd(lostWd)} iş günü</strong> malzeme beklemesi (satın alma)${stillWaiting}.`
+            : ` Malzeme beklemesi (satın alma) <strong>${formatWd(lostWd)} iş günü</strong> kaybettirdi${stillWaiting}.`;
     }
 
     const v = forecast.variance_wd;
@@ -1997,6 +2075,23 @@ function weldingPanelHtml(welding) {
         ? `<div class="pp-panel-sub"><span class="pp-num-orange"><strong>${waitParts.join(' · ')}</strong> malzeme bekliyor (satın alma)</span></div>`
         : '';
 
+    // Under WHAT is missing, what it has COST: the count sends the question
+    // to satın alma, the days say how urgent it is (266-13 lost ~44 working
+    // days on copper pipe while the count read "2 items"; user decision
+    // 2026-09-08). Per-job lines only when more than one job in the subtree
+    // is waiting — a single job's figure IS the headline. Older briefs carry
+    // no days_lost_wd: nothing rendered.
+    const lostWd = wait.days_lost_wd;
+    let lossLine = '';
+    if (typeof lostWd === 'number' && lostWd > 0) {
+        const perJob = Array.isArray(wait.per_job) ? wait.per_job : [];
+        const perJobHtml = perJob.length > 1
+            ? `<div class="pp-wait-jobs">${perJob.map(j =>
+                `<div>${escapeHtml(j.job_no)} — <strong>${formatWd(j.days_lost_wd)} g</strong>${j.blocking ? ` — ${escapeHtml(j.blocking)}` : ''}</div>`).join('')}</div>`
+            : '';
+        lossLine = `<div class="pp-panel-sub"><span class="pp-num-orange">Malzeme bekleme kaybı: <strong>${formatWd(lostWd)} g</strong>${wait.open ? ' (devam ediyor)' : ''}</span></div>${perJobHtml}`;
+    }
+
     const body = `
         <div class="pp-panel-hero">
             <span class="pp-panel-big">${big === null || big === undefined ? '—' : `%${fmtInt(big)}`}</span>
@@ -2005,7 +2100,7 @@ function weldingPanelHtml(welding) {
         </div>
         <div class="pp-scroll pp-res-scroll">${rows || (usingTaskProgress || big === null
             ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}</div>
-        <div class="pp-welding-foot">${waitLine}${hoursStrip}</div>`;
+        <div class="pp-welding-foot">${waitLine}${lossLine}${hoursStrip}</div>`;
     return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-area-welding', 'welding');
 }
 

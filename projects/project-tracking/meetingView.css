@@ -1044,6 +1044,24 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     color: #b6bcc6;
 }
 
+/* Welding footer — per-job "malzeme bekleme kaybı" lines under the headline
+   figure, only when more than one job in the subtree is waiting. */
+.pp-wait-jobs {
+    font-size: 0.8rem;
+    color: #59616d;
+    line-height: 1.3;
+}
+
+.pp-wait-jobs > div {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-wait-jobs strong {
+    color: #1f2530;
+}
+
 /* Mini progress bar: light track, saturated fill */
 .pp-mini-bar {
     width: 110px;

@@ -1942,9 +1942,18 @@ function jobOrderProjectionHtml(row) {
         const phased = !!(forecast.phases && forecast.phases.length);
         const phaseNote = phased && forecast.worst_phase !== null && forecast.worst_phase !== undefined
             ? `<span style="font-size:0.68rem; color:#6b7280; white-space:nowrap;">Faz ${forecast.worst_phase}</span>` : '';
+        // Working days the forecast attributes to undelivered material — lets
+        // a late verdict be read as satın alma's rather than the shop's
+        // (266-13 lost ~44 on copper pipe; user decision 2026-09-08). The
+        // overview is cached ~15 min server side: a stale item has no key,
+        // so no chip.
+        const lostWd = forecast.material_wait_wd;
+        const materialChip = typeof lostWd === 'number' && lostWd > 0
+            ? `<span class="jo-material-chip" title="Malzeme beklemesinden kaynaklanan kayıp iş günü">⏳ ${formatWorkDays(lostWd)} g malzeme</span>`
+            : '';
         return projectionCellShell(dateText,
             `<span style="display:flex; align-items:center; justify-content:center; gap:4px; flex-wrap:wrap;">
-                <span class="status-badge ${badge.badgeClass}">${badge.label}</span>${phaseNote}
+                <span class="status-badge ${badge.badgeClass}">${badge.label}</span>${phaseNote}${materialChip}
              </span>`);
     }
 

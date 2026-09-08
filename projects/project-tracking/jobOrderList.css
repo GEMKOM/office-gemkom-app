@@ -347,6 +347,31 @@
     text-overflow: ellipsis;
 }
 
+/* "⏳ N g malzeme" beside the forecast badge: working days the root's
+   forecast attributes to undelivered material (satın alma), so a late
+   verdict reads as procurement's rather than the shop's. */
+.jo-material-chip {
+    display: inline-block;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #9a3412;
+    background: #ffedd5;
+    border: 1px solid #fdba74;
+    white-space: nowrap;
+}
+
+.jo-tight .jo-material-chip {
+    font-size: 0.62rem;
+    padding: 0.06rem 0.3rem;
+}
+
+.jo-ultra .jo-material-chip {
+    font-size: 0.56rem;
+    padding: 0.04rem 0.22rem;
+}
+
 /* --------------------------------------------------------------- progress
    bar                                                                       */
 
