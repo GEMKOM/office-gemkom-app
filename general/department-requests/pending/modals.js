@@ -66,6 +66,56 @@ function initializeModalComponents() {
     });
 }
 
+// Stored file names are prefixed with the upload uuid (`<uuid>_original.pdf`);
+// show the original name so a file can be matched to the item row it belongs to.
+function prettyFileName(file) {
+    const raw = (file && file.file_name ? String(file.file_name) : '').split('/').pop();
+    if (!raw) return 'Dosya';
+    return raw.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}_/i, '');
+}
+
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function openAttachment(fileUrl, fileName) {
+    const name = fileName || 'Dosya';
+    const extension = name.split('.').pop().toLowerCase();
+    const viewer = new FileViewer();
+    viewer.setDownloadCallback(async () => {
+        await viewer.downloadFile(fileUrl, name);
+    });
+    viewer.openFile(fileUrl, name, extension);
+}
+
+// Clickable chips for the files attached to a single item row
+function renderItemFiles(files) {
+    if (!files || files.length === 0) {
+        return '<span class="text-muted">-</span>';
+    }
+
+    return `
+        <div class="d-flex flex-column gap-1">
+            ${files.map(file => `
+                <button type="button"
+                        class="btn btn-sm btn-outline-secondary text-start item-file-link"
+                        data-file-url="${escapeHtml(file.file_url)}"
+                        data-file-name="${escapeHtml(file.file_name)}"
+                        title="${escapeHtml(file.file_name)}"
+                        style="font-size: 0.75rem; padding: 0.15rem 0.4rem; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    <i class="fas fa-paperclip me-1"></i>${escapeHtml(file.file_name)}
+                </button>
+            `).join('')}
+        </div>
+    `;
+}
+
 // Show department request details modal
 async function showDepartmentRequestDetailsModal(request = null) {
     if (!departmentRequestDetailsModal) return;
@@ -191,7 +241,7 @@ async function showDepartmentRequestDetailsModal(request = null) {
                             <label class="field-label me-2 mb-0 flex-shrink-0">
                                 <i class="fas fa-boxes me-1"></i>Ürün Sayısı:
                             </label>
-                            <div class="field-value">${requestToShow.items?.length || 0} ürün</div>
+                            <div class="field-value">${requestToShow.items?.length ?? requestToShow.items_count ?? 0} ürün</div>
                         </div>
                     </div>
                     ${requestToShow.approved_at ? `
@@ -245,6 +295,18 @@ async function showDepartmentRequestDetailsModal(request = null) {
             });
         }
 
+        // Files attached to the request, keyed by asset id so each item row can
+        // show the files it was uploaded with (items carry `file_asset_ids`).
+        const requestFiles = (requestToShow.files || []).map(file => ({
+            ...file,
+            file_name: prettyFileName(file)
+        }));
+        const filesByAssetId = new Map(
+            requestFiles
+                .filter(file => file.asset_id !== null && file.asset_id !== undefined)
+                .map(file => [String(file.asset_id), file])
+        );
+
         // Add items section with table
         if (requestToShow.items && requestToShow.items.length > 0) {
             departmentRequestDetailsModal.addSection({
@@ -253,15 +315,22 @@ async function showDepartmentRequestDetailsModal(request = null) {
                 iconColor: 'text-primary'
             });
 
-            // Create items table
+            // Create items table.
+            // Items are stored as free-form JSON and two shapes exist in the
+            // data: the older one uses `name`/`unit`, the current form sends
+            // `item_name`/`item_unit`, so read both.
             const itemsData = requestToShow.items.map((item, index) => ({
                 id: index + 1,
-                item_code: item.item_code || '-',
-                name: item.name || item.product_name || '-',
-                quantity: item.quantity || 0,
-                unit: item.unit || 'Adet',
-                item_description: item.item_description || '-',
-                item_specifications: item.item_specifications || '-'
+                item_code: item.item_code || item.code || '-',
+                name: item.item_name || item.name || item.product_name || '-',
+                job_no: item.job_no || '-',
+                quantity: item.quantity ?? 0,
+                unit: item.item_unit || item.unit || 'Adet',
+                item_description: item.item_description || item.description || '-',
+                item_specifications: item.item_specifications || item.specifications || '-',
+                files: (item.file_asset_ids || [])
+                    .map(assetId => filesByAssetId.get(String(assetId)))
+                    .filter(Boolean)
             }));
 
             // Add custom HTML content for the table
@@ -274,22 +343,26 @@ async function showDepartmentRequestDetailsModal(request = null) {
                                     <th>#</th>
                                     <th>Ürün Kodu</th>
                                     <th>Ad</th>
+                                    <th>İş Emri</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
                                     <th>Ürün Açıklaması</th>
                                     <th>Özellikler</th>
+                                    <th>Dosyalar</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${itemsData.map(item => `
                                     <tr>
                                         <td>${item.id}</td>
-                                        <td><strong>${item.item_code}</strong></td>
-                                        <td>${item.name}</td>
-                                        <td>${item.quantity}</td>
-                                        <td>${item.unit}</td>
-                                        <td>${item.item_description}</td>
-                                        <td>${item.item_specifications}</td>
+                                        <td><strong>${escapeHtml(item.item_code)}</strong></td>
+                                        <td>${escapeHtml(item.name)}</td>
+                                        <td>${escapeHtml(item.job_no)}</td>
+                                        <td>${escapeHtml(item.quantity)}</td>
+                                        <td>${escapeHtml(item.unit)}</td>
+                                        <td>${escapeHtml(item.item_description)}</td>
+                                        <td>${escapeHtml(item.item_specifications)}</td>
+                                        <td>${renderItemFiles(item.files)}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -359,17 +432,21 @@ async function showDepartmentRequestDetailsModal(request = null) {
                     layout: 'grid',
                     showTitle: false,
                     onFileClick: (file) => {
-                        const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
-                        const fileExtension = fileName.split('.').pop().toLowerCase();
-                        const viewer = new FileViewer();
-                        viewer.setDownloadCallback(async () => {
-                            await viewer.downloadFile(file.file_url, fileName);
-                        });
-                        viewer.openFile(file.file_url, fileName, fileExtension);
+                        openAttachment(file.file_url, prettyFileName(file));
                     }
                 });
                 // Set files (empty array if no files)
-                fileAttachments.setFiles(requestToShow.files || []);
+                fileAttachments.setFiles(requestFiles);
+            }
+
+            // Open a file straight from the item row it is attached to
+            const itemsContainer = document.getElementById('items-table-container');
+            if (itemsContainer) {
+                itemsContainer.addEventListener('click', (event) => {
+                    const button = event.target.closest('.item-file-link');
+                    if (!button) return;
+                    openAttachment(button.dataset.fileUrl, button.dataset.fileName);
+                });
             }
         }, 100);
     }
@@ -405,7 +482,7 @@ function showApproveDepartmentRequestModal(requestId) {
                 <strong>Departman:</strong> ${request.department_label || '-'}
             </div>
             <div class="col-6">
-                <strong>Ürün Sayısı:</strong> ${request.items?.length || 0} ürün
+                <strong>Ürün Sayısı:</strong> ${request.items_count ?? request.items?.length ?? 0} ürün
             </div>
             <div class="col-6">
                 <strong>Öncelik:</strong> ${getPriorityLabel(request.priority)}

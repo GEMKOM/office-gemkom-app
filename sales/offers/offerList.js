@@ -5149,7 +5149,7 @@ function showEditModal(onSuccess) {
             modal.hide();
             showNotification('Teklif güncellendi', 'success');
             await onSuccess();
-        } catch (e) { showNotification('Güncelleme hatası', 'error'); }
+        } catch (e) { showNotification(parseError(e, 'Güncelleme hatası'), 'error'); }
     });
     modal.render();
     modal.show();
@@ -6120,6 +6120,37 @@ function toDateInputValue(val) {
     return '';
 }
 
+// Toolbar with select-all / clear-all for a list of file checkboxes.
+// `scope` is the container the checkboxes live in; they may be rendered after
+// this call, so the list is queried lazily on every use.
+function buildFileSelectionToolbar(scope, cbSelector) {
+    const bar = document.createElement('div');
+    bar.className = 'd-flex align-items-center gap-2 mb-2';
+    bar.innerHTML = `
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-file-select="all"><i class="fas fa-check-double me-1"></i>Tümünü Seç</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-file-select="none"><i class="fas fa-eraser me-1"></i>Seçimi Temizle</button>
+        <small class="text-muted ms-auto" data-file-select-count></small>
+    `;
+    const boxes = () => Array.from(scope.querySelectorAll(cbSelector));
+    const updateCount = () => {
+        const all = boxes();
+        const checked = all.filter(cb => cb.checked).length;
+        bar.querySelector('[data-file-select-count]').textContent = `${checked} / ${all.length} dosya seçili`;
+    };
+    bar.querySelectorAll('[data-file-select]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const select = btn.dataset.fileSelect === 'all';
+            boxes().forEach(cb => { cb.checked = select; });
+            updateCount();
+        });
+    });
+    scope.addEventListener('change', (e) => {
+        if (e.target.matches(cbSelector)) updateCount();
+    });
+    return { bar, updateCount };
+}
+
 async function showConsultationModal(onSuccess) {
     const modal = new EditModal('consultation-modal-container', { title: 'Departman Görüşü Gönder', icon: 'fas fa-paper-plane', size: 'lg', showEditButton: false });
     modal.clearAll();
@@ -6190,6 +6221,8 @@ async function showConsultationModal(onSuccess) {
             const filesContainer = document.createElement('div');
             filesContainer.className = 'consultation-files-selection';
             filesContainer.innerHTML = '<p class="text-muted small mb-2">Departmanın görmesini istediğiniz dosyaları işaretleyin.</p>';
+            const selectToolbar = buildFileSelectionToolbar(filesSection, '.consultation-file-cb');
+            filesContainer.appendChild(selectToolbar.bar);
             const listDiv = document.createElement('div');
             listDiv.className = 'row g-2';
             offerFiles.forEach(f => {
@@ -6220,6 +6253,7 @@ async function showConsultationModal(onSuccess) {
             });
             filesContainer.appendChild(listDiv);
             filesSection.appendChild(filesContainer);
+            selectToolbar.updateCount();
             filesSection.querySelectorAll('.preview-consultation-file').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -6326,6 +6360,8 @@ async function showEditConsultationModal(taskId, onSuccess) {
             p.className = 'text-muted small mb-2';
             p.textContent = 'Departmanın görmesini istediğiniz dosyaları işaretleyin. Mevcut setin yerine seçtiğiniz set geçer.';
             filesSection.appendChild(p);
+            const selectToolbar = buildFileSelectionToolbar(filesSection, '.edit-consultation-file-cb');
+            filesSection.appendChild(selectToolbar.bar);
             const listDiv = document.createElement('div');
             listDiv.className = 'row g-2';
             offerFiles.forEach(f => {
@@ -6356,6 +6392,7 @@ async function showEditConsultationModal(taskId, onSuccess) {
                 listDiv.appendChild(col);
             });
             filesSection.appendChild(listDiv);
+            selectToolbar.updateCount();
             filesSection.querySelectorAll('.preview-edit-consultation-file').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();

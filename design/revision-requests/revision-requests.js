@@ -262,7 +262,7 @@ async function showRevisionRequestDetails(request) {
     if (!detailsModal) return;
 
     currentRequest = request;
-    detailsModal.clearAll();
+    detailsModal.clearData();
 
     // Add general information section
     detailsModal.addSection({
