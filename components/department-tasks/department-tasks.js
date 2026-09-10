@@ -82,6 +82,8 @@ function formatCommentWithMentions(content, mentionedUsers = [], mentionedGroups
  * @param {string} [config.userTeam] - Team for assigned-user filter (defaults to department)
  * @param {Object} [config.containerIds] - Override container IDs: header, filters, table
  * @param {Array} [config.customFilters] - Extra filter definitions added after defaults
+ * @param {boolean} [config.syncFiltersToUrl] - Keep filter values in the URL query string so the
+ *   filtered view survives reloads and returning from a task detail (opt-in; default false)
  * @param {Object} [config.customTableColumns] - { insertAfter: string, columns: Array } to add columns
  * @param {Function} [config.onBeforeLoadTasks] - Called before each loadTasks()
  * @param {Function} [config.onAfterLoadTasks] - Called after each loadTasks()
@@ -96,6 +98,7 @@ export async function initDepartmentTasksPage(config) {
         canCreateTasks = false,
         containerIds: containerIdsOverride = {},
         customFilters = [],
+        syncFiltersToUrl = false,
         customTableColumns,
         onBeforeLoadTasks,
         onAfterLoadTasks
@@ -398,6 +401,71 @@ function updateUrlParams(params) {
     window.history.replaceState({}, '', url);
 }
 
+// --- Filter state in the URL (opt-in via config.syncFiltersToUrl) ---
+// Query param name used for each filter id. Custom filters fall back to their
+// apiParam (or id) so a page adding filters gets URL support for free.
+function getFilterUrlParamMap() {
+    const map = {
+        'status-filter': 'status',
+        'search-filter': 'search',
+        'job-order-filter': 'job_order',
+        'customer-filter': 'customer',
+        'assigned-to-filter': 'assigned_to',
+        'target-start-date-filter': 'target_start_date',
+        'target-completion-date-filter': 'target_completion_date'
+    };
+    (customFilters || []).forEach((filterDef) => {
+        if (filterDef && filterDef.id && !map[filterDef.id]) {
+            map[filterDef.id] = filterDef.apiParam || filterDef.id;
+        }
+    });
+    return map;
+}
+
+// Values present in the URL, keyed by filter id. Absent params are omitted so
+// callers can tell "not in URL" from "explicitly empty".
+function readFilterValuesFromUrl() {
+    const values = {};
+    if (!syncFiltersToUrl) return values;
+
+    const params = new URLSearchParams(window.location.search);
+    const map = getFilterUrlParamMap();
+    Object.keys(map).forEach((filterId) => {
+        const param = map[filterId];
+        if (params.has(param)) {
+            values[filterId] = params.get(param);
+        }
+    });
+    return values;
+}
+
+function syncFilterValuesToUrl() {
+    if (!syncFiltersToUrl || !tasksFilters) return;
+
+    // Filters whose empty value is a deliberate choice ("Tümü") rather than "not set":
+    // their param is written as empty instead of removed, so a reload does not
+    // silently re-apply the built-in default.
+    const filtersWithDefaultValue = ['status-filter'];
+
+    const map = getFilterUrlParamMap();
+    const filterValues = tasksFilters.getFilterValues();
+    const params = {};
+
+    Object.keys(map).forEach((filterId) => {
+        const value = filterValues[filterId];
+        const normalized = Array.isArray(value) ? value.join(',') : (value ?? '');
+        if (String(normalized).trim() === '') {
+            params[map[filterId]] = filtersWithDefaultValue.includes(filterId) ? '' : null;
+        } else {
+            params[map[filterId]] = normalized;
+        }
+    });
+
+    // Filter changes always restart paging, so keep the page param in step.
+    params.page = currentPage;
+    updateUrlParams(params);
+}
+
 async function checkUrlAndOpenModal() {
     const urlParams = new URLSearchParams(window.location.search);
     const taskParam = urlParams.get('task');
@@ -423,16 +491,32 @@ async function checkUrlAndOpenModal() {
 }
 
 function initializeFiltersComponent(defaultAssignedUserId = null) {
+    // Values carried in the URL (only when syncFiltersToUrl is on) win over the
+    // built-in defaults, so a filtered view survives a reload or a return from
+    // a task detail.
+    const urlFilterValues = readFilterValuesFromUrl();
+    const initialFilterValue = (filterId, fallback = '') => (
+        urlFilterValues[filterId] !== undefined ? urlFilterValues[filterId] : fallback
+    );
+    // Remote-search dropdowns start with no items, so a restored value would show
+    // the placeholder; seed the selected item with a label we can derive.
+    const seedOptionsFor = (filterId, labelFor = (value) => value) => {
+        const value = initialFilterValue(filterId);
+        return value ? [{ value, label: labelFor(value) }] : [];
+    };
+
     tasksFilters = new FiltersComponent(containerIds.filters, {
         title: 'Görev Filtreleri',
         onApply: (values) => {
             currentPage = 1;
+            syncFilterValuesToUrl();
             loadTasks();
         },
         onClear: () => {
             currentPage = 1;
             currentStatusFilter = '';
             currentFilters = {};
+            syncFilterValuesToUrl();
             loadTasks();
             showNotification('Filtreler temizlendi', 'info');
         },
@@ -453,7 +537,7 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'Durum',
         options: statusFilterOptions,
         placeholder: 'Durum seçin',
-        value: 'pending,in_progress',
+        value: initialFilterValue('status-filter', 'pending,in_progress'),
         colSize: 2
     });
 
@@ -462,6 +546,7 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         id: 'search-filter',
         label: 'Arama',
         placeholder: 'Görev başlığı, açıklama, iş emri...',
+        value: initialFilterValue('search-filter'),
         colSize: 3
     });
 
@@ -471,6 +556,8 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'İş Emri',
         options: [],
         placeholder: 'İş emri ara (en az 2 karakter)',
+        value: initialFilterValue('job-order-filter'),
+        seedOptions: seedOptionsFor('job-order-filter'),
         colSize: 2,
         searchable: true,
         minSearchLength: 2,
@@ -497,6 +584,8 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'Müşteri',
         options: [],
         placeholder: 'Müşteri ara (en az 3 karakter)',
+        value: initialFilterValue('customer-filter'),
+        seedOptions: seedOptionsFor('customer-filter', (value) => `#${value}`),
         colSize: 2,
         searchable: true,
         minSearchLength: 3,
@@ -524,7 +613,7 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'Atanan Kişi',
         options: userOptions,
         placeholder: 'Kişi seçin',
-        value: defaultAssignedUserId || '',
+        value: initialFilterValue('assigned-to-filter', defaultAssignedUserId || ''),
         colSize: 2
     });
 
@@ -532,20 +621,24 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
     tasksFilters.addDateFilter({
         id: 'target-start-date-filter',
         label: 'Hedef Başlangıç',
+        value: initialFilterValue('target-start-date-filter'),
         colSize: 2
     });
 
     tasksFilters.addDateFilter({
         id: 'target-completion-date-filter',
         label: 'Hedef Bitiş',
+        value: initialFilterValue('target-completion-date-filter'),
         colSize: 2
     });
 
     // Optional: add custom filters (for future per-page extensions)
     (customFilters || []).forEach(f => {
-        if (f.type === 'dropdown') tasksFilters.addDropdownFilter(f);
-        else if (f.type === 'text') tasksFilters.addTextFilter(f);
-        else if (f.type === 'date') tasksFilters.addDateFilter(f);
+        const restored = urlFilterValues[f.id];
+        const filterDef = restored !== undefined ? { ...f, value: restored } : f;
+        if (f.type === 'dropdown') tasksFilters.addDropdownFilter(filterDef);
+        else if (f.type === 'text') tasksFilters.addTextFilter(filterDef);
+        else if (f.type === 'date') tasksFilters.addDateFilter(filterDef);
     });
 }
 
