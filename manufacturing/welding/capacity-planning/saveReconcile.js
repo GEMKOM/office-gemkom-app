@@ -79,3 +79,57 @@ export function shouldPostNewBlock(block) {
 export function shouldHydrateAfterSave(clockAtSend, clockNow) {
     return clockAtSend === clockNow;
 }
+
+/** Stage cids this payload will POST (id-less, not already deleted). */
+export function newStageCidsFromBlock(block) {
+    return (block && block.stages || [])
+        .filter((s) => s && !s.deleted && s.id == null && s.cid)
+        .map((s) => s.cid);
+}
+
+/**
+ * A stage is already on the server, or is in the in-flight create payload.
+ * Splicing it locally (as if it were never POSTed) would orphan the row.
+ */
+export function shouldDiscardNewStageLocally(stage, inflightNewStageCids) {
+    if (!stage || stage.id != null || stage.createdOnServer) return false;
+    return !(inflightNewStageCids && inflightNewStageCids.has(stage.cid));
+}
+
+export function findBoardBlock(board, assignmentType, assignmentId) {
+    if (assignmentId == null) return null;
+    const key = assignmentKey(assignmentType, assignmentId);
+    for (const res of ((board && board.resources) || [])) {
+        for (const b of (res.blocks || [])) {
+            if (b && assignmentKey(b.assignment_type, b.assignment_id) === key) {
+                return b;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Copy server ids onto client stages that were deleted while their create
+ * was in flight, so the next payload can send `{id, deleted: true}`.
+ * Live (non-deleted) stages keep first claim on a title match — recreating
+ * Montaj during the same save must not steal the id for a delete+recreate.
+ */
+export function adoptDeletedStageIds(clientStages, serverStages) {
+    const usedIds = new Set(
+        (clientStages || []).filter((s) => s && s.id != null).map((s) => s.id),
+    );
+    const server = (serverStages || []).filter(
+        (s) => s && s.id != null && !s.deleted && !usedIds.has(s.id),
+    );
+    const taken = new Set();
+    (clientStages || []).forEach((cs) => {
+        if (!cs || !cs.deleted || cs.id != null) return;
+        const idx = server.findIndex((ss, i) => !taken.has(i) && ss.title === cs.title);
+        if (idx < 0) return;
+        taken.add(idx);
+        cs.id = server[idx].id;
+        cs.cid = `s${cs.id}`;
+        cs.createdOnServer = false;
+    });
+}
