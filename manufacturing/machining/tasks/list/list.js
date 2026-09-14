@@ -1,5 +1,5 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats, uploadPartFiles, deletePartFile, convertPartsToDepartmentRequest, getPartCost } from '../../../../apis/machining/parts.js';
+import { getParts, getPart, updatePart, deletePart, createPart, updatePartOperations, getPartsStats, uploadPartFiles, deletePartFile, convertPartsToDepartmentRequest, getPartCost } from '../../../../apis/machining/parts.js';
 import { createJobAllocationsEditor, formatSharePercent } from '../../../../components/jobAllocations/jobAllocations.js';
 import { hasPerm, isSuperuser } from '../../../../authService.js';
 import { getOperations, markOperationCompleted, unmarkOperationCompleted, createManualTimeEntry } from '../../../../apis/machining/operations.js';
@@ -15,6 +15,26 @@ import { FileViewer } from '../../../../components/file-viewer/file-viewer.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 import { escapeHtml } from '../../../../utils/text.js';
+
+// Plan dates come from the server-side machine plan (read-only on this page).
+function formatIsoDate(isoDate) {
+    // "2026-09-30" -> "30.09.2026" (string split; no timezone drift through Date)
+    if (!isoDate || typeof isoDate !== 'string') return '';
+    const [year, month, day] = isoDate.split('-');
+    if (!year || !month || !day) return isoDate;
+    return `${day}.${month}.${year}`;
+}
+
+function formatPlanStamp(ms, withYear = false) {
+    // epoch ms -> "18.09.2026 08:00" (withYear) or "18.09 08:00"
+    if (!ms) return '';
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    const dayMonth = `${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
+    const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return withYear ? `${dayMonth}.${date.getFullYear()} ${time}` : `${dayMonth} ${time}`;
+}
 
 // State management
 let currentPage = 1;
@@ -1346,6 +1366,13 @@ function showCreatePartModal() {
     } else if (createAllocationsEditor) {
         createAllocationsEditor.setValue([]);
     }
+
+    // "Malzeme ve Özellikler" starts collapsed on every open; it is optional
+    // and only expands when the user asks for it.
+    const materialSection = document.getElementById('part-material-section');
+    if (materialSection && window.bootstrap?.Collapse) {
+        bootstrap.Collapse.getOrCreateInstance(materialSection, { toggle: false }).hide();
+    }
 }
 
 function addOperationRow() {
@@ -1485,7 +1512,18 @@ async function savePart() {
         
         if (createdPart) {
             const partKey = createdPart.key || '-';
-            showNotification(`Parça başarıyla oluşturuldu: ${partKey}`, 'success');
+            // Creation always plans: show the first operation's slot when the server
+            // returned one (planned_start_ms is null while auto-planning is off).
+            const createdOps = Array.isArray(createdPart.operations)
+                ? [...createdPart.operations].sort((a, b) => (a.order || 0) - (b.order || 0))
+                : [];
+            const firstOp = createdOps[0];
+            let successMessage = `Parça oluşturuldu: ${partKey}`;
+            if (firstOp && firstOp.planned_start_ms) {
+                const machineName = firstOp.machine_name || machines.find(m => m.id === firstOp.machine_fk)?.name || '';
+                successMessage += ` · Plana eklendi: ${formatPlanStamp(firstOp.planned_start_ms, true)}${machineName ? ` (${machineName})` : ''}`;
+            }
+            showNotification(successMessage, 'success');
             const modalElement = document.getElementById('createPartModal');
             if (modalElement) {
                 const modalInstance = bootstrap.Modal.getInstance(modalElement);
@@ -1564,19 +1602,23 @@ function setupPartDetailFilesSection(part, isLocked) {
 
 async function showPartDetails(partKey) {
     try {
-        // Fetch operations for this part
-        const operationsResponse = await getOperations({ part_key: partKey });
+        // Fetch operations for this part, plus the part detail for its server-computed
+        // plan_summary (the list rows do not carry it; a failed detail fetch is not fatal)
+        const [operationsResponse, partDetail] = await Promise.all([
+            getOperations({ part_key: partKey }),
+            getPart(partKey).catch(() => null)
+        ]);
         const operations = Array.isArray(operationsResponse) ? operationsResponse : (operationsResponse.results || []);
-        
-        // Get part info from the parts list (we already have it)
-        const part = parts.find(p => p.key === partKey);
-        
-        if (part) {
-            showPartDetailsModal(part, operations);
-        } else {
-            // If part not in list, create minimal part object with just the key
-            showPartDetailsModal({ key: partKey, name: partKey }, operations);
+
+        // Get part info from the parts list (we already have it); fall back to a
+        // minimal part object with just the key
+        const listPart = parts.find(p => p.key === partKey);
+        const part = listPart ? { ...listPart } : { key: partKey, name: partKey };
+        if (partDetail && partDetail.plan_summary) {
+            part.plan_summary = partDetail.plan_summary;
         }
+
+        showPartDetailsModal(part, operations);
     } catch (error) {
         console.error('Error showing part details:', error);
         showNotification('Parça detayları gösterilirken hata oluştu', 'error');
@@ -1621,10 +1663,40 @@ function showPartDetailsModal(part, operations = []) {
         customContent: allocationSectionHtml
     });
     
+    // One-line plan summary (server-computed; from GET /tasks/parts/{key}/)
+    const planSummary = part.plan_summary || null;
+    let planSummaryHtml = '';
+    if (planSummary) {
+        const flags = planSummary.flags;
+        const hasFlag = (name) => Array.isArray(flags) ? flags.includes(name) : Boolean(flags && flags[name]);
+        const dueLabel = formatIsoDate(planSummary.due_date);
+        const dueSource = planSummary.due_source === 'part' ? 'parça' : (planSummary.due_source === 'job_order' ? 'iş emri' : '');
+        const summaryParts = [
+            `<span><strong>Termin:</strong> ${dueLabel ? `${dueLabel}${dueSource ? ` (${dueSource})` : ''}` : '-'}</span>`,
+            `<span><strong>Tahmini bitiş:</strong> ${planSummary.projected_finish_ms ? formatPlanStamp(planSummary.projected_finish_ms, true) : '-'}</span>`
+        ];
+        if (planSummary.projected_late) {
+            summaryParts.push('<span class="status-badge status-red" title="Tahmini bitiş termini aşıyor">Geç</span>');
+        }
+        if (hasFlag('estimate_missing')) {
+            summaryParts.push('<small class="text-muted" title="Bir veya daha fazla operasyonda tahmini saat yok">tahmin eksik</small>');
+        }
+        if (hasFlag('due_missing')) {
+            summaryParts.push('<small class="text-muted" title="Parçanın ve bağlı iş emirlerinin termini yok">termin yok</small>');
+        }
+        planSummaryHtml = `
+            <div class="part-plan-summary mb-3 d-flex flex-wrap align-items-center gap-2">
+                <i class="fas fa-calendar-alt text-primary"></i>
+                ${summaryParts.join('<span class="text-muted">·</span>')}
+            </div>
+        `;
+    }
+
     // Create operations management section with editable table
     const operationsHtml = `
         <div class="operations-management">
             ${isLocked ? '<div class="alert alert-info py-2 mb-3"><i class="fas fa-lock me-2"></i>Bu parça departman talebine dönüştürüldü; operasyonlar düzenlenemez.</div>' : ''}
+            ${planSummaryHtml}
             <div class="mb-3 d-flex justify-content-between align-items-center">
                 <button type="button" class="btn btn-sm btn-primary" id="add-operation-row-btn" ${isLocked ? 'disabled' : ''}>
                     <i class="fas fa-plus me-1"></i>Satır Ekle
@@ -1643,13 +1715,14 @@ function showPartDetailsModal(part, operations = []) {
                             <th style="width: 10%;">Makine</th>
                             <th style="width: 9%;">Tahmini Saat</th>
                             <th style="width: 9%;">Harcanan Saat</th>
+                            <th style="width: 10%;">Plan</th>
                             <th style="width: 7%;">Değiştirilebilir</th>
                             <th style="width: 7%;">Durum</th>
                             <th style="width: 7%;">İşlem</th>
                         </tr>
                     </thead>
                     <tbody id="operations-detail-table-body">
-                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
+                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -1819,6 +1892,13 @@ function createOperationRow(operation, isNew = false) {
     const estimatedHoursValue = operation.estimated_hours || '';
     const keyValue = escapeHtml(operation.key || '');
     
+    // Planned window from the server-side machine plan (read-only here)
+    const planStart = formatPlanStamp(operation.planned_start_ms);
+    const planEnd = formatPlanStamp(operation.planned_end_ms);
+    const planHtml = (planStart || planEnd)
+        ? `<small class="text-nowrap">${planStart || '?'} → ${planEnd || '?'}</small>${operation.plan_locked ? ' <i class="fas fa-lock text-secondary ms-1" title="Sıra kilitli"></i>' : ''}`
+        : '<span class="text-muted">-</span>';
+
     // Build machine options HTML
     const machineOptionsHtml = machines.map(m => {
         const selected = operation.machine_fk == m.id ? 'selected' : '';
@@ -1848,6 +1928,9 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 ${hoursSpent > 0 ? parseFloat(hoursSpent).toFixed(2) + ' saat' : '-'}
+            </td>
+            <td class="text-center">
+                ${planHtml}
             </td>
             <td class="text-center">
                 <div class="form-check d-flex justify-content-center">
@@ -2259,7 +2342,7 @@ function updateOperationOrdersInTable() {
     
     // Show empty message if no rows
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
         return;
     }
     

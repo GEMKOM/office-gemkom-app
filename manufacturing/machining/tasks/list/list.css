@@ -287,3 +287,94 @@ tr[data-part-key]:not([data-locked]) .part-alloc-cell:hover {
     }
 }
 
+
+/* ---- Yeni Parça modal layout ------------------------------------------- */
+/* Every field in a row carries label + control + one help line, so rows
+   stay aligned; the help lines are clamped to a single line. */
+#createPartModal .create-part-row {
+    margin-bottom: 0.5rem;
+}
+#createPartModal .create-part-row .form-text.compact {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-height: 1.1em;
+}
+#createPartModal .form-section.compact:last-child {
+    margin-bottom: 0;
+}
+
+/* Collapsible "Malzeme ve Özellikler" header: same look as the other
+   section titles, but a full-width button with a chevron. */
+#createPartModal .create-part-section-toggle {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    background: none;
+    border: 0;
+    padding: 0;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+}
+#createPartModal .create-part-section-toggle:focus-visible {
+    outline: 2px solid var(--bs-primary, #0d6efd);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+#createPartModal .create-part-section-hint {
+    margin-left: 0.5rem;
+    font-weight: 400;
+    color: #6c757d;
+    font-size: 0.8em;
+}
+#createPartModal .create-part-section-chevron {
+    margin-left: auto;
+    font-size: 0.8em;
+    color: #6c757d;
+    transition: transform 0.2s ease;
+}
+#createPartModal .create-part-section-toggle:not(.collapsed) .create-part-section-chevron {
+    transform: rotate(180deg);
+}
+
+/* Operations header: title + note on the left, add button on the right. */
+#createPartModal .create-part-ops-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Section cards inside the Yeni Parça modal (the shared edit-modal styles
+   are scoped to .edit-modal-container and do not reach this modal). */
+#createPartModal .form-section.compact {
+    margin-bottom: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #DC143C;
+}
+#createPartModal .section-subtitle.compact {
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 0.92rem;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+}
+#createPartModal .create-part-collapsible .section-subtitle.compact {
+    margin-bottom: 0;
+}
+#createPartModal .form-label.compact {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.2rem;
+}
+#createPartModal .form-text.compact {
+    font-size: 0.72rem;
+    color: #6c757d;
+    margin-top: 0.2rem;
+}

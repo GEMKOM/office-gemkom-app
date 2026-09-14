@@ -74,102 +74,91 @@
                             <h6 class="section-subtitle compact">
                                 <i class="fas fa-info-circle me-2 text-primary"></i>Temel Bilgiler
                             </h6>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-tag me-1"></i>Parça Adı *
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="part-name" placeholder="Parça adını girin" required>
-                                        <div class="form-text compact">Parçayı tanımlayan açıklayıcı isim</div>
-                                    </div>
+                            <!-- Row 1: identity + due date on one aligned line -->
+                            <div class="row g-2 create-part-row">
+                                <div class="col-md-5">
+                                    <label class="form-label compact" for="part-name">
+                                        <i class="fas fa-tag me-1"></i>Parça Adı *
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm" id="part-name" placeholder="Parça adını girin" required>
+                                    <div class="form-text compact">Parçayı tanımlayan açıklayıcı isim</div>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label compact" for="part-image-no">
+                                        <i class="fas fa-image me-1"></i>Resim No
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm" id="part-image-no" placeholder="Resim no">
+                                    <div class="form-text compact">Teknik çizim (ops.)</div>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label compact" for="part-position-no">
+                                        <i class="fas fa-map-marker-alt me-1"></i>Pozisyon No
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm" id="part-position-no" placeholder="Poz no">
+                                    <div class="form-text compact">Montaj pozisyonu (ops.)</div>
                                 </div>
                                 <div class="col-md-3">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-image me-1"></i>Resim No
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="part-image-no" placeholder="Resim numarası">
-                                        <div class="form-text compact">Teknik çizim numarası (opsiyonel)</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-3">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-map-marker-alt me-1"></i>Pozisyon No
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="part-position-no" placeholder="Pozisyon numarası">
-                                        <div class="form-text compact">Montaj pozisyonu (opsiyonel)</div>
-                                    </div>
+                                    <label class="form-label compact" for="part-finish-time">
+                                        <i class="fas fa-calendar-alt me-1"></i>Bitiş Tarihi
+                                    </label>
+                                    <input type="date" class="form-control form-control-sm" id="part-finish-time">
+                                    <div class="form-text compact">Planlanan bitiş tarihi (ops.)</div>
                                 </div>
                             </div>
-                            <div class="row g-2">
+                            <!-- Row 2: job orders and quantities -->
+                            <div class="row g-2 create-part-row">
                                 <div class="col-12">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-hashtag me-1"></i>İş Emri ve Adet
-                                        </label>
-                                        <!-- Job allocation editor (components/jobAllocations) is mounted here -->
-                                        <div id="part-job-allocations-editor"></div>
-                                        <div class="form-text compact">Parça birden fazla iş emrine bölünebilir; adet iş emri başına girilir (opsiyonel)</div>
-                                    </div>
+                                    <label class="form-label compact">
+                                        <i class="fas fa-hashtag me-1"></i>İş Emri ve Adet
+                                    </label>
+                                    <!-- Job allocation editor (components/jobAllocations) is mounted here -->
+                                    <div id="part-job-allocations-editor"></div>
+                                    <div class="form-text compact">Parça birden fazla iş emrine bölünebilir; adet iş emri başına girilir (opsiyonel)</div>
                                 </div>
                             </div>
-                            <div class="row g-2">
-                                <div class="col-md-12">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-comment-alt me-1"></i>Açıklama
-                                        </label>
-                                        <textarea class="form-control form-control-sm" id="part-description" rows="2" placeholder="Parça hakkında ek bilgiler..."></textarea>
-                                        <div class="form-text compact">Parça ile ilgili özel notlar (opsiyonel)</div>
-                                    </div>
+                            <!-- Row 3: description -->
+                            <div class="row g-2 create-part-row">
+                                <div class="col-12">
+                                    <label class="form-label compact" for="part-description">
+                                        <i class="fas fa-comment-alt me-1"></i>Açıklama
+                                    </label>
+                                    <textarea class="form-control form-control-sm" id="part-description" rows="2" placeholder="Parça hakkında ek bilgiler..."></textarea>
+                                    <div class="form-text compact">Parça ile ilgili özel notlar (opsiyonel)</div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Material & Specifications Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
+                        <!-- Material & Specifications Section (collapsed by default) -->
+                        <div class="form-section compact mb-3 create-part-collapsible">
+                            <button type="button" class="section-subtitle compact create-part-section-toggle collapsed"
+                                    data-bs-toggle="collapse" data-bs-target="#part-material-section"
+                                    aria-expanded="false" aria-controls="part-material-section">
                                 <i class="fas fa-cogs me-2 text-success"></i>Malzeme ve Özellikler
-                            </h6>
-                            <div class="row g-2">
-                                <div class="col-md-4">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
+                                <span class="create-part-section-hint">(opsiyonel)</span>
+                                <i class="fas fa-chevron-down create-part-section-chevron"></i>
+                            </button>
+                            <div class="collapse" id="part-material-section">
+                                <div class="row g-2 create-part-row pt-2">
+                                    <div class="col-md-4">
+                                        <label class="form-label compact" for="part-material">
                                             <i class="fas fa-cube me-1"></i>Malzeme
                                         </label>
                                         <input type="text" class="form-control form-control-sm" id="part-material" placeholder="Malzeme türü">
-                                        <div class="form-text compact">Kullanılacak malzeme (opsiyonel)</div>
+                                        <div class="form-text compact">Kullanılacak malzeme</div>
                                     </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
+                                    <div class="col-md-4">
+                                        <label class="form-label compact" for="part-dimensions">
                                             <i class="fas fa-ruler me-1"></i>Boyutlar
                                         </label>
                                         <input type="text" class="form-control form-control-sm" id="part-dimensions" placeholder="Örn: 100x50x25">
-                                        <div class="form-text compact">Parça boyutları (opsiyonel)</div>
+                                        <div class="form-text compact">Parça boyutları</div>
                                     </div>
-                                </div>
-                                <div class="col-md-4">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
+                                    <div class="col-md-4">
+                                        <label class="form-label compact" for="part-weight-kg">
                                             <i class="fas fa-weight me-1"></i>Ağırlık (kg)
                                         </label>
                                         <input type="number" class="form-control form-control-sm" id="part-weight-kg" step="0.001" min="0" placeholder="0.000">
-                                        <div class="form-text compact">Parça ağırlığı (opsiyonel)</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-calendar-alt me-1"></i>Bitiş Tarihi
-                                        </label>
-                                        <input type="date" class="form-control form-control-sm" id="part-finish-time">
-                                        <div class="form-text compact">Planlanan bitiş tarihi (opsiyonel)</div>
+                                        <div class="form-text compact">Parça ağırlığı</div>
                                     </div>
                                 </div>
                             </div>
@@ -177,11 +166,13 @@
 
                         <!-- Operations Section -->
                         <div class="form-section compact">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-tasks me-2 text-info"></i>Operasyonlar *
-                            </h6>
-                            <div class="mb-2">
-                                <p class="text-muted small mb-2">Parça için en az bir operasyon eklenmelidir.</p>
+                            <div class="create-part-ops-header">
+                                <div>
+                                    <h6 class="section-subtitle compact mb-0">
+                                        <i class="fas fa-tasks me-2 text-info"></i>Operasyonlar *
+                                    </h6>
+                                    <div class="form-text compact mt-0">Parça için en az bir operasyon eklenmelidir.</div>
+                                </div>
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="add-operation-btn">
                                     <i class="fas fa-plus me-1"></i>Operasyon Ekle
                                 </button>

@@ -265,11 +265,20 @@ function buildUniqueFileName(baseName, usedNames) {
 function normalizeNcrFile(file) {
     // Backend spec says serializer includes `url` (presigned). Some backends may return `file_url`.
     const fileUrl = file?.url || file?.file_url || file?.file || '';
-    const fileName = file?.name || file?.filename || file?.original_name || 'Dosya';
+    const rawName = file?.name || file?.filename || file?.original_name || 'Dosya';
+    // The name may be a free-text title typed on upload, with no extension, so fall back
+    // to the stored file's extension — the viewer needs it to pick a preview mode.
+    const extension = String(file?.extension || '').replace(/^\./, '').toLowerCase()
+        || getFileExtension(rawName)
+        || getFileExtension(extractFileNameFromUrl(fileUrl));
+    const fileName = (extension && !rawName.toLowerCase().endsWith(`.${extension}`))
+        ? `${rawName}.${extension}`
+        : rawName;
     return {
         ...file,
         file_url: fileUrl,
         filename: fileName,
+        file_extension: extension,
         uploaded_at: file?.uploaded_at || file?.created_at || null
     };
 }
@@ -983,7 +992,7 @@ async function refreshNcrFilesUI(ncrId) {
             showDeleteButton: true,
             onFileClick: (file) => {
                 const name = file.file_name || 'Dosya';
-                const ext = getFileExtension(name);
+                const ext = getFileExtension(name) || (file.file_extension || '').toLowerCase();
                 const url = file.file_url;
                 if (!url) {
                     showNotification('Dosya URL bulunamadı', 'warning');
@@ -1053,6 +1062,7 @@ async function refreshNcrFilesUI(ncrId) {
         id: f.id,
         file_url: f.file_url || f.url || f.file || '',
         file_name: f.filename || f.name || 'Dosya',
+        file_extension: f.file_extension || '',
         uploaded_at: f.uploaded_at,
         uploaded_by_username: f.uploaded_by_username || f.uploaded_by_name || ''
     }));
