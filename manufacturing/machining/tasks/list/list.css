@@ -37,6 +37,70 @@
     font-weight: 500;
 }
 
+/* İş No / Adet cells open the job allocation editor (unless the part is locked) */
+tr[data-part-key]:not([data-locked]) .part-alloc-cell {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+tr[data-part-key]:not([data-locked]) .part-alloc-cell:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+/* "+2" count chip next to the job number of a multi-job part */
+.part-multi-job-chip {
+    min-width: 0;
+    padding: 0.1rem 0.4rem;
+    margin-left: 0.25rem;
+    font-size: 0.7rem;
+    vertical-align: middle;
+    cursor: help;
+}
+
+/* Allocation table in the part details modal */
+.part-allocation-table th,
+.part-allocation-table td {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.85rem;
+}
+
+.part-allocation-label {
+    font-weight: 600;
+    color: #343a40;
+}
+
+/* Cost card in the part details modal */
+.part-cost-card {
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 0.75rem;
+    background: #f8f9fa;
+}
+
+.part-cost-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+}
+
+.part-cost-stat {
+    min-width: 140px;
+}
+
+.part-cost-stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: #6c757d;
+}
+
+.part-cost-stat-value {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1e40af;
+}
+
 .operation-count-badge {
     display: inline-block;
     padding: 0.25rem 0.5rem;

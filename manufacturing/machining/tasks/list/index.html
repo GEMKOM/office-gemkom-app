@@ -19,6 +19,7 @@
     <link rel="stylesheet" href="../../../../components/display-modal/display-modal.css">
     <link rel="stylesheet" href="../../../../components/table/table.css">
     <link rel="stylesheet" href="../../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../../components/jobAllocations/jobAllocations.css">
     <link rel="stylesheet" href="../../../../components/edit-modal/edit-modal.css">
     <link rel="stylesheet" href="../../../../components/file-attachments/file-attachments.css">
 </head>
@@ -83,18 +84,7 @@
                                         <div class="form-text compact">Parçayı tanımlayan açıklayıcı isim</div>
                                     </div>
                                 </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-hashtag me-1"></i>İş No
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="part-job-no" placeholder="İş numarası">
-                                        <div class="form-text compact">Proje veya iş numarası (opsiyonel)</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <div class="mb-2">
                                         <label class="form-label compact">
                                             <i class="fas fa-image me-1"></i>Resim No
@@ -103,7 +93,7 @@
                                         <div class="form-text compact">Teknik çizim numarası (opsiyonel)</div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <div class="mb-2">
                                         <label class="form-label compact">
                                             <i class="fas fa-map-marker-alt me-1"></i>Pozisyon No
@@ -112,13 +102,16 @@
                                         <div class="form-text compact">Montaj pozisyonu (opsiyonel)</div>
                                     </div>
                                 </div>
-                                <div class="col-md-4">
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-12">
                                     <div class="mb-2">
                                         <label class="form-label compact">
-                                            <i class="fas fa-boxes me-1"></i>Adet
+                                            <i class="fas fa-hashtag me-1"></i>İş Emri ve Adet
                                         </label>
-                                        <input type="number" class="form-control form-control-sm" id="part-quantity" min="1" placeholder="1">
-                                        <div class="form-text compact">Üretilecek parça adedi (opsiyonel)</div>
+                                        <!-- Job allocation editor (components/jobAllocations) is mounted here -->
+                                        <div id="part-job-allocations-editor"></div>
+                                        <div class="form-text compact">Parça birden fazla iş emrine bölünebilir; adet iş emri başına girilir (opsiyonel)</div>
                                     </div>
                                 </div>
                             </div>
@@ -270,6 +263,7 @@
                 </div>
                 <div class="modal-body">
                     <h6 class="mb-2">Önizleme</h6>
+                    <p id="convert-dr-allocation-summary" class="text-muted small mb-2"></p>
                     <div class="table-responsive mb-3">
                         <table class="table table-sm table-bordered">
                             <thead class="table-light">
@@ -309,6 +303,32 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
                     <button type="button" class="btn btn-primary" id="convert-dr-submit-btn">Oluştur ve Gönder</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Part Job Allocations Modal (opened from the İş No / Adet cells) -->
+    <div class="modal fade" id="partAllocationsModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-sitemap me-2"></i>İş Emri Dağılımı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-2">Parça: <strong id="part-allocations-modal-part">-</strong></p>
+                    <div id="part-allocations-editor"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>İptal
+                    </button>
+                    <button type="button" class="btn btn-primary" id="save-part-allocations-btn">
+                        <i class="fas fa-save me-1"></i>Kaydet
+                    </button>
                 </div>
             </div>
         </div>

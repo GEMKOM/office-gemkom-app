@@ -1221,17 +1221,29 @@ function weldingModalHtml(brief) {
 function machiningModalHtml(brief, detail) {
     const machining = brief.machining || {};
     const operations = (detail && detail.operations) || [];
-    const rows = operations.map((op) => `
+    const rows = operations.map((op) => {
+        // A part shared with other job orders: show this job's share and
+        // its allocated quantity next to the part name (hours are already scaled).
+        const share = Number(op.share);
+        const isShared = Number.isFinite(share) && share > 0 && share < 1;
+        const shareHtml = isShared
+            ? ` <span class="text-muted" title="Bu iş emrine düşen pay">×${share.toFixed(2)}</span>`
+                + (op.allocated_quantity !== null && op.allocated_quantity !== undefined
+                    ? ` <span class="text-muted">(${fmtInt(op.allocated_quantity)} adet)</span>`
+                    : '')
+            : '';
+        return `
         <tr>
             <td class="pp-td-main" title="${escapeHtml(op.name || op.key)}">${escapeHtml(op.name || op.key)}</td>
-            <td class="pp-td-muted" title="${escapeHtml(op.part_name || '')}">${escapeHtml(op.part_name || '—')}</td>
+            <td class="pp-td-muted" title="${escapeHtml(op.part_name || '')}">${escapeHtml(op.part_name || '—')}${shareHtml}</td>
             <td>${escapeHtml(op.job_no || '')}</td>
             <td class="pp-td-num">${fmtHours(op.estimated_hours)} s</td>
             <td class="pp-td-num">${fmtHours(op.hours_spent)} s</td>
             <td>${op.completed
                 ? '<span class="status-badge status-green">Tamam</span>'
                 : '<span class="status-badge status-blue">Açık</span>'}</td>
-        </tr>`);
+        </tr>`;
+    });
     const body = `
         <div class="pp-modal-stats">
             <span>Operasyon <strong>${fmtInt(machining.operations_completed)} / ${fmtInt(machining.operations_total)}</strong></span>

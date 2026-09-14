@@ -3035,14 +3035,39 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
                     const department = row.department || '';
                     const taskId = row.id;
                     const departmentUrl = departmentUrlMap[department];
-                    
+
+                    // Talaşlı parça rows carry no quantity / job cell of their own;
+                    // show the part key and "6 / 10 adet · ortak: 260-02" when the
+                    // part is shared with other job orders. Stays non-editable.
+                    let machiningHint = '';
+                    if (row.type === 'machining_part') {
+                        const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                        const md = row.machining_data || {};
+                        const allocated = md.allocated_quantity;
+                        const total = md.quantity;
+                        const others = Array.isArray(md.other_job_nos) ? md.other_job_nos.filter(Boolean) : [];
+                        let quantityText = '';
+                        if (others.length) {
+                            quantityText = `${allocated ?? '-'} / ${total ?? '-'} adet · ortak: ${others.map(esc).join(', ')}`;
+                        } else if (total !== null && total !== undefined) {
+                            quantityText = `${total} adet`;
+                        } else if (allocated !== null && allocated !== undefined) {
+                            quantityText = `${allocated} adet`;
+                        }
+                        const keyText = md.key || row.key || '';
+                        const bits = [keyText ? esc(keyText) : '', quantityText].filter(Boolean).join(' · ');
+                        if (bits) {
+                            machiningHint = `<small class="text-muted d-block" title="Talaşlı parça${others.length ? ' — birden fazla iş emrine bölünmüş' : ''}">${bits}</small>`;
+                        }
+                    }
+
                     if (departmentUrl && taskId) {
                         const url = `${departmentUrl}?task=${encodeURIComponent(taskId)}`;
                         const escapedUrl = url.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-                        return `<span class="department-link" data-href="${escapedUrl}" style="font-weight: 700; color: #0d6efd; text-decoration: none; cursor: pointer; user-select: none;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${value}</span>`;
+                        return `<span class="department-link" data-href="${escapedUrl}" style="font-weight: 700; color: #0d6efd; text-decoration: none; cursor: pointer; user-select: none;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${value}</span>${machiningHint}`;
                     }
-                    
-                    return `<strong>${value}</strong>`;
+
+                    return `<strong>${value}</strong>${machiningHint}`;
                 }
             },
             {

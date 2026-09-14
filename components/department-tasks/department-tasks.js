@@ -840,7 +840,13 @@ function initializeTableComponent() {
                             // Make the key clickable, opening in a new tab
                             const keyUrl = `/manufacturing/machining/tasks/list/?key=${encodeURIComponent(key)}`;
                             const keyLink = `<a href="${keyUrl}" target="_blank" rel="noopener noreferrer" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${key}</a>`;
-                            return `<div style="padding-left: ${indent}px;">${prefix}${keyLink}</div>`;
+                            // Part shared with other job orders: "6 / 10 adet · ortak: 260-02"
+                            const md = row.machining_data || {};
+                            const otherJobNos = Array.isArray(md.other_job_nos) ? md.other_job_nos.filter(Boolean) : [];
+                            const sharedHint = otherJobNos.length
+                                ? `<small class="text-muted d-block" title="Birden fazla iş emrine bölünmüş parça">${md.allocated_quantity ?? '-'} / ${md.quantity ?? '-'} adet · ortak: ${escapeHtml(otherJobNos.join(', '))}</small>`
+                                : '';
+                            return `<div style="padding-left: ${indent}px;">${prefix}${keyLink}${sharedHint}</div>`;
                         }
                     }
                     

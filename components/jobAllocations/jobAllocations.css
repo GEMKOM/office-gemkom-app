@@ -1,0 +1,92 @@
+/* Job allocations editor — rows of [job order picker | adet | share | remove] */
+
+.job-allocations-editor {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.5rem 0.75rem 0.75rem;
+    background: #fff;
+}
+
+.job-allocations-header,
+.job-allocations-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 96px 64px 40px;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.job-allocations-header {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    color: #6c757d;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #f1f3f5;
+    margin-bottom: 0.5rem;
+}
+
+.job-allocations-row + .job-allocations-row {
+    margin-top: 0.5rem;
+}
+
+/* ModernDropdown replaces the container class on init and renders a fixed
+   46px-high field; keep the quantity input and the remove button aligned. */
+.job-allocations-row .job-no-dropdown-container,
+.job-allocations-row .modern-dropdown-container {
+    width: 100%;
+    min-width: 0;
+}
+
+.job-allocations-row .job-allocations-qty {
+    height: 46px;
+    text-align: right;
+}
+
+.job-allocations-row .job-allocations-remove-btn {
+    height: 46px;
+    width: 100%;
+    padding: 0;
+}
+
+.job-allocations-share {
+    display: inline-block;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1e40af;
+    background: #dbeafe;
+    border: 1px solid #3b82f6;
+    border-radius: 0.375rem;
+    padding: 0.2rem 0.45rem;
+    min-width: 52px;
+    text-align: center;
+}
+
+.job-allocations-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #f1f3f5;
+}
+
+.job-allocations-total {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.job-allocations-error {
+    margin-top: 0.5rem;
+}
+
+@media (max-width: 576px) {
+    .job-allocations-header {
+        display: none;
+    }
+
+    .job-allocations-row {
+        grid-template-columns: minmax(0, 1fr) 80px 56px 40px;
+    }
+}
