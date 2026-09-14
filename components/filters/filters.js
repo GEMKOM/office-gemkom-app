@@ -1,4 +1,5 @@
 import { ModernDropdown } from '../dropdown/dropdown.js';
+import { escapeHtml } from '../../utils/text.js';
 
 /**
  * Reusable Filters Component
@@ -298,11 +299,11 @@ export class FiltersComponent {
                 return `
                     <div class="${colClass}">
                         <label class="form-label small mb-1">${filter.label}</label>
-                        <input type="${filter.inputType}" 
-                               class="form-control form-control-sm" 
-                               id="${filter.id}" 
-                               placeholder="${filter.placeholder}"
-                               value="${filter.value}">
+                        <input type="${filter.inputType}"
+                               class="form-control form-control-sm"
+                               id="${filter.id}"
+                               placeholder="${escapeHtml(filter.placeholder)}"
+                               value="${escapeHtml(filter.value)}">
                     </div>
                 `;
 
@@ -318,10 +319,10 @@ export class FiltersComponent {
                 return `
                     <div class="${colClass}">
                         <label class="form-label small mb-1">${filter.label}</label>
-                        <input type="date" 
-                               class="form-control form-control-sm" 
-                               id="${filter.id}" 
-                               value="${filter.value}">
+                        <input type="date"
+                               class="form-control form-control-sm"
+                               id="${filter.id}"
+                               value="${escapeHtml(filter.value)}">
                     </div>
                 `;
 
@@ -346,10 +347,10 @@ export class FiltersComponent {
                 return `
                     <div class="${colClass}">
                         <label class="form-label small mb-1">${filter.label}</label>
-                        <input type="datetime-local" 
-                               class="form-control form-control-sm" 
-                               id="${filter.id}" 
-                               value="${filter.value}">
+                        <input type="datetime-local"
+                               class="form-control form-control-sm"
+                               id="${filter.id}"
+                               value="${escapeHtml(filter.value)}">
                     </div>
                 `;
 
@@ -450,9 +451,11 @@ export class FiltersComponent {
                     }
                     const dropdown = new ModernDropdown(container, dropdownOptions);
                     
-                    // Use remote search results only when remoteSearch is set; otherwise use static options
+                    // Use remote search results only when remoteSearch is set; otherwise use static options.
+                    // `seedOptions` lets a caller pre-register the already selected item so a value
+                    // restored from outside (e.g. the URL) shows its label instead of the placeholder.
                     const items = dropdownOptions.remoteSearch
-                        ? []
+                        ? (filter.seedOptions || []).map(option => ({ value: option.value, text: option.label }))
                         : (filter.options || []).map(option => ({ value: option.value, text: option.label }));
                     dropdown.setItems(items);
                     
