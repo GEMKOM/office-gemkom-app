@@ -63,6 +63,34 @@ export function adoptStageIds(clientStages, serverStages) {
     });
 }
 
+/**
+ * After a save whose hydrate is skipped (planner kept typing), existing
+ * assignments that just created stages still have id: null. The next Kaydet
+ * would POST those stages again. Stitch server ids by assignment identity
+ * and title, same matching as new-block adopt.
+ */
+export function adoptExistingBlockStageIds(clientResources, board) {
+    const serverByKey = new Map();
+    ((board && board.resources) || []).forEach((res) => {
+        (res.blocks || []).forEach((b) => {
+            if (!b || b.assignment_id == null) return;
+            serverByKey.set(assignmentKey(b.assignment_type, b.assignment_id), b);
+        });
+    });
+    (clientResources || []).forEach((res) => {
+        (res.blocks || []).forEach((client) => {
+            if (!client || client.isNew || client.deleted || client.assignment_id == null) return;
+            const needsId = (client.stages || []).some((s) => s && !s.deleted && s.id == null);
+            if (!needsId) return;
+            const server = serverByKey.get(
+                assignmentKey(client.assignment_type, client.assignment_id),
+            );
+            if (!server) return;
+            adoptStageIds(client.stages, server.stages);
+        });
+    });
+}
+
 export function leftoverDeleted(currentDeleted, sentDeleted) {
     const sent = new Set(
         (sentDeleted || []).map((d) => assignmentKey(d.assignment_type, d.assignment_id)),
