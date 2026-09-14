@@ -472,6 +472,10 @@ function initializeTableComponent() {
             {
                 field: 'finish_time',
                 label: 'Bitiş Tarihi',
+                // type 'date' makes the inline editor a native date picker (shown in the
+                // browser's locale, e.g. 20.02.2026) instead of a text box with the raw
+                // ISO value; the saved value stays ISO.
+                type: 'date',
                 sortable: true,
                 width: '10%',
                 formatter: (value) => {
