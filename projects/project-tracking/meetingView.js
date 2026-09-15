@@ -726,6 +726,21 @@ async function openPlanModal(item) {
         if (s.projection_kind === 'done') {
             return '%100 görünüyor — kapanışı bekleniyor.';
         }
+        // CNC Kesim follows the CNC plan's scheduled cuts (293-14-02,
+        // 2026-09-15): the kg tempo of the first small nests is not a pace.
+        if ((s.projection_basis || {}).term === 'cnc_plan') {
+            const b = s.projection_basis;
+            const extra = b.unplanned_cuts > 0
+                ? ` Planda olmayan ${b.unplanned_cuts} kesim (${Math.round(b.unplanned_kg)} kg) için ~${formatWd(b.extra_wd)} iş günü eklendi.`
+                : '';
+            return `Kesim planına göre: açık ${b.planned_cuts} kesimin sonuncusu ${fmtShortDate(b.plan_end)} tarihinde planlı.${extra}`;
+        }
+        // Work planned to start later: the remaining share runs from the
+        // board's plan start (the 'plan' kind used to render an empty cell).
+        if ((s.projection_basis || {}).term === 'plan_start') {
+            const b = s.projection_basis;
+            return `Plan başlangıcına göre: ${fmtShortDate(b.start)} tarihinde başlayıp kalan ~${formatWd(b.work_wd)} iş günü sürer.`;
+        }
         if (s.projection_kind === 'rate') {
             const b = s.projection_basis || {};
             let compare = '';
@@ -901,6 +916,7 @@ async function openPlanModal(item) {
         floored: ['fa-anchor', 'Bitiş tabanı (teslimat / koşul)'],
         coupled: ['fa-anchor', 'Kesim ilerledikçe ilerleyebilir'],
         weight: ['fa-scale-balanced', 'Ağırlık payından tahmin'],
+        plan: ['fa-calendar-check', 'Plan tarihine göre (kesim planı / plan başlangıcı)'],
         done: ['fa-check', 'Kapanış bekleniyor'],
     };
 
@@ -1730,9 +1746,13 @@ function meetingHeroHtml(item) {
     const projectedClass = variance !== null && variance !== undefined && variance > 0
         ? 'pp-fig-late' : '';
     const pct = Math.round(item.completion_percentage || 0);
-    const statusChip = item.status && item.status !== 'active'
-        ? `<span class="status-badge status-grey">${escapeHtml(item.status_display || item.status)}</span>`
-        : '';
+    // A root on hold for a drawing revision is on the deck because its work
+    // is live; the chip says why the slide is not plain "Aktif".
+    const statusChip = item.status === 'on_hold' && item.hold_kind === 'revision'
+        ? '<span class="status-badge status-orange">Revizyonda</span>'
+        : (item.status && item.status !== 'active'
+            ? `<span class="status-badge status-grey">${escapeHtml(item.status_display || item.status)}</span>`
+            : '');
     const startLine = item.created_date
         ? `<div class="pp-fig-xl-start" title="İş emrinin açıldığı tarih">Başlangıç · ${fmtShortDate(item.created_date)}</div>`
         : '';

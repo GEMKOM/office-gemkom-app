@@ -811,9 +811,12 @@ function renderWarnings() {
 
 // ---- rendering: the sheet (grouped table) --------------------------------
 
-function statusBadge(status, overdue) {
+function statusBadge(status, overdue, holdKind) {
     const meta = STATUS_META[status] || STATUS_META.pending;
-    let html = `<span class="status-badge ${meta.badge}">${meta.label}</span>`;
+    // A job order on hold for a drawing revision is on the board precisely
+    // because its welding is live work — label the hold for what it is.
+    const label = status === 'on_hold' && holdKind === 'revision' ? 'Revizyonda' : meta.label;
+    let html = `<span class="status-badge ${meta.badge}">${label}</span>`;
     if (overdue) {
         html += ` <span class="status-badge status-red" title="Bitiş tarihi geçti">Gecikmiş</span>`;
     }
@@ -954,6 +957,7 @@ const FORECAST_KIND_TITLES = {
     floored: 'bitiş tabanına (teslimat/koşul) göre',
     coupled: 'kesim ilerleyişine göre',
     weight: 'ağırlık payı tahminiyle',
+    plan: 'kesim planı / plan başlangıcına göre',
     done: 'kapanış bekleniyor',
 };
 
@@ -1091,6 +1095,7 @@ function buildSheetRows(res) {
             weight: jo?.total_weight_kg ?? null,
             progress: jo?.progress ?? 0,
             status: jo?.status || 'active',
+            hold_kind: jo?.hold_kind || '',
             completed_at: jo?.completed_at || null,
             // The job's Öngörü is İmalat's engine projection — comparing it
             // with end_date (the promised date) is the group's whole story.
@@ -1440,7 +1445,7 @@ const GRID_COLUMNS = [
       formatter: (v, row) => cellOverride(row, 'progress') ?? progressBar(v) },
     { field: 'status', label: 'Durum', width: '124px', type: 'select',
       headerClass: 'col-center', cellClass: 'col-center', options: EDITABLE_STATUS_OPTIONS,
-      formatter: (v, row) => cellOverride(row, 'status') ?? statusBadge(v, isRowOverdue(row)) },
+      formatter: (v, row) => cellOverride(row, 'status') ?? statusBadge(v, isRowOverdue(row), row.hold_kind) },
     { field: 'forecast_date', label: 'Gerçek./Tahmini', width: '118px',
       headerClass: 'col-center', cellClass: 'col-center col-date',
       formatter: (v, row) => cellOverride(row, 'forecast_date') ?? forecastCell(row) },

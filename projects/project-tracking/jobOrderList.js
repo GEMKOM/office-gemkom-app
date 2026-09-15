@@ -833,6 +833,11 @@ function initializeTableComponent() {
                     } else if (status === 'draft') {
                         return `<span class="status-badge status-grey" ${compactBadgeStyle}>Taslak</span>`;
                     } else if (status === 'on_hold') {
+                        // A revision hold is live work waiting on the drawing —
+                        // say so instead of lumping it with the orders parked by hand.
+                        if (row.hold_kind === 'revision') {
+                            return `<span class="status-badge status-orange" ${compactBadgeStyle}>${tight ? 'Rev.' : 'Revizyonda'}</span>`;
+                        }
                         return `<span class="status-badge status-yellow" ${compactBadgeStyle}>${tight ? 'Bekl.' : 'Beklemede'}</span>`;
                     } else if (status === 'completed') {
                         return `<span class="status-badge status-green" ${compactBadgeStyle}>${tight ? 'Tam.' : 'Tamamlandı'}</span>`;
@@ -3395,6 +3400,9 @@ function renderChildrenTable(children, getStatusBadgeClass) {
                 sortable: true,
                 formatter: (value, row) => {
                     if (!value || value === '-') return '-';
+                    if (row.status === 'on_hold' && row.hold_kind === 'revision') {
+                        return '<span class="status-badge status-orange">Revizyonda</span>';
+                    }
                     const badgeClass = getStatusBadgeClass(row.status);
                     return `<span class="status-badge ${badgeClass}">${value}</span>`;
                 }
@@ -3524,6 +3532,9 @@ function renderPhasesTable(phases, jobNo, getStatusBadgeClass) {
                 sortable: true,
                 formatter: (value, row) => {
                     if (!value || value === '-') return '-';
+                    if (row.status === 'on_hold' && row.hold_kind === 'revision') {
+                        return '<span class="status-badge status-orange">Revizyonda</span>';
+                    }
                     return `<span class="status-badge ${getStatusBadgeClass(row.status)}">${value}</span>`;
                 }
             },
