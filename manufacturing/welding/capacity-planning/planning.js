@@ -26,6 +26,7 @@ import { fetchPriceTiers } from '../../../apis/subcontracting/priceTiers.js';
 import { createWorkdayCalendar, reconcileScheduleEdit } from '../../../utils/workdays.js';
 import { deptSchedulePatch } from './deptSchedulePatch.js';
 import { blockSchedulePatch } from './blockSchedulePatch.js';
+import { compareJobsBy, earliestDate, normalizeSortMode } from './jobSort.js';
 import {
     assignmentKey,
     knownAssignmentKeys,
@@ -88,6 +89,7 @@ let collapsedJobs = new Set();    // job_no -> collapsed in the grid
 let expandedJobsAll = new Set();
 let showCompleted = false;
 let showEmptyResources = false;   // empty-resource tabs tucked behind a toggle
+let sortMode = 'job_no';          // job groups by iş emri number, or 'start'
 let newCounter = 0;
 
 // View filters. Purely client-side — the whole board is already in memory, so
@@ -1004,11 +1006,31 @@ function jobNosOf(res) {
     visibleBlocks(res).forEach(b => {
         if (!seen.includes(b.job_no)) seen.push(b.job_no);
     });
-    // Always by iş emri number. Assignment order is an accident of when the
-    // work was handed out; a planner looking for 293-03-07 wants it where the
-    // numbers say it is, on every sheet.
-    return seen.sort((a, b) => String(a || '').localeCompare(String(b || ''), 'tr',
-        { numeric: true, sensitivity: 'base' }));
+    // Assignment order is an accident of when the work was handed out, so
+    // never that. By iş emri number (default — a planner looking for
+    // 293-03-07 finds it where the numbers say it is, on every sheet), or by
+    // the earliest start this resource's blocks show for the job (the
+    // "Başlangıç" toggle, 2026-09-15 — the sheet read as the team's timeline,
+    // top to bottom). A job split across two teams sorts on each sheet by
+    // when THAT team takes it up.
+    return seen.sort(compareJobsBy(sortMode, jobNo => sheetStartOf(res, jobNo)));
+}
+
+// The start the sheet prints for a job on this resource: the earliest of its
+// block rows here, else the İmalat start. Mirrors what buildSheetRows puts
+// in the block row's Başlangıç cell, so the order matches the column.
+function sheetStartOf(res, jobNo) {
+    const starts = res.blocks
+        .filter(b => !b.deleted && b.job_no === jobNo)
+        .map(blockStartShown);
+    return earliestDate(starts)
+        || (deptOf(jobNo, 'manufacturing') || {}).start_date
+        || null;
+}
+
+function blockStartShown(b) {
+    if (b.stages.some(s => !s.deleted)) return blockRollup(b).windowStart;
+    return b.subtask.start_date || b.subtask.projected_start_date || null;
 }
 
 // One row per task, flat, in tree order — the grid draws the hierarchy from
@@ -1024,14 +1046,10 @@ function jobNosOf(res) {
 //         HARUN METAL BAKIR         ← a subcontractor/team assignment
 //           Montaj, Kaynak ve Taşlama
 //       Boya                        ← editable
-function buildSheetRows(res, sortJobs = false) {
+function buildSheetRows(res) {
     const rows = [];
 
-    const jobList = sortJobs
-        ? jobNosOf(res).slice().sort((a, b) =>
-            String(a).localeCompare(String(b), 'tr', { numeric: true }))
-        : jobNosOf(res);
-    jobList.forEach(jobNo => {
+    jobNosOf(res).forEach(jobNo => {
         const blocks = res.blocks.filter(b => !b.deleted && b.job_no === jobNo);
         const first = blocks[0] || {};
         const info = jobInfo[jobNo] || {};
@@ -1497,6 +1515,7 @@ function isCellEditable(row, field) {
 const COLUMNS_KEY = 'imalatPlanlama.columns';
 const ZOOM_KEY = 'imalatPlanlama.zoom';
 const GRIDW_KEY = 'imalatPlanlama.gridWidth';
+const SORT_KEY = 'imalatPlanlama.sort';
 
 function defaultColumnKeys() {
     return GRID_COLUMNS.filter(c => c.always).map(c => c.field);
@@ -1888,7 +1907,8 @@ function rederiveEngineDates() {
 }
 
 // The "Tümü" tab: every resource's jobs on one sheet — ordered by
-// subcontractor/team first, job number second (user ask 2026-08-29) — with
+// subcontractor/team first (user ask 2026-08-29), then by the sheet's sort
+// toggle: job number by default, or each resource's start dates — with
 // an "Atanmamış / Eksik Atanan" section at the end: each row is the job's
 // İmalat department task (editable start + duration, job-order weight),
 // listed while any of the job's welding weight is still unassigned, with
@@ -1908,7 +1928,7 @@ function buildAllRows() {
             start_date: null, end_date: null, duration_wd: null,
             weight: null, progress: null, status: null, note: '',
         });
-        const resRows = buildSheetRows(res, true);
+        const resRows = buildSheetRows(res);
         // A job can sit under two resources on this sheet — namespace the
         // row keys so the grid's key lookup stays unambiguous.
         resRows.forEach(r => { r.key = `${key}::${r.key}`; });
@@ -1936,8 +1956,11 @@ function buildAllRows() {
             if (!assigned.has(t.job_no)) return true;
             return remaining != null && remaining > 0.05;
         })
-        .sort((a, b) => String(a.t.job_no).localeCompare(
-            String(b.t.job_no), 'tr', { numeric: true }));
+        // Same toggle as the sheets; an unassigned job's only start is the
+        // İmalat entry.
+        .sort((a, b) => compareJobsBy(
+            sortMode, jobNo => (deptOf(jobNo, 'manufacturing') || {}).start_date || null,
+        )(a.t.job_no, b.t.job_no));
     if (pending.length) {
         rows.push({
             key: 'all-head-unassigned',
@@ -2173,6 +2196,16 @@ function applyZoom(zoom) {
     if (grid) grid.setZoom(zoom);
 }
 
+// Job-group order: by iş emri number, or by start date (earliest first).
+// A view preference, remembered like the zoom.
+function applySort(mode) {
+    sortMode = normalizeSortMode(mode);
+    localStorage.setItem(SORT_KEY, sortMode);
+    document.querySelectorAll('#sort-buttons [data-sort]').forEach(
+        b => b.classList.toggle('active', b.dataset.sort === sortMode));
+    renderGrid();
+}
+
 // What narrows the printed sheet, said on the sheet itself: a filtered export
 // that does not admit to being filtered reads as the whole plan.
 function exportContextText() {
@@ -2240,6 +2273,14 @@ function initGridToolbar() {
         });
     }
 
+    const sortWrap = document.getElementById('sort-buttons');
+    if (sortWrap) {
+        sortMode = normalizeSortMode(localStorage.getItem(SORT_KEY));
+        sortWrap.querySelectorAll('[data-sort]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.sort === sortMode);
+            btn.addEventListener('click', () => applySort(btn.dataset.sort));
+        });
+    }
 }
 
 // The picker lives on <body>, not in the grid header: that cell clips its
