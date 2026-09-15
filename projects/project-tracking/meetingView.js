@@ -29,6 +29,7 @@ import {
 // natural job-no order.
 let overviewData = null;                // last fetched overview payload
 let overviewFetchedAt = 0;              // Date.now() of that fetch
+let overviewError = null;               // last overview failure (null once one succeeds)
 const overviewStatus = 'active';        // status the overview was fetched with
 const portfolioSort = 'job_no';         // 'job_no' | 'risk'
 
@@ -225,9 +226,11 @@ async function fetchOverview() {
     try {
         overviewData = await getProductionPlanOverview(overviewStatus, { refresh: true });
         overviewFetchedAt = Date.now();
+        overviewError = null;
     } catch (error) {
         console.error('Overview load failed:', error);
         overviewData = null;
+        overviewError = error;
         showNotification('Proje portföyü yüklenemedi', 'error');
     }
 }
@@ -243,10 +246,21 @@ function overviewStampText() {
     return `Veri ${at.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}`;
 }
 
+// The portfolio rows out of an overview payload. The endpoint answers with
+// `{items: [...]}`, but a DRF-paginated (`{count, results}`) or bare-array
+// response has to land on the same slides — reading only `items` turns any
+// other shape into "Sunulacak proje bulunamadı" with nothing to diagnose.
+function overviewItems(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.items)) return payload.items;
+    if (Array.isArray(payload?.results)) return payload.results;
+    return [];
+}
+
 // Current portfolio items in slide order.
 function sortedPortfolioItems() {
     if (!overviewData) return [];
-    const items = [...overviewData.items];
+    const items = [...overviewItems(overviewData)];
     if (portfolioSort === 'risk') {
         const severity = (item) => {
             const v = item.forecast ? item.forecast.variance_wd : null;
@@ -279,6 +293,13 @@ async function enterMeeting(jobNo) {
         await fetchOverview();
         if (currentMode !== 'meeting') return;
     }
+    // A failed portfolio call is not an empty portfolio: saying "Sunulacak
+    // proje bulunamadı" over a 500 or a dropped connection sends the presenter
+    // looking for missing projects instead of a broken request.
+    if (overviewError) {
+        if (container) container.innerHTML = meetingErrorHtml(overviewError);
+        return;
+    }
     meetingItems = sortedPortfolioItems();
     if (!meetingItems.length) {
         if (container) container.innerHTML = meetingEmptyHtml();
@@ -294,10 +315,42 @@ function meetingEmptyHtml() {
         <div class="pp-slide-empty">
             <i class="fas fa-folder-open fa-2x mb-3"></i>
             <p>Sunulacak proje bulunamadı.</p>
+            <p class="small">Sunum modu yalnızca aktif iş emirlerini listeler.</p>
             <button type="button" class="btn btn-outline-secondary" data-action="exit">
                 <i class="fas fa-xmark me-1"></i>Çık
             </button>
         </div>`;
+}
+
+// Shown when the portfolio request itself failed — a distinct message with a
+// retry, rather than the empty state. The error is already on the console
+// (fetchOverview + the API helper both log it); its text goes on screen too so
+// a report can say WHAT failed.
+function meetingErrorHtml(error) {
+    const detail = error && error.message ? error.message : '';
+    return `
+        <div class="pp-slide-empty">
+            <i class="fas fa-triangle-exclamation fa-2x mb-3"></i>
+            <p>Proje portföyü yüklenemedi.</p>
+            ${detail ? `<p class="small">${escapeHtml(detail)}</p>` : ''}
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-primary" data-action="retry">
+                    <i class="fas fa-rotate me-1"></i>Tekrar Dene
+                </button>
+                <button type="button" class="btn btn-outline-secondary" data-action="exit">
+                    <i class="fas fa-xmark me-1"></i>Çık
+                </button>
+            </div>
+        </div>`;
+}
+
+// "Tekrar Dene" on the error state: drop the failed attempt so enterMeeting
+// re-fetches instead of reusing it, and land on the first slide.
+function retryOverview() {
+    overviewData = null;
+    overviewFetchedAt = 0;
+    overviewError = null;
+    enterMeeting(null);
 }
 
 function meetingLoadingHtml() {
@@ -339,6 +392,7 @@ function bindMeetingControls() {
                 if (action === 'prev') meetingStep(-1);
                 else if (action === 'next') meetingStep(1);
                 else if (action === 'refresh') refreshCurrentSlide(control);
+                else if (action === 'retry') retryOverview();
                 else if (action === 'exit') exitMeeting();
                 return;
             }
