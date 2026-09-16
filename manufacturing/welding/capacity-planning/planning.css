@@ -295,6 +295,39 @@
 
 .forecast-cell.late { color: #b02a37; font-weight: 600; }
 
+/* A job order's Bitiş stacks the two dates that must never be read as one
+   (user 2026-09-16): the job's own planned finish — where the last row of the
+   group lands — and the promised termin under it. Both fit the 30px row at
+   these sizes. */
+.job-end {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.05;
+    white-space: nowrap;
+}
+
+.job-end-plan {
+    font-size: .78rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.job-end-plan.late { color: #b02a37; }
+
+.job-end-termin {
+    font-size: .66rem;
+    font-weight: 500;
+    color: #6b7280;
+}
+
+/* Adet: the order's own count reads plain, a team's kg share reads as the
+   approximation it is. */
+.qty-cell { font-variant-numeric: tabular-nums; }
+
+.qty-share { color: #6b7280; }
+
 /* ---- "İş Ekle" job allocation summary ---- */
 .job-alloc-info {
     margin-top: 8px;

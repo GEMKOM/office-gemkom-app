@@ -65,7 +65,7 @@ let board = null;                 // last raw server board
 let calendar = createWorkdayCalendar([]);
 let resources = [];               // [{resource_type, id, name, blocks: [BlockVM]}]
 let weldingTasks = [];            // assignable jobs
-let jobInfo = {};                 // job_no -> {material_supply, machining[], cutting[], painting}
+let jobInfo = {};                 // job_no -> {job_order, material_supply, machining[], cutting[], painting, logistics}
 let deptByJob = {};               // job_no -> {manufacturing, welding, painting} VMs
 let machiningByJob = {};          // job_no -> Talaşlı İmalat VM (weight only)
 
@@ -845,6 +845,7 @@ const DATE_SOURCE_TITLES = {
     operations_plan: 'Operasyon planından hesaplandı — bu göreve girilmiş bir tarih değil',
     operations_actual: 'Operasyonlardaki gerçek çalışmadan alındı',
     engine: 'Üretim planı öngörüsü (proje takibi ile aynı hesap) — bu göreve girilmiş bir tarih değil',
+    plan_tail: 'İmalat planının bitişinden hesaplandı — bu göreve girilmiş bir tarih değil',
 };
 
 // Derived rows borrow the forecast engine's projected window for display and
@@ -895,14 +896,47 @@ function withDerivedDates(row, vm, { keepStart = false } = {}) {
 // The Bitiş cell of a row that carries the job hedef says, on hover, how far
 // the projection sits from it: "2 gün geride" (late) / "2 gün ileride" (ahead).
 function endDateCell(value, row) {
+    if (row.kind === 'group') return jobEndCell(value, row);
     const d = row.job_target_delta_wd;
-    if ((row.kind === 'group' || row.unassignedRow) && value && d != null && d !== 0) {
+    if (row.unassignedRow && value && d != null && d !== 0) {
         const text = d > 0
             ? `Öngörülen bitiş hedeften ${d} gün geride`
             : `Öngörülen bitiş hedeften ${Math.abs(d)} gün ileride`;
         return `<span title="${esc(text)}">${fmtDate(value)}</span>`;
     }
     return dateCell(value, row.end_is_actual, row, 'end_date');
+}
+
+// A job order's Bitiş carries TWO dates, stacked (user 2026-09-16: "display
+// the actual termin tarihi below the projected one, so that I know what is
+// what"). The top one is the job's own planned finish — the LAST row of the
+// group, which is Lojistik behind Boya — so this column now reads
+// top-to-bottom without contradicting itself. It printed the termin alone
+// before, which is how 114-13 came to show 30.09 over a sheet whose last row
+// ended on the 24th, with nothing saying which number was which. The tempo
+// forecast is a different question and keeps its own column (Gerçek./Tahmini).
+function jobEndCell(termin, row) {
+    const planned = row.job_plan_end || null;
+    if (!planned && !termin) return '<span class="text-muted">—</span>';
+    const d = targetDeltaWd(termin, planned);
+    const gap = (d == null || d === 0) ? ''
+        : (d > 0 ? ` — terminden ${d} iş günü sonra`
+            : ` — terminden ${Math.abs(d)} iş günü önce`);
+    // Names the row the date came from, because it is not always the last
+    // row in the list: a job waiting on material ends when the material
+    // lands, not when Lojistik was pencilled in.
+    const from = row.job_plan_end_source
+        ? `En son biten satır: ${row.job_plan_end_source}` : 'İş emrinin bitişi';
+    const late = !!(planned && termin && planned > termin);
+    return `
+        <span class="job-end">
+            <span class="job-end-plan${late ? ' late' : ''}"
+                  title="${esc(`${from}${gap}`)}">${
+                planned ? fmtDate(planned) : '—'}</span>
+            <span class="job-end-termin"
+                  title="Termin tarihi — iş emrine girilen teslim tarihi">${
+                termin ? fmtDate(termin) : 'termin yok'}</span>
+        </span>`;
 }
 
 function dateCell(value, isActual, row, field) {
@@ -1000,6 +1034,33 @@ function forecastCell(row) {
         </span>`;
 }
 
+// Adet for a kg slice of a job order: the order's quantity scaled by the
+// slice's share of its tonnage (user 2026-09-16 — "a job order that is 10000
+// kg and quantity of 4, if I give a team 2500 kg, that means it has 1
+// quantity of it"). Whole units only: half a panel is not a thing, so the
+// share rounds and the exact ratio goes in the tooltip.
+function quantityShare(kg, jobQuantity, jobTotalKg) {
+    const total = Number(jobTotalKg || 0);
+    const qty = Number(jobQuantity || 0);
+    const slice = Number(kg || 0);
+    if (!(total > 0) || !(qty > 0) || !(slice > 0)) return null;
+    const exact = qty * slice / total;
+    return { exact, whole: Math.round(exact) };
+}
+
+function quantityCell(row) {
+    const q = row.quantity;
+    if (q == null) return '<span class="text-muted">—</span>';
+    if (!row.quantity_is_share) return `<span class="qty-cell">${q}</span>`;
+    // A slice too small to make one unit says so. Printing "0" would read as
+    // "this team was given nothing", and a 1 kg placeholder next to 14.227 kg
+    // is a real shape on this board.
+    const label = q === 0 ? '&lt;1' : `≈${q}`;
+    const title = `${fmtKg(row.quantity_kg)} kg / ${fmtKg(row.job_total_kg)} kg`
+        + ` × ${row.job_quantity} adet = ${Number(row.quantity_exact).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} adet`;
+    return `<span class="qty-cell qty-share" title="${esc(title)}">${label}</span>`;
+}
+
 function progressBar(value) {
     const pct = Math.max(0, Math.min(100, Number(value ?? 0)));
     const color = pct >= 100 ? 'bg-success' : (pct > 0 ? 'bg-primary' : 'bg-secondary');
@@ -1072,9 +1133,13 @@ function buildSheetRows(res) {
         const jo = info.job_order || null;
         // The job order's promised end rides on EVERY row of the group: the
         // gantt draws it as one continuous target line, and forecast cells
-        // compare against it. Late = the İmalat engine projection overshoots.
-        const mfgForecast = (deptOf(jobNo, 'manufacturing') || {}).forecast_date || null;
-        const jobLate = !!(jo && jo.end_date && mfgForecast && mfgForecast > jo.end_date);
+        // compare against it. Late = the ORDER's projection overshoots it —
+        // İmalat's own is not the job's, since Boya trails welding and
+        // Lojistik trails Boya (user 2026-09-16, 114-13).
+        const jobForecast = jobForecastOf(jobNo);
+        const jobPlanEnd = jobPlanEndOf(jobNo);
+        const jobLate = !!(jo && jo.end_date && jobForecast.date
+            && jobForecast.date > jo.end_date);
         const base = {
             job_no: jobNo,
             groupKey: jobNo,
@@ -1082,7 +1147,12 @@ function buildSheetRows(res) {
             job_target_late: jobLate,
             // How far the projection sits from the hedef, in workdays —
             // the "+2 gün / −2 gün" label on the gantt.
-            job_target_delta_wd: targetDeltaWd(jo ? jo.end_date : null, mfgForecast),
+            job_target_delta_wd: targetDeltaWd(jo ? jo.end_date : null, jobForecast.date),
+            // Adet is the ORDER's, and every row that covers the whole order
+            // repeats it; a kg slice of it works out its own share below.
+            quantity: jo ? jo.quantity ?? null : null,
+            job_quantity: jo ? jo.quantity ?? null : null,
+            job_total_kg: jo ? jo.total_weight_kg ?? null : null,
         };
 
         // The job order frames everything under it. It is not a department
@@ -1109,10 +1179,15 @@ function buildSheetRows(res) {
             status: jo?.status || 'active',
             hold_kind: jo?.hold_kind || '',
             completed_at: jo?.completed_at || null,
-            // The job's Öngörü is İmalat's engine projection — comparing it
-            // with end_date (the promised date) is the group's whole story.
-            forecast_date: mfgForecast,
-            forecast_kind: (deptOf(jobNo, 'manufacturing') || {}).forecast_kind || null,
+            // The job's Öngörü is the ORDER's projection — comparing it with
+            // end_date (the promised date) is the group's whole story.
+            forecast_date: jobForecast.date,
+            forecast_kind: jobForecast.kind,
+            forecast_source: jobForecast.source,
+            // The top line of the Bitiş cell; end_date below it stays the
+            // termin, so the gantt frame and the target flag do not move.
+            job_plan_end: jobPlanEnd.date,
+            job_plan_end_source: jobPlanEnd.source,
             note: '',
         });
 
@@ -1217,6 +1292,17 @@ function buildSheetRows(res) {
         blocks.forEach(b => {
             const staged = b.stages.filter(s => !s.deleted);
             const rollup = blockRollup(b);
+            // What this assignment is worth in units. Stages take the same
+            // number: a stage is a phase of the block's work, not a slice of
+            // its tonnage.
+            const qty = quantityShare(
+                b.allocated_weight_kg, jo && jo.quantity, jo && jo.total_weight_kg);
+            const qtyFields = {
+                quantity: qty ? qty.whole : null,
+                quantity_is_share: !!qty,
+                quantity_exact: qty ? qty.exact : null,
+                quantity_kg: b.allocated_weight_kg,
+            };
             // With stages, the assignment row is their rollup and reports only.
             // Without them, it IS the schedule and takes the edits directly —
             // which is also the only shape the server accepts a subtask
@@ -1247,6 +1333,7 @@ function buildSheetRows(res) {
                 entered_duration_wd: b.subtask.entered_duration_wd ?? null,
                 weight: b.allocated_weight_kg,
                 weight_is_kg: true,
+                ...qtyFields,
                 progress: staged.length ? rollup.progress : b.subtask.progress,
                 status: staged.length ? rollup.derived : b.subtask.status,
                 completed_at: staged.length ? null : b.subtask.completed_at,
@@ -1273,6 +1360,7 @@ function buildSheetRows(res) {
                 duration_source: s.duration_source || null,
                 entered_duration_wd: s.entered_duration_wd ?? null,
                 weight: s.weight,
+                ...qtyFields,
                 progress: s.progress,
                 status: s.status,
                 completed_at: s.completed_at,
@@ -1300,9 +1388,96 @@ function buildSheetRows(res) {
 
         const painting = deptRow('painting', 'Boya', 2);
         if (painting) rows.push(painting);
+
+        // Lojistik closes the order. Nothing on a welding sheet plans
+        // shipping, so the row only reports — but it is what the group's
+        // projection usually ends on, and a date with no row under it to
+        // explain it is the thing this change was asked to fix.
+        if (info.logistics) {
+            const shipping = infoRow(info.logistics, 'Lojistik', 'info', 1);
+            // withEngineDates stamps a borrowed window 'engine'; this one is
+            // the tail of the İmalat PLAN, and a cell that claims to be a
+            // forecast it is not is how this row came to read 14.10 under an
+            // İmalat that plans to finish on the 9th (009-37).
+            if (info.logistics.date_source === 'plan_tail') {
+                shipping.start_date_source = 'plan_tail';
+                shipping.end_date_source = 'plan_tail';
+            }
+            rows.push(shipping);
+        }
     });
 
     return rows;
+}
+
+// When the LAST row of this group ends — the largest Bitiş on the sheet, over
+// every row the group prints. No exceptions: a column whose top row disagrees
+// with a row underneath it is the thing this was asked to fix, and "all of
+// them except Malzeme Tedarik" is not a rule anyone can read off the screen.
+// Upstream rows matter here even though they run first, because a row with no
+// plan of its own borrows its projection — RM045-17's material lands 20.11
+// against an İmalat that plans to 09.11, and the job cannot finish before it.
+// (The Öngörü column takes a different set; see jobForecastOf.)
+//
+// Assignment blocks are not consulted: both plan_windows and
+// rederivePlanWindows widen Kaynaklı İmalat and İmalat to cover their
+// children, so a block past İmalat would be a bug in the split, not a row
+// this should quietly absorb.
+function jobPlanEndOf(jobNo) {
+    const info = jobInfo[jobNo] || {};
+    const slots = deptByJob[jobNo] || {};
+    let date = null, source = null;
+    const offer = (vm, label) => {
+        // What the row's own cell shows: its stored plan, else the projected
+        // window the sheet borrows when there is no plan (withDerivedDates).
+        const end = vm && (vm.end_date || vm.projected_end_date);
+        if (end && (!date || end > date)) {
+            date = end;
+            source = label;
+        }
+    };
+    offer(info.material_supply, 'Malzeme Tedarik');
+    (info.cutting || []).forEach(c => offer(c, 'Kesim'));
+    offer(slots.manufacturing, 'İmalat');
+    (info.machining || []).forEach(m => offer(m, 'Talaşlı İmalat'));
+    offer(slots.welding, 'Kaynaklı İmalat');
+    offer(slots.painting, 'Boya');
+    offer(info.logistics, 'Lojistik');
+    return { date, source };
+}
+
+// The ORDER's projected finish (the Öngörü column): the latest forecast the
+// group prints — İmalat and everything that trails it. The server sends the
+// same number on `job_order.forecast_date`; a job the planner is editing
+// recomputes it here from the live VMs, so an İmalat edit moves it before
+// Kaydet does. Never the upstream rows (Malzeme Tedarik, Kesim): on 78 of 202
+// jobs theirs is the only projection left and it is months in the past.
+function jobForecastOf(jobNo) {
+    const info = jobInfo[jobNo] || {};
+    const jo = info.job_order || null;
+    if (!liveForecastJobs.has(jobNo)) {
+        return {
+            date: (jo && jo.forecast_date) || null,
+            kind: (jo && jo.forecast_kind) || null,
+            source: (jo && jo.forecast_source) || null,
+        };
+    }
+    const slots = deptByJob[jobNo] || {};
+    let date = null, kind = null, source = null;
+    const offer = (row, label) => {
+        const end = row && row.forecast_date;
+        if (end && (!date || end > date)) {
+            date = end;
+            kind = row.forecast_kind || null;
+            source = label;
+        }
+    };
+    offer(slots.manufacturing, 'İmalat');
+    offer(slots.welding, 'Kaynaklı İmalat');
+    offer(slots.painting, 'Boya');
+    offer(info.logistics, 'Lojistik');
+    (info.machining || []).forEach(m => offer(m, 'Talaşlı İmalat'));
+    return { date, kind, source };
 }
 
 // This block's OWN progress — its stages rolled up by weight, or the
@@ -1455,6 +1630,13 @@ const GRID_COLUMNS = [
               : (['stage', 'dept', 'machining'].includes(row.kind)
                   ? String(v)
                   : `<span class="weight-readonly">${v}</span>`))) },
+    // Off by default — a planner who wants to read the sheet in units turns
+    // it on and it stays on (user 2026-09-16: "I would OPTIONALLY like to be
+    // able to display quantity").
+    { field: 'quantity', label: 'Adet', width: '70px',
+      title: 'Adet — iş emrinin adedi; ekip/taşeron satırlarında kg payına düşen adet',
+      headerClass: 'col-center', cellClass: 'col-center col-num',
+      formatter: (v, row) => cellOverride(row, 'quantity') ?? quantityCell(row) },
     { field: 'progress', label: 'İlerleme', width: '116px', type: 'number', min: 0, max: 100, step: 1,
       headerClass: 'col-center', cellClass: 'col-progress', always: true,
       formatter: (v, row) => cellOverride(row, 'progress') ?? progressBar(v) },
@@ -1481,6 +1663,10 @@ const SCHEDULE_ONLY = ['start_date', 'end_date', 'duration_wd', 'status'];
 // rule from the cursor instead of from an error.
 function isCellEditable(row, field) {
     if (READ_ONLY_KINDS.includes(row.kind)) return false;
+    // Adet is never typed here: the order's count belongs to the job order and
+    // a block's is arithmetic on its kg. Guarded by name because the fallthrough
+    // at the bottom of this function says "editable".
+    if (field === 'quantity') return false;
     // Skipped work is display-only — the row exists to say what happened to
     // it, not to be planned. (Cancelled stays editable: scheduling a
     // cancelled stage is how it is brought back.)
@@ -1739,7 +1925,31 @@ function rederivePlanWindows() {
         // the paint tail spills past it.
         imalat.end_date = later(spanEnd(start, total), latest);
         imalat.end_is_actual = false;
+
+        // Lojistik has no plan of its own — it trails İmalat — so the sheet's
+        // last row has to move with the entry above it. Without this it kept
+        // the window the server chained off the OLD start and the job order's
+        // Bitiş ended up EARLIER than the rows under it.
+        const shipping = (jobInfo[jobNo] || {}).logistics;
+        if (shipping
+                && !['completed', 'cancelled', 'skipped'].includes(shipping.status)) {
+            const from = nextWorkday(imalat.end_date);
+            shipping.projected_start_date = from;
+            shipping.projected_end_date = spanEnd(from, logisticsDays(shipping));
+            shipping.date_source = 'plan_tail';
+        }
     });
+}
+
+// How long shipping takes, from whatever was known about it — an entered
+// duration, else the span it was last laid out over, else a day. Re-reading a
+// window this file wrote is safe: every pass writes the same number of days.
+function logisticsDays(row) {
+    if (row.duration_wd != null) return Number(row.duration_wd);
+    const start = row.projected_start_date || row.start_date;
+    const end = row.projected_end_date || row.end_date;
+    if (start && end) return calendar.workingDaysInclusive(start, end);
+    return 1;
 }
 
 // Live parent-progress rollup (user: "when a subtask's progress changes,
@@ -1923,6 +2133,18 @@ function rederiveEngineDates() {
                 imalat.forecast_date = end;
             }
         }
+
+        // Shipping trails the whole of İmalat here too, but off the ENGINE's
+        // finish, not the plan's — the Öngörü column answers a different
+        // question from Bitiş and the two must not be crossed. The plan side
+        // of this row is laid out in rederivePlanWindows.
+        const shipping = (jobInfo[jobNo] || {}).logistics;
+        const imalatEnd = imalat && (imalat.projected_end_date || imalat.forecast_date);
+        if (shipping && imalatEnd
+                && !['completed', 'cancelled', 'skipped'].includes(shipping.status)) {
+            shipping.forecast_date = calendar.spanEnd(
+                nextWorkday(imalatEnd), Math.max(logisticsDays(shipping), 0.1));
+        }
     });
 }
 
@@ -2028,6 +2250,9 @@ function buildAllRows() {
                 has_subtasks: vm.has_subtasks,
                 weight: t.total_weight_kg ?? (jo ? jo.total_weight_kg : null),
                 weight_is_kg: true,
+                quantity: jo ? jo.quantity ?? null : null,
+                job_quantity: jo ? jo.quantity ?? null : null,
+                job_total_kg: jo ? jo.total_weight_kg ?? null : null,
                 allocated_kg: partly && t.total_weight_kg != null
                     ? round2(allocatedForTask(t.welding_task_id)) : null,
                 progress: vm.progress,

@@ -330,10 +330,17 @@ body.pg-resizing * {
 .pg-delta-late { color: #dc2626; }
 .pg-delta-early { color: #16a34a; }
 
-/* The group's promised end turns red when the projection overshoots it */
+/* The group's promised end turns red when the projection overshoots it.
+   The termin line stacked under it keeps its own colour — painting both red
+   is how the cell stopped saying which date is which. */
 .pg-group-late .pg-cell[data-field="end_date"] {
     color: #b91c1c;
     font-weight: 700;
+}
+
+.pg-group-late .pg-cell[data-field="end_date"] .job-end-termin {
+    color: #6b7280;
+    font-weight: 500;
 }
 
 /* "Tümü" tab: unassigned jobs — visibly waiting for an owner */
