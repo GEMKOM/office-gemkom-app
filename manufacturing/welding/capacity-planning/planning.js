@@ -39,6 +39,8 @@ import {
     adoptExistingBlockStageIds,
 } from './saveReconcile.js';
 import { exportPlanningPdf } from './pdf.js';
+import { initCapacityPanel } from './capacityPanel.js';
+import { blockVerdictLabel, verdictMeta } from './capacityText.js';
 
 // ---- constants -----------------------------------------------------------
 
@@ -114,6 +116,14 @@ let customStageModal = null;
 let confirmModal = null;
 let pendingNewBlock = null;       // waiting for tier selection
 let blockModalMode = null;        // {mode: 'add'|'weight', blockRef?, prefillTaskId?}
+
+// Kapasite drawer (advisory, 2026-09-16). The report is fetched when the
+// drawer is first opened — never on board load — and the grid decorations
+// below read these maps; they reflect the SAVED plan only.
+let capacityPanel = null;
+let capacityReport = null;             // last /welding/planning/capacity/ payload
+let capacityByBlockKey = new Map();    // 'subcontracting-12' -> {block, resource}
+let capacityByResourceKey = new Map(); // 'team-5' -> resource
 
 // ---- helpers -------------------------------------------------------------
 
@@ -214,6 +224,102 @@ function findBlock(blockRef) {
 function hasUnsavedChanges() {
     return dirtyBlocks.size > 0 || dirtyDept.size > 0
         || dirtyMachining.size > 0 || deletedBlocks.length > 0;
+}
+
+// ---- capacity decorations (advisory) --------------------------------------
+
+// The engine's entry for a block row — only while the row still reflects the
+// SAVED plan. An unsaved edit changes what the engine would say, so the mark
+// disappears until Kaydet and comes back with the refreshed report.
+function capacityFor(row) {
+    if (!row || row.kind !== 'block' || !row.blockRef) return null;
+    if (dirtyBlocks.has(row.blockRef) || liveForecastJobs.has(row.job_no)) return null;
+    return capacityByBlockKey.get(row.blockRef) || null;
+}
+
+function capacityIsLate(entry) {
+    return !!entry && entry.block.verdict === 'late_risk'
+        && !(entry.block.flags || []).includes('deadline_passed');
+}
+
+function capacityRowTitle(entry) {
+    const b = entry.block;
+    const finish = b.relaxed_finish ? fmtDate(b.relaxed_finish) : 'simülasyon ufkunun ötesinde';
+    const deadline = b.deadline ? fmtDate(b.deadline) : 'girilmemiş';
+    return `Kapasite: ${blockVerdictLabel(b)} — bu kaynağın sırasında en erken bitiş ${finish}, `
+        + `termin ${deadline}. Öneriler için Kapasite panelini açın.`;
+}
+
+// "En erken bitiş (sıra)" column: the engine's date, deliberately NOT in the
+// Öngörü column — two date models in one cell would bring back "I don't know
+// how this is calculated" (2026-08-28).
+function capacityCell(row) {
+    const entry = capacityFor(row);
+    if (!entry) return '<span class="text-muted">—</span>';
+    const b = entry.block;
+    if (b.verdict === 'no_data') {
+        return '<span class="text-muted" title="Bu kaynak için ölçülmüş hız yok — Kapasite panelinden kapasite girin">veri yok</span>';
+    }
+    const finish = b.relaxed_finish ? fmtDate(b.relaxed_finish) : 'ufuk dışı';
+    const chipCls = capacityIsLate(entry) ? 'cap-late-chip'
+        : (b.verdict === 'on_track' && b.late_cause !== 'plan_start' ? 'cap-early-chip' : 'cap-muted-chip');
+    return `<span title="${esc(capacityRowTitle(entry))}">${esc(finish)}`
+        + `<span class="${chipCls} cap-cell-chip">${esc(blockVerdictLabel(b))}</span></span>`;
+}
+
+function capacityTabChip(key) {
+    const res = capacityByResourceKey.get(key);
+    if (!res || !['tight', 'overloaded'].includes(res.verdict)) return '';
+    const level = res.verdict === 'overloaded' ? 'over' : 'tight';
+    const meta = verdictMeta(res.verdict, 'resource');
+    const text = res.pressure != null
+        ? `${Number(res.pressure).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}×`
+        : meta.label;
+    const title = res.pressure != null
+        ? `Kapasite: ${meta.label} — terminler için gerekli hız mevcut hızın ${text}'ı`
+        : `Kapasite: ${meta.label}`;
+    return `<span class="cap-tab-chip cap-tab-${level}" title="${esc(title)}">${esc(text)}</span>`;
+}
+
+function updateCapacityBadge() {
+    const badge = document.getElementById('capacity-btn-badge');
+    if (!badge) return;
+    const n = (capacityReport && capacityReport.summary && capacityReport.summary.late_blocks) || 0;
+    badge.textContent = String(n);
+    badge.classList.toggle('d-none', !n);
+    badge.title = n ? `${n} blok gecikme riskinde` : '';
+}
+
+function onCapacityReport({ report, byBlockKey, byResourceKey }) {
+    capacityReport = report;
+    capacityByBlockKey = byBlockKey;
+    capacityByResourceKey = byResourceKey;
+    updateCapacityBadge();
+    renderTabs();
+    renderGrid();
+}
+
+function clearCapacityDecorations() {
+    capacityByBlockKey = new Map();
+    capacityByResourceKey = new Map();
+}
+
+// "Göster" in the drawer: bring the row on screen — clear a filter that
+// hides the job, switch to the resource's sheet, unfold the job, pulse the row.
+function onCapacityLocate({ blockKey, resourceKey, jobNo }) {
+    if (hasActiveFilter()) clearFilters();
+    if (jobNo) revealJob(jobNo);
+    if (resourceKey && resourceKey !== activeResourceKey) switchResource(resourceKey);
+    else renderGrid();
+    const rowKey = blockKey
+        ? `${blockKey}-block`
+        : (sheetRows.find(r => r.kind === 'group' && r.job_no === jobNo) || {}).key;
+    if (!rowKey) return;
+    const el = document.querySelector(`.pg-row[data-row="${CSS.escape(rowKey)}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    el.classList.add('cap-row-pulse');
+    setTimeout(() => el.classList.remove('cap-row-pulse'), 1600);
 }
 
 function todayStr() {
@@ -363,6 +469,9 @@ async function loadBoard() {
     try {
         const data = await getWeldingPlanningBoard(showCompleted);
         hydrate(data);
+        // Never on first load: the report is only fetched once the drawer
+        // has been opened, and then follows every board reload.
+        if (capacityPanel && capacityPanel.hasLoaded()) capacityPanel.refresh({ silent: true });
     } catch (e) {
         showNotification(e.message, 'error');
     }
@@ -733,6 +842,7 @@ function renderTabs() {
                 <i class="fas ${icon}"></i>
                 <span class="tab-label">${esc(res.display_name || res.name)}</span>
                 ${blockCount ? `<span class="resource-kg">${fmtKg(remainingKg)} kg</span>` : ''}
+                ${capacityTabChip(key)}
                 ${dirty ? '<span class="dirty-dot" title="Kaydedilmemiş değişiklik"></span>' : ''}
             </button>`;
     };
@@ -1588,8 +1698,12 @@ function titleCell(value, row) {
     }
     const icon = (row.kind === 'dept' ? DEPT_ICONS[row.slot] : ROW_ICONS[row.kind])
         || 'fas fa-circle';
+    const cap = row.kind === 'block' ? capacityFor(row) : null;
+    const capFlag = capacityIsLate(cap)
+        ? `<i class="fas fa-triangle-exclamation cap-row-flag" title="${esc(capacityRowTitle(cap))}"></i>`
+        : '';
     return `<span class="pg-title"><i class="${icon} pg-ico"></i>${esc(row.title)}${
-        row.isNew ? '<span class="badge bg-info ms-1">yeni</span>' : ''}</span>`;
+        row.isNew ? '<span class="badge bg-info ms-1">yeni</span>' : ''}${capFlag}</span>`;
 }
 
 // ---- grid definition -----------------------------------------------------
@@ -1646,6 +1760,12 @@ const GRID_COLUMNS = [
     { field: 'forecast_date', label: 'Gerçek./Tahmini', width: '118px',
       headerClass: 'col-center', cellClass: 'col-center col-date',
       formatter: (v, row) => cellOverride(row, 'forecast_date') ?? forecastCell(row) },
+    // Advisory, opt-in via the column picker: the capacity engine's earliest
+    // finish in the resource's deadline order (Kapasite panel, saved plan only).
+    { field: 'cap_finish', label: 'En erken bitiş (sıra)', width: '150px',
+      title: 'Kapasite simülasyonu — kaynağın ölçülen hızıyla, termin sırasına göre en erken bitiş (kaydedilmiş plana göre; ayrıntı Kapasite panelinde)',
+      headerClass: 'col-center', cellClass: 'col-center col-date',
+      formatter: (v, row) => capacityCell(row) },
     { field: 'note', label: 'Not', width: '160px', type: 'text',
       formatter: (v, row) => cellOverride(row, 'note')
           ?? (v ? `<span class="stage-note">${esc(v)}</span>` : '<span class="text-muted">—</span>') },
@@ -1662,6 +1782,9 @@ const SCHEDULE_ONLY = ['start_date', 'end_date', 'duration_wd', 'status'];
 // is touched is a worse answer than not offering it: the planner learns the
 // rule from the cursor instead of from an error.
 function isCellEditable(row, field) {
+    // The capacity column reports; stage rows would otherwise fall through
+    // to the editable default at the end.
+    if (field === 'cap_finish') return false;
     if (READ_ONLY_KINDS.includes(row.kind)) return false;
     // Adet is never typed here: the order's count belongs to the job order and
     // a block's is arithmetic on its kg. Guarded by name because the fallthrough
@@ -2332,6 +2455,7 @@ function rowClasses(row) {
     if (row.status === 'skipped') classes.push('pg-row-skipped');
     if (row.kind === 'dept') classes.push(`pg-row-dept pg-row-${row.slot}`);
     if (row.kind === 'block') classes.push('pg-row-block');
+    if (row.kind === 'block' && capacityIsLate(capacityFor(row))) classes.push('pg-cap-late');
     if (row.status === 'cancelled') classes.push('pg-row-cancelled');
     classes.push(`pg-indent-${row.indent || 0}`);
     return classes.join(' ');
@@ -3746,6 +3870,9 @@ async function onSave() {
     try {
         const resp = await bulkSaveWeldingPlanning(payload);
         showNotification('Plan kaydedildi.', 'success');
+        // The capacity marks described the plan before this save; they come
+        // back with the report refreshed after the board rebuild.
+        clearCapacityDecorations();
         // What the save changed on its own — a move shifting price-tier
         // capacity — must not go unseen.
         (resp && resp.messages || []).forEach(m => showNotification(m, 'info'));
@@ -3835,6 +3962,7 @@ function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
 async function refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys } = {}) {
     try {
         const data = await getWeldingPlanningBoard(showCompleted);
+        if (capacityPanel && capacityPanel.hasLoaded()) capacityPanel.refresh({ silent: true });
         if (shouldHydrateAfterSave(clockAtSend, mutationClock)) {
             hydrate(data);
             return;
@@ -3945,6 +4073,13 @@ function init() {
     document.getElementById('save-btn').addEventListener('click', onSave);
     document.getElementById('add-job-btn').addEventListener('click', () => openAddJobModal());
     document.getElementById('pdf-btn')?.addEventListener('click', onExportPdf);
+
+    capacityPanel = initCapacityPanel({
+        onReport: onCapacityReport,
+        onLocate: onCapacityLocate,
+        hasUnsavedChanges,
+    });
+    document.getElementById('capacity-btn')?.addEventListener('click', () => capacityPanel.toggle());
 
     const completedToggle = document.getElementById('show-completed-toggle');
     if (completedToggle) {

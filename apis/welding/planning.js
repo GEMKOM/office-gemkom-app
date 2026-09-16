@@ -70,3 +70,22 @@ export async function bulkSaveWeldingPlanning(payload) {
     }
     return await resp.json();
 }
+
+/**
+ * Capacity suggestions (advisory, read-only): a measured rate per resource,
+ * a deadline-ordered simulation of its open blocks, per-block verdicts and
+ * structured suggestions the panel renders in Turkish.
+ * GET /welding/planning/capacity/?months=6&difficulty=1
+ * Returns {generated_at, today, params, resources: [{key, resource_type, id,
+ *   display_name, rate_kg_per_wd, rate_source, confidence, evidence, verdict,
+ *   pressure, required_eff_kg_per_wd, backlog_end, blocks: [...], suggestions}],
+ *   unplanned_jobs, unassigned, summary, timing_ms, query_count}.
+ */
+export async function getWeldingCapacityReport({ months = 6, difficulty = true } = {}) {
+    const qs = new URLSearchParams({ months: String(months), difficulty: difficulty ? "1" : "0" });
+    const resp = await authedFetch(`${BASE}/capacity/?${qs}`);
+    if (!resp.ok) {
+        throw new Error(await parseError(resp, "Kapasite raporu yüklenirken hata oluştu"));
+    }
+    return await resp.json();
+}
