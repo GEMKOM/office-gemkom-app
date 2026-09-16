@@ -11,10 +11,11 @@
  * to move, and the server refuses them on the header. The one key it does
  * take there is actual_start_date.
  *
- * Gerçek Başlangıç is PER ASSIGNMENT (user decision 2026-09-08 — 284-07: two
- * subcontractors, two start dates), so it rides both shapes, but only when
- * it changed against the last-save snapshot: an absent key means "unchanged"
- * to the server, an explicit null clears the date.
+ * That key is the assignment's own START (284-07: two subcontractors, two
+ * start dates; one visible column since 2026-09-16). It rides both shapes,
+ * but only when it changed against the last-save snapshot: an absent key
+ * means "unchanged" to the server, an explicit null clears the date and
+ * hands the block back to the weight split.
  */
 export function blockSchedulePatch(snapSubtask, subtask, hasStages) {
     const item = hasStages

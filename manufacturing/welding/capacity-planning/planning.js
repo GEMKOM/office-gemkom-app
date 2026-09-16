@@ -277,9 +277,11 @@ function blockVM(b, res) {
             progress: Number(b.subtask.progress ?? 0),
             start_date: b.subtask.start_date,
             end_date: b.subtask.end_date,
-            // Gerçek Başlangıç — the day this ASSIGNMENT actually started,
-            // entered per block (user decision 2026-09-08, 284-07). Evidence
-            // for the server forecast, never a plan date: nothing derives it.
+            // This ASSIGNMENT's own start, typed per block (284-07). Stored
+            // apart from the derived `start_date` above because the weight
+            // split and the purge must not touch it — since 2026-09-16 the
+            // split reads it and anchors the block there, and one Başlangıç
+            // column shows the result.
             actual_start_date: b.subtask.actual_start_date || null,
             duration_wd: b.subtask.duration_wd,
             duration_is_derived: !!b.subtask.duration_is_derived,
@@ -374,10 +376,11 @@ function bumpMutation() {
     mutationClock += 1;
 }
 
-// `live: false` keeps the job on the SERVER's projections. The client cascade
-// (rederivePlanWindows / rederiveEngineDates) does not model Gerçek Başlangıç,
-// so switching to it on that edit would show a forecast that ignores the very
-// date just typed, until Kaydet brought the server's back.
+// `live: false` keeps the job on the SERVER's projections — for an edit the
+// client cascade cannot model, where switching would show numbers that ignore
+// the very thing just typed until Kaydet brought the server's back. Both
+// cascades DO model a pinned assignment start (2026-09-16), so that edit goes
+// live like any other.
 function markBlockDirty(blockRef, { live = true } = {}) {
     dirtyBlocks.add(blockRef);
     bumpMutation();
@@ -948,17 +951,6 @@ function dateCell(value, isActual, row, field) {
     }
     if (!isActual) return fmtDate(value);
     return `<span class="date-actual" title="Gerçekleşen tarih (planlanmış tarih girilmemiş)">${fmtDate(value)}</span>`;
-}
-
-// Gerçek Başlangıç is PER ASSIGNMENT (user decision 2026-09-08 — 284-07: two
-// subcontractors built two units, one from 12.02.2026 and one from
-// 20.06.2026; the single İmalat start could not say so, and the forecast
-// measured the second one's tempo from the first one's calendar). Only the
-// block row carries it, and it prints plain: nothing on this column is ever
-// derived or borrowed, it is typed or it is empty.
-function actualStartCell(value, row) {
-    if (row.kind !== 'block' || !value) return '<span class="text-muted">—</span>';
-    return fmtDate(value);
 }
 
 // A derived duration is not a plan anyone entered, and the two derivations are
@@ -1599,16 +1591,14 @@ function titleCell(value, row) {
 const GRID_COLUMNS = [
     { field: 'title', label: 'Görev', width: '250px', always: true,
       formatter: (v, row) => titleCell(v, row) },
+    // ONE start column (user 2026-09-16: "get rid of having two start dates").
+    // It is typed on the İmalat row and on each assignment row; everything
+    // else derives. What a block carries here is stored on the subtask's
+    // `actual_start_date`, the only date below İmalat the purge spares.
     { field: 'start_date', label: 'Başlangıç', width: '96px', type: 'date',
+      title: 'Başlangıç — İmalat satırında işin başlangıcı, ekip/taşeron satırında o ekibin işe başladığı (ya da başlayacağı) tarih',
       headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
       formatter: (v, row) => cellOverride(row, 'start_date') ?? dateCell(v, row.start_is_actual, row, 'start_date') },
-    // `always`, like the other dates: an ENTRY column, and one that a column
-    // set stored before 2026-09-08 would otherwise never show — activeColumns()
-    // keeps `always` columns whatever localStorage says.
-    { field: 'actual_start_date', label: 'Gerçek Başl.', width: '96px', type: 'date',
-      title: 'Gerçek Başlangıç — atamanın başladığı ya da başlayacağı tarih (geçmişse tempo bu tarihten ölçülür, ilerideyse öngörü bu tarihte başlar)',
-      headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
-      formatter: (v, row) => cellOverride(row, 'actual_start_date') ?? actualStartCell(v, row) },
     { field: 'end_date', label: 'Bitiş', width: '96px', type: 'date',
       headerClass: 'col-center', cellClass: 'col-center col-date', always: true,
       formatter: (v, row) => cellOverride(row, 'end_date') ?? endDateCell(v, row) },
@@ -1679,22 +1669,22 @@ function isCellEditable(row, field) {
             && !(row.kind === 'dept' && row.slot === 'manufacturing')) {
         return false;
     }
-    // ONE date entry point too (user decision 2026-08-28): the İmalat START.
-    // Every other date on the sheet is DERIVED — the forecast engine projects
-    // the schedule from that start, the entered duration and the progress,
-    // with the same arithmetic project tracking uses. İmalat's own end is
-    // the engine's projection; its Hedef lives on project tracking.
+    // STARTS are typed, ends never are (2026-08-28): every end on the sheet is
+    // derived — the plan laid out from a start and a duration, or the engine's
+    // projection where there is no plan. İmalat's Hedef lives on project
+    // tracking.
+    //
+    // Two rows take a start. The İmalat row, which is the job's; and each
+    // ASSIGNMENT, which is that team's (284-07: two subcontractors, two start
+    // dates). The block row takes it whether or not it has stages, since the
+    // date is the assignment's, not any one stage's — but not on a block that
+    // is not saved yet, which posts through new_blocks and carries no
+    // schedule, so the date would be lost: Kaydet first, then enter it.
     if (field === 'start_date' || field === 'end_date') {
-        return field === 'start_date'
-            && row.kind === 'dept' && row.slot === 'manufacturing';
+        if (field !== 'start_date') return false;
+        if (row.kind === 'block') return !row.isNew;
+        return row.kind === 'dept' && row.slot === 'manufacturing';
     }
-    // Gerçek Başlangıç is the one date typed BELOW İmalat, and it is typed per
-    // ASSIGNMENT (user decision 2026-09-08 — 284-07: two subcontractors, two
-    // start dates): the block row takes it whether or not it has stages, since
-    // the date is the assignment's, not any one stage's. Not on a block that is
-    // not saved yet — it posts through new_blocks, which carries no schedule,
-    // so the date would be lost: Kaydet first, then enter it.
-    if (field === 'actual_start_date') return row.kind === 'block' && !row.isNew;
     // Talaşlı İmalat's share of the manufacturing rollup is set here; its dates
     // are not — those come from the operations underneath it.
     if (row.kind === 'machining') return field === 'weight';
@@ -1900,10 +1890,15 @@ function rederivePlanWindows() {
             blocks.forEach(b => {
                 if (kgSum <= 0) return;
                 const blockDays = weldDays * w(b.allocated_weight_kg) / kgSum;
-                const blockEnd = set(b.subtask, start, blockDays);
+                // Pinned to its own start when the planner typed one — the
+                // mirror of plan_windows.lay_out_children. Without this the
+                // client preview put every team on the İmalat start and only
+                // the save would move them back.
+                const blockStart = b.subtask.actual_start_date || start;
+                const blockEnd = set(b.subtask, blockStart, blockDays);
                 const stages = b.stages.filter(s => !s.deleted && s.status !== 'cancelled');
                 const stageSum = stages.reduce((acc, s) => acc + w(s.weight), 0);
-                let cursor = start, deepest = null;
+                let cursor = blockStart, deepest = null;
                 stages.forEach(s => {
                     if (stageSum <= 0) return;
                     const e = set(s, cursor, blockDays * w(s.weight) / stageSum);
@@ -1912,6 +1907,11 @@ function rederivePlanWindows() {
                 });
                 if (deepest && deepest > blockEnd) b.subtask.end_date = deepest;
                 weldEnd = later(weldEnd, b.subtask.end_date);
+                // Kaynaklı İmalat opens backwards too: a team pinned before
+                // the İmalat start must not sit outside its own parent.
+                if (b.subtask.start_date && b.subtask.start_date < weld.start_date) {
+                    weld.start_date = b.subtask.start_date;
+                }
             });
             weld.end_date = weldEnd;
             parallelEnd = later(parallelEnd, weldEnd);
@@ -1922,9 +1922,13 @@ function rederivePlanWindows() {
             latest = later(latest, set(paint, paintStart, total * w(paint.weight) / sibSum));
         }
         // The İmalat row covers what it contains — its own span, extended if
-        // the paint tail spills past it.
+        // the paint tail spills past it, and opened backwards if a pinned
+        // team starts before it.
         imalat.end_date = later(spanEnd(start, total), latest);
         imalat.end_is_actual = false;
+        if (weld && weld.start_date && weld.start_date < imalat.start_date) {
+            imalat.start_date = weld.start_date;
+        }
 
         // Lojistik has no plan of its own — it trails İmalat — so the sheet's
         // last row has to move with the entry above it. Without this it kept
@@ -2068,7 +2072,11 @@ function rederiveEngineDates() {
         let weldEnd = null;
         (jobBlocks[jobNo] || []).forEach(b => {
             let blockEnd = null;
-            let cursor = jobStart;
+            // Where this assignment actually begins: its own entered start
+            // (which rederivePlanWindows has already put on start_date),
+            // else the job's. layout() still floors an unstarted row at
+            // today, so a past entry anchors and a future one pushes out.
+            let cursor = b.subtask.start_date || jobStart;
             const live = b.stages.filter(
                 s => !s.deleted && !['cancelled', 'skipped'].includes(s.status));
             if (live.length) {
@@ -2083,7 +2091,7 @@ function rederiveEngineDates() {
                     if (blockEnd) cursor = nextWorkday(blockEnd);
                 });
             } else if (b.subtask.status !== 'completed') {
-                blockEnd = layout(b.subtask, jobStart, b.subtask.duration_wd);
+                blockEnd = layout(b.subtask, cursor, b.subtask.duration_wd);
             }
             if (blockEnd && b.subtask.status !== 'completed') {
                 if (live.length) {
@@ -2756,22 +2764,23 @@ function onCellEdit(row, field, newValue) {
                 b.stages.forEach(s => { if (!s.deleted) clearEntry(s); });
             }));
         }
-    } else if (field === 'actual_start_date') {
-        // Gerçek Başlangıç (per assignment, 2026-09-08 — 284-07). It moves
-        // no start, end or duration here, and it skips the start-vs-end rule
-        // below — a start after the planned end is a true statement about a
-        // late job. A PAST date is the assignment's actual start (the server
-        // forecast measures its tempo from it); a FUTURE date is when the
-        // assignment WILL start (user 2026-09-08: "it should let me input a
-        // date later than today") — the forecast begins the row there. The
-        // client cascade models neither, so the job stays on server
-        // projections (live: false) rather than switching to a client
-        // forecast that would ignore the date.
-        if (row.kind !== 'block') throw new Error('Gerçek başlangıç yalnızca atama satırına girilir.');
-        const actual = newValue || null;
-        target.actual_start_date = actual;
-        row.actual_start_date = actual;
-        markBlockDirty(block.key, { live: false });
+    } else if (field === 'start_date' && row.kind === 'block') {
+        // An assignment's own start. Stored on `actual_start_date` — the one
+        // date below İmalat that _purge_descendant_schedules spares, which is
+        // exactly what an entry the weight split must not overwrite needs.
+        // It skips the start-vs-end rule below: plan_windows re-lays the block
+        // (and widens Kaynaklı İmalat and İmalat around it) from this date, so
+        // the old end is about to be recomputed anyway.
+        // A PAST date is when the assignment actually began — the forecast
+        // measures its tempo from there; a FUTURE date is when it WILL begin
+        // (user 2026-09-08: "it should let me input a date later than today")
+        // and floors the projection. Both now also MOVE THE PLAN (user
+        // 2026-09-16), which is the whole reason the second column is gone.
+        const entered = newValue || null;
+        target.actual_start_date = entered;
+        target.start_date = entered || target.start_date;
+        row.actual_start_date = entered;
+        markBlockDirty(block.key);
         scheduleRefresh();
         return;
     } else if (field === 'start_date' || field === 'end_date') {
@@ -3693,8 +3702,8 @@ function buildPayload() {
         });
         if (stageItems.length) item.stages = stageItems;
 
-        // Status + progress for an unstaged block, Gerçek Başlangıç for any
-        // block when it changed — the shapes are blockSchedulePatch's.
+        // Status + progress for an unstaged block, the assignment's own start
+        // for any block when it changed — the shapes are blockSchedulePatch's.
         const schedule = blockSchedulePatch(snap.subtask, b.subtask, hasStages);
         if (schedule) item.subtask_schedule = schedule;
         payload.blocks.push(item);
