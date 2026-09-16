@@ -706,7 +706,19 @@ function renderTabs() {
         // this job" — the resources without it drop behind the +N toggle.
         const blocks = visibleBlocks(res);
         const blockCount = blocks.length;
-        const totalKg = blocks.reduce((sum, b) => sum + Number(b.allocated_weight_kg || 0), 0);
+        // REMAINING kg, not assigned kg (user 2026-09-16): the strip is a
+        // capacity view, so 20.000 kg at %25 is 15.000 kg of work still to
+        // do. Each block discounts by its OWN progress — the job order's
+        // overall progress covers slices this resource never took.
+        const totalKg = round2(blocks.reduce(
+            (sum, b) => sum + Number(b.allocated_weight_kg || 0), 0));
+        const remainingKg = round2(blocks.reduce((sum, b) => {
+            const done = Math.min(Math.max(blockProgress(b), 0), 100);
+            return sum + Number(b.allocated_weight_kg || 0) * (1 - done / 100);
+        }, 0));
+        const kgTitle = remainingKg === totalKg
+            ? `${fmtKg(totalKg)} kg`
+            : `kalan ${fmtKg(remainingKg)} kg / atanan ${fmtKg(totalKg)} kg`;
         // Unsaved work is never hidden by a view filter.
         const dirty = res.blocks.some(b => dirtyBlocks.has(b.key))
             || deletedBlocks.some(d => d.resourceKey === key);
@@ -717,10 +729,10 @@ function renderTabs() {
         const emptyHint = hasActiveFilter() ? ' — filtreye uyan iş yok' : ' — atanmış iş yok';
         return `
             <button type="button" class="${classes.join(' ')}" data-resource-key="${esc(key)}"
-                    title="${esc(res.name)}${blockCount ? ` — ${blockCount} iş, ${fmtKg(totalKg)} kg` : emptyHint}">
+                    title="${esc(res.name)}${blockCount ? ` — ${blockCount} iş, ${kgTitle}` : emptyHint}">
                 <i class="fas ${icon}"></i>
                 <span class="tab-label">${esc(res.display_name || res.name)}</span>
-                ${blockCount ? `<span class="resource-kg">${fmtKg(totalKg)} kg</span>` : ''}
+                ${blockCount ? `<span class="resource-kg">${fmtKg(remainingKg)} kg</span>` : ''}
                 ${dirty ? '<span class="dirty-dot" title="Kaydedilmemiş değişiklik"></span>' : ''}
             </button>`;
     };
@@ -1293,26 +1305,29 @@ function buildSheetRows(res) {
     return rows;
 }
 
+// This block's OWN progress — its stages rolled up by weight, or the
+// assignment row itself when it has none. Never the job order's overall
+// progress: an assignment is one slice of the job, and the other slices say
+// nothing about how far this resource has got.
+function blockProgress(b) {
+    if (b.subtask.status === 'completed' || b.subtask.status === 'skipped') return 100;
+    const active = b.stages.filter(s => !s.deleted && !['skipped', 'cancelled'].includes(s.status));
+    if (active.length) {
+        const totalW = active.reduce((s, x) => s + Number(x.weight || 0), 0);
+        if (totalW <= 0) return 0;
+        const leaf = (s) => s.status === 'completed' ? 100
+            : (['pending', 'blocked', 'cancelled'].includes(s.status) ? 0
+                : Math.min(Number(s.progress || 0), 99));
+        return Math.min(
+            active.reduce((sum, s) => sum + leaf(s) * Number(s.weight || 0), 0) / totalW, 99);
+    }
+    return b.subtask.status === 'completed' ? 100 : Math.min(Number(b.subtask.progress || 0), 99);
+}
+
 // Client mirror of the backend rollup for the block header.
 function blockRollup(b) {
     const active = b.stages.filter(s => !s.deleted && !['skipped', 'cancelled'].includes(s.status));
-    let progress;
-    if (b.subtask.status === 'completed' || b.subtask.status === 'skipped') {
-        progress = 100;
-    } else if (active.length) {
-        const totalW = active.reduce((s, x) => s + Number(x.weight || 0), 0);
-        if (totalW > 0) {
-            const leaf = (s) => s.status === 'completed' ? 100
-                : (['pending', 'blocked', 'cancelled'].includes(s.status) ? 0
-                    : Math.min(Number(s.progress || 0), 99));
-            progress = Math.min(
-                active.reduce((sum, s) => sum + leaf(s) * Number(s.weight || 0), 0) / totalW, 99);
-        } else {
-            progress = 0;
-        }
-    } else {
-        progress = b.subtask.status === 'completed' ? 100 : Math.min(Number(b.subtask.progress || 0), 99);
-    }
+    const progress = blockProgress(b);
 
     const hasStages = b.stages.some(s => !s.deleted);
     const dated = hasStages
