@@ -1,0 +1,545 @@
+/* Sunum Modu slide, plan-sheet edition.
+   Rows: strip / hero / tiles / sheet. The sheet is the İmalat Planlama grid
+   (../../manufacturing/welding/capacity-planning/grid.css) rendered
+   read-only; this file is the chrome around it plus the sheet's own cell
+   styles (ps-*). Colours are the house palette — never yellow. */
+
+/* ---- hero ---------------------------------------------------------------- */
+
+.pp-hero-ps {
+    background: #ffffff;
+    border: 1px solid #e2e6ec;
+    border-left: 6px solid #6c757d;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+    padding: 12px 18px 10px;
+    display: grid;
+    grid-template-columns: minmax(240px, 1fr) auto;
+    grid-template-areas:
+        "id figures"
+        "lines lines"
+        "progress progress";
+    column-gap: 18px;
+    row-gap: 6px;
+    align-items: center;
+    min-height: 0;
+}
+
+.pp-hero-ps.ps-theme-green { border-left-color: #198754; }
+.pp-hero-ps.ps-theme-orange { border-left-color: #fd7e14; }
+.pp-hero-ps.ps-theme-red { border-left-color: #dc3545; }
+.pp-hero-ps.ps-theme-grey { border-left-color: #6c757d; }
+
+.ps-hero-id {
+    grid-area: id;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ps-hero-jobno {
+    font-size: 1.9rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: #1f2530;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ps-hero-title {
+    font-size: 1.02rem;
+    font-weight: 600;
+    color: #2b3240;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ps-hero-customer {
+    font-size: 0.82rem;
+    color: #6c757d;
+}
+
+.ps-hero-figures {
+    grid-area: figures;
+    display: flex;
+    gap: 24px;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+}
+
+.ps-fig {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 118px;
+}
+
+.ps-fig label {
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8a919c;
+    margin: 0 0 1px;
+}
+
+.ps-fig-value {
+    font-size: 1.22rem;
+    font-weight: 800;
+    color: #1f2530;
+    line-height: 1.15;
+    white-space: nowrap;
+}
+
+.ps-fig-primary .ps-fig-value { font-size: 1.42rem; }
+.ps-fig-late { color: #c62839; }
+.ps-fig-early { color: #1f8a4c; }
+.ps-fig-ok { color: #1f8a4c; }
+.ps-fig-muted { color: #9aa1ab; }
+
+.ps-fig-note {
+    font-size: 0.7rem;
+    color: #8a919c;
+    white-space: nowrap;
+}
+
+.ps-hero-lines {
+    grid-area: lines;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.9rem;
+    color: #3a4150;
+    min-width: 0;
+}
+
+.ps-hero-lines .ps-line-plan { font-weight: 600; }
+.ps-theme-red .ps-line-plan { color: #a71d2a; }
+.ps-theme-orange .ps-line-plan { color: #b5500a; }
+.ps-theme-green .ps-line-plan { color: #146c43; }
+
+.ps-hero-progress {
+    grid-area: progress;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.74rem;
+    color: #6c757d;
+}
+
+.ps-hero-progress-bar {
+    flex: 1;
+    height: 7px;
+    border-radius: 4px;
+    background: #eef1f5;
+    overflow: hidden;
+}
+
+.ps-hero-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: #198754;
+}
+
+.ps-theme-red .ps-hero-progress-fill { background: #dc3545; }
+.ps-theme-orange .ps-hero-progress-fill { background: #fd7e14; }
+.ps-theme-grey .ps-hero-progress-fill { background: #6c757d; }
+
+.ps-hero-progress-pct {
+    font-weight: 700;
+    color: #1f2530;
+}
+
+/* ---- tiles --------------------------------------------------------------- */
+
+.pp-tiles {
+    display: flex;
+    gap: 10px;
+    min-height: 0;
+}
+
+.pp-tile {
+    flex: 1 1 0;
+    min-width: 0;
+    background: #ffffff;
+    border: 1px solid #e2e6ec;
+    border-top: 3px solid #cdd3db;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+    padding: 9px 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pp-tile-click {
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.pp-tile-click:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(31, 37, 48, 0.14);
+}
+
+.pp-tile-green { border-top-color: #198754; }
+.pp-tile-orange { border-top-color: #fd7e14; }
+.pp-tile-red { border-top-color: #dc3545; }
+.pp-tile-blue { border-top-color: #0d6efd; }
+.pp-tile-purple { border-top-color: #6f42c1; }
+.pp-tile-grey { border-top-color: #cdd3db; }
+
+/* The only glow: quality problems must pop */
+.pp-tile-alert {
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06), 0 0 18px rgba(239, 68, 68, 0.14);
+}
+
+.pp-tile-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8a919c;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.pp-tile-head i { color: #b6bcc6; }
+
+.pp-tile-hint {
+    margin-left: auto;
+    color: #c9d0d9;
+    font-size: 0.62rem;
+}
+
+.pp-tile-click:hover .pp-tile-hint { color: #6c757d; }
+
+.pp-tile-big {
+    font-size: 1.55rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    color: #1f2530;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-tile-big-dim {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #9aa1ab;
+}
+
+.pp-tile-big .pp-num-red { color: #c62839; }
+.pp-tile-big .pp-num-orange { color: #d9670b; }
+.pp-tile-big .pp-num-green { color: #1f8a4c; }
+
+.pp-tile-label,
+.pp-tile-sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-tile-label {
+    font-size: 0.74rem;
+    color: #6c757d;
+}
+
+.pp-tile-sub {
+    font-size: 0.72rem;
+    color: #4b5563;
+}
+
+.pp-tile-sub .pp-num-red { color: #c62839; font-weight: 600; }
+.pp-tile-sub .pp-num-orange { color: #d9670b; font-weight: 600; }
+.pp-tile-sub .pp-num-green { color: #1f8a4c; font-weight: 600; }
+
+.pp-tile-skeleton .pp-skeleton { margin: 5px 0; }
+
+/* ---- sheet card ---------------------------------------------------------- */
+
+.pp-sheet {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #e2e6ec;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+    overflow: hidden;
+}
+
+.pp-sheet-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 14px;
+    border-bottom: 1px solid #eef1f5;
+    font-size: 0.74rem;
+    color: #6c757d;
+}
+
+.pp-sheet-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8a919c;
+    white-space: nowrap;
+}
+
+.pp-sheet-title i { color: #b6bcc6; }
+
+.pp-sheet-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.pp-sheet-legend {
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+.pp-sheet-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pp-sheet-legend i {
+    width: 12px;
+    height: 8px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.pp-sheet-legend .lg-ontime { background: #34ad51; }
+.pp-sheet-legend .lg-late { background: #e2515f; }
+.pp-sheet-legend .lg-hold { background: #d99e00; }
+.pp-sheet-legend .lg-termin { background: #6f42c1; width: 3px; height: 12px; }
+.pp-sheet-legend .lg-today { background: #dc3545; width: 3px; height: 12px; }
+.pp-sheet-legend .lg-ext { background: repeating-linear-gradient(135deg, rgba(220, 53, 69, 0.6) 0 3px, rgba(220, 53, 69, 0.2) 3px 6px); }
+
+/* Projected overrun: a hatched tail behind the plan bar, from the plan end
+   to the projected end. Red = the row's own loss, grey = chain only. */
+.pp-sheet .ps-bar-ext {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: calc(var(--pg-row-h) - 16px);
+    min-height: 8px;
+    border: 1px solid rgba(189, 33, 48, 0.6);
+    border-left: 0;
+    border-radius: 0 3px 3px 0;
+    background: repeating-linear-gradient(135deg, rgba(220, 53, 69, 0.55) 0 4px, rgba(220, 53, 69, 0.18) 4px 8px);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 3px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: #7a1420;
+    white-space: nowrap;
+    overflow: hidden;
+    pointer-events: auto;
+}
+
+.pp-sheet .ps-bar-ext-chain {
+    border-color: rgba(73, 80, 87, 0.5);
+    background: repeating-linear-gradient(135deg, rgba(108, 117, 125, 0.5) 0 4px, rgba(108, 117, 125, 0.16) 4px 8px);
+    color: #343a40;
+}
+
+.pp-sheet-zoom {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.pp-sheet-zoom .btn {
+    font-size: 0.68rem;
+    padding: 1px 9px;
+    border-color: #d5dae1;
+    color: #495057;
+}
+
+.pp-sheet-zoom .btn.active {
+    background: #1f2530;
+    border-color: #1f2530;
+    color: #ffffff;
+}
+
+.pp-sheet-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.pp-sheet-body > .pg {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 0;
+    border-radius: 0;
+}
+
+.pp-sheet-body .pg-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+}
+
+/* Column picker is the planner's tool; the slide has fixed columns */
+.pp-sheet-body .pg-columns-btn { display: none; }
+
+.pp-sheet-empty,
+.pp-sheet-error {
+    padding: 28px;
+    text-align: center;
+    color: #6c757d;
+}
+
+.pp-sheet-error { color: #b02a37; }
+
+.pp-sheet-skeleton {
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Row washes: late on its own = red, late only because of the chain = grey */
+.pp-sheet .ps-row-late .pg-row-grid { background: rgba(220, 53, 69, 0.055); }
+.pp-sheet .ps-row-chain .pg-row-grid { background: rgba(108, 117, 125, 0.08); }
+.pp-sheet .pg-row-cancelled .pg-row-grid { opacity: 0.55; }
+.pp-sheet .pg-row-group .pg-row-grid { background: #f3f5f8; }
+
+/* ---- sheet cells --------------------------------------------------------- */
+
+.ps-chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.ps-chip-late { background: #fde2e5; color: #a71d2a; }
+.ps-chip-chain { background: #e9ecef; color: #495057; }
+.ps-chip-early { background: #d9f2e3; color: #146c43; }
+.ps-chip-ok { background: #d9f2e3; color: #146c43; }
+.ps-chip-muted { background: #f1f3f5; color: #9aa1ab; font-weight: 500; }
+
+.ps-date { white-space: nowrap; }
+.ps-date-default { color: #7c8590; font-style: italic; }
+.ps-proj-late { color: #c62839; font-weight: 700; }
+.ps-proj-early { color: #1f8a4c; font-weight: 700; }
+
+.ps-default {
+    margin-left: 6px;
+    font-size: 0.6rem;
+    color: #7c8590;
+    border: 1px dashed #c9ced4;
+    border-radius: 8px;
+    padding: 0 5px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.ps-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.ps-progress-track {
+    position: relative;
+    flex: 1;
+    height: 7px;
+    background: #eef1f5;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ps-progress-expected {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: rgba(13, 110, 253, 0.18);
+}
+
+.ps-progress-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: #198754;
+    border-radius: 4px;
+}
+
+.ps-progress-behind .ps-progress-fill { background: #dc3545; }
+
+.ps-progress-text {
+    font-size: 0.7rem;
+    color: #4b5563;
+    white-space: nowrap;
+    min-width: 58px;
+    text-align: right;
+}
+
+.ps-cause {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.76rem;
+    color: #3a4150;
+}
+
+.pp-sheet .col-progress { padding: 0 6px; }
+
+/* ---- short screens (laptop 768p) ---------------------------------------- */
+
+@media (max-height: 860px) {
+    .pp-hero-ps { padding: 9px 16px 8px; row-gap: 4px; }
+    .ps-hero-jobno { font-size: 1.55rem; }
+    .ps-hero-title { font-size: 0.94rem; }
+    .ps-fig-value { font-size: 1.05rem; }
+    .ps-fig-primary .ps-fig-value { font-size: 1.2rem; }
+    .ps-hero-lines { font-size: 0.82rem; }
+    .pp-tile { padding: 6px 10px 6px; gap: 1px; }
+    .pp-tile-big { font-size: 1.25rem; }
+}
+
+@media (max-width: 1200px) {
+    .pp-tiles { flex-wrap: wrap; }
+    .pp-tile { flex: 1 1 calc(25% - 10px); }
+    .pp-hero-ps {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "id" "figures" "lines" "progress";
+    }
+    .ps-hero-figures { justify-content: flex-start; }
+}

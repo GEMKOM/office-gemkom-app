@@ -890,6 +890,32 @@ export async function getProductionPlanOverview(status = 'active', { refresh = f
 }
 
 /**
+ * Plan sheet (Sunum Modu): the entered plan vs progress for a job order's
+ * whole subtree — one row per department task with plan window, projected
+ * finish, deviation (own + inherited from predecessors) and a named cause.
+ * Endpoint: GET /projects/job-orders/{jobNo}/plan-sheet/
+ * @param {string} jobNo - Root job order number
+ * @returns {Promise<Object>} {job_order, today, termin, plan_end, projected_end,
+ *   deviation_wd, termin_gap_wd, plan_vs_termin_wd, root_cause, nodes, rows,
+ *   holidays, defaults, summary}
+ */
+export async function getJobOrderPlanSheet(jobNo) {
+    try {
+        const response = await authedFetch(
+            `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/plan-sheet/`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching plan sheet for ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Meeting brief (Sunum Modu): NCR/revision/procurement/cutting/manufacturing/
  * files/financial context for one ROOT job order's whole subtree.
  * Endpoint: GET /projects/job-orders/{jobNo}/meeting-brief/

@@ -17,12 +17,17 @@ import {
     getJobOrderProductionPlan,
     getProductionPlanOverview,
     getJobOrderMeetingBrief,
-    getMeetingBriefSection
+    getMeetingBriefSection,
+    getJobOrderPlanSheet
 } from '../../apis/projects/jobOrders.js';
 import {
     markPlanningRequestItemCritical,
     unmarkPlanningRequestItemCritical
 } from '../../apis/planning/planningRequestItems.js';
+import { ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
+import { renderPlanSheet, SHEET_ZOOMS } from './planSheet.js';
+import { headerSummary, signedFigure } from './planSheetText.js';
+import { FINANCIAL_META, FILE_GROUP_LABELS, renderTilesHtml, tilesSkeletonHtml } from './meetingTiles.js';
 
 // Portfolio backing the slide deck. The status/sort controls belonged to the
 // retired portfolio page, so the deck is the default view: active projects,
@@ -49,7 +54,9 @@ const MEETING_SETTLE_MS = 700;
 const MEETING_PREFETCH_MS = 1300;
 const meetingBriefCache = new Map();    // job_no -> meeting brief payload
 const meetingBriefPromises = new Map(); // job_no -> in-flight fetch promise
-const meetingPlanCache = new Map();     // job_no -> production plan (hero modal)
+const meetingPlanCache = new Map();     // job_no -> production plan (job-order table)
+const meetingSheetCache = new Map();    // job_no -> plan sheet payload (the slide body)
+const meetingSheetPromises = new Map(); // job_no -> in-flight plan sheet fetch
 const meetingSectionCache = new Map();  // `${job_no}:${section}` -> detail payload
 
 let meetingModalOpen = false;
@@ -73,13 +80,15 @@ function cacheIsStale(key) {
     return at === undefined || Date.now() - at > MEETING_MAX_AGE_MS;
 }
 
-// Every cached payload for one job order — brief, section details, plan — so
-// the next read of each goes back to the server.
+// Every cached payload for one job order — brief, section details, plan,
+// plan sheet — so the next read of each goes back to the server.
 function dropJobCaches(jobNo) {
     meetingBriefCache.delete(jobNo);
     meetingPlanCache.delete(jobNo);
+    meetingSheetCache.delete(jobNo);
     meetingCachedAt.delete(`brief:${jobNo}`);
     meetingCachedAt.delete(`plan:${jobNo}`);
+    meetingCachedAt.delete(`sheet:${jobNo}`);
     [...meetingSectionCache.keys()]
         .filter(key => key.startsWith(`${jobNo}:`))
         .forEach((key) => {
@@ -109,46 +118,6 @@ const TASK_STATUS_BADGES = {
     cancelled: 'status-grey',
     skipped: 'status-grey'
 };
-
-// "Material wait" badge — the delay belongs to procurement, not the task.
-// CNC rows carry the plate keys (cuts_waiting / plate_items_pending); welding
-// and Üretim rows carry the manufacturing keys (pipe/profile + hand-marked
-// critical items). Those keys say WHAT is missing; the schedule's
-// material_wait_wd says what it has COST — 266-13 cut its parts, then sat
-// ~44 working days on undelivered copper pipe while the forecast read the
-// idle weeks as slow tempo (user decision 2026-09-08). The badge dict only
-// exists while items are pending, so a wait that has closed (material
-// arrived, days still lost) renders from the figure alone, in the past
-// tense. Older plan payloads carry neither figure nor flags: bare label.
-function materialWaitBadgeHtml(materialWait, sched) {
-    const lost = sched?.material_wait_wd;
-    const hasLoss = typeof lost === 'number' && lost > 0;
-    if (!materialWait && !hasLoss) return '';
-    const parts = [];
-    if (materialWait?.cuts_waiting > 0) parts.push(`${materialWait.cuts_waiting} kesim plaka bekliyor`);
-    if (materialWait?.plate_items_pending > 0) parts.push(`${materialWait.plate_items_pending} plaka kalemi teslim edilmedi`);
-    if (materialWait?.pipe_profile_items_pending > 0) parts.push(`${materialWait.pipe_profile_items_pending} boru/profil kalemi teslim edilmedi`);
-    if (materialWait?.critical_items_pending > 0) parts.push(`${materialWait.critical_items_pending} kritik kalem teslim edilmedi`);
-    const arrived = hasLoss && sched.material_wait_open === false;
-    const lines = [`Satın alma kaynaklı bekleme: ${parts.join(' · ') || (arrived ? 'kapandı' : 'malzeme teslim edilmedi')}`];
-    let label = arrived ? 'Malzeme Bekledi' : 'Malzeme Bekliyor';
-    if (hasLoss) {
-        label += ` · ${formatWd(lost)} g`;
-        // Headline = idle since the last progress entry (the undisputable
-        // share); the gross span since the task started with something
-        // undelivered is context only — 284-07 built two units through 130
-        // days of it (user decision 2026-09-08).
-        const exposure = sched.material_wait_exposure_wd;
-        let line = `Malzeme nedeniyle kaybedilen: ${formatWd(lost)} iş günü (son ilerleme girişinden beri)`;
-        if (typeof exposure === 'number' && exposure > lost) line += ` — başlangıçtan beri açık malzemeyle geçen: ${formatWd(exposure)} g`;
-        if (sched.material_wait_since) {
-            line += ` — ${fmtShortDate(sched.material_wait_since)} → ${sched.material_wait_until ? fmtShortDate(sched.material_wait_until) : 'teslim tarihi belirsiz'}`;
-        }
-        if (arrived) line += ' (malzeme geldi)';
-        lines.push(line);
-    }
-    return `<span class="status-badge status-orange" title="${escapeHtml(lines.join('\n'))}">${label}</span>`;
-}
 
 // ---------------------------------------------------------------------------
 // Entry points — the page owns the button, this module owns the deck
@@ -401,6 +370,11 @@ function bindMeetingControls() {
             // not a drill-down request.
             if (e.target.classList.contains('pp-scroll')
                 && e.offsetX > e.target.clientWidth) return;
+            // Sheet zoom (Gün / Hafta / Ay): the grid re-renders in place.
+            const zoomBtn = e.target.closest('[data-zoom]');
+            if (zoomBtn) { setSheetZoom(zoomBtn.dataset.zoom); return; }
+            // Clicks inside the sheet belong to the grid (group toggles).
+            if (e.target.closest('.pp-sheet-body')) return;
             // Section drill-down: an in-slide modal — the meeting never leaves
             // the screen.
             const trigger = e.target.closest('[data-modal]');
@@ -441,6 +415,11 @@ function bindMeetingControls() {
         // slide's own row count.
         const scroller = e.target?.closest?.('.pp-scroll');
         if (scroller && scroller.scrollHeight > scroller.clientHeight) return;
+        // The plan sheet scrolls (and Ctrl+wheel zooms) on its own whenever
+        // it has more rows or more timeline than fits.
+        const sheet = e.target?.closest?.('.pg-scroll');
+        if (sheet && (e.ctrlKey || sheet.scrollHeight > sheet.clientHeight
+            || sheet.scrollWidth > sheet.clientWidth)) return;
         const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
         if (Math.abs(delta) < 30) return;
         const now = Date.now();
@@ -448,52 +427,6 @@ function bindMeetingControls() {
         meetingWheelAt = now;
         meetingStep(delta > 0 ? 1 : -1);
     }, { passive: true });
-}
-
-// ---------------------------------------------------------------------------
-// Verdict vocabulary shared by the hero and the plan modal
-// ---------------------------------------------------------------------------
-
-const VERDICT_META = {
-    on_track: { theme: 'green', label: 'Zamanında Bitecek', icon: 'fa-circle-check' },
-    late_risk: { theme: 'red', label: 'Gecikecek', icon: 'fa-triangle-exclamation' },
-    finished_on_time: { theme: 'green', label: 'Tamamlandı · Zamanında', icon: 'fa-flag-checkered' },
-    finished_late: { theme: 'red', label: 'Tamamlandı · Geç', icon: 'fa-flag-checkered' },
-    no_target: { theme: 'orange', label: 'Hedef Tarih Girilmemiş', icon: 'fa-circle-question' },
-    // Every open task is a dataless placeholder — claiming a date would be
-    // fiction, so the hero shows the target and says "veri yok" instead.
-    no_data: { theme: 'grey', label: 'Öngörü İçin Veri Yok', icon: 'fa-hourglass-start' },
-    unknown: { theme: 'grey', label: 'Öngörü Yok', icon: 'fa-circle-question' }
-};
-
-// Per-phase cards for phased masters — each faz ships on its own date, so
-// the single Hedef/Öngörülen/Sapma triple is replaced by one card per phase.
-function phaseCardsHtml(forecast, xl) {
-    const phases = forecast.phases || [];
-    if (!phases.length) return '';
-    const cls = xl ? 'pp-phase-card pp-phase-card-xl' : 'pp-phase-card';
-    const cards = phases.map((p) => {
-        const worst = p.phase_number === forecast.worst_phase;
-        const quiet = p.verdict === 'not_started';
-        let statusHtml;
-        if (quiet) {
-            statusHtml = '<span class="pp-phase-status pp-num-grey">Başlamadı</span>';
-        } else if (p.variance_wd !== null && p.variance_wd > 0) {
-            statusHtml = `<span class="pp-phase-status pp-num-red">+${formatWd(p.variance_wd)} iş günü</span>`;
-        } else if (p.variance_wd !== null && p.variance_wd < 0) {
-            statusHtml = `<span class="pp-phase-status pp-num-green">${formatWd(p.variance_wd)} g erken</span>`;
-        } else {
-            statusHtml = '<span class="pp-phase-status pp-num-green">Zamanında</span>';
-        }
-        return `
-            <div class="${cls}${worst ? ' pp-phase-worst' : ''}${quiet ? ' pp-phase-quiet' : ''}">
-                <div class="pp-phase-name">Faz ${p.phase_number}</div>
-                <div class="pp-phase-line"><label>Hedef</label><span>${fmtShortDate(p.target_completion_date)}</span></div>
-                <div class="pp-phase-line"><label>Öngörü</label><span>${quiet ? '—' : fmtShortDate(p.projected_completion_date)}</span></div>
-                ${statusHtml}
-            </div>`;
-    }).join('');
-    return `<div class="pp-phase-cards">${cards}</div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -621,6 +554,7 @@ const SECTION_MODAL_TITLES = {
     procurement: 'Satın Alma Detayı',
     revisions: 'Dizayn Detayı',
     financial: 'Finans Detayı',
+    files: 'Dosyalar',
 };
 
 // Sections whose detail list is fetched only when the modal opens — the main
@@ -637,14 +571,13 @@ const SECTION_MODAL_BUILDERS = {
 async function openSectionModal(kind) {
     const item = meetingItems[meetingIndex];
     if (!item) return;
-    if (kind === 'plan') { openPlanModal(item); return; }
     const brief = meetingBriefCache.get(item.job_no);
     if (!brief) return;
 
-    // Welding renders straight from the brief (its resources already drive
-    // the panel); everything else fetches its detail on demand.
-    if (kind === 'welding') {
-        const built = weldingModalHtml(brief);
+    // Welding and files render straight from the brief (their tiles already
+    // hold the data); everything else fetches its detail on demand.
+    if (kind === 'welding' || kind === 'files') {
+        const built = kind === 'welding' ? weldingModalHtml(brief) : filesModalHtml(brief);
         openMeetingModal(
             `${built.title} <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
             built.body, { jobNo: item.job_no, kind });
@@ -693,722 +626,6 @@ function modalTableHtml(headers, rows) {
             <thead><tr>${ths}</tr></thead>
             <tbody>${rows.join('')}</tbody>
         </table>`;
-}
-
-// 2a — the "why": per-task plan with variances and pushers, fetched on demand.
-// ---------------------------------------------------------------------------
-// Plan timeline — the capacity board's picture, inside the meeting modal
-// ---------------------------------------------------------------------------
-// User 2026-09-17: "can we have the detail modal to be like capacity-planning
-// — it should show the plan and deviation from the plan as a result of
-// progress, materials etc."
-//
-// Same vocabulary as /manufacturing/welding/capacity-planning so the two pages
-// read alike: the BAR is the plan, a violet line is the termin, today is red.
-// What this adds over that board is the DEVIATION — the stretch between where
-// the plan ends and where the row is now projected to end, drawn red when it
-// runs late and green when it lands early. The "Neden bu tarih?" column below
-// already says WHY (tempo, malzeme, sıra bağımlılığı); this says how much.
-
-const PLAN_TL_DAY_MS = 86400000;
-
-function planTlDate(value) {
-    if (!value) return null;
-    const d = new Date(`${value}T00:00:00`);
-    return Number.isNaN(d.getTime()) ? null : d;
-}
-
-/** Every date the chart has to fit, as [min, max] — null when there are none. */
-function planTimelineRange(tasks, termin, today) {
-    const dates = [];
-    tasks.forEach(t => {
-        const s = t.schedule || {};
-        [t.plan_start_date, t.plan_end_date, t.target_start_date,
-         t.target_completion_date, s.projected_start_date, s.projected_end_date,
-         s.actual_end_date].forEach(v => {
-            const d = planTlDate(v);
-            if (d) dates.push(d);
-        });
-    });
-    [termin, today].forEach(v => { const d = planTlDate(v); if (d) dates.push(d); });
-    if (!dates.length) return null;
-    // A little air either side, so a bar ending on the last day is not flush
-    // against the frame.
-    const min = new Date(Math.min(...dates) - 3 * PLAN_TL_DAY_MS);
-    const max = new Date(Math.max(...dates) + 3 * PLAN_TL_DAY_MS);
-    return [min, max];
-}
-
-/** Month ticks across the range, for the header strip. */
-function planTimelineMonths(min, max, pct) {
-    const out = [];
-    const cur = new Date(min.getFullYear(), min.getMonth(), 1);
-    while (cur <= max) {
-        if (cur >= min) {
-            out.push({
-                left: pct(cur),
-                label: cur.toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' }),
-            });
-        }
-        cur.setMonth(cur.getMonth() + 1);
-    }
-    return out;
-}
-
-function planTimelineHtml(planData, labelFor) {
-    const tasks = (planData.tasks || []).filter(t => t.status !== 'cancelled');
-    const termin = (planData.job_order || {}).target_completion_date || null;
-    const today = planData.today || null;
-    const range = planTimelineRange(tasks, termin, today);
-    if (!range) return '';
-    const [min, max] = range;
-    const span = Math.max(max - min, PLAN_TL_DAY_MS);
-    const pct = (d) => ((d - min) / span) * 100;
-    const at = (value) => {
-        const d = planTlDate(value);
-        return d === null ? null : pct(d);
-    };
-
-    const grid = planTimelineMonths(min, max, pct).map(m =>
-        `<div class="pp-tl-month" style="left:${m.left}%"><span>${escapeHtml(m.label)}</span></div>`
-    ).join('');
-
-    const lines = [];
-    const terminX = at(termin);
-    if (terminX !== null) {
-        lines.push(`<div class="pp-tl-termin" style="left:${terminX}%" title="Termin ${escapeHtml(fmtShortDate(termin) || '')}"></div>`);
-    }
-    const todayX = at(today);
-    if (todayX !== null) {
-        lines.push(`<div class="pp-tl-today" style="left:${todayX}%" title="Bugün"></div>`);
-    }
-
-    const rows = tasks.map(task => {
-        const s = task.schedule || {};
-        const label = (labelFor && labelFor(task)) || task.department_display || '';
-        const indent = task.parent !== null ? ' pp-tl-sub' : '';
-        // The PLAN: what the capacity board laid out, else what was entered.
-        const planStart = task.plan_start_date || task.target_start_date;
-        const planEnd = task.plan_end_date || task.target_completion_date;
-        const projEnd = s.projected_end_date || null;
-        const done = task.status === 'completed';
-
-        const segs = [];
-        const a = at(planStart);
-        const b = at(planEnd);
-        if (a !== null && b !== null) {
-            segs.push(`<div class="pp-tl-bar${done ? ' is-done' : ''}" style="left:${a}%;width:${Math.max(b - a, 0.6)}%" title="${escapeHtml(`Plan: ${fmtShortDate(planStart)} – ${fmtShortDate(planEnd)}`)}"></div>`);
-            // The DEVIATION. This is what the chart is for, so it is drawn even
-            // when it is only a day wide.
-            const p = at(projEnd);
-            if (p !== null && Math.abs(p - b) > 0.01) {
-                const late = p > b;
-                const from = Math.min(b, p);
-                const to = Math.max(b, p);
-                const gap = s.projected_variance_wd ?? s.end_variance_wd;
-                const gapTxt = (gap === null || gap === undefined)
-                    ? '' : ` (${late ? '+' : '−'}${formatWd(Math.abs(gap))} iş günü)`;
-                const word = late ? 'Plandan sapma' : 'Planın önünde';
-                segs.push(`<div class="pp-tl-dev ${late ? 'is-late' : 'is-early'}" style="left:${from}%;width:${Math.max(to - from, 0.6)}%" title="${escapeHtml(`${word}: ${fmtShortDate(projEnd)}${gapTxt}`)}"></div>`);
-            }
-        } else {
-            // Nothing to deviate FROM — the projection is all there is, and it
-            // draws hollow so it is never read as a plan.
-            const ps = at(s.projected_start_date);
-            const pe = at(projEnd);
-            if (ps !== null && pe !== null) {
-                segs.push(`<div class="pp-tl-proj" style="left:${ps}%;width:${Math.max(pe - ps, 0.6)}%" title="${escapeHtml(`Öngörü: ${fmtShortDate(s.projected_start_date)} – ${fmtShortDate(projEnd)} (plana girilmemiş)`)}"></div>`);
-            }
-        }
-        if (!segs.length) return '';
-        return `
-            <div class="pp-tl-row">
-                <div class="pp-tl-label${indent}" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
-                <div class="pp-tl-lane">${segs.join('')}</div>
-            </div>`;
-    }).filter(Boolean).join('');
-
-    if (!rows) return '';
-    return `
-        <div class="pp-plan-section">
-            Plan ve sapma
-            <span>— dolu çubuk planlanan pencere, uzantı ise ilerleme, malzeme ve
-            sıra bağımlılıklarından doğan sapma. Mor çizgi termin, kırmızı çizgi bugün.</span>
-        </div>
-        <div class="pp-tl">
-            <div class="pp-tl-head">
-                <div class="pp-tl-label"></div>
-                <div class="pp-tl-lane">${grid}</div>
-            </div>
-            <div class="pp-tl-rows">
-                <div class="pp-tl-lines" aria-hidden="true">
-                    <div class="pp-tl-label"></div>
-                    <div class="pp-tl-lane">${lines.join('')}</div>
-                </div>
-                ${rows}
-            </div>
-        </div>
-        <div class="pp-plan-legend">
-            <span><i class="fas fa-square pp-tl-key-plan"></i>plan</span>
-            <span><i class="fas fa-square pp-tl-key-late"></i>sapma (geç)</span>
-            <span><i class="fas fa-square pp-tl-key-early"></i>sapma (erken)</span>
-            <span><i class="far fa-square pp-tl-key-proj"></i>plana girilmemiş, yalnızca öngörü</span>
-        </div>`;
-}
-
-async function openPlanModal(item) {
-    openMeetingModal(
-        `Plan Detayı <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
-        MODAL_LOADING_HTML, { jobNo: item.job_no, kind: 'plan' });
-    const stillCurrent = () => meetingModalOpen && meetingModalContext
-        && meetingModalContext.jobNo === item.job_no && meetingModalContext.kind === 'plan';
-    let planData = cacheIsStale(`plan:${item.job_no}`) ? null : meetingPlanCache.get(item.job_no);
-    if (!planData) {
-        try {
-            planData = await getJobOrderProductionPlan(item.job_no);
-            meetingPlanCache.set(item.job_no, planData);
-            cacheStamp(`plan:${item.job_no}`);
-        } catch (error) {
-            console.error(`Plan fetch failed for ${item.job_no}:`, error);
-            if (stillCurrent()) {
-                document.getElementById('pp-modal-body').innerHTML =
-                    '<div class="text-danger pp-empty">Plan yüklenemedi.</div>';
-            }
-            return;
-        }
-    }
-    if (!stillCurrent()) return;
-
-    const byId = new Map(planData.tasks.map(t => [t.id, t]));
-    const nodeByJob = new Map((planData.nodes || []).map(n => [n.job_no, n]));
-    const label = (task) => {
-        const node = nodeByJob.get(task.job_no);
-        if (task.parent !== null) {
-            const parent = byId.get(task.parent);
-            const parentLabel = parent
-                ? (parent.title && node && parent.title !== node.title
-                    ? parent.title : parent.department_display)
-                : null;
-            return parentLabel ? `${parentLabel} - ${task.title || ''}` : (task.title || '');
-        }
-        // A main titled after its own department ("Dizayn" under Dizayn)
-        // must not render as "Dizayn - Dizayn".
-        const hasCustomTitle = task.title && node && task.title !== node.title
-            && task.title !== task.department_display;
-        return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
-    };
-
-    // Indented rows carry their parent visually, so the row label drops the
-    // "Üretim - " prefix `label()` builds for the driver box and the counts.
-    const rowLabel = (task) => {
-        if (task.parent !== null) return task.title || '';
-        const node = nodeByJob.get(task.job_no);
-        const hasCustomTitle = task.title && node && task.title !== node.title
-            && task.title !== task.department_display;
-        return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
-    };
-
-    // A parent's entered duration is split down to its children by weight, so
-    // the two figures describe the same work. When they disagree the backend
-    // flags the highest task where it shows, and we say which entries collide
-    // — the planner, not the reader, is the one who can fix it.
-    const conflictSentence = (t) => {
-        const c = t.schedule.duration_conflict;
-        if (!c) return '';
-        const source = byId.get(c.source_task_id);
-        const sourceName = source ? label(source) : (c.source_title || 'üst görev');
-        const where = c.actual_source === 'own'
-            ? `bu göreve ${formatWd(c.actual_wd)} iş günü girili`
-            : `alt görevlerinde toplam ${formatWd(c.actual_wd)} iş günü girili`;
-        return `Süre tutarsızlığı: "${sourceName}" görevinde ${formatWd(c.source_wd)} iş günü girili`
-            + ` ve bu görevin ağırlık payı %${formatWd(c.share_pct)}, yani ~${formatWd(c.implied_wd)} iş günü`
-            + ` beklenir — ama ${where}.`;
-    };
-
-    // Plain-language answer to "why this date?" — one short sentence per task,
-    // so the column reads without a legend.
-    const coreBasisSentence = (t) => {
-        const s = t.schedule;
-        if (t.status === 'completed') {
-            const v = s.end_variance_wd;
-            if (v !== null && v !== undefined && v > 0) {
-                return `Bitti — hedefinden ${formatWd(v)} iş günü geç tamamlandı.`;
-            }
-            return 'Bitti.';
-        }
-        const rem = s.projection_remaining_wd;
-        if (s.projection_kind === 'done') {
-            return '%100 görünüyor — kapanışı bekleniyor.';
-        }
-        // CNC Kesim follows the CNC plan's scheduled cuts (293-14-02,
-        // 2026-09-15): the kg tempo of the first small nests is not a pace.
-        if ((s.projection_basis || {}).term === 'cnc_plan') {
-            const b = s.projection_basis;
-            const extra = b.unplanned_cuts > 0
-                ? ` Planda olmayan ${b.unplanned_cuts} kesim (${Math.round(b.unplanned_kg)} kg) için ~${formatWd(b.extra_wd)} iş günü eklendi.`
-                : '';
-            return `Kesim planına göre: açık ${b.planned_cuts} kesimin sonuncusu ${fmtShortDate(b.plan_end)} tarihinde planlı.${extra}`;
-        }
-        // Work planned to start later: the remaining share runs from the
-        // board's plan start (the 'plan' kind used to render an empty cell).
-        if ((s.projection_basis || {}).term === 'plan_start') {
-            const b = s.projection_basis;
-            return `Plan başlangıcına göre: ${fmtShortDate(b.start)} tarihinde başlayıp kalan ~${formatWd(b.work_wd)} iş günü sürer.`;
-        }
-        if (s.projection_kind === 'rate') {
-            const b = s.projection_basis || {};
-            let compare = '';
-            if (b.term === 'rate_vs_entered') {
-                const slower = rem > b.entered_remaining_wd;
-                compare = ` Girilen süre ${formatWd(b.entered_total_wd)} g (kalan ~${formatWd(b.entered_remaining_wd)} g) — tempo ${slower ? 'daha yavaş' : 'daha hızlı'}.`;
-            }
-            // Hand-entered %: the window OPENS at the task's real start
-            // (window_start = the chain's start when the task's own log is
-            // its only start signal) and CLOSES at the last progress entry —
-            // the idle tail after it measures typing, not pace.
-            let windowText = b.window_start
-                ? ` (görev başlangıcı ${fmtShortDate(b.window_start)} → son giriş ${fmtShortDate(b.last_entry)})`
-                : (b.last_entry
-                    ? ` (son ilerleme girişi ${fmtShortDate(b.last_entry)})` : '');
-            // A closed material wait that sat inside the window came off it
-            // (275-11, user 2026-09-08): say so, or "2 iş gününde %10" reads
-            // like a typo next to a 21.08 → 08.09 window.
-            if (typeof b.wait_discount_wd === 'number' && b.wait_discount_wd > 0) {
-                windowText += `, ${formatWd(b.wait_discount_wd)} iş günü malzeme beklemesi düşüldü`;
-            }
-            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi${windowText}; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
-        }
-        // STARVED: the crew is waiting for material, so no budget is being
-        // spent on work and no tempo can be measured — the remaining share
-        // of the entered duration starts when the material lands (266-13,
-        // user 2026-09-08: "it cannot get 90% in 1 day"). A late PO is
-        // clamped to today by the server, so "en erken bugün" is honest.
-        if ((s.projection_basis || {}).term === 'material_wait') {
-            const b = s.projection_basis;
-            const what = b.blocking ? ` (${b.blocking})` : '';
-            // A rate that the wait explains: say what the tempo would have
-            // read, so the planner sees why the plan share was used.
-            const rateNote = typeof b.rate_wd === 'number'
-                ? ` Ölçülen tempoyla ~${formatWd(b.rate_wd)} iş günü çıkıyordu; bekleme tempoyu açıkladığı için plan payı esas alındı.` : '';
-            return `Malzeme bekleniyor${what} — %${Math.round(t.completion_percentage)} tamamlandı, kalan iş ~${formatWd(b.work_wd)} iş günü (${formatWd(b.total_wd)} iş günlük sürenin payı); malzeme geldiğinde, en erken ${fmtShortDate(b.resume)}'de başlar ve ~${formatWd(rem)} iş günü sonra biter.${rateNote}`;
-        }
-        // All progress arrived in ONE entry: a milestone, not a pace — no
-        // tempo to extrapolate, so the duration chain projects the remaining
-        // share as a calendar budget (293-03: "1 of 2 painted" entered as
-        // 50% must not read as half the paint time).
-        if ((s.projection_basis || {}).term === 'single_entry') {
-            const b = s.projection_basis;
-            if (b.overrun) {
-                // Budget spent with work remaining — never "~0 kaldı"
-                // (user decision 2026-09-08): the remaining share runs
-                // from today, or from the resume date typed into Gerçek
-                // Başl.; the overrun is sapma.
-                const from = b.restart && b.restart > new Date().toISOString().slice(0, 10)
-                    ? `${fmtShortDate(b.restart)}'den itibaren` : 'bugünden itibaren';
-                return `%${Math.round(t.completion_percentage)} tek girişte kaydedildi (${fmtShortDate(b.last_entry)}) — tempo ölçülemiyor; ${formatWd(b.total_wd)} iş günlük süre bütçesi doldu, kalan %${Math.round(100 - t.completion_percentage)} (~${formatWd(b.work_wd)} iş günü) ${from} sayılıyor.`;
-            }
-            return `%${Math.round(t.completion_percentage)} tek girişte kaydedildi (${fmtShortDate(b.last_entry)}) — tempo ölçülemiyor; ${formatWd(b.total_wd)} iş günlük süre başlangıçtan itibaren bütçe olarak sayılıyor (~${formatWd(rem)} iş günü kaldı).`;
-        }
-        // Budget spent (parents / procurement): the remaining share of the
-        // entered duration runs from today — never "~0 kaldı".
-        if ((s.projection_basis || {}).term === 'budget_overrun') {
-            const b = s.projection_basis;
-            const from = b.restart && b.restart > new Date().toISOString().slice(0, 10)
-                ? `${fmtShortDate(b.restart)}'den itibaren` : 'bugünden itibaren';
-            return `Girilen süre bütçesi doldu (${formatWd(b.total_wd)} iş günü, ${fmtShortDate(b.anchor)}'dan): kalan %${Math.round(100 - t.completion_percentage)} (~${formatWd(b.work_wd)} iş günü) ${from} sayılıyor — aşım, sapma olarak görünür.`;
-        }
-        // Slow progress never stretches an entered duration — it is a
-        // calendar budget from the task's real start; overruns surface as
-        // sapma, not as a quietly longer estimate.
-        if (['duration', 'parent_duration', 'parent_window'].includes(s.projection_kind)
-                && (s.projection_basis || {}).term === 'duration_budget') {
-            const b = s.projection_basis;
-            return `Girilen süre başlangıçtan itibaren bütçe olarak sayılıyor: ${formatWd(b.total_wd)} iş günü (${fmtShortDate(b.anchor)}'dan). Yavaş ilerleme bütçeyi uzatmaz — aşım, sapma olarak görünür.`;
-        }
-        if (s.projection_kind === 'duration') {
-            return `Girilen süre esas alındı: ~${formatWd(rem)} iş günü.`;
-        }
-        if (s.projection_kind === 'parent_duration') {
-            return `Ana göreve girilen süreden ağırlık payıyla: ~${formatWd(rem)} iş günü.`;
-        }
-        if (s.projection_kind === 'parent_window') {
-            return `Ana görevin plan penceresinden ağırlık payıyla: ~${formatWd(rem)} iş günü.`;
-        }
-        if (s.projection_kind === 'gate') {
-            const g = (s.projection_gates || []).find(x => x.binding);
-            const durationNote = {
-                weight: ' Süre girilmediği için ağırlık payına göre tahmin edildi.',
-                start: '',
-                duration: ' (girilen süre)',
-                parent_duration: ' Süre, ana göreve girilen süreden ağırlık payıyla türetildi.',
-                parent_window: ' Süre, ana görevin plan penceresinden ağırlık payıyla türetildi.',
-            }[s.projection_duration_kind] || '';
-            if (g && g.kind === 'dependency' && g.via_label) {
-                // The full chain: what holds the PARENT holds this row too.
-                return `Ana görevi tutan koşul: ${g.via_label} — bu yüzden en erken ${fmtShortDate(g.date)}'de başlayabilir. Sonrasında ~${formatWd(rem)} iş günü sürer.${durationNote}`;
-            }
-            if (g) {
-                const overdueNote = g.overdue ? ' (teslimat gecikmiş — en erken bugünden itibaren)' : '';
-                return `${g.label}: ${fmtShortDate(g.date)}${overdueNote}. Sonrasında ~${formatWd(rem)} iş günü sürer.${durationNote}`;
-            }
-            return `Başlama koşulu bekleniyor; sonrasında ~${formatWd(rem)} iş günü sürer.${durationNote}`;
-        }
-        if (s.projection_kind === 'coupled') {
-            const b = s.projection_basis || {};
-            const cutNote = b.cut_ratio !== undefined && b.cut_ratio !== null
-                ? ` (kesilen: %${Math.round(b.cut_ratio * 100)})` : '';
-            return `Kesim bittikçe ilerleyebilir — kesim öngörüsü ${fmtShortDate(b.base_end)} + son parti için ~${formatWd(b.tail_wd)} iş günü${cutNote}.`;
-        }
-        if (s.projection_kind === 'chained') {
-            // Remaining work of a chained task runs after its predecessor's
-            // projected close — the % records the overlap that already
-            // happened, but the overlap of what is LEFT is unproven.
-            const b = s.projection_basis || {};
-            return `Kalan iş (~${formatWd(b.work_wd)} iş günü), "${b.pred_label}" bittikten (${fmtShortDate(b.pred_end)}) sonra sayılıyor.`;
-        }
-        if (s.projection_kind === 'floored') {
-            const b = s.projection_basis || {};
-            return `${b.label || 'Bitiş koşulu'} — öngörü: ${fmtShortDate(s.projected_end_date)}.`;
-        }
-        if (s.projection_kind === 'weight') {
-            return `Henüz ilerleme yok; görevin ağırlığına ve işin genel hızına göre ~${formatWd(rem)} iş günü sürmesi bekleniyor.`;
-        }
-        if (s.projection_kind === 'push') {
-            const pusher = s.pushed_by && byId.get(s.pushed_by);
-            return `Önce şu görev bitmeli: ${pusher ? label(pusher) : 'önceki görev'}. Sonrasında ~${formatWd(rem)} iş günü sürer.`;
-        }
-        if (s.projection_kind === 'subtasks') {
-            return 'Alt görevlerine göre: en geç biten alt görevi bu tarihte bitiyor.';
-        }
-        if (s.projection_kind === 'start') {
-            // A started-but-0% task restarts its window from TODAY — without
-            // saying so, "plandaki aralık" next to a date past the planned
-            // end reads as a contradiction (266-13-02 BAKIR EKİBİ).
-            const started = s.projection_elapsed_wd !== null
-                && s.projection_elapsed_wd !== undefined;
-            if (t.target_start_date || t.target_completion_date) {
-                return started
-                    ? `Plandaki aralığın süresi esas alındı (~${formatWd(rem)} iş günü) — ilerleme %0 olduğu için bugünden itibaren sayılıyor.`
-                    : `Plandaki tarih aralığı esas alındı (~${formatWd(rem)} iş günü).`;
-            }
-            return 'Süre bilgisi yok — 1 iş günü varsayıldı.';
-        }
-        return '';
-    };
-
-    // Started tasks are never held by their conditions, but open waits must
-    // stay visible ("Üretim başladı ama kritik borular Eylül'de gelecek").
-    // The table renders them as separate note lines under the core sentence;
-    // prose consumers (driver box) get them joined. Gate rows already
-    // narrate their binding condition.
-    const basisNotes = (t) => {
-        const s = t.schedule;
-        if (s.projection_kind === 'gate' || t.status === 'completed') return [];
-        return (s.projection_gates || [])
-            .filter(g => g.open && !g.binding)
-            .map(g => g.date ? `${g.label}: ${fmtShortDate(g.date)}` : g.label);
-    };
-    const basisSentence = (t) => {
-        const core = coreBasisSentence(t);
-        const notes = basisNotes(t);
-        return notes.length ? `${core} Açık koşul — ${notes.join(' · ')}.` : core;
-    };
-
-    // One glyph per projection family so the column scans without reading:
-    // tempo is measured, budgets are entered, chains are ordering, floors are
-    // external constraints. The legend above the table names them.
-    const BASIS_ICONS = {
-        rate: ['fa-gauge-high', 'Ölçülen tempo'],
-        duration: ['fa-ruler-horizontal', 'Girilen süre (takvim bütçesi)'],
-        parent_duration: ['fa-ruler-horizontal', 'Üst görevden ağırlık payı (bütçe)'],
-        parent_window: ['fa-ruler-horizontal', 'Plan penceresinden ağırlık payı'],
-        start: ['fa-ruler-horizontal', 'Plan penceresi'],
-        subtasks: ['fa-sitemap', 'Alt görevlerin en geç biteni'],
-        push: ['fa-link', 'Sıra: önceki görev bitince başlar'],
-        chained: ['fa-link', 'Sıra: kalan iş öncekinden sonra sayılır'],
-        gate: ['fa-hourglass-half', 'Başlama koşulu bekliyor'],
-        floored: ['fa-anchor', 'Bitiş tabanı (teslimat / koşul)'],
-        coupled: ['fa-anchor', 'Kesim ilerledikçe ilerleyebilir'],
-        weight: ['fa-scale-balanced', 'Ağırlık payından tahmin'],
-        plan: ['fa-calendar-check', 'Plan tarihine göre (kesim planı / plan başlangıcı)'],
-        done: ['fa-check', 'Kapanış bekleniyor'],
-    };
-
-    const MINI_THEME = {
-        overdue: 'red', completed_late: 'red', at_risk: 'orange',
-        completed_on_time: 'green',
-    };
-    const progressCell = (t) => {
-        const pct = Math.round(t.completion_percentage || 0);
-        const theme = t.status === 'completed'
-            ? 'green' : (MINI_THEME[t.schedule.classification] || 'blue');
-        return `
-            <div class="pp-plan-progress">
-                ${miniBarHtml(pct / 100, theme)}<span class="pp-plan-pct">%${pct}</span>
-            </div>`;
-    };
-
-    const taskRow = (t, depth = 0, isParent = false) => {
-        const s = t.schedule;
-        const completed = t.status === 'completed';
-        // "Plansız" on a finished row reads as a problem — a completed task
-        // without a target date is simply done.
-        const badge = completed && s.classification === 'unplanned'
-            ? { label: 'Bitti', badgeClass: 'status-green' }
-            : (CLASSIFICATION_BADGES[s.classification] || CLASSIFICATION_BADGES.not_started);
-        const end = s.projected_end_date || s.actual_end_date;
-        const variance = s.projected_variance_wd ?? s.end_variance_wd ?? s.overdue_wd;
-        const varianceHtml = variance === null || variance === undefined ? ''
-            : (variance > 0
-                ? ` <span class="pp-var-chip pp-var-late">${formatWd(variance)} g geç</span>`
-                : (variance < 0 ? ` <span class="pp-var-chip pp-var-early">${formatWd(variance)} g erken</span>` : ''));
-        const materialWaitHtml = (s.material_wait || s.material_wait_wd > 0)
-            ? ` ${materialWaitBadgeHtml(s.material_wait, s)}` : '';
-        const driver = s.drives_completion;
-        const conflict = conflictSentence(t);
-        const warnIcon = conflict
-            ? `<i class="fas fa-triangle-exclamation pp-warn-flag" title="${escapeHtml(conflict)}"></i> ` : '';
-        const branch = depth > 0 ? '<span class="pp-tree-branch">└</span>' : '';
-        const icon = completed ? null : BASIS_ICONS[s.projection_kind];
-        const notes = basisNotes(t);
-        const basisCell = `
-            <div class="pp-basis">
-                ${icon ? `<i class="fas ${icon[0]} pp-basis-icon" title="${escapeHtml(icon[1])}"></i>` : ''}
-                <div class="pp-basis-text">
-                    <div class="pp-basis-core">${escapeHtml(coreBasisSentence(t))}</div>
-                    ${notes.map(n => `<div class="pp-basis-note"><i class="far fa-clock"></i>Açık koşul · ${escapeHtml(n)}</div>`).join('')}
-                    ${conflict ? `<div class="pp-td-conflict"><i class="fas fa-triangle-exclamation"></i> ${escapeHtml(conflict)}</div>` : ''}
-                </div>
-            </div>`;
-        const rowClasses = [
-            driver ? 'pp-modal-driver' : '',
-            (isParent || depth === 0) ? 'pp-row-parent' : '',
-        ].filter(Boolean).join(' ');
-        return `
-            <tr${rowClasses ? ` class="${rowClasses}"` : ''}>
-                <td class="pp-td-main" style="padding-left: ${8 + depth * 18}px" title="${escapeHtml(label(t))}">${branch}${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${warnIcon}${escapeHtml(rowLabel(t))}</td>
-                <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
-                <td>${progressCell(t)}</td>
-                <td class="pp-td-date">${startCell(t)}</td>
-                <td class="pp-td-date">${fmtShortDate(t.plan_end_date || t.target_completion_date)}</td>
-                <td class="pp-td-date pp-td-proj">${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
-                <td class="pp-td-basis">${basisCell}</td>
-            </tr>`;
-    };
-
-    // Başlangıç: the PLAN the welding board laid out (user 2026-09-01 —
-    // "display the entered start and end dates, the only difference is that
-    // we display the end date by the tempo there"), then the actual
-    // (evidence/entered) start, then the forecast's projected start with a ~
-    // prefix — gates and pushes are start stories, and the column makes them
-    // visible.
-    function startCell(t) {
-        const s = t.schedule;
-        if (t.plan_start_date) return fmtShortDate(t.plan_start_date);
-        if (s.actual_start_date) return fmtShortDate(s.actual_start_date);
-        if (s.projected_start_date) {
-            return `<span title="Öngörülen başlangıç">~${fmtShortDate(s.projected_start_date)}</span>`;
-        }
-        return '—';
-    }
-
-    // Subtrees group by job order in tree order (the endpoint's nodes array
-    // is DFS), tasks in their original plan order within each group — a lone
-    // job order renders as a flat list with no group chrome.
-    // Parents used to be hidden here, on the grounds that their row repeated
-    // the children's story. It hid exactly the rows the push arrows point AT:
-    // "Boya · Önce şu görev bitmeli: Üretim - Kaynaklı İmalat" named a task
-    // that was nowhere in the table, so its date looked like it came from
-    // nothing. The whole tree renders now, indented by depth.
-    const tasksByJob = new Map();
-    for (const t of planData.tasks) {
-        if (!tasksByJob.has(t.job_no)) tasksByJob.set(t.job_no, []);
-        tasksByJob.get(t.job_no).push(t);
-    }
-    // Depth-first within each job, children under their parent, plan order
-    // preserved among siblings. Anything whose parent sits outside the group
-    // (shouldn't happen) is appended rather than dropped.
-    const asTree = (list) => {
-        const ids = new Set(list.map(t => t.id));
-        const byParent = new Map();
-        for (const t of list) {
-            const key = (t.parent !== null && ids.has(t.parent)) ? t.parent : '_';
-            if (!byParent.has(key)) byParent.set(key, []);
-            byParent.get(key).push(t);
-        }
-        const out = [];
-        const walk = (key, depth) => {
-            for (const t of byParent.get(key) || []) {
-                const kids = byParent.get(t.id);
-                out.push({ task: t, depth, isParent: !!(kids && kids.length) });
-                walk(t.id, depth + 1);
-            }
-        };
-        walk('_', 0);
-        return out;
-    };
-    const groups = (planData.nodes || [])
-        .filter(n => (tasksByJob.get(n.job_no) || []).length)
-        .map(n => ({ node: n, tasks: tasksByJob.get(n.job_no) }));
-    const multiNode = groups.length > 1;
-
-    const rows = [];
-    for (const { node, tasks } of groups) {
-        // A subtree job where every task finished with no lateness has no
-        // story left to tell — one header line says it all (270-06: 40+
-        // finished panel jobs each spent rows repeating "Bitti."). Any late
-        // finish keeps the group expanded so the red badge stays visible.
-        const allDone = multiNode && tasks.every(t => t.status === 'completed');
-        const anyLate = tasks.some(
-            t => t.schedule.classification === 'completed_late');
-        const collapse = allDone && !anyLate;
-        if (multiNode) {
-            const projected = node.summary && node.summary.projected_completion;
-            rows.push(`
-                <tr class="pp-modal-group">
-                    <td colspan="7" style="padding-left: ${node.depth * 18}px">
-                        ${escapeHtml(node.job_no)}
-                        <span class="pp-modal-group-title">${escapeHtml(node.title || '')}</span>
-                        <span class="pp-modal-group-meta">%${Math.round(node.completion_percentage || 0)}${projected ? ` · Öngörülen ${fmtShortDate(projected)}` : ''}${collapse ? ' · <i class="fas fa-circle-check pp-num-green"></i> tamamlandı' : ''}</span>
-                    </td>
-                </tr>`);
-        }
-        if (!collapse) {
-            rows.push(...asTree(tasks).map(
-                ({ task, depth, isParent }) => taskRow(task, depth, isParent)));
-        }
-    }
-
-    // The story, top-down: verdict sentence → the three dates → the task that
-    // decides the end date → task counts → the per-task table.
-    //
-    // Read the forecast from the PLAN, not from `item`. The slide item comes
-    // from the production-plan OVERVIEW, which is cached ~15 minutes server
-    // side; the plan below is recomputed per request. Sourcing the header from
-    // `item` let this modal contradict itself — the Sapma figure quoting a
-    // stale snapshot while the driver box and the table, built from `planData`
-    // two lines down, quoted the current one. Same shape, same values when
-    // both are fresh (verified across phased and unphased roots), so the only
-    // thing that changes is which of the two can be out of date.
-    const forecast = planData.job_order?.forecast || item.forecast || {};
-    const vMeta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
-    const phased = !!(forecast.phases && forecast.phases.length);
-    let verdictSentence = {
-        late_risk: `Bu gidişle iş, hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> bitecek görünüyor.`,
-        on_track: 'Bu gidişle iş <strong>hedef tarihinde</strong> bitecek görünüyor.',
-        finished_late: `İş tamamlandı — hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> bitti.`,
-        finished_on_time: 'İş tamamlandı — <strong>zamanında</strong> bitti.',
-        no_target: 'Hedef tarih girilmediği için sapma hesaplanamıyor.',
-        no_data: 'Öngörü için henüz veri yok: açık görevlerin hiçbirinde süre, hedef tarih veya ilerleme bulunmuyor. Öngörü, ilk gerçek veriyle (dizayn süresi, teknik resim yayını, planlama talebi) netleşmeye başlar.',
-    }[forecast.verdict] || 'Öngörü hesaplanacak veri yok.';
-    if (phased && forecast.worst_phase !== null && forecast.worst_phase !== undefined) {
-        verdictSentence = forecast.verdict === 'late_risk'
-            ? `En geç faz: <strong>Faz ${forecast.worst_phase}</strong> — kendi hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> görünüyor. Fazlar kendi sevk tarihlerine göre ayrı değerlendirilir.`
-            : `Fazlar kendi sevk tarihlerine göre ayrı değerlendirilir — geciken faz yok.`;
-    }
-    // How much of the slip is procurement's — ONE sentence after the verdict,
-    // never inside the templates above, so every existing sentence stays as
-    // it was. "Bunun … iş günü" (of this) only when the loss fits inside the
-    // stated variance; a loss bigger than the slip (slack absorbed part of
-    // it) or a non-late verdict gets the neutral form, so the slide never
-    // says "30 days late, 44 of which…" (266-13, user decision 2026-09-08).
-    const lostWd = forecast.material_wait_wd;
-    if (typeof lostWd === 'number' && lostWd > 0) {
-        const stillWaiting = forecast.material_wait_open ? ' — hâlâ bekleniyor' : '';
-        const late = forecast.verdict === 'late_risk' || forecast.verdict === 'finished_late';
-        const withinSlip = late && typeof forecast.variance_wd === 'number' && lostWd <= forecast.variance_wd;
-        verdictSentence += withinSlip
-            ? ` Bunun <strong>${formatWd(lostWd)} iş günü</strong> malzeme beklemesi (satın alma)${stillWaiting}.`
-            : ` Malzeme beklemesi (satın alma) <strong>${formatWd(lostWd)} iş günü</strong> kaybettirdi${stillWaiting}.`;
-    }
-
-    const v = forecast.variance_wd;
-    const sapmaHtml = v === null || v === undefined ? '—'
-        : (v > 0
-            ? `<span class="pp-fig-late">+${formatWd(v)} iş günü</span>`
-            : (v < 0 ? `<span class="pp-fig-early">${formatWd(v)} iş günü erken</span>` : 'Tam zamanında'));
-
-    const driverTask = planData.tasks.find(t => t.schedule.drives_completion);
-    const driverBox = driverTask ? `
-        <div class="pp-plan-driver">
-            <i class="fas fa-flag pp-driver-flag"></i>
-            <div>
-                <div class="pp-plan-driver-title">Bitiş tarihini bu görev belirliyor:
-                    <strong>${escapeHtml(label(driverTask))}</strong>
-                    <span class="pp-td-muted-sm">· ${escapeHtml(driverTask.job_no)}</span></div>
-                <div class="pp-plan-driver-sub">En geç bitmesi öngörülen görev bu:
-                    ${fmtShortDate(driverTask.schedule.projected_end_date)} — iş de o gün tamamlanır.
-                    ${escapeHtml(basisSentence(driverTask))}</div>
-            </div>
-        </div>` : '';
-
-    // Every date under a contradicted duration rests on one of two entries
-    // that cannot both be right, so the count belongs above the table rather
-    // than only in the rows.
-    const conflicted = planData.tasks.filter(t => t.schedule.duration_conflict);
-    const conflictBanner = conflicted.length ? `
-        <div class="pp-plan-warn">
-            <i class="fas fa-triangle-exclamation"></i>
-            <div><strong>${conflicted.length} görevde süre tutarsızlığı var.</strong>
-                Bir üst görevin süresi, alt görevlere ağırlık payına göre bölünür;
-                girilen süreler bu payla çelişiyor. Aşağıdaki tarihlerden bir kısmı
-                hatalı süreye dayanıyor olabilir.</div>
-        </div>` : '';
-
-    const counts = summarizePlanTasks(planData.tasks);
-    const chip = (n, txt, cls) => n ? `<span class="pp-plan-count ${cls}">${n} ${txt}</span>` : '';
-    const countsHtml = `
-        <div class="pp-plan-counts">
-            ${chip(counts.late, 'gecikmede', 'pp-pc-red')}
-            ${chip(counts.risk, 'risk altında', 'pp-pc-orange')}
-            ${chip(counts.active, 'devam ediyor', 'pp-pc-blue')}
-            ${chip(counts.waiting, 'başlamadı', 'pp-pc-grey')}
-            ${chip(counts.lateDone, 'geç bitti', 'pp-pc-red')}
-            ${chip(counts.done, 'bitti', 'pp-pc-green')}
-            ${chip(counts.excluded, 'kapsam dışı', 'pp-pc-grey')}
-        </div>`;
-
-    document.getElementById('pp-modal-body').innerHTML = `
-        <div class="pp-plan-verdict pp-pv-${vMeta.theme}">
-            <i class="fas ${vMeta.icon}"></i>
-            <div>${verdictSentence}</div>
-        </div>
-        ${phased ? phaseCardsHtml(forecast, false) : `
-        <div class="pp-plan-figures">
-            <div class="pp-plan-fig">
-                <label>Hedef Bitiş</label>
-                <span>${formatDateLong(forecast.target_completion_date)}</span>
-            </div>
-            <div class="pp-plan-fig">
-                <label>Öngörülen Bitiş</label>
-                <span class="${forecast.verdict === 'late_risk' ? 'pp-fig-late' : ''}">${formatDateLong(forecast.projected_completion_date)}</span>
-            </div>
-            <div class="pp-plan-fig">
-                <label>Sapma</label>
-                <span>${sapmaHtml}</span>
-            </div>
-        </div>`}
-        ${driverBox}
-        ${countsHtml}
-        ${conflictBanner}
-        ${planTimelineHtml(planData, rowLabel)}
-        <div class="pp-plan-section">
-            Görev bazında öngörü
-            <span>— her satır kendi verisinden hesaplanır; bir ana görev, en geç
-            biten alt görevinde biter${multiNode ? '. Görevler alt iş emirlerine göre gruplu' : ''}.</span>
-        </div>
-        <div class="pp-plan-legend">
-            <span><i class="fas fa-flag pp-driver-flag"></i>bitişi belirleyen görev</span>
-            <span><i class="fas fa-gauge-high"></i>ölçülen tempo</span>
-            <span><i class="fas fa-ruler-horizontal"></i>süre bütçesi</span>
-            <span><i class="fas fa-sitemap"></i>en geç alt görev</span>
-            <span><i class="fas fa-link"></i>sıra bağımlılığı</span>
-            <span><i class="fas fa-anchor"></i>bitiş tabanı</span>
-            <span><i class="fas fa-scale-balanced"></i>ağırlık payı</span>
-            <span><i class="far fa-clock"></i>açık koşul</span>
-            <span class="pp-plan-legend-tilde">~ öngörülen değer</span>
-        </div>
-        ${modalTableHtml(['Görev', 'Durum', 'İlerleme', 'Başlangıç', 'Hedef', 'Öngörülen Bitiş', 'Neden bu tarih?'], rows)}`;
 }
 
 function weldingModalHtml(brief) {
@@ -1785,14 +1002,14 @@ function renderMeetingSlide() {
         null, '', `${window.location.pathname}?meeting=1&job_no=${encodeURIComponent(item.job_no)}`);
 
     const brief = meetingBriefCache.get(item.job_no);
+    const sheet = meetingSheetCache.get(item.job_no);
+    sheetGrid = null;
     container.innerHTML =
         meetingStripHtml(item) +
-        meetingHeroHtml(item) +
-        `<div id="pp-meeting-panels" class="pp-meeting-grid">${brief ? '' : meetingSkeletonHtml()}</div>`;
-
-    if (brief) {
-        renderMeetingPanels(item, brief);
-    }
+        meetingHeroHtml(item, sheet) +
+        `<div id="pp-meeting-tiles" class="pp-tiles">${brief ? renderTilesHtml(brief) : tilesSkeletonHtml()}</div>` +
+        `<div id="pp-meeting-sheet" class="pp-sheet">${sheet ? '' : sheetSkeletonHtml()}</div>`;
+    if (sheet) renderSheet(item, sheet);
 
     // Fetching waits until the user SETTLES on a slide — flipping through ten
     // slides must not fire ten briefs plus twenty prefetches. Cached slides
@@ -1809,7 +1026,15 @@ function renderMeetingSlide() {
             ensureBrief(current.job_no).then((loaded) => {
                 const still = meetingItems[meetingIndex];
                 if (currentMode === 'meeting' && loaded && still && still.job_no === current.job_no) {
-                    renderMeetingPanels(still, loaded);
+                    renderTiles(loaded);
+                }
+            });
+        }
+        if (cacheIsStale(`sheet:${current.job_no}`)) {
+            ensureSheet(current.job_no).then((loaded) => {
+                const still = meetingItems[meetingIndex];
+                if (currentMode === 'meeting' && loaded && still && still.job_no === current.job_no) {
+                    renderSheet(still, loaded);
                 }
             });
         }
@@ -1818,7 +1043,9 @@ function renderMeetingSlide() {
         meetingPrefetchTimer = setTimeout(() => {
             if (currentMode !== 'meeting') return;
             [meetingIndex - 1, meetingIndex + 1].forEach((i) => {
-                if (meetingItems[i]) ensureBrief(meetingItems[i].job_no);
+                if (!meetingItems[i]) return;
+                ensureBrief(meetingItems[i].job_no);
+                ensureSheet(meetingItems[i].job_no);
             });
         }, MEETING_PREFETCH_MS);
     }, MEETING_SETTLE_MS);
@@ -1851,46 +1078,10 @@ function meetingStripHtml(item) {
                         title="Bu slaydın verisini sunucudan yeniden çek (R)">
                     <i class="fas fa-rotate me-1"></i>Yenile
                 </button>
-                <button type="button" class="btn btn-sm pp-strip-btn" data-modal="plan">
-                    <i class="fas fa-table-list me-1"></i>Planı Aç
-                </button>
                 <button type="button" class="btn btn-sm pp-strip-btn" data-action="exit">
                     <i class="fas fa-xmark me-1"></i>Çık
                 </button>
             </div>
-        </div>`;
-}
-
-const FINANCIAL_META = {
-    healthy: { theme: 'green', label: 'Finans · Sağlıklı' },
-    risky: { theme: 'orange', label: 'Finans · Riskli' },
-    critical: { theme: 'red', label: 'Finans · Kritik' },
-    no_price: { theme: 'grey', label: 'Finans · Fiyat Yok' },
-    no_data: { theme: 'grey', label: 'Finans · Veri Yok' },
-};
-
-// Financial medallion: a compact circular badge floating at the center of
-// the panel grid, clipping over the section seams. Verdict word ONLY — the
-// slide is company-public, so no ratios, no amounts (user decision
-// 2026-08-04). Absent financial data (no cost access) renders nothing; the
-// badge is an overlay, so the grid never has a hole.
-function financialBadgeHtml(financial) {
-    if (!financial) return '';
-    const meta = FINANCIAL_META[financial.verdict] || FINANCIAL_META.no_data;
-    const word = meta.label.replace('Finans · ', '');
-    // Cost-permitted users click through to the amounts modal (the section
-    // endpoint re-checks the permission server-side); everyone else gets
-    // the words-only medal.
-    const clickable = !!financial.can_view_details;
-    const reason = (financial.reason || '') +
-        (financial.price_is_derived ? ' — satış fiyatı türetilmiş' : '') +
-        (clickable ? ' — detay için tıklayın' : '');
-    return `
-        <div class="pp-fin-medal pp-fin-medal-${meta.theme}${clickable ? ' pp-fin-medal-click' : ''}"
-             ${clickable ? 'data-modal="financial" role="button"' : ''} title="${escapeHtml(reason)}">
-            <i class="fas fa-coins"></i>
-            <span class="pp-fin-medal-caption">Finans</span>
-            <span class="pp-fin-medal-word">${word}</span>
         </div>`;
 }
 
@@ -1943,90 +1134,199 @@ function financialModalHtml(brief, detail) {
     return { title: 'Finans Detayı', body };
 }
 
-// The slide hero: job no, title, the Hedef/Öngörülen/Sapma triple (or one
-// card per phase) and the progress bar. Clicking it opens Plan Detayı.
-// Finans lives in the center medallion (financialBadgeHtml), not here.
-function meetingHeroHtml(item) {
-    const forecast = item.forecast || { verdict: 'unknown', unplanned_open_tasks: 0 };
-    const meta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
-    const summary = item.summary || {};
-    const variance = forecast.variance_wd;
-    const varianceFigure = variance === null || variance === undefined
-        ? '<span class="pp-fig-value">—</span>'
-        : (variance > 0
-            ? `<span class="pp-fig-value pp-fig-late">+${formatWd(variance)} iş günü</span>`
-            : (variance < 0
-                ? `<span class="pp-fig-value pp-fig-early">${formatWd(variance)} iş günü erken</span>`
-                : '<span class="pp-fig-value">Tam zamanında</span>'));
-    const projectedClass = variance !== null && variance !== undefined && variance > 0
-        ? 'pp-fig-late' : '';
-    const pct = Math.round(item.completion_percentage || 0);
-    // A root on hold for a drawing revision is on the deck because its work
-    // is live; the chip says why the slide is not plain "Aktif".
+// ---------------------------------------------------------------------------
+// The slide body: hero (plan vs termin), section tiles, the plan sheet
+// ---------------------------------------------------------------------------
+
+// Zoom and collapsed groups persist across slides: the presenter sets the
+// sheet once and every job order reads the same way.
+const sheetState = { zoom: 'week', collapsed: new Set(), gridWidth: null };
+let sheetGrid = null;
+
+function setSheetZoom(zoom) {
+    if (!SHEET_ZOOMS.includes(zoom)) return;
+    sheetState.zoom = zoom;
+    if (sheetGrid) sheetGrid.setZoom(zoom);
+    document.querySelectorAll('.pp-sheet-zoom [data-zoom]').forEach((btn) => {
+        btn.classList.toggle('active', btn.dataset.zoom === zoom);
+    });
+}
+
+// The hero: job no and title, then the termin next to the plan and the plan
+// next to the projection. Two sentences say what the figures mean; the theme
+// is the plan verdict (red = behind the plan, orange = on plan but past the
+// termin, green = on plan and inside the termin).
+function meetingHeroHtml(item, sheet) {
     const statusChip = item.status === 'on_hold' && item.hold_kind === 'revision'
         ? '<span class="status-badge status-orange">Revizyonda</span>'
         : (item.status && item.status !== 'active'
             ? `<span class="status-badge status-grey">${escapeHtml(item.status_display || item.status)}</span>`
             : '');
-    const startLine = item.created_date
-        ? `<div class="pp-fig-xl-start" title="İş emrinin açıldığı tarih">Başlangıç · ${fmtShortDate(item.created_date)}</div>`
-        : '';
-    // Phased heroes have no Hedef Bitiş figure to anchor the opening date to,
-    // and their card row already fills the height budget — so the line rides
-    // in the empty right zone of the header instead of adding a row.
-    const phased = !!(forecast.phases && forecast.phases.length);
-
+    const summary = sheet ? headerSummary(sheet) : null;
+    const theme = summary ? summary.theme : 'grey';
+    const fig = (label, value, cls = '', title = '', primary = false) => `
+        <div class="ps-fig${primary ? ' ps-fig-primary' : ''}" title="${escapeHtml(title)}">
+            <label>${label}</label>
+            <span class="ps-fig-value ${cls}">${value}</span>
+        </div>`;
+    let figures;
+    if (!sheet) {
+        const pending = '<span class="ps-fig-muted">…</span>';
+        figures = fig('Termin', pending) + fig('Plan bitişi', pending)
+            + fig('Öngörülen', pending, '', '', true) + fig('Plana göre', pending);
+    } else {
+        const dev = signedFigure(sheet.deviation_wd);
+        const gap = signedFigure(sheet.termin_gap_wd);
+        const planVsTermin = Number(sheet.plan_vs_termin_wd || 0);
+        figures = fig('Termin', formatDateLong(sheet.termin), '', 'İş emrinin termin tarihi')
+            + fig('Plan bitişi', formatDateLong(sheet.plan_end), planVsTermin > 0 ? 'ps-fig-late' : '',
+                'İmalat Planlama sayfasında girilen planın son görevinin bitişi')
+            + fig('Öngörülen', formatDateLong(sheet.projected_end), dev.cls,
+                'Plan artı bugünkü sapmalar: ilerleme, malzeme, kesim ve talaşlı planı', true)
+            + fig('Plana göre', dev.text, dev.cls, 'Öngörülen bitiş ile plan bitişi arasındaki iş günü farkı')
+            + fig('Termine göre', gap.text, gap.cls, 'Öngörülen bitiş ile termin arasındaki iş günü farkı');
+    }
+    const pct = Math.round(item.completion_percentage || 0);
+    const lines = summary
+        ? `<div class="ps-line-plan">${escapeHtml(summary.planLine)}</div>`
+            + `<div class="ps-line-termin">${escapeHtml(summary.terminLine)}</div>`
+        : '<div class="text-muted">Plan yükleniyor…</div>';
     return `
-        <div class="dashboard-card pp-hero pp-verdict-card pp-verdict-${meta.theme}"
-             data-modal="plan" role="button"
-             title="Neden erken/geç? Görev bazında detay">
-            <div class="card-body">
-                <div class="pp-hero-top">
-                    <div class="pp-hero-id">
-                        <span class="pp-verdict-jobno">${escapeHtml(item.job_no)}</span>
-                        ${statusChip}
-                    </div>
-                    <div class="pp-hero-center">
-                        <div class="pp-hero-title" title="${escapeHtml(item.title || '')}">${escapeHtml(item.title || '')}</div>
-                        ${item.customer_name ? `<div class="pp-hero-customer">${escapeHtml(item.customer_name)}</div>` : ''}
-                    </div>
-                    <div class="pp-hero-pills">${phased ? startLine : ''}</div>
-                </div>
-                ${phased ? phaseCardsHtml(forecast, true) : `
-                <div class="pp-hero-figures-xl">
-                    <div class="pp-fig-xl">
-                        ${startLine}
-                        <label>Hedef Bitiş</label>
-                        <span class="pp-fig-xl-value">${formatDateLong(forecast.target_completion_date)}</span>
-                    </div>
-                    <div class="pp-fig-xl pp-fig-xl-primary">
-                        <label>Öngörülen Bitiş</label>
-                        <span class="pp-fig-xl-value ${projectedClass}">${formatDateLong(forecast.projected_completion_date)}</span>
-                    </div>
-                    <div class="pp-fig-xl">
-                        <label>Sapma</label>
-                        ${varianceFigure.replace(/pp-fig-value/g, 'pp-fig-xl-value')}
-                    </div>
-                </div>`}
-                <div class="pp-hero-progress">
-                    <span class="pp-hero-progress-label">İlerleme</span>
-                    <div class="pp-hero-progress-bar">
-                        <div class="pp-hero-progress-fill pp-pf-${meta.theme}" style="width: ${Math.min(pct, 100)}%"></div>
-                    </div>
-                    <span class="pp-hero-progress-pct">%${pct}</span>
-                </div>
+        <div id="pp-meeting-hero" class="pp-hero-ps ps-theme-${theme}">
+            <div class="ps-hero-id">
+                <div class="ps-hero-jobno">${escapeHtml(item.job_no)}${statusChip}</div>
+                <div class="ps-hero-title" title="${escapeHtml(item.title || '')}">${escapeHtml(item.title || '')}</div>
+                ${item.customer_name ? `<div class="ps-hero-customer">${escapeHtml(item.customer_name)}</div>` : ''}
+            </div>
+            <div class="ps-hero-figures">${figures}</div>
+            <div class="ps-hero-lines">${lines}</div>
+            <div class="ps-hero-progress">
+                <span>İlerleme</span>
+                <div class="ps-hero-progress-bar"><div class="ps-hero-progress-fill" style="width: ${Math.min(pct, 100)}%"></div></div>
+                <span class="ps-hero-progress-pct">%${pct}</span>
             </div>
         </div>`;
 }
 
-// Content caps shrink one step on short screens (laptop 768p) so every panel
-// stays inside its clipped cell. Welding is deliberately NOT here: its
-// resource list scrolls instead (.pp-scroll). A row cap made the same slide
-// show different welders to different people — whoever sat at a 768p laptop,
-// or ran browser/display zoom, silently lost the tail of the list.
-function meetingCaps() {
-    const short = window.matchMedia('(max-height: 860px)').matches;
-    return { files: short ? 3 : 4, ncrs: 3 };
+function renderTiles(brief) {
+    const host = document.getElementById('pp-meeting-tiles');
+    if (host) host.innerHTML = renderTilesHtml(brief);
+}
+
+function sheetSkeletonHtml() {
+    return `
+        <div class="pp-sheet-skeleton">
+            <div class="pp-skeleton pp-skeleton-title"></div>
+            <div class="pp-skeleton"></div>
+            <div class="pp-skeleton pp-skeleton-short"></div>
+            <div class="pp-skeleton"></div>
+            <div class="pp-skeleton pp-skeleton-short"></div>
+        </div>`;
+}
+
+// Sheet header: what the summary counted, the legend, the zoom.
+function sheetHeadHtml(sheet) {
+    const s = sheet.summary || {};
+    const chips = [];
+    if (s.late_rows) chips.push(`<span class="ps-chip ps-chip-late">${s.late_rows} görev planın gerisinde</span>`);
+    if (s.own_late_rows) chips.push(`<span class="ps-chip ps-chip-late" title="Kendi kaybı olan görevler">${s.own_late_rows} kendi</span>`);
+    if (s.chain_only_rows) chips.push(`<span class="ps-chip ps-chip-chain" title="Yalnızca önceki görev geç bitirdiği için geride">${s.chain_only_rows} zincir</span>`);
+    if (s.default_duration_rows) chips.push(`<span class="ps-chip ps-chip-muted" title="Süre girilmemiş, departman varsayılanı kullanıldı">${s.default_duration_rows} varsayılan süre</span>`);
+    if (!chips.length && s.rows) chips.push('<span class="ps-chip ps-chip-ok">tüm görevler planında</span>');
+    const zoom = SHEET_ZOOMS.map(z => `
+        <button type="button" class="btn btn-outline-secondary${sheetState.zoom === z ? ' active' : ''}"
+                data-zoom="${z}">${ZOOMS[z].label}</button>`).join('');
+    return `
+        <div class="pp-sheet-head">
+            <span class="pp-sheet-title"><i class="fas fa-table-list"></i>Plan ve sapmalar</span>
+            <span class="pp-sheet-chips">${chips.join('')}</span>
+            <span class="pp-sheet-legend">
+                <span><i class="lg-ontime"></i>plan</span>
+                <span><i class="lg-late"></i>geride</span>
+                <span><i class="lg-ext"></i>öngörülen uzama</span>
+                <span><i class="lg-termin"></i>termin</span>
+                <span><i class="lg-today"></i>bugün</span>
+            </span>
+            <span class="pp-sheet-zoom btn-group">${zoom}</span>
+        </div>`;
+}
+
+function renderSheet(item, sheet) {
+    const hero = document.getElementById('pp-meeting-hero');
+    if (hero) hero.outerHTML = meetingHeroHtml(item, sheet);
+    const host = document.getElementById('pp-meeting-sheet');
+    if (!host) return;
+    if (!sheet.rows || !sheet.rows.length) {
+        host.innerHTML = sheetHeadHtml(sheet)
+            + '<div class="pp-sheet-empty">Bu iş emrinde departman görevi yok.</div>';
+        sheetGrid = null;
+        return;
+    }
+    host.innerHTML = sheetHeadHtml(sheet)
+        + '<div class="pp-sheet-body"><div id="pp-sheet-grid" class="pg"></div></div>';
+    sheetGrid = renderPlanSheet('pp-sheet-grid', sheet, sheetState);
+}
+
+function ensureSheet(jobNo) {
+    const key = `sheet:${jobNo}`;
+    if (meetingSheetCache.has(jobNo) && !cacheIsStale(key)) {
+        return Promise.resolve(meetingSheetCache.get(jobNo));
+    }
+    if (meetingSheetPromises.has(jobNo)) return meetingSheetPromises.get(jobNo);
+    const promise = getJobOrderPlanSheet(jobNo)
+        .then((sheet) => {
+            meetingSheetCache.set(jobNo, sheet);
+            cacheStamp(key);
+            return sheet;
+        })
+        .catch((error) => {
+            console.error(`Plan sheet failed for ${jobNo}:`, error);
+            // Same rule as the brief: a failed revalidation keeps the last
+            // sheet on screen; only a slide with nothing to show says so.
+            if (meetingSheetCache.has(jobNo)) return meetingSheetCache.get(jobNo);
+            const item = meetingItems[meetingIndex];
+            if (currentMode === 'meeting' && item && item.job_no === jobNo) {
+                const host = document.getElementById('pp-meeting-sheet');
+                if (host) {
+                    host.innerHTML = `
+                        <div class="pp-sheet-error">
+                            <i class="fas fa-triangle-exclamation me-2"></i>Plan yüklenemedi.
+                            <button type="button" class="btn btn-sm btn-outline-secondary ms-2" data-action="refresh">Tekrar dene</button>
+                        </div>`;
+                }
+            }
+            return null;
+        })
+        .finally(() => meetingSheetPromises.delete(jobNo));
+    meetingSheetPromises.set(jobNo, promise);
+    return promise;
+}
+
+// Files: every attachment of the job order, its tasks and discussions, as
+// links — rendered from the brief the tile already holds.
+function filesModalHtml(brief) {
+    const files = brief.files || {};
+    const merged = FILE_GROUP_LABELS.flatMap(([key, label]) =>
+        ((files[key] || {}).items || []).map(f => ({ ...f, source: label })));
+    merged.sort((a, b) => String(b.uploaded_at || '').localeCompare(String(a.uploaded_at || '')));
+    const rows = merged.map((f) => {
+        const name = escapeHtml(f.name || 'dosya');
+        const link = f.url
+            ? `<a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" title="${name}">${name}</a>`
+            : `<span title="${name}">${name}</span>`;
+        return `
+            <tr>
+                <td class="pp-td-main">${link}</td>
+                <td>${escapeHtml(f.source)}</td>
+                <td>${fmtShortDate(f.uploaded_at)}</td>
+            </tr>`;
+    });
+    const stats = FILE_GROUP_LABELS.map(([key, label]) =>
+        `<span>${label} <strong>${fmtInt((files[key] || {}).total)}</strong></span>`).join('');
+    const body = `
+        <div class="pp-modal-stats">${stats}</div>
+        ${modalTableHtml(['Dosya', 'Kaynak', 'Yüklendi'], rows)}`;
+    return { title: 'Dosyalar', body };
 }
 
 function ensureBrief(jobNo) {
@@ -2055,13 +1355,12 @@ function ensureBrief(jobNo) {
             if (meetingBriefCache.has(jobNo)) return meetingBriefCache.get(jobNo);
             const item = meetingItems[meetingIndex];
             if (currentMode === 'meeting' && item && item.job_no === jobNo) {
-                const panels = document.getElementById('pp-meeting-panels');
-                if (panels) {
-                    panels.innerHTML = `
-                        <div class="dashboard-card pp-panel pp-area-welding">
-                            <div class="card-body text-center text-danger py-4">
-                                <i class="fas fa-exclamation-triangle me-2"></i>Toplantı özeti yüklenemedi.
-                            </div>
+                const tiles = document.getElementById('pp-meeting-tiles');
+                if (tiles) {
+                    tiles.innerHTML = `
+                        <div class="pp-tile pp-tile-red">
+                            <div class="pp-tile-head"><i class="fas fa-triangle-exclamation"></i>Özet</div>
+                            <div class="pp-tile-label text-danger">Toplantı özeti yüklenemedi.</div>
                         </div>`;
                 }
             }
@@ -2072,33 +1371,10 @@ function ensureBrief(jobNo) {
     return promise;
 }
 
-function meetingSkeletonHtml() {
-    return ['pp-area-welding', 'pp-area-machining', 'pp-area-cutting',
-            'pp-area-quality', 'pp-area-procurement', 'pp-area-revisions',
-            'pp-area-files']
-        .map(area => `
-        <div class="dashboard-card pp-panel ${area}">
-            <div class="card-body">
-                <div class="pp-skeleton pp-skeleton-title"></div>
-                <div class="pp-skeleton pp-skeleton-big"></div>
-                <div class="pp-skeleton"></div>
-                <div class="pp-skeleton pp-skeleton-short"></div>
-            </div>
-        </div>`).join('');
-}
-
-function panelHtml(icon, title, bodyHtml, extraClass = '', modalKind = null) {
-    const linkAttrs = modalKind
-        ? ` data-modal="${modalKind}" role="button" title="Detayı aç"` : '';
-    const linkHint = modalKind
-        ? '<span class="pp-link-hint"><i class="fas fa-expand"></i></span>' : '';
+function miniBarHtml(ratio, theme = 'blue') {
+    const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
     return `
-        <div class="dashboard-card pp-panel${extraClass ? ' ' + extraClass : ''}"${linkAttrs}>
-            <div class="card-body">
-                <div class="pp-panel-title"><i class="fas fa-${icon} me-2"></i>${title}${linkHint}</div>
-                ${bodyHtml}
-            </div>
-        </div>`;
+        <div class="pp-mini-bar"><div class="pp-mini-fill pp-mini-${theme}" style="width: ${pct}%"></div></div>`;
 }
 
 function fmtInt(value) {
@@ -2113,282 +1389,7 @@ function fmtShortDate(value) {
     return value ? formatDateCell(String(value)) : '—';
 }
 
-function miniBarHtml(ratio, theme = 'blue') {
-    const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
-    return `
-        <div class="pp-mini-bar"><div class="pp-mini-fill pp-mini-${theme}" style="width: ${pct}%"></div></div>`;
-}
-
-function renderMeetingPanels(item, brief) {
-    const panels = document.getElementById('pp-meeting-panels');
-    if (!panels) return;
-    // Two full-width rows (placement via pp-area-* grid areas); the finans
-    // medallion floats over the center seam as an absolutely-positioned
-    // badge, clipping the neighbouring panels.
-    panels.innerHTML = [
-        weldingPanelHtml(brief.welding),
-        machiningPanelHtml(brief.machining, item.job_no),
-        cuttingPanelHtml(brief.cutting),
-        qualityPanelHtml(brief.quality, item.job_no),
-        procurementPanelHtml(brief.procurement),
-        revisionsPanelHtml(brief.revisions, item.job_no),
-        filesPanelHtml(brief.files, item.job_no),
-        financialBadgeHtml(brief.financial),
-    ].join('');
-}
-
 const NCR_SEVERITY_BADGES = { critical: 'status-red', major: 'status-orange', minor: 'status-grey' };
-
-function qualityPanelHtml(quality, jobNo) {
-    if (!quality) return '';
-    const caps = meetingCaps();
-    const open = quality.open || 0;
-    const sev = quality.open_by_severity || {};
-    if (!open) {
-        const body = `
-            <div class="pp-panel-hero">
-                <span class="pp-panel-big pp-num-green"><i class="fas fa-circle-check"></i></span>
-                <span class="pp-panel-big-label">Açık NCR yok</span>
-                <span class="pp-panel-sub text-muted">toplam ${fmtInt(quality.total)}</span>
-            </div>`;
-        return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-area-quality', 'quality');
-    }
-    const shown = (quality.open_list || []).slice(0, caps.ncrs);
-    const list = shown.map(n => `
-        <div class="pp-line">
-            <span class="pp-line-main"><strong>${escapeHtml(n.ncr_number)}</strong> ${escapeHtml(n.title)}</span>
-            <span class="status-badge ${NCR_SEVERITY_BADGES[n.severity] || 'status-grey'}">${escapeHtml(n.severity_display)}</span>
-        </div>`).join('');
-    const body = `
-        <div class="pp-panel-hero">
-            <span class="pp-panel-big pp-num-red">${fmtInt(open)}</span>
-            <span class="pp-panel-big-label">açık NCR</span>
-            <span class="pp-panel-dots">
-                ${sev.critical ? `<span class="pp-dot pp-dot-red">Kritik ${fmtInt(sev.critical)}</span>` : ''}
-                ${sev.major ? `<span class="pp-dot pp-dot-orange">Majör ${fmtInt(sev.major)}</span>` : ''}
-                ${sev.minor ? `<span class="pp-dot pp-dot-grey">Minör ${fmtInt(sev.minor)}</span>` : ''}
-                ${open > shown.length ? `<span class="text-muted">+${fmtInt(open - shown.length)} daha</span>` : ''}
-            </span>
-        </div>
-        ${list}`;
-    // The ONLY panel with a colored top strip — quality problems must pop.
-    return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-area-quality pp-panel-alert', 'quality');
-}
-
-function revisionsPanelHtml(revisions, jobNo) {
-    if (!revisions) return '';
-    const drawing = revisions.drawing || {};
-    const targets = revisions.design_targets || {};
-    const latest = drawing.latest;
-    const missing = (targets.total || 0) - (targets.with_target || 0);
-    const hasWindow = targets.earliest && targets.latest && targets.earliest !== targets.latest;
-    const body = `
-        <div class="pp-rev-cols">
-            <div>
-                <div class="pp-rev-heading">Teknik Resim</div>
-                <div class="pp-panel-hero">
-                    <span class="pp-panel-big">${latest ? fmtShortDate(latest.released_at) : '—'}</span>
-                </div>
-                ${latest
-                    ? `<div class="pp-panel-sub">Rev ${escapeHtml(latest.revision_code || `R${latest.revision_number}`)} · ${escapeHtml(latest.job_no)}</div>`
-                    : '<div class="pp-panel-sub text-muted">Yayın yok</div>'}
-                <div class="pp-panel-sub ${drawing.revision_count ? 'pp-num-orange' : 'text-muted'}">${fmtInt(drawing.revision_count)} kez revize edildi</div>
-                ${drawing.in_revision_count ? `<div class="pp-panel-sub pp-text-orange">${fmtInt(drawing.in_revision_count)} yayın revizyonda</div>` : ''}
-            </div>
-            <div>
-                <div class="pp-rev-heading">Hedef Tarih</div>
-                <div class="pp-panel-hero">
-                    <span class="pp-panel-big">${targets.latest ? fmtShortDate(targets.latest) : '—'}</span>
-                </div>
-                ${hasWindow ? `<div class="pp-panel-sub">En erken: ${fmtShortDate(targets.earliest)}</div>` : ''}
-                <div class="pp-panel-sub ${missing ? 'pp-num-orange' : 'text-muted'}">${fmtInt(targets.with_target)}/${fmtInt(targets.total)} dizayn görevinde tarih</div>
-            </div>
-        </div>`;
-    return panelHtml('pen-ruler', 'Dizayn', body, 'pp-area-revisions', 'revisions');
-}
-
-function procurementPanelHtml(procurement) {
-    if (!procurement) return '';
-    const waiting = procurement.items_waiting || 0;
-    const total = procurement.items_total || 0;
-    // Stage-weighted progress (same basis as the procurement task's own %:
-    // miktar x birim ağırlık, boru/profil boost, PO aşamaları) — NOT the
-    // item-count ratio, which over-credits small delivered fittings.
-    const pct = procurement.progress_pct;
-    const body = `
-        <div class="pp-panel-hero">
-            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}<span class="pp-panel-big-dim">/${fmtInt(total)}</span></span>
-            <span class="pp-panel-big-label">bekleyen kalem</span>
-        </div>
-        <div class="pp-panel-sub"><strong class="pp-num-green">%${pct !== null && pct !== undefined ? pct.toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : 0}</strong> tedarik ilerlemesi
-            ${miniBarHtml((pct || 0) / 100, 'green')}</div>
-        <div class="pp-panel-sub">Talebe dönüşmedi: <strong>${fmtInt(procurement.not_yet_requested)}</strong></div>
-        <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
-        <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong> / ${fmtInt(total)} kalem</div>
-        ${pullsLine(procurement.material_pulls)}
-        ${procurement.critical_waiting ? `<div class="pp-panel-sub"><span class="pp-num-red">Kritik bekleyen: <strong>${fmtInt(procurement.critical_waiting)}</strong> — imalatı tutuyor</span></div>` : ''}`;
-    return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-area-procurement', 'procurement');
-}
-
-// Warehouse pull requests — material handed out of the warehouse to a
-// subcontractor or internal team. Absent on cached/older briefs.
-function pullsLine(pulls) {
-    if (!pulls || !(pulls.items_pulled > 0)) return '';
-    const pendingPart = pulls.pending > 0
-        ? ` · <span class="pp-num-orange"><strong>${fmtInt(pulls.pending)}</strong> talep bekliyor</span>`
-        : '';
-    return `<div class="pp-panel-sub"><i class="fas fa-dolly me-1"></i>Depodan çekilen: <strong>${fmtInt(pulls.items_pulled)}</strong> kalem${pendingPart}</div>`;
-}
-
-function cuttingPanelHtml(cutting) {
-    if (!cutting) return '';
-    const waiting = cutting.parts_waiting || 0;
-    const materialWaiting = cutting.parts_waiting_material || 0;
-    const body = `
-        <div class="pp-panel-hero">
-            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span>
-            <span class="pp-panel-big-label">parça kesim bekliyor</span>
-            <span class="pp-panel-sub text-muted">${fmtInt(cutting.weight_waiting)} kg</span>
-        </div>
-        <div class="pp-panel-sub">Kesilen: <strong>${fmtInt(cutting.parts_cut)}</strong> / ${fmtInt(cutting.parts_total)} parça · ${fmtInt(cutting.weight_cut)} / ${fmtInt(cutting.weight_total)} kg</div>
-        ${materialWaiting ? `<div class="pp-panel-sub"><span class="pp-num-orange"><strong>${fmtInt(materialWaiting)} parça · ${fmtInt(cutting.weight_waiting_material)} kg</strong> malzeme bekliyor (satın alma)</span></div>` : ''}
-        ${miniBarHtml(cutting.weight_total ? cutting.weight_cut / cutting.weight_total : 0, 'blue')}`;
-    return panelHtml('scissors', 'CNC Kesim', body, 'pp-area-cutting', 'cutting');
-}
-
-function machiningPanelHtml(machining, jobNo) {
-    if (!machining) return '';
-    const waiting = machining.operations_waiting || 0;
-    const body = `
-        <div class="pp-panel-hero">
-            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span>
-            <span class="pp-panel-big-label">operasyon bekliyor</span>
-            <span class="pp-panel-sub text-muted">${fmtInt(machining.operations_completed)} / ${fmtInt(machining.operations_total)} tamamlandı</span>
-        </div>
-        <div class="pp-panel-sub">Tahmini <strong>${fmtHours(machining.estimated_hours_total)} s</strong> · Harcanan <strong>${fmtHours(machining.hours_spent)} s</strong> · Kalan ~<strong>${fmtHours(machining.hours_remaining)} s</strong></div>
-        <div class="pp-panel-sub text-muted">${fmtInt(machining.parts_completed)} / ${fmtInt(machining.parts_total)} parça tamam</div>
-        ${miniBarHtml(machining.estimated_hours_total ? machining.hours_earned / machining.estimated_hours_total : 0, 'blue')}`;
-    return panelHtml('gears', 'Talaşlı İmalat', body, 'pp-area-machining', 'machining');
-}
-
-function weldingPanelHtml(welding) {
-    if (!welding) return '';
-    const resources = welding.resources || [];
-    const rows = resources.map((r) => {
-        const badge = r.kind === 'subcontractor'
-            ? '<span class="status-badge status-purple">Taşeron</span>'
-            : '<span class="status-badge status-blue">Dahili</span>';
-        const right = r.planned
-            ? `<span class="text-muted">(plan${r.planned_start_date ? ` · ${fmtShortDate(r.planned_start_date)} – ${fmtShortDate(r.planned_end_date)}` : ''})</span>`
-            : `${miniBarHtml((r.progress_pct || 0) / 100, 'blue')}<span class="pp-res-pct">%${fmtInt(r.progress_pct)}</span>`;
-        return `
-            <div class="pp-line${r.planned ? ' pp-line-muted' : ''}">
-                <span class="pp-line-main" title="${escapeHtml(r.name)}">${badge} ${escapeHtml(r.name)}
-                    <span class="text-muted">· ${fmtInt(r.allocated_weight_kg)} kg</span></span>
-                <span class="pp-res-right">${right}</span>
-            </div>`;
-    }).join('');
-
-    // Assignments carry the headline; without committed kg the welding tasks'
-    // own (manual) progress speaks — work happens before allocation.
-    const overall = welding.weighted_progress_pct;
-    const taskPct = welding.task_progress_pct;
-    const usingTaskProgress = (overall === null || overall === undefined)
-        && taskPct !== null && taskPct !== undefined;
-    const big = usingTaskProgress ? taskPct : overall;
-    const bigLabel = usingTaskProgress ? 'görev ilerlemesi' : 'ağırlıklı ilerleme';
-    const kgNote = welding.allocated_kg_total
-        ? `<span class="pp-panel-sub text-muted">${fmtInt(welding.allocated_kg_total)} kg tahsis</span>` : '';
-    const countNote = resources.length
-        ? `<span class="pp-panel-sub text-muted">${fmtInt(resources.length)} kaynak</span>` : '';
-
-    const hours = welding.hours || {};
-    const hourParts = [];
-    if (hours.regular) hourParts.push(`İşçilik <strong>${fmtHours(hours.regular)} s</strong>`);
-    if (hours.after_hours) hourParts.push(`Fazla mesai <strong>${fmtHours(hours.after_hours)} s</strong>`);
-    if (hours.holiday) hourParts.push(`Tatil <strong>${fmtHours(hours.holiday)} s</strong>`);
-    const hoursStrip = hourParts.length
-        ? `<div class="pp-hours-strip"><i class="fas fa-user-clock me-1"></i>${hourParts.join('<span class="pp-meta-sep"> · </span>')}</div>`
-        : '';
-
-    // Manufacturing material wait — same "the delay belongs to procurement"
-    // signal the Kesim panel shows for plates, here for pipes/profiles and
-    // hand-marked critical items.
-    const wait = welding.material_wait || {};
-    const waitParts = [];
-    if (wait.pipe_profile_items_pending) waitParts.push(`${fmtInt(wait.pipe_profile_items_pending)} boru/profil kalemi`);
-    if (wait.critical_items_pending) waitParts.push(`${fmtInt(wait.critical_items_pending)} kritik kalem`);
-    const waitLine = waitParts.length
-        ? `<div class="pp-panel-sub"><span class="pp-num-orange"><strong>${waitParts.join(' · ')}</strong> malzeme bekliyor (satın alma)</span></div>`
-        : '';
-
-    // Under WHAT is missing, what it has COST: the count sends the question
-    // to satın alma, the days say how urgent it is (266-13 lost ~44 working
-    // days on copper pipe while the count read "2 items"; user decision
-    // 2026-09-08). Per-job lines only when more than one job in the subtree
-    // is waiting — a single job's figure IS the headline. Older briefs carry
-    // no days_lost_wd: nothing rendered.
-    const lostWd = wait.days_lost_wd;
-    let lossLine = '';
-    if (typeof lostWd === 'number' && lostWd > 0) {
-        const perJob = Array.isArray(wait.per_job) ? wait.per_job : [];
-        const perJobHtml = perJob.length > 1
-            ? `<div class="pp-wait-jobs">${perJob.map(j =>
-                `<div>${escapeHtml(j.job_no)} — <strong>${formatWd(j.days_lost_wd)} g</strong>${j.blocking ? ` — ${escapeHtml(j.blocking)}` : ''}</div>`).join('')}</div>`
-            : '';
-        lossLine = `<div class="pp-panel-sub"><span class="pp-num-orange">Malzeme bekleme kaybı: <strong>${formatWd(lostWd)} g</strong>${wait.open ? ' (devam ediyor)' : ''}</span></div>${perJobHtml}`;
-    }
-
-    const body = `
-        <div class="pp-panel-hero">
-            <span class="pp-panel-big">${big === null || big === undefined ? '—' : `%${fmtInt(big)}`}</span>
-            <span class="pp-panel-big-label">${bigLabel}</span>
-            ${kgNote}${countNote}
-        </div>
-        <div class="pp-scroll pp-res-scroll">${rows || (usingTaskProgress || big === null
-            ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}</div>
-        <div class="pp-welding-foot">${waitLine}${lossLine}${hoursStrip}</div>`;
-    return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-area-welding', 'welding');
-}
-
-const FILE_GROUP_LABELS = [
-    ['job_order', 'İş Emri'],
-    ['task', 'Görev'],
-    ['discussion', 'Tartışma'],
-];
-
-function filesPanelHtml(files, jobNo) {
-    if (!files) return '';
-    const caps = meetingCaps();
-    const totalAll = FILE_GROUP_LABELS.reduce(
-        (n, [key]) => n + ((files[key] || {}).total || 0), 0);
-    const merged = FILE_GROUP_LABELS.flatMap(([key, label]) =>
-        ((files[key] || {}).items || []).map(f => ({ ...f, source: label })));
-    merged.sort((a, b) => String(b.uploaded_at || '').localeCompare(String(a.uploaded_at || '')));
-    const shown = merged.slice(0, caps.files);
-
-    const chips = FILE_GROUP_LABELS.map(([key, label]) =>
-        `<span class="pp-chip">${label} <strong>${fmtInt((files[key] || {}).total)}</strong></span>`).join('');
-    const moreChip = totalAll > shown.length
-        ? `<span class="pp-chip pp-chip-muted">+${fmtInt(totalAll - shown.length)}</span>` : '';
-
-    const lines = shown.map((f) => {
-        const name = escapeHtml(f.name || 'dosya');
-        const link = f.url
-            ? `<a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" title="${name}">${name}</a>`
-            : `<span title="${name}">${name}</span>`;
-        return `
-            <div class="pp-file-line">
-                ${link}
-                <span class="pp-file-src">${escapeHtml(f.source)} · ${fmtShortDate(f.uploaded_at)}</span>
-            </div>`;
-    }).join('');
-
-    const body = `
-        <div class="pp-chips-row">${chips}${moreChip}</div>
-        ${lines || '<div class="text-muted pp-empty">Dosya yok.</div>'}`;
-    return panelHtml('folder-open', 'Dosyalar', body, 'pp-area-files');
-}
 
 // Parents whose progress is carried by their children are hidden — the
 // children rows represent them (renamed "Parent - Child").
@@ -2424,7 +1425,6 @@ function formatWd(value) {
     const abs = Math.abs(value);
     return (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1)).replace('.', ',');
 }
-
 
 // Task counts for a plan payload, the single source for both Plan Detayı and
 // the Üretim Planı tab. Two rules the raw server summary does not apply:
