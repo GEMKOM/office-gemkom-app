@@ -1977,13 +1977,19 @@ function rederivePlanWindows() {
     liveForecastJobs.forEach(jobNo => {
         const slots = deptByJob[jobNo] || {};
         const imalat = slots.manufacturing;
-        if (!imalat || !imalat.start_date) return;
+        if (!imalat) return;
         const total = imalat.entered_duration_wd != null
             ? Number(imalat.entered_duration_wd)
             : (imalat.duration_wd != null ? Number(imalat.duration_wd) : null);
         if (!total || total <= 0) return;
 
-        const start = imalat.start_date;
+        // Floor is the planner's İmalat start, not a covering window the last
+        // pass drew around a pinned team. `start_date` is a save field; using
+        // a child pin as the origin (and leaving it there) would persist that
+        // date on Kaydet whenever İmalat start was edited in the same session.
+        const start = imalat.entered_start_date || imalat.start_date;
+        if (!start) return;
+        imalat.start_date = start;
         const weld = live(slots.welding) ? slots.welding : null;
         const paint = live(slots.painting) ? slots.painting : null;
         // A skipped Talaşlı takes no share — the server's split drops it the
@@ -2045,13 +2051,12 @@ function rederivePlanWindows() {
             latest = later(latest, set(paint, paintStart, total * w(paint.weight) / sibSum));
         }
         // The İmalat row covers what it contains — its own span, extended if
-        // the paint tail spills past it, and opened backwards if a pinned
-        // team starts before it.
+        // the paint tail spills past it. A pinned team MAY start earlier
+        // (284-07); that is the assignment's own start, not İmalat's. Opening
+        // `imalat.start_date` backwards used to overwrite the typed job start
+        // on the next Kaydet. End is safe to widen: it is never sent.
         imalat.end_date = later(spanEnd(start, total), latest);
         imalat.end_is_actual = false;
-        if (weld && weld.start_date && weld.start_date < imalat.start_date) {
-            imalat.start_date = weld.start_date;
-        }
 
         // Lojistik has no plan of its own — it trails İmalat — so the sheet's
         // last row has to move with the entry above it. Without this it kept
