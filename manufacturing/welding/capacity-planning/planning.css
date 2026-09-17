@@ -322,6 +322,30 @@
     color: #6b7280;
 }
 
+/* A weight cell that carries a share and the whole it came out of stacks them
+   — one line would need twice the column's width. Same idiom as .job-end. */
+.kg-split {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.05;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.kg-part {
+    font-size: .78rem;
+    font-weight: 600;
+    color: #334155;
+}
+
+.kg-total {
+    font-size: .66rem;
+    font-weight: 500;
+    color: #6b7280;
+}
+
 /* Adet: the order's own count reads plain, a team's kg share reads as the
    approximation it is. */
 .qty-cell { font-variant-numeric: tabular-nums; }
