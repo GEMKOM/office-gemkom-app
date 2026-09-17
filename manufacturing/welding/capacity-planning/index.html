@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="../../../components/badges/badges.css">
     <link rel="stylesheet" href="grid.css">
     <link rel="stylesheet" href="planning.css">
+    <link rel="stylesheet" href="capacity.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
 </head>
 <body>
@@ -53,6 +54,12 @@
                         <button class="btn btn-sm btn-outline-secondary" id="pdf-btn"
                                 title="Görünen tabloyu ve zaman çizelgesini PDF olarak indir">
                             <i class="fas fa-file-pdf me-1"></i>PDF
+                        </button>
+                        <!-- Advisory only: the drawer explains and proposes,
+                             the sheet stays the place where plans are typed. -->
+                        <button class="btn btn-sm btn-outline-secondary" id="capacity-btn"
+                                title="Kapasite önerileri — ekip/taşeron yükü, termin riski, önerilen başlangıçlar">
+                            <i class="fas fa-gauge-high me-1"></i>Kapasite<span class="cap-btn-badge d-none" id="capacity-btn-badge"></span>
                         </button>
                         <span class="btn-group pg-zoom" id="zoom-buttons" role="group"
                               aria-label="Zaman ölçeği"
@@ -115,6 +122,41 @@
     <div id="tier-modal-container"></div>
     <div id="custom-stage-modal-container"></div>
     <div id="confirm-modal-container"></div>
+
+    <!-- Kapasite drawer: a body-level offcanvas (never inside the navbar's
+         backdrop-filter, which would trap position:fixed). No backdrop and
+         body scroll on, so the sheet behind stays editable while reading. -->
+    <div class="offcanvas offcanvas-end cap-drawer" id="capacity-drawer" tabindex="-1"
+         data-bs-backdrop="false" data-bs-scroll="true" aria-labelledby="cap-drawer-title">
+        <div class="offcanvas-header cap-drawer-head">
+            <div class="cap-drawer-titles">
+                <h5 class="offcanvas-title" id="cap-drawer-title"><i class="fas fa-gauge-high me-2"></i>Kapasite önerileri</h5>
+                <span class="cap-stamp" id="cap-drawer-stamp"></span>
+            </div>
+            <div class="cap-drawer-tools">
+                <span class="pg-zoom-wrap" title="Hız ölçümünde kullanılan geçmiş (tam aylar)">
+                    <span>Geçmiş</span>
+                    <span class="btn-group pg-zoom" id="cap-months" role="group" aria-label="Geçmiş">
+                        <button type="button" class="btn btn-outline-secondary" data-cap-months="3">3 ay</button>
+                        <button type="button" class="btn btn-outline-secondary active" data-cap-months="6">6 ay</button>
+                        <button type="button" class="btn btn-outline-secondary" data-cap-months="12">12 ay</button>
+                    </span>
+                </span>
+                <span class="pg-zoom-wrap" title="Kg'ları işin kg fiyatına göre ağırlıklandır — pahalı iş zor iştir">
+                    <span>Zorluk</span>
+                    <span class="btn-group pg-zoom" id="cap-difficulty" role="group" aria-label="Zorluk ağırlığı">
+                        <button type="button" class="btn btn-outline-secondary active" data-cap-difficulty="1">Açık</button>
+                        <button type="button" class="btn btn-outline-secondary" data-cap-difficulty="0">Kapalı</button>
+                    </span>
+                </span>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="cap-refresh" title="Raporu yeniden hesapla">
+                    <i class="fas fa-rotate"></i>
+                </button>
+                <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Kapat"></button>
+            </div>
+        </div>
+        <div class="offcanvas-body cap-drawer-body" id="cap-drawer-body"></div>
+    </div>
 
     <footer class="footer-section">
         <div class="container">
