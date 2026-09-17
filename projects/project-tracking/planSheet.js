@@ -157,11 +157,24 @@ export const SHEET_COLUMNS = [
 // column ends and the timeline takes whatever the slide has left.
 export const SHEET_GRID_WIDTH = 1116;
 
-/** Grid rows (group per job, task rows beneath) from the payload. */
+export function groupKeyOf(node) {
+    return `job-${node.job_no}`;
+}
+
+/**
+ * Grid rows (group per job, task rows beneath) from the payload. A collapsed
+ * job folds its own tasks AND every sub-job under it — nodes come in DFS
+ * order, so a job whose parent is hidden or collapsed is skipped whole.
+ */
 export function buildSheetRows(sheet, collapsed = new Set()) {
     const rows = [];
+    const hiddenJobs = new Set();
     for (const { node, rows: taskRows } of groupRows(sheet)) {
-        const groupKey = `job-${node.job_no}`;
+        const groupKey = groupKeyOf(node);
+        if (node.parent && (hiddenJobs.has(node.parent) || collapsed.has(`job-${node.parent}`))) {
+            hiddenJobs.add(node.job_no);
+            continue;
+        }
         const rc = node.root_cause;
         const rootCauseText = rc
             ? `${rc.department_display || rc.title}${rc.job_no && rc.job_no !== node.job_no ? ` (${rc.job_no})` : ''}: `
@@ -322,12 +335,19 @@ class SheetGrid extends PlanningGrid {
 export function renderPlanSheet(containerId, sheet, state) {
     const calendar = createWorkdayCalendar(sheet.holidays || []);
     const rows = buildSheetRows(sheet, state.collapsed);
+    const groupKeys = (sheet.nodes || []).map(groupKeyOf);
+    const allCollapsed = () => groupKeys.length > 0 && groupKeys.every(k => state.collapsed.has(k));
+    const refresh = () => {
+        grid.options.allCollapsed = allCollapsed();
+        grid.setRows(buildSheetRows(sheet, state.collapsed));
+    };
     const grid = new SheetGrid(containerId, {
         columns: SHEET_COLUMNS,
         rows,
         zoom: SHEET_ZOOMS.includes(state.zoom) ? state.zoom : 'week',
         gridWidth: state.gridWidth || SHEET_GRID_WIDTH,
         collapsed: state.collapsed,
+        allCollapsed: allCollapsed(),
         isCellEditable: () => false,
         rowAttributes: (row) => ({ class: rowClasses(row) }),
         bar: rowBar,
@@ -336,7 +356,13 @@ export function renderPlanSheet(containerId, sheet, state) {
         onToggleGroup: (row) => {
             if (state.collapsed.has(row.key)) state.collapsed.delete(row.key);
             else state.collapsed.add(row.key);
-            grid.setRows(buildSheetRows(sheet, state.collapsed));
+            refresh();
+        },
+        // The header's double chevron: fold every job, or open every job.
+        onToggleAll: () => {
+            if (allCollapsed()) groupKeys.forEach(k => state.collapsed.delete(k));
+            else groupKeys.forEach(k => state.collapsed.add(k));
+            refresh();
         },
         onZoomChange: (zoom) => { state.zoom = zoom; },
         onGridWidthChange: (px) => { state.gridWidth = px; },

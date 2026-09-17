@@ -427,10 +427,12 @@
     gap: 6px;
 }
 
-/* Row washes: late on its own = red, late only because of the chain = grey */
-.pp-sheet .ps-row-late .pg-row-grid { background: rgba(220, 53, 69, 0.055); }
-.pp-sheet .ps-row-chain .pg-row-grid { background: rgba(108, 117, 125, 0.08); }
-.pp-sheet .pg-row-cancelled .pg-row-grid { opacity: 0.55; }
+/* Row washes: late on its own = red, late only because of the chain = grey.
+   OPAQUE on purpose: .pg-row-grid is the sticky left pane that hides the bars
+   scrolled under it; a translucent wash let July's bars bleed through
+   October's cells on exactly these rows. */
+.pp-sheet .ps-row-late .pg-row-grid { background: #fdf3f4; }
+.pp-sheet .ps-row-chain .pg-row-grid { background: #f2f3f5; }
 .pp-sheet .pg-row-group .pg-row-grid { background: #f3f5f8; }
 
 /* ---- sheet cells --------------------------------------------------------- */
