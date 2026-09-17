@@ -286,49 +286,83 @@ body.pg-resizing * {
    The same tick on every row of the job draws one continuous target line;
    the bullseye flag on the group row names it. Red = the İmalat engine
    projection overshoots the promise. */
+/* A hairline, BEHIND the bars (z-index 1, below .pg-bar) — a rule you read
+   the chart against, not a thing competing with it. Violet, so it is never
+   confused with the solid red "today" line however late the job is. */
 .pg-target-line {
     position: absolute;
     top: 0;
     bottom: 0;
     width: 0;
-    border-left: 2px dashed rgba(37, 99, 235, 0.55);
-    z-index: 2;
+    border-left: 1px dashed rgba(124, 58, 237, 0.45);
+    z-index: 1;
     pointer-events: none;
 }
 
-.pg-target-line.pg-target-late {
-    border-left-color: rgba(220, 38, 38, 0.6);
-}
-
-.pg-target-flag {
-    position: absolute;
-    top: 1px;
-    transform: translateX(-50%);
-    color: #2563eb;
-    font-size: 11px;
-    z-index: 4;
-    background: #ffffff;
-    border-radius: 50%;
-    line-height: 1;
-}
-
-.pg-target-flag.pg-target-late {
-    color: #dc2626;
-}
-
-/* "+2 gün / −2 gün" — how far the projection sits from the hedef */
-.pg-target-delta {
+/* The termin and the gap from it, in one tag pinned to the line. On a group
+   row the bar ENDS at this line, so the space to its right is clear. */
+.pg-target-tag {
     position: absolute;
     top: 50%;
     transform: translateY(-50%);
+    margin-left: 5px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 17px;
+    padding: 0 6px;
+    border-radius: 9px;
     font-size: 10.5px;
-    font-weight: 700;
+    font-weight: 600;
+    line-height: 1;
     white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    color: #5b21b6;
+    background: #f5f3ff;
+    border: 1px solid rgba(124, 58, 237, 0.35);
+    /* Opaque, and lifted off whatever is under it: on rows whose bar brackets
+       the termin there is no clear side to sit on. */
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .18);
+    z-index: 4;
+}
+
+.pg-target-tag .fas { font-size: 9px; opacity: .75; }
+
+/* The date the bar stops on, printed just past its right edge. Muted and
+   small: it annotates the bar, it is not a second thing to read. */
+.pg-bar-end {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    margin-left: 5px;
+    font-size: 10px;
+    line-height: 1;
+    color: #64748b;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
     z-index: 3;
 }
 
-.pg-delta-late { color: #dc2626; }
-.pg-delta-early { color: #16a34a; }
+/* Flipped to the left of the line, for a row whose bar runs past the termin. */
+.pg-target-tag.flip {
+    transform: translate(-100%, -50%);
+    margin-left: -5px;
+}
+
+/* Late and early are the only states worth a colour — the neutral tag is just
+   "here is the termin". */
+.pg-target-tag.is-late {
+    color: #b02a37;
+    background: #fef2f2;
+    border-color: rgba(220, 38, 38, 0.4);
+}
+
+.pg-target-tag.is-early {
+    color: #15803d;
+    background: #f0fdf4;
+    border-color: rgba(22, 163, 74, 0.35);
+}
 
 /* The group's promised end turns red when the projection overshoots it.
    The termin line stacked under it keeps its own colour — painting both red

@@ -24,5 +24,18 @@ export function blockSchedulePatch(snapSubtask, subtask, hasStages) {
     const was = (snapSubtask && snapSubtask.actual_start_date) || null;
     const now = subtask.actual_start_date || null;
     if (was !== now) item.actual_start_date = now;
+    // The assignment's own span rides the same way and for the same reason:
+    // it belongs to the assignment, stages or not, and an absent key means
+    // "unchanged" while an explicit null hands the row back to its parent's
+    // window.
+    const wasDur = normalizeDuration(snapSubtask && snapSubtask.entered_duration_wd);
+    const nowDur = normalizeDuration(subtask.entered_duration_wd);
+    if (wasDur !== nowDur) item.duration_wd = nowDur;
     return Object.keys(item).length ? item : null;
+}
+
+function normalizeDuration(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : null;
 }

@@ -696,6 +696,166 @@ function modalTableHtml(headers, rows) {
 }
 
 // 2a — the "why": per-task plan with variances and pushers, fetched on demand.
+// ---------------------------------------------------------------------------
+// Plan timeline — the capacity board's picture, inside the meeting modal
+// ---------------------------------------------------------------------------
+// User 2026-09-17: "can we have the detail modal to be like capacity-planning
+// — it should show the plan and deviation from the plan as a result of
+// progress, materials etc."
+//
+// Same vocabulary as /manufacturing/welding/capacity-planning so the two pages
+// read alike: the BAR is the plan, a violet line is the termin, today is red.
+// What this adds over that board is the DEVIATION — the stretch between where
+// the plan ends and where the row is now projected to end, drawn red when it
+// runs late and green when it lands early. The "Neden bu tarih?" column below
+// already says WHY (tempo, malzeme, sıra bağımlılığı); this says how much.
+
+const PLAN_TL_DAY_MS = 86400000;
+
+function planTlDate(value) {
+    if (!value) return null;
+    const d = new Date(`${value}T00:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** Every date the chart has to fit, as [min, max] — null when there are none. */
+function planTimelineRange(tasks, termin, today) {
+    const dates = [];
+    tasks.forEach(t => {
+        const s = t.schedule || {};
+        [t.plan_start_date, t.plan_end_date, t.target_start_date,
+         t.target_completion_date, s.projected_start_date, s.projected_end_date,
+         s.actual_end_date].forEach(v => {
+            const d = planTlDate(v);
+            if (d) dates.push(d);
+        });
+    });
+    [termin, today].forEach(v => { const d = planTlDate(v); if (d) dates.push(d); });
+    if (!dates.length) return null;
+    // A little air either side, so a bar ending on the last day is not flush
+    // against the frame.
+    const min = new Date(Math.min(...dates) - 3 * PLAN_TL_DAY_MS);
+    const max = new Date(Math.max(...dates) + 3 * PLAN_TL_DAY_MS);
+    return [min, max];
+}
+
+/** Month ticks across the range, for the header strip. */
+function planTimelineMonths(min, max, pct) {
+    const out = [];
+    const cur = new Date(min.getFullYear(), min.getMonth(), 1);
+    while (cur <= max) {
+        if (cur >= min) {
+            out.push({
+                left: pct(cur),
+                label: cur.toLocaleDateString('tr-TR', { month: 'short', year: '2-digit' }),
+            });
+        }
+        cur.setMonth(cur.getMonth() + 1);
+    }
+    return out;
+}
+
+function planTimelineHtml(planData, labelFor) {
+    const tasks = (planData.tasks || []).filter(t => t.status !== 'cancelled');
+    const termin = (planData.job_order || {}).target_completion_date || null;
+    const today = planData.today || null;
+    const range = planTimelineRange(tasks, termin, today);
+    if (!range) return '';
+    const [min, max] = range;
+    const span = Math.max(max - min, PLAN_TL_DAY_MS);
+    const pct = (d) => ((d - min) / span) * 100;
+    const at = (value) => {
+        const d = planTlDate(value);
+        return d === null ? null : pct(d);
+    };
+
+    const grid = planTimelineMonths(min, max, pct).map(m =>
+        `<div class="pp-tl-month" style="left:${m.left}%"><span>${escapeHtml(m.label)}</span></div>`
+    ).join('');
+
+    const lines = [];
+    const terminX = at(termin);
+    if (terminX !== null) {
+        lines.push(`<div class="pp-tl-termin" style="left:${terminX}%" title="Termin ${escapeHtml(fmtShortDate(termin) || '')}"></div>`);
+    }
+    const todayX = at(today);
+    if (todayX !== null) {
+        lines.push(`<div class="pp-tl-today" style="left:${todayX}%" title="Bugün"></div>`);
+    }
+
+    const rows = tasks.map(task => {
+        const s = task.schedule || {};
+        const label = (labelFor && labelFor(task)) || task.department_display || '';
+        const indent = task.parent !== null ? ' pp-tl-sub' : '';
+        // The PLAN: what the capacity board laid out, else what was entered.
+        const planStart = task.plan_start_date || task.target_start_date;
+        const planEnd = task.plan_end_date || task.target_completion_date;
+        const projEnd = s.projected_end_date || null;
+        const done = task.status === 'completed';
+
+        const segs = [];
+        const a = at(planStart);
+        const b = at(planEnd);
+        if (a !== null && b !== null) {
+            segs.push(`<div class="pp-tl-bar${done ? ' is-done' : ''}" style="left:${a}%;width:${Math.max(b - a, 0.6)}%" title="${escapeHtml(`Plan: ${fmtShortDate(planStart)} – ${fmtShortDate(planEnd)}`)}"></div>`);
+            // The DEVIATION. This is what the chart is for, so it is drawn even
+            // when it is only a day wide.
+            const p = at(projEnd);
+            if (p !== null && Math.abs(p - b) > 0.01) {
+                const late = p > b;
+                const from = Math.min(b, p);
+                const to = Math.max(b, p);
+                const gap = s.projected_variance_wd ?? s.end_variance_wd;
+                const gapTxt = (gap === null || gap === undefined)
+                    ? '' : ` (${late ? '+' : '−'}${formatWd(Math.abs(gap))} iş günü)`;
+                const word = late ? 'Plandan sapma' : 'Planın önünde';
+                segs.push(`<div class="pp-tl-dev ${late ? 'is-late' : 'is-early'}" style="left:${from}%;width:${Math.max(to - from, 0.6)}%" title="${escapeHtml(`${word}: ${fmtShortDate(projEnd)}${gapTxt}`)}"></div>`);
+            }
+        } else {
+            // Nothing to deviate FROM — the projection is all there is, and it
+            // draws hollow so it is never read as a plan.
+            const ps = at(s.projected_start_date);
+            const pe = at(projEnd);
+            if (ps !== null && pe !== null) {
+                segs.push(`<div class="pp-tl-proj" style="left:${ps}%;width:${Math.max(pe - ps, 0.6)}%" title="${escapeHtml(`Öngörü: ${fmtShortDate(s.projected_start_date)} – ${fmtShortDate(projEnd)} (plana girilmemiş)`)}"></div>`);
+            }
+        }
+        if (!segs.length) return '';
+        return `
+            <div class="pp-tl-row">
+                <div class="pp-tl-label${indent}" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+                <div class="pp-tl-lane">${segs.join('')}</div>
+            </div>`;
+    }).filter(Boolean).join('');
+
+    if (!rows) return '';
+    return `
+        <div class="pp-plan-section">
+            Plan ve sapma
+            <span>— dolu çubuk planlanan pencere, uzantı ise ilerleme, malzeme ve
+            sıra bağımlılıklarından doğan sapma. Mor çizgi termin, kırmızı çizgi bugün.</span>
+        </div>
+        <div class="pp-tl">
+            <div class="pp-tl-head">
+                <div class="pp-tl-label"></div>
+                <div class="pp-tl-lane">${grid}</div>
+            </div>
+            <div class="pp-tl-rows">
+                <div class="pp-tl-lines" aria-hidden="true">
+                    <div class="pp-tl-label"></div>
+                    <div class="pp-tl-lane">${lines.join('')}</div>
+                </div>
+                ${rows}
+            </div>
+        </div>
+        <div class="pp-plan-legend">
+            <span><i class="fas fa-square pp-tl-key-plan"></i>plan</span>
+            <span><i class="fas fa-square pp-tl-key-late"></i>sapma (geç)</span>
+            <span><i class="fas fa-square pp-tl-key-early"></i>sapma (erken)</span>
+            <span><i class="far fa-square pp-tl-key-proj"></i>plana girilmemiş, yalnızca öngörü</span>
+        </div>`;
+}
+
 async function openPlanModal(item) {
     openMeetingModal(
         `Plan Detayı <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
@@ -1231,6 +1391,7 @@ async function openPlanModal(item) {
         ${driverBox}
         ${countsHtml}
         ${conflictBanner}
+        ${planTimelineHtml(planData, rowLabel)}
         <div class="pp-plan-section">
             Görev bazında öngörü
             <span>— her satır kendi verisinden hesaplanır; bir ana görev, en geç

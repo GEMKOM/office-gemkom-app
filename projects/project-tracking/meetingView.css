@@ -2066,3 +2066,136 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     font-weight: 600;
     color: #8a919c;
 }
+
+/* ---- plan timeline (plan modal) ------------------------------------------
+   The capacity board's picture, at modal scale: the bar is the PLAN, the
+   extension past it is the DEVIATION, and the two vertical lines keep the
+   same meaning they have on /manufacturing/welding/capacity-planning —
+   violet termin, red today. */
+
+.pp-tl {
+    margin: 6px 0 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.pp-tl-head,
+.pp-tl-row,
+.pp-tl-lines {
+    display: flex;
+    align-items: stretch;
+}
+
+.pp-tl-label {
+    flex: 0 0 190px;
+    width: 190px;
+    padding: 0 8px;
+    font-size: .74rem;
+    color: #334155;
+    line-height: 22px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-tl-label.pp-tl-sub {
+    padding-left: 20px;
+    color: #64748b;
+}
+
+.pp-tl-lane {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 22px;
+}
+
+.pp-tl-head {
+    background: #f8fafc;
+    border-bottom: 1px solid #e5e7eb;
+    height: 22px;
+}
+
+.pp-tl-month {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    border-left: 1px solid #e5e7eb;
+}
+
+.pp-tl-month span {
+    position: absolute;
+    left: 4px;
+    top: 4px;
+    font-size: .64rem;
+    color: #94a3b8;
+    white-space: nowrap;
+}
+
+/* The rows stack over one shared pair of vertical lines. */
+.pp-tl-rows { position: relative; }
+
+.pp-tl-lines {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.pp-tl-termin,
+.pp-tl-today {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 0;
+}
+
+.pp-tl-termin { border-left: 1px dashed rgba(124, 58, 237, .55); }
+.pp-tl-today { border-left: 2px solid rgba(220, 53, 69, .55); }
+
+.pp-tl-row {
+    position: relative;
+    z-index: 2;
+    height: 22px;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.pp-tl-row:last-child { border-bottom: none; }
+
+.pp-tl-bar,
+.pp-tl-dev,
+.pp-tl-proj {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: 10px;
+    border-radius: 3px;
+    min-width: 2px;
+}
+
+.pp-tl-bar { background: #3b82f6; }
+.pp-tl-bar.is-done { background: #16a34a; }
+
+/* Deviation reads as an extension of the bar, not a bar of its own: square
+   where it meets the plan, rounded where it ends. */
+.pp-tl-dev {
+    border-radius: 0 3px 3px 0;
+    height: 8px;
+}
+
+.pp-tl-dev.is-late { background: #dc2626; }
+.pp-tl-dev.is-early { background: #16a34a; }
+
+/* No plan to deviate from — hollow, so it is never read as one. */
+.pp-tl-proj {
+    background: repeating-linear-gradient(
+        45deg, #cbd5e1, #cbd5e1 3px, #f1f5f9 3px, #f1f5f9 6px);
+    border: 1px solid #cbd5e1;
+    height: 8px;
+}
+
+.pp-tl-key-plan { color: #3b82f6; }
+.pp-tl-key-late { color: #dc2626; }
+.pp-tl-key-early { color: #16a34a; }
+.pp-tl-key-proj { color: #94a3b8; }

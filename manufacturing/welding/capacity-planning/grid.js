@@ -47,6 +47,13 @@ const ISO_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
 export const DATE_ENTRY_PLACEHOLDER = 'gg.aa.yyyy';
 
 /** ISO yyyy-mm-dd -> 'dd.mm.yyyy' (empty string for a missing date). */
+/** dd.mm — the year is on the header tiers and in every tooltip, and a bar
+ *  label has to stay narrow enough not to reach the next row's work. */
+function shortDMY(iso) {
+    const m = ISO_DATE_RE.exec(String(iso ?? '').trim());
+    return m ? `${m[3]}.${m[2]}` : '';
+}
+
 export function formatDMY(iso) {
     const m = ISO_DATE_RE.exec(String(iso ?? '').trim());
     return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
@@ -502,45 +509,73 @@ export class PlanningGrid {
             : timeline.colWidth / (timeline.unit === 'week' ? 7 : 30);
 
         const parts = [];
+        const bar = this.options.bar(row);
+        const startX = bar ? timeline.xOf(bar.start || bar.end) : null;
+        const endX = bar ? timeline.xOf(bar.end || bar.start) : null;
+        const barDrawn = bar && startX !== null && endX !== null;
         // İş emri hedef bitişi: the same vertical tick on every row of the
         // job, so the group reads as one continuous target line down the
-        // sheet. Red when the job's projected end overshoots it.
+        // sheet.
         if (row.job_target) {
             const tx = timeline.xOf(row.job_target);
             if (tx !== null) {
-                const lateCls = row.job_target_late ? ' pg-target-late' : '';
-                parts.push(`<div class="pg-target-line${lateCls}" style="left:${tx + oneUnit}px"></div>`);
-                if (row.kind === 'group') {
-                    parts.push(`
-                        <div class="pg-target-flag${lateCls}" style="left:${tx + oneUnit}px"
-                             title="İş emri hedef bitişi: ${esc(row.job_target)}${row.job_target_late ? ' — öngörülen bitiş bu tarihi aşıyor' : ''}">
-                            <i class="fas fa-bullseye"></i>
-                        </div>`);
-                }
-                // "+2 gün / −2 gün": how far the projection sits from the
-                // hedef, in workdays — after whichever marker is rightmost.
-                const delta = Number(row.job_target_delta_wd || 0);
-                if (delta && (row.kind === 'group' || row.unassignedRow)) {
-                    const fx = timeline.xOf(row.forecast_date);
-                    const x = Math.max(tx, fx === null ? tx : fx) + oneUnit + 5;
+                // The line is a GUIDE, not a mark: one hairline, one colour,
+                // drawn on every row of the job so it reads as one continuous
+                // rule down the group. It used to go red when the job was
+                // late, which put a second red vertical line next to "today"
+                // — two 2px reds on one chart, and no way to tell at a glance
+                // which was which. Lateness is on the tag instead.
+                const x = tx + oneUnit;
+                parts.push(`<div class="pg-target-line" style="left:${x}px"></div>`);
+                // ONE tag per job, sitting ON the line and carrying both
+                // numbers: the termin and how far the plan sits from it. The
+                // delta used to float at the FORECAST's x — metres from the
+                // line it was measured against, attached to nothing.
+                if (row.kind === 'group' || row.unassignedRow) {
+                    const delta = Number(row.job_target_delta_wd || 0);
                     const late = delta > 0;
+                    const tone = delta ? (late ? ' is-late' : ' is-early') : '';
+                    const gap = delta
+                        ? ` ${late ? '+' : '−'}${Math.abs(delta)}g` : '';
+                    const why = delta
+                        ? ` — planlanan bitiş ${Math.abs(delta)} iş günü ${late ? 'sonra' : 'önce'}`
+                        : '';
+                    // Right of the line by default; a group bar ends there, so
+                    // that space is clear. Flip left only when that actually
+                    // buys clear space — a bar starting after the line. A bar
+                    // that BRACKETS the line (the Atanmamış rows, whose bar is
+                    // İmalat's window and pays the termin no attention) covers
+                    // both sides, so the tag stays put and relies on its own
+                    // opaque background to stay readable over it.
+                    const flip = barDrawn && startX >= x;
                     parts.push(`
-                        <div class="pg-target-delta ${late ? 'pg-delta-late' : 'pg-delta-early'}"
-                             style="left:${x}px"
-                             title="Öngörülen bitiş hedeften ${Math.abs(delta)} gün ${late ? 'geride' : 'ileride'}">${late ? '+' : '−'}${Math.abs(delta)} gün</div>`);
+                        <div class="pg-target-tag${tone}${flip ? ' flip' : ''}" style="left:${x}px"
+                             title="${esc(`Termin ${formatDMY(row.job_target)}${why}`)}">
+                            <i class="fas fa-flag-checkered"></i>${formatDMY(row.job_target)}${gap}
+                        </div>`);
                 }
             }
         }
 
-        const bar = this.options.bar(row);
-        if (!bar) return parts.join('');
-        const startX = timeline.xOf(bar.start || bar.end);
-        const endX = timeline.xOf(bar.end || bar.start);
-        if (startX === null || endX === null) return parts.join('');
+        if (!barDrawn) return parts.join('');
         // The end date is inclusive — a task that starts and ends the same day
         // is one day long, not zero — so the bar runs to the END of that unit.
         const width = Math.max(6, endX - startX + oneUnit);
         const pct = Math.max(0, Math.min(100, Number(bar.progress || 0)));
+
+        const barEnd = startX + width;
+        // TWO dates on this chart and no more (user 2026-09-17): the termin,
+        // as the line and its tag, and the PLAN, as the bar. The estimate is a
+        // third date and it belongs in the table — it had a tick here and that
+        // was one too many things to read off a bar.
+        //
+        // The end date, printed where the bar stops. A group row's bar ends on
+        // the termin line, where its own tag already carries the date.
+        const endLabel = (bar.endDate && !bar.hideEndLabel)
+            ? `<div class="pg-bar-end" style="left:${barEnd}px"
+                    title="${esc(`Bitiş: ${formatDMY(bar.endDate)}`)}">${
+                   shortDMY(bar.endDate)}</div>`
+            : '';
 
         return `${parts.join('')}
             <div class="pg-bar pg-bar-${esc(bar.state || 'on-time')}"
@@ -548,7 +583,7 @@ export class PlanningGrid {
                  title="${esc(bar.title || '')}">
                 <div class="pg-bar-fill" style="width:${pct}%"></div>
                 ${width > 54 ? `<span class="pg-bar-label">${esc(bar.label || '')}</span>` : ''}
-            </div>`;
+            </div>${endLabel}`;
     }
 
     // ---- interaction ----------------------------------------------------

@@ -92,6 +92,7 @@ let expandedJobsAll = new Set();
 let showCompleted = false;
 let showEmptyResources = false;   // empty-resource tabs tucked behind a toggle
 let sortMode = 'job_no';          // job groups by iş emri number, or 'start'
+let viewScope = 'full';           // whole job, or only Kaynaklı İmalat + its teams
 let newCounter = 0;
 
 // View filters. Purely client-side — the whole board is already in memory, so
@@ -449,7 +450,10 @@ function hydrate(boardData) {
         snapBlocks.set(b.key, {
             allocated_weight_kg: b.allocated_weight_kg,
             notes: b.notes,
-            subtask: { actual_start_date: b.subtask.actual_start_date },
+            subtask: {
+                actual_start_date: b.subtask.actual_start_date,
+                entered_duration_wd: b.subtask.entered_duration_wd,
+            },
         });
     }));
 
@@ -970,11 +974,22 @@ function withEngineDates(row, vm) {
         row.start_date = vm.projected_start_date;
         row.start_date_source = row.start_date_source || 'engine';
     }
-    if (row.end_date == null && vm.projected_end_date) {
+    if (canBorrowEnd(row, vm.projected_end_date)) {
         row.end_date = vm.projected_end_date;
         row.end_date_source = row.end_date_source || 'engine';
     }
     return row;
+}
+
+// A projection is only worth borrowing while it still sits after the row's own
+// start. Pinning an assignment to 01.12 left the cell reading "01.12 -> 14.10"
+// (user 2026-09-17, 305-01): the start was the planner's entry and the end was
+// an engine projection made before it, and with no duration anywhere on the job
+// there is nothing to recompute the end from. An empty Bitiş says that; a
+// backwards one says something false.
+function canBorrowEnd(row, projectedEnd) {
+    if (row.end_date != null || !projectedEnd) return false;
+    return !row.start_date || projectedEnd >= row.start_date;
 }
 
 // Başlangıç and Bitiş on this sheet are the PLAN (user 2026-09-01: "we enter
@@ -998,7 +1013,7 @@ function withDerivedDates(row, vm, { keepStart = false } = {}) {
             row.start_date = vm.projected_start_date;
             row.start_date_source = row.start_date_source || 'engine';
         }
-        if (row.end_date == null && vm.projected_end_date) {
+        if (canBorrowEnd(row, vm.projected_end_date)) {
             row.end_date = vm.projected_end_date;
             row.end_date_source = row.end_date_source || 'engine';
         }
@@ -1010,6 +1025,9 @@ function withDerivedDates(row, vm, { keepStart = false } = {}) {
 // the projection sits from it: "2 gün geride" (late) / "2 gün ileride" (ahead).
 function endDateCell(value, row) {
     if (row.kind === 'group') return jobEndCell(value, row);
+    // A flat assignment row is read against the order's promise, so the two
+    // dates sit together the way they do on the job order row.
+    if (row.show_termin) return assignmentEndCell(value, row);
     const d = row.job_target_delta_wd;
     if (row.unassignedRow && value && d != null && d !== 0) {
         const text = d > 0
@@ -1031,7 +1049,8 @@ function endDateCell(value, row) {
 function jobEndCell(termin, row) {
     const planned = row.job_plan_end || null;
     if (!planned && !termin) return '<span class="text-muted">—</span>';
-    const d = targetDeltaWd(termin, planned);
+    // The same number the gantt tag prints — computed once, on `base`.
+    const d = row.job_target_delta_wd;
     const gap = (d == null || d === 0) ? ''
         : (d > 0 ? ` — terminden ${d} iş günü sonra`
             : ` — terminden ${Math.abs(d)} iş günü önce`);
@@ -1046,6 +1065,22 @@ function jobEndCell(termin, row) {
             <span class="job-end-plan${late ? ' late' : ''}"
                   title="${esc(`${from}${gap}`)}">${
                 planned ? fmtDate(planned) : '—'}</span>
+            <span class="job-end-termin"
+                  title="Termin tarihi — iş emrine girilen teslim tarihi">${
+                termin ? fmtDate(termin) : 'termin yok'}</span>
+        </span>`;
+}
+
+function assignmentEndCell(end, row) {
+    const termin = row.job_target || null;
+    if (!end && !termin) return '<span class="text-muted">—</span>';
+    const late = !!(end && termin && end > termin);
+    return `
+        <span class="job-end">
+            <span class="job-end-plan${late ? ' late' : ''}"
+                  title="${esc('Bu atamanın planlanan bitişi'
+                      + (late ? ' — iş emri terminini aşıyor' : ''))}">${
+                end ? fmtDate(end) : '—'}</span>
             <span class="job-end-termin"
                   title="Termin tarihi — iş emrine girilen teslim tarihi">${
                 termin ? fmtDate(termin) : 'termin yok'}</span>
@@ -1150,6 +1185,60 @@ function quantityShare(kg, jobQuantity, jobTotalKg) {
     return { exact, whole: Math.round(exact) };
 }
 
+// Adet on a group row: how many units of the order this sheet's blocks add up
+// to, over the order's own count — "1 / 9". Falls back to the plain total
+// where the order has no tonnage or no quantity to divide.
+function groupQuantity(blocks, jo) {
+    const total = jo ? jo.quantity ?? null : null;
+    const kg = blocks.reduce((sum, b) => sum + Number(b.allocated_weight_kg || 0), 0);
+    const share = quantityShare(kg, total, jo && jo.total_weight_kg);
+    if (!share) return { quantity: total };
+    return {
+        quantity: share.whole,
+        quantity_of: total,
+        quantity_is_share: true,
+        quantity_exact: share.exact,
+        quantity_kg: round2(kg),
+    };
+}
+
+// A block row's "weight" is its kg allocation, not a rollup weight — same
+// column, different unit, so it has to say which.
+//
+// Two of these cells carry a share AND the whole it came out of, and
+// "20.224,5 / 107.794,9 kg" is 134px of text in a 59px cell. They stack
+// instead, the way the job order's Bitiş does: the number that answers the
+// question on top, the whole underneath in small grey.
+function weightCell(v, row) {
+    if (v == null) return '<span class="text-muted">—</span>';
+    if (!row.weight_is_kg) {
+        return ['stage', 'dept', 'machining'].includes(row.kind)
+            ? String(v) : `<span class="weight-readonly">${v}</span>`;
+    }
+    // How much of a partially assigned job is already out — the note column
+    // that used to say so is usually hidden.
+    if (row.allocated_kg != null) {
+        return kgSplit(row.allocated_kg, v,
+            `Atanan ${fmtKg(row.allocated_kg)} kg — Kalan ${fmtKg(round2(v - row.allocated_kg))} kg`);
+    }
+    // A group row on a sheet carries THIS resource's slice over the order's
+    // tonnage — a different question from "Atanan / Kalan", so a different
+    // tooltip.
+    if (row.resource_kg != null) {
+        return kgSplit(row.resource_kg, v,
+            `Bu sayfadaki atamalar ${fmtKg(row.resource_kg)} kg — iş emri toplamı ${fmtKg(v)} kg`);
+    }
+    return `<span class="weight-readonly">${fmtKg(v)} kg</span>`;
+}
+
+function kgSplit(part, total, title) {
+    return `
+        <span class="kg-split" title="${esc(title)}">
+            <span class="kg-part">${fmtKg(part)}</span>
+            <span class="kg-total">${fmtKg(total)} kg</span>
+        </span>`;
+}
+
 function quantityCell(row) {
     const q = row.quantity;
     if (q == null) return '<span class="text-muted">—</span>';
@@ -1157,7 +1246,11 @@ function quantityCell(row) {
     // A slice too small to make one unit says so. Printing "0" would read as
     // "this team was given nothing", and a 1 kg placeholder next to 14.227 kg
     // is a real shape on this board.
-    const label = q === 0 ? '&lt;1' : `≈${q}`;
+    const share = q === 0 ? '&lt;1' : String(q);
+    // A group row names the whole it is a slice of ("1 / 9"); a block row has
+    // that whole spelled out two rows above it, so it just approximates.
+    const label = row.quantity_of != null
+        ? `${share} / ${row.quantity_of}` : `≈${share}`;
     const title = `${fmtKg(row.quantity_kg)} kg / ${fmtKg(row.job_total_kg)} kg`
         + ` × ${row.job_quantity} adet = ${Number(row.quantity_exact).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} adet`;
     return `<span class="qty-cell qty-share" title="${esc(title)}">${label}</span>`;
@@ -1240,8 +1333,13 @@ function buildSheetRows(res) {
         // Lojistik trails Boya (user 2026-09-16, 114-13).
         const jobForecast = jobForecastOf(jobNo);
         const jobPlanEnd = jobPlanEndOf(jobNo);
-        const jobLate = !!(jo && jo.end_date && jobForecast.date
-            && jobForecast.date > jo.end_date);
+        // Late = the PLAN overshoots the termin. It used to be the ESTIMATE,
+        // which put a third date's verdict on a cell and a gantt tag that draw
+        // the other two (user 2026-09-17). A late ESTIMATE against an on-time
+        // plan still shows: that is what the Gerçek./Tahmini column is for,
+        // and forecastCell reddens it there.
+        const jobLate = !!(jo && jo.end_date && jobPlanEnd.date
+            && jobPlanEnd.date > jo.end_date);
         const base = {
             job_no: jobNo,
             groupKey: jobNo,
@@ -1249,7 +1347,7 @@ function buildSheetRows(res) {
             job_target_late: jobLate,
             // How far the projection sits from the hedef, in workdays —
             // the "+2 gün / −2 gün" label on the gantt.
-            job_target_delta_wd: targetDeltaWd(jo ? jo.end_date : null, jobForecast.date),
+            job_target_delta_wd: targetDeltaWd(jo ? jo.end_date : null, jobPlanEnd.date),
             // Adet is the ORDER's, and every row that covers the whole order
             // repeats it; a kg slice of it works out its own share below.
             quantity: jo ? jo.quantity ?? null : null,
@@ -1273,10 +1371,17 @@ function buildSheetRows(res) {
             block_count: blocks.length,
             bar_label: jobNo,
             weight_is_kg: true,
+            // A group row on a SHEET is this resource's slice of the order,
+            // not the order (user 2026-09-17): "10.000 / 94.500 kg" and
+            // "1 / 9". Every sheet, Tümü included — a group row there belongs
+            // to the resource band it sits under.
+            resource_kg: round2(blocks.reduce(
+                (sum, b) => sum + Number(b.allocated_weight_kg || 0), 0)),
             start_date: jo?.start_date ?? null,
             end_date: jo?.end_date ?? null,
             duration_wd: jo?.duration_wd ?? null,
             weight: jo?.total_weight_kg ?? null,
+            ...groupQuantity(blocks, jo),
             progress: jo?.progress ?? 0,
             status: jo?.status || 'active',
             hold_kind: jo?.hold_kind || '',
@@ -1485,6 +1590,15 @@ function buildSheetRows(res) {
                 welding.start_date = earliest;
                 welding.start_date_source = 'engine';
                 welding.start_is_actual = false;
+                // An assignment pinned past this row's own end leaves the
+                // container window pointing backwards ("01.12 -> 21.10" on a
+                // job with no İmalat duration to re-lay it, 2026-09-17). The
+                // end is the stale half — it was worked out before the pin —
+                // so it goes, rather than the pair reading as a real span.
+                if (welding.end_date && welding.end_date < earliest) {
+                    welding.end_date = null;
+                    welding.end_date_source = null;
+                }
             }
         }
 
@@ -1684,6 +1798,21 @@ function titleCell(value, row) {
                     ? `<span class="block-count">${row.block_count} blok</span>` : ''}
             </span>`;
     }
+    // "Kaynak" view: the row IS the assignment, but the resource is already on
+    // the tab (or the band above), so the title has to say which JOB — iş no,
+    // then the order's name and customer underneath.
+    if (row.flat_assignment) {
+        const cap = capacityFor(row);
+        const capFlag = capacityIsLate(cap)
+            ? `<i class="fas fa-triangle-exclamation cap-row-flag" title="${esc(capacityRowTitle(cap))}"></i>`
+            : '';
+        const sub = [row.job_order_title, row.customer_name].filter(Boolean).join(' · ');
+        return `
+            <span class="pg-title" title="${esc(row.resource_name || '')}">
+                <strong>${esc(row.title)}</strong>
+                <span class="pg-sub">${esc(sub)}</span>
+            </span>${capFlag}`;
+    }
     if (row.kind === 'stage' && row.is_default) {
         return `<span class="pg-title"><i class="fas fa-thumbtack pg-ico"
                      title="Varsayılan aşama — silinemez, süresiz/iptal edilebilir"></i>${esc(row.title)}</span>`;
@@ -1719,21 +1848,9 @@ const GRID_COLUMNS = [
     { field: 'duration_wd', label: 'Süre', width: '76px', type: 'number', min: 0, step: 0.5,
       headerClass: 'col-center', cellClass: 'col-center col-num', always: true,
       formatter: (v, row) => cellOverride(row, 'duration_wd') ?? durationCell(v, row.duration_is_derived, row) },
-    { field: 'weight', label: 'Ağırlık', width: '76px', type: 'number', min: 1, step: 1,
+    { field: 'weight', label: 'Ağırlık', width: '96px', type: 'number', min: 1, step: 1,
       headerClass: 'col-center', cellClass: 'col-center col-num', always: true,
-      // A block row's "weight" is its kg allocation, not a rollup weight —
-      // same column, different unit, so it has to say which.
-      formatter: (v, row) => cellOverride(row, 'weight') ?? (v == null
-          ? '<span class="text-muted">—</span>'
-          : (row.weight_is_kg
-              // A partially assigned job says how much is out right in the
-              // weight cell — the note column is usually hidden.
-              ? (row.allocated_kg != null
-                  ? `<span class="weight-readonly" title="Atanan ${fmtKg(row.allocated_kg)} kg — Kalan ${fmtKg(round2(v - row.allocated_kg))} kg">${fmtKg(row.allocated_kg)} / ${fmtKg(v)} kg</span>`
-                  : `<span class="weight-readonly">${fmtKg(v)} kg</span>`)
-              : (['stage', 'dept', 'machining'].includes(row.kind)
-                  ? String(v)
-                  : `<span class="weight-readonly">${v}</span>`))) },
+      formatter: (v, row) => cellOverride(row, 'weight') ?? weightCell(v, row) },
     // Off by default — a planner who wants to read the sheet in units turns
     // it on and it stays on (user 2026-09-16: "I would OPTIONALLY like to be
     // able to display quantity").
@@ -1788,9 +1905,13 @@ function isCellEditable(row, field) {
     // row. Everything under it — Kaynaklı İmalat, Boya, blocks, stages —
     // sizes as a live weight-share slice of that number; weights are the
     // lever, dates remain free (scheduling is a different decision).
-    if (field === 'duration_wd'
-            && !(row.kind === 'dept' && row.slot === 'manufacturing')) {
-        return false;
+    // TWO duration entry points now. İmalat sizes the job. An ASSIGNMENT sizes
+    // one team's span within it (user 2026-09-17): simultaneous teams default
+    // to the whole parent window, which is right when they all work to one
+    // finish and wrong when one of them is only on the job for a fortnight.
+    if (field === 'duration_wd') {
+        if (row.kind === 'block') return !row.isNew;
+        return row.kind === 'dept' && row.slot === 'manufacturing';
     }
     // STARTS are typed, ends never are (2026-08-28): every end on the sheet is
     // derived — the plan laid out from a start and a duration, or the engine's
@@ -1835,6 +1956,7 @@ const COLUMNS_KEY = 'imalatPlanlama.columns';
 const ZOOM_KEY = 'imalatPlanlama.zoom';
 const GRIDW_KEY = 'imalatPlanlama.gridWidth';
 const SORT_KEY = 'imalatPlanlama.sort';
+const SCOPE_KEY = 'imalatPlanlama.scope';
 
 function defaultColumnKeys() {
     return GRID_COLUMNS.filter(c => c.always).map(c => c.field);
@@ -1876,11 +1998,18 @@ function rowBar(row) {
     // were opened. There is no span to draw; the two dates stay visible in the
     // grid so the contradiction is obvious rather than hidden behind a stub.
     if (end < start) return null;
+    // The bar is the PLAN and nothing else. The estimate is a third date and
+    // it lives in the table (user 2026-09-17: "Estimation is on the table and
+    // that's enough").
     return {
         start, end,
         progress: Number(row.progress || 0),
         state: barState(row),
         label: row.bar_label || row.title,
+        endDate: end,
+        // A group row's bar stops ON the termin line, where its own tag
+        // already prints that date — a second label there is just clutter.
+        hideEndLabel: row.kind === 'group',
         title: `${row.title} · ${fmtDate(row.start_date)} – ${fmtDate(row.end_date)}`,
     };
 }
@@ -1936,11 +2065,18 @@ function rederiveDerivedDurations() {
         const kgSum = blocks.reduce((acc, b) => acc + w(b.allocated_weight_kg), 0);
         blocks.forEach(b => {
             if (kgSum <= 0) return;
-            const blockSlice = weldSlice * w(b.allocated_weight_kg) / kgSum;
-            setSlice(b.subtask, blockSlice);
+            // Simultaneous teams each take the welding slice WHOLE — the
+            // mirror of task_durations.weight_share_durations. The kg share
+            // divides the work between them, not the calendar: they are all
+            // welding toward the same finish (user 2026-09-17). A team with
+            // its own entered span keeps it.
+            const entered = b.subtask.entered_duration_wd;
+            const blockSlice = entered != null ? Number(entered) : weldSlice;
+            if (entered == null) setSlice(b.subtask, blockSlice);
             const live = b.stages.filter(s => !s.deleted && s.status !== 'cancelled');
             const stageSum = live.reduce((acc, s) => acc + w(s.weight), 0);
             if (stageSum <= 0) return;
+            // Stages run one after another inside the block, so THEY split it.
             live.forEach(s => setSlice(s, blockSlice * w(s.weight) / stageSum));
         });
     });
@@ -1974,7 +2110,71 @@ function rederivePlanWindows() {
         (jobBlocks[b.job_no] = jobBlocks[b.job_no] || []).push(b);
     }));
 
-    liveForecastJobs.forEach(jobNo => {
+    // Invariants that must hold whether or not the job has an İmalat entry to
+    // split: a pinned assignment starts where it was pinned, no window runs
+    // backwards, and a parent covers its children. Without this, a job with no
+    // entered İmalat duration took the split's early return and showed a block
+    // pinned to 01.12 still ending 14.10, with nothing above it moving (user
+    // 2026-09-17, 305-01 — 4 of that sheet's 9 jobs have no duration).
+    const honourPins = (jobNo) => {
+        const slots = deptByJob[jobNo] || {};
+        let earliest = null, latest = null;
+        (jobBlocks[jobNo] || []).forEach(b => {
+            const pin = b.subtask.actual_start_date;
+            if (pin) {
+                b.subtask.start_date = pin;
+                b.subtask.start_is_actual = false;
+            }
+            const from = b.subtask.start_date;
+            if (!from) return;
+            // Nothing here can SIZE the block — that needs the İmalat entry —
+            // so an end the move left behind collapses onto the start instead
+            // of pointing backwards.
+            if (b.subtask.end_date && b.subtask.end_date < from) {
+                const days = w(b.subtask.duration_wd);
+                b.subtask.end_date = days > 0 ? spanEnd(from, days) : from;
+            }
+            earliest = (earliest && earliest < from) ? earliest : from;
+            latest = later(latest, b.subtask.end_date);
+        });
+        [slots.welding, slots.manufacturing].forEach(vm => {
+            if (!vm) return;
+            // Backwards only, and only over a start it already has. Pulling a
+            // parent FORWARD to a late pin put İmalat on 01.12 with its own
+            // procurement rows still in September; and a parent with no start
+            // of its own is the projection's to fill, not one late block's.
+            if (earliest && vm.start_date && earliest < vm.start_date) {
+                vm.start_date = earliest;
+                vm.start_is_actual = false;
+            }
+            if (latest && (!vm.end_date || latest > vm.end_date)) {
+                vm.end_date = latest;
+                vm.end_is_actual = false;
+            }
+        });
+    };
+
+    // Lojistik has no plan of its own — it trails İmalat — so the sheet's last
+    // row has to move with the entry above it, or the job order's Bitiş reads
+    // EARLIER than the rows under it.
+    const chainLogistics = (jobNo) => {
+        const imalat = (deptByJob[jobNo] || {}).manufacturing;
+        const shipping = (jobInfo[jobNo] || {}).logistics;
+        if (!imalat || !imalat.end_date || !shipping) return;
+        if (['completed', 'cancelled', 'skipped'].includes(shipping.status)) return;
+        // Measured BEFORE the window is touched: reading it back after
+        // projected_start_date had already been overwritten measured the new
+        // start against the OLD end, so every edit grew shipping by however
+        // far İmalat had moved (12.10 -> 03.12 on 009-37, and it never shrank
+        // back).
+        const days = logisticsDays(shipping);
+        const from = nextWorkday(imalat.end_date);
+        shipping.projected_start_date = from;
+        shipping.projected_end_date = spanEnd(from, days);
+        shipping.date_source = 'plan_tail';
+    };
+
+    const splitFromImalat = (jobNo) => {
         const slots = deptByJob[jobNo] || {};
         const imalat = slots.manufacturing;
         if (!imalat || !imalat.start_date) return;
@@ -2012,7 +2212,12 @@ function rederivePlanWindows() {
             const kgSum = blocks.reduce((acc, b) => acc + w(b.allocated_weight_kg), 0);
             blocks.forEach(b => {
                 if (kgSum <= 0) return;
-                const blockDays = weldDays * w(b.allocated_weight_kg) / kgSum;
+                // Simultaneous teams span the whole welding window — the
+                // mirror of plan_windows.lay_out_children. The kg share
+                // divides the WORK, never the calendar.
+                const blockDays = b.subtask.entered_duration_wd != null
+                    ? Number(b.subtask.entered_duration_wd)
+                    : weldDays;
                 // Pinned to its own start when the planner typed one — the
                 // mirror of plan_windows.lay_out_children. Without this the
                 // client preview put every team on the İmalat start and only
@@ -2052,19 +2257,12 @@ function rederivePlanWindows() {
         if (weld && weld.start_date && weld.start_date < imalat.start_date) {
             imalat.start_date = weld.start_date;
         }
+    };
 
-        // Lojistik has no plan of its own — it trails İmalat — so the sheet's
-        // last row has to move with the entry above it. Without this it kept
-        // the window the server chained off the OLD start and the job order's
-        // Bitiş ended up EARLIER than the rows under it.
-        const shipping = (jobInfo[jobNo] || {}).logistics;
-        if (shipping
-                && !['completed', 'cancelled', 'skipped'].includes(shipping.status)) {
-            const from = nextWorkday(imalat.end_date);
-            shipping.projected_start_date = from;
-            shipping.projected_end_date = spanEnd(from, logisticsDays(shipping));
-            shipping.date_source = 'plan_tail';
-        }
+    liveForecastJobs.forEach(jobNo => {
+        splitFromImalat(jobNo);
+        honourPins(jobNo);
+        chainLogistics(jobNo);
     });
 }
 
@@ -2072,10 +2270,14 @@ function rederivePlanWindows() {
 // duration, else the span it was last laid out over, else a day. Re-reading a
 // window this file wrote is safe: every pass writes the same number of days.
 function logisticsDays(row) {
-    if (row.duration_wd != null) return Number(row.duration_wd);
+    if (row.duration_wd != null) return Math.max(Number(row.duration_wd), 0.1);
     const start = row.projected_start_date || row.start_date;
     const end = row.projected_end_date || row.end_date;
-    if (start && end) return calendar.workingDaysInclusive(start, end);
+    // Only a forward window measures anything. Callers must read this BEFORE
+    // they move the row, or the span is start-of-the-new against end-of-the-old.
+    if (start && end && end >= start) {
+        return Math.max(calendar.workingDaysInclusive(start, end), 1);
+    }
     return 1;
 }
 
@@ -2392,11 +2594,11 @@ function buildAllRows() {
                 forecast_date: vm.forecast_date,
                 forecast_kind: vm.forecast_kind,
                 job_target: (jo && jo.end_date) || t.target_completion_date || null,
-                job_target_late: !!(jo && jo.end_date && vm.forecast_date
-                    && vm.forecast_date > jo.end_date),
+                job_target_late: !!(jo && jo.end_date && vm.end_date
+                    && vm.end_date > jo.end_date),
                 job_target_delta_wd: targetDeltaWd(
                     (jo && jo.end_date) || t.target_completion_date || null,
-                    vm.forecast_date),
+                    vm.end_date),
                 note: noteParts.join(' — '),
                 // keepStart: this IS an İmalat row — its start is the
                 // planner's entry and must show (and edit) as typed.
@@ -2404,6 +2606,75 @@ function buildAllRows() {
         });
     }
     return rows;
+}
+
+// "Kaynak" view (user 2026-09-17, with a mock-up): ONE FLAT ROW PER
+// ASSIGNMENT — a team's worklist, nothing to expand. The job order row, the
+// Kaynaklı İmalat row and every other department drop out; what is left is the
+// assignment itself, carrying the JOB's identity in its title so the row still
+// says what the work is. One row, one bar, so a team's jobs read back to back
+// on the timeline.
+//
+// The rows stay `kind: 'block'` and keep their blockRef, so the start date is
+// still editable here and every action still resolves to the right assignment.
+function weldingScopeRows(rows) {
+    const flat = [];
+    rows.forEach(row => {
+        // Resource headers survive on the Tümü tab — without them the sheet is
+        // one undifferentiated list of assignments.
+        if (row.kind === 'band' && String(row.key).startsWith('all-head-')) {
+            flat.push({ ...row, indent: 0 });
+            return;
+        }
+        if (row.kind !== 'block') return;
+        const jo = (jobInfo[row.job_no] || {}).job_order || null;
+        // The customer lives on the block VM; block ROWS never needed it
+        // until the title had to identify the job on its own.
+        const vm = findBlock(row.blockRef);
+        flat.push({
+            ...row,
+            customer_name: (vm && vm.customer_name) || '',
+            indent: 0,
+            // Nothing above it to fold into, and nothing below it to fold.
+            groupKey: null,
+            collapsed: false,
+            has_stages: row.has_stages,
+            flat_assignment: true,
+            resource_name: row.title,
+            job_order_title: row.job_order_title || (jo && jo.title) || '',
+            title: String(row.job_no),
+            bar_label: String(row.job_no),
+            // The order's promised date rides along so the Bitiş cell can put
+            // it under the assignment's own end — the two numbers this view
+            // exists to compare.
+            show_termin: true,
+        });
+    });
+    // "Back to back" only reads if the rows are in time order, so the Başlangıç
+    // sort applies to the ASSIGNMENTS here, not to the job orders they belong
+    // to. Each resource's run is sorted on its own.
+    if (sortMode !== 'start') return flat;
+    const out = [];
+    let run = [];
+    const flush = () => {
+        run.sort((a, b) => compareDates(a.start_date, b.start_date));
+        out.push(...run);
+        run = [];
+    };
+    flat.forEach(row => {
+        if (row.kind === 'band') { flush(); out.push(row); }
+        else run.push(row);
+    });
+    flush();
+    return out;
+}
+
+// Undated last — an assignment nobody has scheduled is not "the earliest".
+function compareDates(a, b) {
+    if (a === b) return 0;
+    if (!a) return 1;
+    if (!b) return -1;
+    return a < b ? -1 : 1;
 }
 
 function renderGrid() {
@@ -2414,9 +2685,10 @@ function renderGrid() {
     rederiveProgress();
     rederiveEngineDates();
     const res = activeResource();
-    const rows = activeResourceKey === 'all'
+    const built = activeResourceKey === 'all'
         ? buildAllRows()
         : (res ? buildSheetRows(res) : []);
+    const rows = viewScope === 'welding' ? weldingScopeRows(built) : built;
     sheetRows = rows;
 
     if (!grid) {
@@ -2575,6 +2847,15 @@ function applyZoom(zoom) {
 
 // Job-group order: by iş emri number, or by start date (earliest first).
 // A view preference, remembered like the zoom.
+function applyScope(mode) {
+    viewScope = mode === 'welding' ? 'welding' : 'full';
+    localStorage.setItem(SCOPE_KEY, viewScope);
+    document.querySelectorAll('#scope-buttons [data-scope]').forEach(
+        b => b.classList.toggle('active', b.dataset.scope === viewScope));
+    renderGrid();
+}
+
+// A view preference, remembered like the zoom.
 function applySort(mode) {
     sortMode = normalizeSortMode(mode);
     localStorage.setItem(SORT_KEY, sortMode);
@@ -2587,6 +2868,7 @@ function applySort(mode) {
 // that does not admit to being filtered reads as the whole plan.
 function exportContextText() {
     const parts = [];
+    if (viewScope === 'welding') parts.push('Görünüm: yalnızca Kaynaklı İmalat');
     if (filterJobNos.length) {
         parts.push(`İş emri: ${filterJobNos.slice(0, 4).join(', ')}`
             + (filterJobNos.length > 4 ? ` +${filterJobNos.length - 4}` : ''));
@@ -2647,6 +2929,15 @@ function initGridToolbar() {
         zoomWrap.querySelectorAll('[data-zoom]').forEach(btn => {
             btn.classList.toggle('active', btn.dataset.zoom === stored);
             btn.addEventListener('click', () => applyZoom(btn.dataset.zoom));
+        });
+    }
+
+    const scopeWrap = document.getElementById('scope-buttons');
+    if (scopeWrap) {
+        viewScope = localStorage.getItem(SCOPE_KEY) === 'welding' ? 'welding' : 'full';
+        scopeWrap.querySelectorAll('[data-scope]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.scope === viewScope);
+            btn.addEventListener('click', () => applyScope(btn.dataset.scope));
         });
     }
 
@@ -2721,10 +3012,21 @@ function openColumnPicker(button) {
     window.addEventListener('resize', closeColumnPicker);
 }
 
+// DELEGATED to the grid container, which outlives every render. The button
+// itself does not: PlanningGrid.render() rebuilds the whole header through
+// `innerHTML`, so a listener bound to the node is thrown away with it. Binding
+// after each renderGrid() was not enough — the grid also re-renders on its own,
+// from the window `resize` handler and at the end of a grip drag, and neither
+// goes through renderGrid(). The layout settling just after page load fires
+// exactly that resize, which is why the button was dead on FIRST load and came
+// back as soon as anything else re-rendered the sheet (user 2026-09-17).
 function bindColumnPicker() {
-    const btn = document.querySelector('.pg-columns-btn');
-    if (!btn) return;
-    btn.addEventListener('click', (e) => {
+    const host = document.getElementById('planning-grid');
+    if (!host || host.dataset.columnPickerBound) return;
+    host.dataset.columnPickerBound = '1';
+    host.addEventListener('click', (e) => {
+        const btn = e.target.closest('.pg-columns-btn');
+        if (!btn) return;
         e.preventDefault();
         e.stopPropagation();
         if (columnPickerEl) closeColumnPicker();
@@ -2850,11 +3152,26 @@ function onCellEdit(row, field, newValue) {
             throw new Error('Bu satırda not düzenlenemez.');
         }
         row.note = String(newValue || '');
+    } else if (field === 'duration_wd' && row.kind === 'block') {
+        // One team's span inside the job. Stored on the assignment's own
+        // estimated_duration_wd, which the purge now spares (2026-09-17);
+        // cleared, the row goes back to spanning its parent's window.
+        const raw = String(newValue ?? '').trim();
+        const num = raw === '' ? null : Number(raw);
+        if (num != null && (!Number.isFinite(num) || num <= 0)) {
+            throw new Error('Süre 0’dan büyük olmalıdır.');
+        }
+        target.entered_duration_wd = num;
+        target.duration_wd = num;
+        target.duration_is_derived = num == null;
+        target.duration_source = num == null ? 'weight_share' : null;
+        markBlockDirty(block.key);
+        scheduleRefresh();
+        return;
     } else if (field === 'duration_wd') {
-        // Only the İmalat row reaches here (isCellEditable). Duration is
-        // PURE SIZING, fully decoupled from dates (user model 2026-08-28):
-        // it never moves a date, and the render pass redistributes every
-        // child slice immediately — before any save.
+        // The İmalat row. Duration is PURE SIZING, fully decoupled from dates
+        // (user model 2026-08-28): it never moves a date, and the render pass
+        // redistributes every child slice immediately — before any save.
         const raw = String(newValue ?? '').trim();
         const num = raw === '' ? null : Number(raw);
         if (num != null && (!Number.isFinite(num) || num < 0)) {
@@ -2884,7 +3201,10 @@ function onCellEdit(row, field, newValue) {
             clearEntry(deptOf(row.job_no, 'painting'));
             resources.forEach(res => res.blocks.forEach(b => {
                 if (b.job_no !== row.job_no || b.deleted) return;
-                clearEntry(b.subtask);
+                // An assignment's OWN span survives — the server's purge
+                // spares it too, and clearing it here would make the sheet
+                // disagree with what the next save actually stores.
+                if (b.subtask.entered_duration_wd == null) clearEntry(b.subtask);
                 b.stages.forEach(s => { if (!s.deleted) clearEntry(s); });
             }));
         }
@@ -2902,7 +3222,11 @@ function onCellEdit(row, field, newValue) {
         // 2026-09-16), which is the whole reason the second column is gone.
         const entered = newValue || null;
         target.actual_start_date = entered;
-        target.start_date = entered || target.start_date;
+        // Clearing hands the block BACK to the weight split, so the pinned
+        // date goes with it. `entered || target.start_date` kept the value the
+        // planner had just deleted on screen (user 2026-09-17) — on a job the
+        // split cannot re-lay, forever.
+        target.start_date = entered;
         row.actual_start_date = entered;
         markBlockDirty(block.key);
         scheduleRefresh();
