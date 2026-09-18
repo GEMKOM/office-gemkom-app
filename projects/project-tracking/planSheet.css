@@ -17,7 +17,6 @@
     grid-template-columns: minmax(240px, 1fr) auto;
     grid-template-areas:
         "id figures"
-        "lines lines"
         "progress progress";
     column-gap: 18px;
     row-gap: 6px;
@@ -563,7 +562,114 @@
     .pp-tile { flex: 1 1 calc(25% - 10px); }
     .pp-hero-ps {
         grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "id" "figures" "lines" "progress";
+        grid-template-areas: "id" "figures" "progress";
     }
     .ps-hero-figures { justify-content: flex-start; }
+}
+
+/* ---- v13: the dates ARE the hero --------------------------------------- */
+
+/* No sentences above the sheet any more: four dates, each with its distance
+   to the others beneath it. */
+.ps-hero-figures { gap: 30px; }
+.ps-fig { min-width: 150px; }
+.ps-fig label { font-size: 0.68rem; }
+.ps-fig-value { font-size: 1.55rem; }
+.ps-fig-primary .ps-fig-value { font-size: 1.8rem; }
+.ps-fig-note {
+    display: block;
+    font-size: 0.74rem;
+    font-weight: 600;
+    margin-top: 2px;
+    white-space: nowrap;
+}
+.ps-fig-note.ps-fig-ok { color: #1f8a4c; }
+
+/* The slide must never grow past the viewport: the sheet's canvas is wider
+   than any screen, and a grid item's minimum width is its content unless
+   told otherwise (061-60's April–November timeline pushed the whole slide to
+   2150px). */
+body.pp-meeting-fullscreen #pp-meeting-container { grid-template-columns: minmax(0, 1fr); }
+.pp-hero-ps,
+.pp-tiles,
+.pp-sheet,
+.pp-sheet-body,
+.pp-sheet-body > .pg { min-width: 0; }
+.pp-sheet-head { flex-wrap: wrap; row-gap: 4px; }
+
+/* The columns already carry the termin and the deviation: the timeline keeps
+   the termin line and the hatched tail, not the date pills. */
+.pp-sheet .pg-target-flag,
+.pp-sheet .pg-target-delta { display: none; }
+
+/* Finans seal: a coloured disc with the verdict's icon, the word beside it;
+   Riskli / Kritik pulse a sonar ring so the eye lands on them. */
+.pp-tile-fin {
+    --fin-color: #6c757d;
+    --fin-halo: rgba(108, 117, 125, 0.16);
+    --fin-tint: #f4f5f7;
+    background: linear-gradient(135deg, #ffffff 30%, var(--fin-tint) 100%);
+}
+.pp-tile-fin.pp-tile-green { --fin-color: #198754; --fin-halo: rgba(25, 135, 84, 0.18); --fin-tint: #e6f5ec; }
+.pp-tile-fin.pp-tile-orange { --fin-color: #fd7e14; --fin-halo: rgba(253, 126, 20, 0.18); --fin-tint: #fff1e3; }
+.pp-tile-fin.pp-tile-red { --fin-color: #dc3545; --fin-halo: rgba(220, 53, 69, 0.18); --fin-tint: #fde8ea; }
+
+.pp-fin-seal {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 2px 0;
+    min-width: 0;
+}
+
+.pp-fin-seal i {
+    position: relative;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: #ffffff;
+    background: var(--fin-color);
+    box-shadow: 0 0 0 4px var(--fin-halo);
+}
+
+.pp-fin-word {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--fin-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-tile-fin.pp-tile-orange .pp-fin-seal i::after,
+.pp-tile-fin.pp-tile-red .pp-fin-seal i::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid var(--fin-color);
+    opacity: 0;
+    animation: pp-fin-ping 2s ease-out infinite;
+}
+
+@keyframes pp-fin-ping {
+    0% { transform: scale(1); opacity: 0.6; }
+    70%, 100% { transform: scale(1.7); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pp-fin-seal i::after { animation: none; }
+}
+
+@media (max-height: 860px) {
+    .ps-fig-value { font-size: 1.25rem; }
+    .ps-fig-primary .ps-fig-value { font-size: 1.45rem; }
+    .pp-fin-seal i { flex-basis: 30px; width: 30px; height: 30px; font-size: 0.95rem; }
+    .pp-fin-word { font-size: 1.15rem; }
 }

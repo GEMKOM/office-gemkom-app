@@ -5,8 +5,9 @@
  * One group row per job order (root and sub-jobs), the department tasks
  * beneath it. The BAR is the plan window with the progress fill; a hatched
  * tail after it is the projected overrun; the violet line is the termin,
- * today is red. The Sapma column says how far the row is from its plan and
- * the Neden column why. Sentences come from planSheetText.js (tested under
+ * today is red — no date pills on the timeline, the columns carry the
+ * dates. The Sapma column says how far the row is from its plan and the
+ * Neden column why. Sentences come from planSheetText.js (tested under
  * node).
  */
 
@@ -196,11 +197,9 @@ export function buildSheetRows(sheet, collapsed = new Set()) {
             status: node.status,
             deviation: node.deviation_wd,
             projected_end: node.projected_end,
-            forecast_date: node.projected_end,
             cause: rootCauseText,
             job_target: node.termin,
             job_target_late: targetLate,
-            job_target_delta_wd: node.termin_gap_wd,
             late_count: node.late_count,
             collapsed: collapsed.has(groupKey),
         });
@@ -221,7 +220,6 @@ export function buildSheetRows(sheet, collapsed = new Set()) {
                 status: r.status,
                 deviation: r.deviation_wd,
                 projected_end: r.projected_end,
-                forecast_date: r.projected_end,
                 job_target: node.termin,
                 job_target_late: targetLate,
             });
@@ -257,7 +255,7 @@ function rowBar(row) {
 function rowClasses(row) {
     const classes = [];
     if (row.kind === 'group') classes.push('pg-row-group');
-    if (row.kind === 'group' && Number(row.job_target_delta_wd || 0) > 0) classes.push('pg-group-late');
+    if (row.kind === 'group' && Number(row.node.termin_gap_wd || 0) > 0) classes.push('pg-group-late');
     if (row.kind === 'task') {
         classes.push('pg-row-dept');
         if (row.row.kind === 'block') classes.push('pg-row-block');
@@ -293,7 +291,6 @@ function projectionTailHtml(row, timeline) {
     return `
         <div class="ps-bar-ext${chainOnly ? ' ps-bar-ext-chain' : ''}" style="left:${left}px;width:${width}px"
              title="Öngörülen bitiş ${fmtDateTr(projected)}: plana göre ${label} iş günü${chainOnly ? ' (zincir)' : ''}">
-            ${width > 34 ? `<span>${label}</span>` : ''}
         </div>`;
 }
 

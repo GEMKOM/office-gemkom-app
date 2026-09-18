@@ -26,7 +26,7 @@ import {
 } from '../../apis/planning/planningRequestItems.js';
 import { ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
 import { renderPlanSheet, SHEET_ZOOMS } from './planSheet.js';
-import { headerSummary, signedFigure } from './planSheetText.js';
+import { headerSummary } from './planSheetText.js';
 import { FINANCIAL_META, FILE_GROUP_LABELS, renderTilesHtml, tilesSkeletonHtml } from './meetingTiles.js';
 
 // Portfolio backing the slide deck. The status/sort controls belonged to the
@@ -1152,45 +1152,60 @@ function setSheetZoom(zoom) {
     });
 }
 
-// The hero: job no and title, then the termin next to the plan and the plan
-// next to the projection. Two sentences say what the figures mean; the theme
-// is the plan verdict (red = behind the plan, orange = on plan but past the
-// termin, green = on plan and inside the termin).
+// A signed working-day distance for the notes under the dates.
+function signedWd(value) {
+    if (value === null || value === undefined) return null;
+    const n = Number(value);
+    if (n > 0) return { text: `+${formatWd(n)} iş günü`, cls: 'ps-fig-late' };
+    if (n < 0) return { text: `−${formatWd(n)} iş günü`, cls: 'ps-fig-early' };
+    return { text: 'tam gününde', cls: 'ps-fig-ok' };
+}
+
+// The hero: job no and title on the left; on the right the four dates that
+// frame the job — Başlangıç (when the order was opened), Termin (the
+// commitment), Plan bitişi (the plan entered on the welding board) and
+// Öngörülen (the plan plus today's deviations) — each with its distance to
+// the others spelled out beneath it, so "+15 to the plan" and "+25 to the
+// termin" are read as one story. The theme is the plan verdict (red = behind
+// the plan, orange = on plan but past the termin, green = inside both).
 function meetingHeroHtml(item, sheet) {
     const statusChip = item.status === 'on_hold' && item.hold_kind === 'revision'
         ? '<span class="status-badge status-orange">Revizyonda</span>'
         : (item.status && item.status !== 'active'
             ? `<span class="status-badge status-grey">${escapeHtml(item.status_display || item.status)}</span>`
             : '');
-    const summary = sheet ? headerSummary(sheet) : null;
-    const theme = summary ? summary.theme : 'grey';
-    const fig = (label, value, cls = '', title = '', primary = false) => `
-        <div class="ps-fig${primary ? ' ps-fig-primary' : ''}" title="${escapeHtml(title)}">
+    const theme = sheet ? headerSummary(sheet).theme : 'grey';
+    const jobOrder = (sheet && sheet.job_order) || {};
+    const created = jobOrder.created_at || item.created_date || null;
+    const fig = (label, value, notes = [], cls = '', primary = false) => `
+        <div class="ps-fig${primary ? ' ps-fig-primary' : ''}">
             <label>${label}</label>
             <span class="ps-fig-value ${cls}">${value}</span>
+            ${notes.filter(Boolean).map(n => `<span class="ps-fig-note ${n.cls}">${escapeHtml(n.text)}</span>`).join('')}
         </div>`;
+    const pending = '<span class="ps-fig-muted">…</span>';
     let figures;
     if (!sheet) {
-        const pending = '<span class="ps-fig-muted">…</span>';
-        figures = fig('Termin', pending) + fig('Plan bitişi', pending)
-            + fig('Öngörülen', pending, '', '', true) + fig('Plana göre', pending);
+        const termin = item.forecast && item.forecast.target_completion_date;
+        figures = fig('Başlangıç', created ? formatDateLong(created) : pending)
+            + fig('Termin', termin ? formatDateLong(termin) : pending)
+            + fig('Plan bitişi', pending)
+            + fig('Öngörülen', pending, [], '', true);
     } else {
-        const dev = signedFigure(sheet.deviation_wd);
-        const gap = signedFigure(sheet.termin_gap_wd);
-        const planVsTermin = Number(sheet.plan_vs_termin_wd || 0);
-        figures = fig('Termin', formatDateLong(sheet.termin), '', 'İş emrinin termin tarihi')
-            + fig('Plan bitişi', formatDateLong(sheet.plan_end), planVsTermin > 0 ? 'ps-fig-late' : '',
-                'İmalat Planlama sayfasında girilen planın son görevinin bitişi')
-            + fig('Öngörülen', formatDateLong(sheet.projected_end), dev.cls,
-                'Plan artı bugünkü sapmalar: ilerleme, malzeme, kesim ve talaşlı planı', true)
-            + fig('Plana göre', dev.text, dev.cls, 'Öngörülen bitiş ile plan bitişi arasındaki iş günü farkı')
-            + fig('Termine göre', gap.text, gap.cls, 'Öngörülen bitiş ile termin arasındaki iş günü farkı');
+        const dev = signedWd(sheet.deviation_wd);
+        const gap = signedWd(sheet.termin_gap_wd);
+        const planVs = signedWd(sheet.plan_vs_termin_wd);
+        figures = fig('Başlangıç', formatDateLong(created))
+            + fig('Termin', formatDateLong(sheet.termin))
+            + fig('Plan bitişi', formatDateLong(sheet.plan_end),
+                [planVs && { text: `termine göre ${planVs.text}`, cls: planVs.cls }],
+                planVs && planVs.cls === 'ps-fig-late' ? 'ps-fig-late' : '')
+            + fig('Öngörülen', formatDateLong(sheet.projected_end),
+                [dev && { text: `plana göre ${dev.text}`, cls: dev.cls },
+                 gap && { text: `termine göre ${gap.text}`, cls: gap.cls }],
+                dev ? dev.cls : '', true);
     }
     const pct = Math.round(item.completion_percentage || 0);
-    const lines = summary
-        ? `<div class="ps-line-plan">${escapeHtml(summary.planLine)}</div>`
-            + `<div class="ps-line-termin">${escapeHtml(summary.terminLine)}</div>`
-        : '<div class="text-muted">Plan yükleniyor…</div>';
     return `
         <div id="pp-meeting-hero" class="pp-hero-ps ps-theme-${theme}">
             <div class="ps-hero-id">
@@ -1199,7 +1214,6 @@ function meetingHeroHtml(item, sheet) {
                 ${item.customer_name ? `<div class="ps-hero-customer">${escapeHtml(item.customer_name)}</div>` : ''}
             </div>
             <div class="ps-hero-figures">${figures}</div>
-            <div class="ps-hero-lines">${lines}</div>
             <div class="ps-hero-progress">
                 <span>İlerleme</span>
                 <div class="ps-hero-progress-bar"><div class="ps-hero-progress-fill" style="width: ${Math.min(pct, 100)}%"></div></div>

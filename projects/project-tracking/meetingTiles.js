@@ -19,6 +19,7 @@ export const FINANCIAL_META = {
 
 export const FILE_GROUP_LABELS = [
     ['job_order', 'İş Emri'],
+    ['offer', 'Teklif'],
     ['task', 'Görev'],
     ['discussion', 'Tartışma'],
 ];
@@ -207,9 +208,20 @@ function filesTile(files) {
     });
 }
 
-// Verdict word ONLY — the slide is company-public, so no ratios, no amounts
-// (user decision 2026-08-04). Cost-permitted users click through to the
-// amounts modal; the section endpoint re-checks the permission server-side.
+const FINANCIAL_ICONS = {
+    healthy: 'fa-circle-check',
+    risky: 'fa-triangle-exclamation',
+    critical: 'fa-circle-exclamation',
+    no_price: 'fa-tag',
+    no_data: 'fa-circle-question',
+};
+
+// Finans as a seal: a coloured disc with the verdict's icon and the verdict
+// word beside it — read from the back of the room, like the Kalite tick.
+// Verdict word ONLY: the slide is company-public, so no ratios, no amounts
+// (user decision 2026-08-04); the reason stays in the tooltip. Cost-permitted
+// users click through to the amounts modal; the section endpoint re-checks
+// the permission server-side.
 function financialTile(financial) {
     if (!financial) return '';
     const meta = FINANCIAL_META[financial.verdict] || FINANCIAL_META.no_data;
@@ -217,13 +229,18 @@ function financialTile(financial) {
     const reason = (financial.reason || '')
         + (financial.price_is_derived ? ' · satış fiyatı türetilmiş' : '')
         + (clickable ? ' · detay için tıklayın' : '');
-    return tileHtml({
-        kind: 'financial', icon: 'coins', title: 'Finans', modal: clickable ? 'financial' : null,
-        theme: meta.theme,
-        big: meta.label.replace('Finans · ', ''),
-        label: 'maliyet durumu',
-        tooltip: reason,
-    });
+    const link = clickable ? ' data-modal="financial" role="button" tabindex="0"' : '';
+    const hint = clickable ? '<span class="pp-tile-hint"><i class="fas fa-expand"></i></span>' : '';
+    return `
+        <div class="pp-tile pp-tile-fin pp-tile-${meta.theme}${clickable ? ' pp-tile-click' : ''}"
+             data-tile="financial"${link}${reason ? ` title="${escapeHtml(reason)}"` : ''}>
+            <div class="pp-tile-head"><i class="fas fa-coins"></i>Finans${hint}</div>
+            <div class="pp-fin-seal">
+                <i class="fas ${FINANCIAL_ICONS[financial.verdict] || FINANCIAL_ICONS.no_data}"></i>
+                <span class="pp-fin-word">${escapeHtml(meta.label.replace('Finans · ', ''))}</span>
+            </div>
+            <div class="pp-tile-label">maliyet durumu</div>
+        </div>`;
 }
 
 /** The whole tile row for a brief, in slide order. */
