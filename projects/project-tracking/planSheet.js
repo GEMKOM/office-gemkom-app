@@ -13,6 +13,7 @@
  */
 
 import { PlanningGrid, ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
+import { exportPlanningPdf } from '../../manufacturing/welding/capacity-planning/pdf.js';
 import { createWorkdayCalendar } from '../../utils/workdays.js';
 import { escapeHtml } from '../../utils/text.js';
 import {
@@ -301,7 +302,7 @@ function projectionTailHtml(row, timeline) {
 // bar), so a projected tail past the last plan end would run off the right
 // edge. The domain pass therefore sees the projected end as the bar's end;
 // the drawing pass switches back to the plan bar and adds the tail itself.
-class SheetGrid extends PlanningGrid {
+export class SheetGrid extends PlanningGrid {
     render() {
         const planBar = this.options.bar;
         this._planBar = planBar;
@@ -419,4 +420,54 @@ function scrollTimelineToToday(containerId, grid, sheet, state) {
     const x = timeline.xOf(String(sheet.today).slice(0, 10));
     if (x === null) return;
     scroller.scrollLeft = Math.max(0, Math.round(x - lane / 3));
+}
+
+/**
+ * The sheet on paper: the chosen columns (Görev always), the groups as they
+ * stand on screen or every job open, the same bars, tails and gap pills —
+ * re-scaled to A4 landscape by the welding board's exporter (a second grid at
+ * page geometry, never a screenshot).
+ *
+ * @param {Object}   arg
+ * @param {SheetGrid} arg.grid     the live sheet grid (its options are the export's)
+ * @param {Object}   arg.sheet     the /plan-sheet/ payload behind it
+ * @param {Object}   arg.item      the portfolio item (job no, title)
+ * @param {string[]} arg.fields    column fields to include
+ * @param {boolean}  arg.expandAll print collapsed jobs open
+ * @param {Function} arg.onProgress (done, total) => void
+ */
+export async function exportPlanSheetPdf({ grid, sheet, item, fields, expandAll, onProgress }) {
+    if (!grid || !sheet) throw new Error('Plan tablosu hazır değil.');
+    const wanted = new Set(['title', ...(fields || [])]);
+    const columns = SHEET_COLUMNS.filter(c => wanted.has(c.field));
+    const collapsed = expandAll ? new Set() : (grid.options.collapsed || new Set());
+    const rows = buildSheetRows(sheet, collapsed);
+    const visible = rows.filter(r => !(r.groupKey && collapsed.has(r.groupKey)));
+    const source = {
+        options: { ...grid.options, columns, rows, collapsed, allCollapsed: false },
+        visibleRows: () => visible,
+    };
+    const jobOrder = sheet.job_order || {};
+    const jobNo = jobOrder.job_no || (item && item.job_no) || '';
+    const title = jobOrder.title || (item && item.title) || '';
+    const dev = Number(sheet.deviation_wd || 0);
+    const devText = dev ? ` (plana göre ${dev > 0 ? '+' : '−'}${Math.abs(dev)} iş günü)` : '';
+    const context = [
+        sheet.termin ? `Termin ${fmtDateTr(sheet.termin)}` : '',
+        sheet.plan_end ? `Plan bitişi ${fmtDateTr(sheet.plan_end)}` : '',
+        sheet.projected_end ? `Öngörülen ${fmtDateTr(sheet.projected_end)}${devText}` : '',
+    ].filter(Boolean).join(' · ');
+    const now = new Date();
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+        + `-${String(now.getDate()).padStart(2, '0')}`;
+    return exportPlanningPdf({
+        grid: source,
+        gridClass: SheetGrid,
+        title: 'Plan ve Sapmalar',
+        subtitle: [jobNo, title].filter(Boolean).join(' · '),
+        context,
+        legend: document.querySelector('.pp-sheet-legend'),
+        fileName: `Plan ve Sapmalar - ${jobNo || 'is emri'} - ${stamp}`,
+        onProgress,
+    });
 }

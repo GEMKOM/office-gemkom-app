@@ -25,7 +25,7 @@ import {
     unmarkPlanningRequestItemCritical
 } from '../../apis/planning/planningRequestItems.js';
 import { ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
-import { renderPlanSheet, SHEET_ZOOMS } from './planSheet.js';
+import { exportPlanSheetPdf, renderPlanSheet, SHEET_COLUMNS, SHEET_ZOOMS } from './planSheet.js';
 import { headerSummary } from './planSheetText.js';
 import { FINANCIAL_META, FILE_GROUP_LABELS, renderTilesHtml, tilesSkeletonHtml } from './meetingTiles.js';
 
@@ -363,6 +363,7 @@ function bindMeetingControls() {
                 else if (action === 'refresh') refreshCurrentSlide(control);
                 else if (action === 'retry') retryOverview();
                 else if (action === 'exit') exitMeeting();
+                else if (action === 'sheet-pdf') openSheetPdfDialog();
                 return;
             }
             // A press on a scroll list's scrollbar (thumb or track) targets
@@ -457,6 +458,8 @@ function ensureMeetingModalHost() {
             <div class="pp-modal-body" id="pp-modal-body"></div>
         </div>`;
     host.addEventListener('click', (e) => {
+        const runBtn = e.target.closest('[data-action="sheet-pdf-run"]');
+        if (runBtn) { runSheetPdf(runBtn); return; }
         const pdfBtn = e.target.closest('[data-modal-pdf]');
         if (pdfBtn) { downloadModalPdf(pdfBtn); return; }
         if (e.target === host || e.target.closest('[data-modal-close]')) closeMeetingModal();
@@ -473,6 +476,8 @@ function openMeetingModal(title, bodyHtml, context = null) {
     const host = ensureMeetingModalHost();
     host.querySelector('.pp-modal').classList.toggle(
         'pp-modal-plan', !!context && context.kind === 'plan');
+    host.querySelector('.pp-modal').classList.toggle(
+        'pp-modal-sheet-pdf', !!context && context.kind === 'sheet-pdf');
     host.querySelector('#pp-modal-title').innerHTML = title;
     host.querySelector('#pp-modal-body').innerHTML = bodyHtml;
     host.style.display = 'flex';
@@ -497,7 +502,7 @@ const MODAL_LOADING_HTML =
 async function downloadModalPdf(btn) {
     const modal = document.querySelector('#pp-meeting-modal .pp-modal');
     const context = meetingModalContext;
-    if (!modal || !context) return;
+    if (!modal || !context || context.kind === 'sheet-pdf') return;
     if (modal.querySelector('.pp-modal-loading')) {
         showNotification('Detay henüz yükleniyor, birazdan tekrar deneyin.', 'info');
         return;
@@ -1262,6 +1267,10 @@ function sheetHeadHtml(sheet) {
                 <span><i class="lg-today"></i>bugün</span>
             </span>
             <span class="pp-sheet-zoom btn-group">${zoom}</span>
+            <button type="button" class="btn btn-outline-secondary pp-sheet-pdf-btn" data-action="sheet-pdf"
+                    title="Plan ve sapmaları PDF olarak indir (sütunları seçerek)">
+                <i class="fas fa-file-pdf me-1"></i>PDF
+            </button>
         </div>`;
 }
 
@@ -1279,6 +1288,103 @@ function renderSheet(item, sheet) {
     host.innerHTML = sheetHeadHtml(sheet)
         + '<div class="pp-sheet-body"><div id="pp-sheet-grid" class="pg"></div></div>';
     sheetGrid = renderPlanSheet('pp-sheet-grid', sheet, sheetState);
+}
+
+// ---------------------------------------------------------------------------
+// Plan ve Sapmalar → PDF: pick the columns, then print through the welding
+// board's exporter (a second grid at page geometry, never a screenshot)
+// ---------------------------------------------------------------------------
+
+// Last choice per viewer — a convenience, never state.
+const SHEET_PDF_COLUMNS_KEY = 'pp.sheetPdf.columns';
+const SHEET_PDF_EXPAND_KEY = 'pp.sheetPdf.expandAll';
+
+function sheetPdfDefaults() {
+    let fields = null;
+    let expandAll = true;
+    try {
+        const stored = JSON.parse(localStorage.getItem(SHEET_PDF_COLUMNS_KEY) || 'null');
+        if (Array.isArray(stored)) fields = stored;
+        expandAll = localStorage.getItem(SHEET_PDF_EXPAND_KEY) !== '0';
+    } catch (error) {
+        // no stored preference: every column
+    }
+    return { fields, expandAll };
+}
+
+function openSheetPdfDialog() {
+    const item = meetingItems[meetingIndex];
+    const sheet = item && meetingSheetCache.get(item.job_no);
+    if (!item || !sheet || !sheetGrid) {
+        showNotification('Plan henüz yüklenmedi.', 'info');
+        return;
+    }
+    const { fields, expandAll } = sheetPdfDefaults();
+    const chosen = new Set(fields || SHEET_COLUMNS.map(c => c.field));
+    const boxes = SHEET_COLUMNS.map((col) => {
+        const locked = col.field === 'title';
+        const checked = locked || chosen.has(col.field);
+        return `
+            <label class="pp-sheetpdf-col${locked ? ' is-locked' : ''}">
+                <input type="checkbox" data-col="${col.field}" ${checked ? 'checked' : ''} ${locked ? 'disabled' : ''}>
+                <span>${escapeHtml(col.label)}</span>
+                ${locked ? '<small>her zaman</small>' : ''}
+            </label>`;
+    }).join('');
+    const body = `
+        <div class="pp-sheetpdf">
+            <p class="pp-sheetpdf-hint">PDF'e girecek sütunları seçin. Görev sütunu ve zaman çizelgesi her zaman
+                yer alır; tablo A4 yatay sayfaya sığacak şekilde yeniden ölçeklenir.</p>
+            <div class="pp-sheetpdf-cols">${boxes}</div>
+            <label class="pp-sheetpdf-opt">
+                <input type="checkbox" data-opt="expand" ${expandAll ? 'checked' : ''}>
+                <span>Katlanmış iş emirlerini de açık yaz</span>
+            </label>
+            <div class="pp-sheetpdf-actions">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-modal-close>Vazgeç</button>
+                <button type="button" class="btn btn-danger btn-sm" data-action="sheet-pdf-run">
+                    <i class="fas fa-file-pdf me-1"></i>PDF Oluştur
+                </button>
+            </div>
+        </div>`;
+    openMeetingModal(
+        `PDF · Plan ve Sapmalar <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
+        body, { jobNo: item.job_no, kind: 'sheet-pdf' });
+}
+
+async function runSheetPdf(btn) {
+    const item = meetingItems[meetingIndex];
+    const sheet = item && meetingSheetCache.get(item.job_no);
+    const modal = document.getElementById('pp-meeting-modal');
+    if (!item || !sheet || !sheetGrid || !modal) return;
+    const fields = [...modal.querySelectorAll('input[data-col]:checked')].map(el => el.dataset.col);
+    const expandAll = !!modal.querySelector('input[data-opt="expand"]:checked');
+    try {
+        localStorage.setItem(SHEET_PDF_COLUMNS_KEY, JSON.stringify(fields));
+        localStorage.setItem(SHEET_PDF_EXPAND_KEY, expandAll ? '1' : '0');
+    } catch (error) {
+        // storage blocked: the choice still applies to this export
+    }
+    const original = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Hazırlanıyor';
+    try {
+        const out = await exportPlanSheetPdf({
+            grid: sheetGrid, sheet, item, fields, expandAll,
+            onProgress: (done, total) => {
+                btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${done}/${total}`;
+            },
+        });
+        showNotification(`PDF indirildi — ${out.pages} sayfa, ${out.rows} satır.`, 'success');
+        closeMeetingModal();
+    } catch (error) {
+        console.error('Plan sheet PDF failed:', error);
+        showNotification(error && error.message ? error.message : 'PDF oluşturulamadı.', 'error');
+        if (btn.isConnected) {
+            btn.disabled = false;
+            btn.innerHTML = original;
+        }
+    }
 }
 
 function ensureSheet(jobNo) {

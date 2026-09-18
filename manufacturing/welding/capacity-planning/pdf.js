@@ -152,6 +152,8 @@ function headHtml({ title, subtitle, metaText, full }) {
  * @param {string}       ctx.context    what narrows the view: filters, options
  * @param {string}       ctx.fileName
  * @param {HTMLElement}  ctx.legend     optional colour key, copied onto page 1
+ * @param {Function}     ctx.gridClass  grid constructor: PlanningGrid, or a
+ *                                      subclass that draws extra marks
  * @param {Function}     ctx.onProgress (done, total) => void
  * @returns {Promise<{pages:number, unit:string, rows:number}>}
  */
@@ -183,7 +185,8 @@ export async function exportPlanningPdf(ctx) {
 
         // Same options, page geometry, and none of the interaction: an export
         // grid that could be edited would be editing a throwaway copy.
-        const exportGrid = new PlanningGrid(HOST_ID, {
+        const GridClass = ctx.gridClass || PlanningGrid;
+        const exportGrid = new GridClass(HOST_ID, {
             ...src.options,
             gridWidth,
             zoom: fit.unit,

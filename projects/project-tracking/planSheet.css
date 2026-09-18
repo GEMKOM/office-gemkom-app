@@ -678,3 +678,82 @@ body.pp-meeting-fullscreen #pp-meeting-container { grid-template-columns: minmax
     .pp-fin-seal i { flex-basis: 30px; width: 30px; height: 30px; font-size: 0.95rem; }
     .pp-fin-word { font-size: 1.15rem; }
 }
+
+/* ---- Plan ve Sapmalar → PDF ---------------------------------------------- */
+
+.pp-sheet-pdf-btn {
+    font-size: 0.68rem;
+    padding: 1px 9px;
+    margin-left: 6px;
+    border-color: #d5dae1;
+    color: #495057;
+    white-space: nowrap;
+}
+
+.pp-sheet-pdf-btn:hover {
+    background: #1f2530;
+    border-color: #1f2530;
+    color: #ffffff;
+}
+
+/* The column picker: a narrow dialog, without the modal's own PDF button
+   (that one prints the modal). */
+.pp-modal.pp-modal-sheet-pdf { width: min(560px, 94vw); }
+.pp-modal-sheet-pdf .pp-modal-pdf { display: none; }
+
+.pp-sheetpdf { padding: 4px 2px 2px; }
+
+.pp-sheetpdf-hint {
+    font-size: 0.86rem;
+    color: #6c757d;
+    margin: 0 0 12px;
+}
+
+.pp-sheetpdf-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 22px;
+    margin-bottom: 14px;
+}
+
+.pp-sheetpdf-col,
+.pp-sheetpdf-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    cursor: pointer;
+    color: #2b3240;
+}
+
+.pp-sheetpdf-col { font-size: 0.92rem; }
+.pp-sheetpdf-col.is-locked { color: #8a919c; cursor: default; }
+.pp-sheetpdf-col small { font-size: 0.68rem; color: #9aa1ab; }
+
+.pp-sheetpdf-col input,
+.pp-sheetpdf-opt input {
+    width: 16px;
+    height: 16px;
+    accent-color: #8b0000;
+    flex: 0 0 auto;
+}
+
+.pp-sheetpdf-opt {
+    font-size: 0.88rem;
+    padding-top: 10px;
+    border-top: 1px solid #eef1f5;
+    margin-bottom: 14px;
+}
+
+.pp-sheetpdf-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* On paper: html2canvas drops repeating gradients, so the hatched tail and
+   its legend swatch print as a solid wash instead of vanishing. */
+.pg-pdf-page .ps-bar-ext { background: rgba(220, 53, 69, 0.32); }
+.pg-pdf-page .ps-bar-ext-chain { background: rgba(108, 117, 125, 0.32); }
+.pg-pdf-legend .lg-ext { background: rgba(220, 53, 69, 0.4); }
+.pg-pdf-legend { margin-left: 0; }
