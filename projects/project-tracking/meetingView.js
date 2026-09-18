@@ -1331,7 +1331,7 @@ function filesModalHtml(brief) {
         return `
             <tr>
                 <td class="pp-td-main">${link}</td>
-                <td>${escapeHtml(f.source)}</td>
+                <td>${escapeHtml(f.source)}${f.label ? ` · ${escapeHtml(f.label)}` : ''}</td>
                 <td>${fmtShortDate(f.uploaded_at)}</td>
             </tr>`;
     });
