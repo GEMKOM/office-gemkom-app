@@ -142,7 +142,7 @@ export const SHEET_COLUMNS = [
     { field: 'progress', label: 'İlerleme', width: '124px', headerClass: 'col-center', cellClass: 'col-progress',
       title: 'Gerçekleşen ilerleme; açık renk plana göre bugün beklenen',
       formatter: (v, row) => progressCell(row) },
-    { field: 'status', label: 'Durum', width: '104px', headerClass: 'col-center', cellClass: 'col-center',
+    { field: 'status', label: 'Durum', width: '110px', headerClass: 'col-center', cellClass: 'col-center col-status',
       formatter: (v) => statusBadge(v) },
     { field: 'deviation', label: 'Sapma', width: '92px', headerClass: 'col-center', cellClass: 'col-center',
       title: 'Plana göre iş günü: + geride, − önde; "zincir" = önceki görev geç bitirdiği için',
@@ -150,7 +150,7 @@ export const SHEET_COLUMNS = [
     { field: 'projected_end', label: 'Öngörülen', width: '86px', headerClass: 'col-center', cellClass: 'col-center col-date',
       title: 'Plan penceresi artı sapma: bu hızla, bu malzemeyle biteceği tarih',
       formatter: (v, row) => projectedCell(v, row) },
-    { field: 'cause', label: 'Neden', width: '270px', formatter: (v, row) => causeCell(row) },
+    { field: 'cause', label: 'Neden', width: '264px', formatter: (v, row) => causeCell(row) },
 ];
 
 // Sum of the column widths above: the grid lane starts where the last

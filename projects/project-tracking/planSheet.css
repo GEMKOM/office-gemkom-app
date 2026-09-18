@@ -522,6 +522,28 @@
 }
 
 .pp-sheet .col-progress { padding: 0 6px; }
+.pp-sheet .col-status { padding: 0 4px; }
+
+/* Status badges: the house classes for colour, sized for the cell. The
+   component's 80px minimum and 0.75rem uppercase overran the column
+   ("DEVAM EDİYOR" clipped). */
+.pp-sheet .pg-cell .status-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.5;
+    padding: 1px 6px;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-sheet .pg-cell .status-badge:hover {
+    transform: none;
+    box-shadow: none;
+}
 
 /* ---- short screens (laptop 768p) ---------------------------------------- */
 
