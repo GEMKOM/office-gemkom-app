@@ -1,0 +1,117 @@
+/* Plan ve Sapmalar on its own page. The cells, chips, tails and the hero's
+   figures come from ../project-tracking/planSheet.css; this file is the page
+   around them and the print layout. */
+
+.ps-page-body {
+    margin: 0;
+    background: #eef1f5;
+    color: #3a4150;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+#ps-page {
+    max-width: 1700px;
+    margin: 0 auto;
+    padding: 18px 22px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.ps-page-brand {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.ps-page-logo {
+    font-size: 1.1rem;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    color: #8b0000;
+}
+
+.ps-page-doc {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8a919c;
+}
+
+.ps-page-hero {
+    margin-top: 8px;
+    grid-template-areas: "id figures";
+}
+
+.ps-page-tools {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+    font-size: 0.76rem;
+    color: #6c757d;
+}
+
+.ps-page-legend { margin-left: 0; }
+.ps-page-tools .pp-sheet-zoom { margin-left: auto; }
+
+/* The page scrolls, not the sheet: every row shows, the timeline still
+   scrolls sideways inside the card. */
+.ps-page-sheet { min-height: 0; }
+.ps-page-sheet .pg-scroll { max-height: none; min-height: 0; }
+
+.ps-page-foot {
+    font-size: 0.74rem;
+    color: #8a919c;
+    text-align: right;
+}
+
+.ps-page-loading,
+.ps-page-error {
+    padding: 40px;
+    text-align: center;
+    font-size: 1rem;
+    color: #6c757d;
+}
+
+.ps-page-error { color: #b02a37; }
+
+/* ---- paper --------------------------------------------------------------- */
+
+@media print {
+    @page { size: A4 landscape; margin: 8mm; }
+
+    * {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .ps-page-body { background: #ffffff; }
+    #ps-page { max-width: none; padding: 0; gap: 8px; }
+    .ps-print-hide { display: none !important; }
+
+    .pp-hero-ps,
+    .pp-sheet {
+        box-shadow: none;
+        border-color: #c9ced4;
+        break-inside: avoid;
+    }
+
+    /* Nothing scrolls and nothing sticks on paper; every row has a box. */
+    .pp-sheet { overflow: visible; border-radius: 0; }
+    .pp-sheet-body { display: block; }
+    .pp-sheet-body > .pg { display: block; overflow: visible; }
+    .ps-page-sheet .pg-scroll { overflow: visible !important; }
+    .pg-header,
+    .pg-header-grid { position: static !important; }
+    .pg-row-grid { position: relative !important; }
+    .pg-rows { position: relative; }
+    .pg-row {
+        break-inside: avoid;
+        content-visibility: visible !important;
+        contain-intrinsic-size: none !important;
+    }
+    .pg-row-time { overflow: hidden; }
+}

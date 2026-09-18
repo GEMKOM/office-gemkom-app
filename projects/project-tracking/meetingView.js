@@ -18,14 +18,15 @@ import {
     getProductionPlanOverview,
     getJobOrderMeetingBrief,
     getMeetingBriefSection,
-    getJobOrderPlanSheet
+    getJobOrderPlanSheet,
+    createPlanSheetShareLink
 } from '../../apis/projects/jobOrders.js';
 import {
     markPlanningRequestItemCritical,
     unmarkPlanningRequestItemCritical
 } from '../../apis/planning/planningRequestItems.js';
 import { ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
-import { exportPlanSheetPdf, renderPlanSheet, SHEET_COLUMNS, SHEET_ZOOMS } from './planSheet.js';
+import { renderPlanSheet, SHEET_COLUMNS, SHEET_ZOOMS } from './planSheet.js';
 import { headerSummary } from './planSheetText.js';
 import { FINANCIAL_META, FILE_GROUP_LABELS, renderTilesHtml, tilesSkeletonHtml } from './meetingTiles.js';
 
@@ -363,7 +364,7 @@ function bindMeetingControls() {
                 else if (action === 'refresh') refreshCurrentSlide(control);
                 else if (action === 'retry') retryOverview();
                 else if (action === 'exit') exitMeeting();
-                else if (action === 'sheet-pdf') openSheetPdfDialog();
+                else if (action === 'sheet-share') openSheetShareDialog();
                 return;
             }
             // A press on a scroll list's scrollbar (thumb or track) targets
@@ -458,8 +459,8 @@ function ensureMeetingModalHost() {
             <div class="pp-modal-body" id="pp-modal-body"></div>
         </div>`;
     host.addEventListener('click', (e) => {
-        const runBtn = e.target.closest('[data-action="sheet-pdf-run"]');
-        if (runBtn) { runSheetPdf(runBtn); return; }
+        const sheetBtn = e.target.closest('[data-sheet-action]');
+        if (sheetBtn) { onSheetDialogAction(sheetBtn); return; }
         const pdfBtn = e.target.closest('[data-modal-pdf]');
         if (pdfBtn) { downloadModalPdf(pdfBtn); return; }
         if (e.target === host || e.target.closest('[data-modal-close]')) closeMeetingModal();
@@ -1267,9 +1268,9 @@ function sheetHeadHtml(sheet) {
                 <span><i class="lg-today"></i>bugün</span>
             </span>
             <span class="pp-sheet-zoom btn-group">${zoom}</span>
-            <button type="button" class="btn btn-outline-secondary pp-sheet-pdf-btn" data-action="sheet-pdf"
-                    title="Plan ve sapmaları PDF olarak indir (sütunları seçerek)">
-                <i class="fas fa-file-pdf me-1"></i>PDF
+            <button type="button" class="btn btn-outline-secondary pp-sheet-pdf-btn" data-action="sheet-share"
+                    title="Sütunları seçerek yazdırın (PDF) ya da müşteri için geçici bağlantı oluşturun">
+                <i class="fas fa-file-export me-1"></i>PDF / Bağlantı
             </button>
         </div>`;
 }
@@ -1291,36 +1292,49 @@ function renderSheet(item, sheet) {
 }
 
 // ---------------------------------------------------------------------------
-// Plan ve Sapmalar → PDF: pick the columns, then print through the welding
-// board's exporter (a second grid at page geometry, never a screenshot)
+// Plan ve Sapmalar on its own page (projects/plan-sheet/): print it — the
+// browser's print gives a vector PDF laid out for A4 landscape — or hand the
+// customer a temporary, login-free link. The dialog picks the columns and
+// the rows for both.
 // ---------------------------------------------------------------------------
 
 // Last choice per viewer — a convenience, never state.
-const SHEET_PDF_COLUMNS_KEY = 'pp.sheetPdf.columns';
-const SHEET_PDF_EXPAND_KEY = 'pp.sheetPdf.expandAll';
+const SHEET_SHARE_KEY = 'pp.sheetShare';
 
-function sheetPdfDefaults() {
-    let fields = null;
-    let expandAll = true;
+function sheetShareDefaults() {
     try {
-        const stored = JSON.parse(localStorage.getItem(SHEET_PDF_COLUMNS_KEY) || 'null');
-        if (Array.isArray(stored)) fields = stored;
-        expandAll = localStorage.getItem(SHEET_PDF_EXPAND_KEY) !== '0';
+        const stored = JSON.parse(localStorage.getItem(SHEET_SHARE_KEY) || 'null');
+        if (stored && typeof stored === 'object') return stored;
     } catch (error) {
-        // no stored preference: every column
+        // no stored preference
     }
-    return { fields, expandAll };
+    return { fields: null, expandAll: true, mainOnly: false, days: 7 };
 }
 
-function openSheetPdfDialog() {
+function sheetPageUrl(item, prefs, print) {
+    const params = new URLSearchParams();
+    params.set('job_no', item.job_no);
+    if (prefs.fields && prefs.fields.length) params.set('cols', prefs.fields.join(','));
+    if (prefs.mainOnly) params.set('main', '1');
+    if (!prefs.expandAll && sheetState.collapsed.size) params.set('collapsed', [...sheetState.collapsed].join(','));
+    params.set('zoom', sheetState.zoom);
+    if (print) params.set('print', '1');
+    return `${window.location.origin}/projects/plan-sheet/?${params.toString()}`;
+}
+
+function sheetShareUrl(token) {
+    return `${window.location.origin}/projects/plan-sheet/?share=${encodeURIComponent(token)}`;
+}
+
+function openSheetShareDialog() {
     const item = meetingItems[meetingIndex];
     const sheet = item && meetingSheetCache.get(item.job_no);
     if (!item || !sheet || !sheetGrid) {
         showNotification('Plan henüz yüklenmedi.', 'info');
         return;
     }
-    const { fields, expandAll } = sheetPdfDefaults();
-    const chosen = new Set(fields || SHEET_COLUMNS.map(c => c.field));
+    const prefs = sheetShareDefaults();
+    const chosen = new Set(prefs.fields || SHEET_COLUMNS.map(c => c.field));
     const boxes = SHEET_COLUMNS.map((col) => {
         const locked = col.field === 'title';
         const checked = locked || chosen.has(col.field);
@@ -1331,59 +1345,119 @@ function openSheetPdfDialog() {
                 ${locked ? '<small>her zaman</small>' : ''}
             </label>`;
     }).join('');
+    const dayOptions = [3, 7, 14, 30].map(d =>
+        `<option value="${d}"${Number(prefs.days) === d ? ' selected' : ''}>${d} gün</option>`).join('');
     const body = `
         <div class="pp-sheetpdf">
-            <p class="pp-sheetpdf-hint">PDF'e girecek sütunları seçin. Görev sütunu ve zaman çizelgesi her zaman
-                yer alır; tablo A4 yatay sayfaya sığacak şekilde yeniden ölçeklenir.</p>
+            <p class="pp-sheetpdf-hint">Sütunları seçin; Görev sütunu ve zaman çizelgesi her zaman yer alır.
+                Sayfa yalnızca bu tabloyu gösterir: yazdırıp PDF olarak kaydedebilir ya da müşteriye giriş
+                gerektirmeyen geçici bir bağlantı verebilirsiniz.</p>
             <div class="pp-sheetpdf-cols">${boxes}</div>
             <label class="pp-sheetpdf-opt">
-                <input type="checkbox" data-opt="expand" ${expandAll ? 'checked' : ''}>
-                <span>Katlanmış iş emirlerini de açık yaz</span>
+                <input type="checkbox" data-opt="expand" ${prefs.expandAll !== false ? 'checked' : ''}>
+                <span>Katlanmış iş emirlerini de açık göster</span>
             </label>
+            <label class="pp-sheetpdf-opt pp-sheetpdf-opt-tight">
+                <input type="checkbox" data-opt="main" ${prefs.mainOnly ? 'checked' : ''}>
+                <span>Yalnızca departman görevleri (alt satırlar, ekip ve taşeron adları gizli)</span>
+            </label>
+            <div class="pp-sheetpdf-row">
+                <label for="pp-share-days">Bağlantının geçerlilik süresi</label>
+                <select id="pp-share-days" class="form-select form-select-sm" data-opt="days">${dayOptions}</select>
+            </div>
+            <div class="pp-sheetpdf-link" id="pp-share-result" hidden></div>
             <div class="pp-sheetpdf-actions">
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-modal-close>Vazgeç</button>
-                <button type="button" class="btn btn-danger btn-sm" data-action="sheet-pdf-run">
-                    <i class="fas fa-file-pdf me-1"></i>PDF Oluştur
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-modal-close>Kapat</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" data-sheet-action="print"
+                        title="Yeni sekmede açılır; tarayıcının yazdırma penceresinden PDF olarak kaydedin">
+                    <i class="fas fa-print me-1"></i>Yazdır / PDF
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" data-sheet-action="share">
+                    <i class="fas fa-link me-1"></i>Müşteri bağlantısı oluştur
                 </button>
             </div>
         </div>`;
     openMeetingModal(
-        `PDF · Plan ve Sapmalar <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
+        `Plan ve Sapmalar · yazdır ya da paylaş <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
         body, { jobNo: item.job_no, kind: 'sheet-pdf' });
 }
 
-async function runSheetPdf(btn) {
-    const item = meetingItems[meetingIndex];
-    const sheet = item && meetingSheetCache.get(item.job_no);
-    const modal = document.getElementById('pp-meeting-modal');
-    if (!item || !sheet || !sheetGrid || !modal) return;
+function readSheetDialog(modal) {
     const fields = [...modal.querySelectorAll('input[data-col]:checked')].map(el => el.dataset.col);
     const expandAll = !!modal.querySelector('input[data-opt="expand"]:checked');
+    const mainOnly = !!modal.querySelector('input[data-opt="main"]:checked');
+    const daysEl = modal.querySelector('select[data-opt="days"]');
+    const days = Number(daysEl ? daysEl.value : 7) || 7;
+    const prefs = { fields, expandAll, mainOnly, days };
     try {
-        localStorage.setItem(SHEET_PDF_COLUMNS_KEY, JSON.stringify(fields));
-        localStorage.setItem(SHEET_PDF_EXPAND_KEY, expandAll ? '1' : '0');
+        localStorage.setItem(SHEET_SHARE_KEY, JSON.stringify(prefs));
     } catch (error) {
-        // storage blocked: the choice still applies to this export
+        // storage blocked: the choice still applies to this run
     }
+    return prefs;
+}
+
+async function onSheetDialogAction(btn) {
+    const action = btn.dataset.sheetAction;
+    const item = meetingItems[meetingIndex];
+    const modal = document.getElementById('pp-meeting-modal');
+    if (!item || !modal) return;
+    if (action === 'copy') {
+        const input = modal.querySelector('#pp-share-url');
+        if (!input) return;
+        try {
+            await navigator.clipboard.writeText(input.value);
+            showNotification('Bağlantı kopyalandı.', 'success');
+        } catch (error) {
+            input.select();
+            showNotification('Kopyalanamadı; bağlantıyı elle kopyalayın.', 'warning');
+        }
+        return;
+    }
+    const prefs = readSheetDialog(modal);
+    if (action === 'print') {
+        window.open(sheetPageUrl(item, prefs, true), '_blank', 'noopener');
+        return;
+    }
+    if (action !== 'share') return;
     const original = btn.innerHTML;
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Hazırlanıyor';
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oluşturuluyor';
     try {
-        const out = await exportPlanSheetPdf({
-            grid: sheetGrid, sheet, item, fields, expandAll,
-            onProgress: (done, total) => {
-                btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span>${done}/${total}`;
+        const link = await createPlanSheetShareLink(item.job_no, {
+            columns: prefs.fields,
+            expires_in_days: prefs.days,
+            options: {
+                expand_all: prefs.expandAll,
+                main_only: prefs.mainOnly,
+                collapsed: prefs.expandAll ? [] : [...sheetState.collapsed],
             },
         });
-        showNotification(`PDF indirildi — ${out.pages} sayfa, ${out.rows} satır.`, 'success');
-        closeMeetingModal();
-    } catch (error) {
-        console.error('Plan sheet PDF failed:', error);
-        showNotification(error && error.message ? error.message : 'PDF oluşturulamadı.', 'error');
-        if (btn.isConnected) {
-            btn.disabled = false;
-            btn.innerHTML = original;
+        const url = sheetShareUrl(link.token);
+        const until = new Date(link.expires_at).toLocaleDateString('tr-TR');
+        const box = modal.querySelector('#pp-share-result');
+        if (box) {
+            box.hidden = false;
+            box.innerHTML = `
+                <div class="pp-sheetpdf-link-head">
+                    <i class="fas fa-link me-1"></i>Müşteri bağlantısı hazır: ${escapeHtml(until)} tarihine kadar geçerli, giriş gerektirmez.
+                </div>
+                <div class="pp-sheetpdf-link-row">
+                    <input id="pp-share-url" class="form-control form-control-sm" type="text" readonly value="${escapeHtml(url)}">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-sheet-action="copy">
+                        <i class="fas fa-copy me-1"></i>Kopyala
+                    </button>
+                    <a class="btn btn-outline-secondary btn-sm" href="${escapeHtml(url)}" target="_blank" rel="noopener">
+                        <i class="fas fa-arrow-up-right-from-square me-1"></i>Aç
+                    </a>
+                </div>`;
         }
+    } catch (error) {
+        console.error('Share link failed:', error);
+        showNotification(error && error.message ? error.message : 'Bağlantı oluşturulamadı.', 'error');
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = original;
     }
 }
 

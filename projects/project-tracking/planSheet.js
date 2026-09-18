@@ -13,7 +13,6 @@
  */
 
 import { PlanningGrid, ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
-import { exportPlanningPdf } from '../../manufacturing/welding/capacity-planning/pdf.js';
 import { createWorkdayCalendar } from '../../utils/workdays.js';
 import { escapeHtml } from '../../utils/text.js';
 import {
@@ -160,6 +159,19 @@ export const SHEET_COLUMNS = [
 // column ends and the timeline takes whatever the slide has left.
 export const SHEET_GRID_WIDTH = 1116;
 
+/** The sheet's columns, or the subset named by `fields` (Görev always). */
+export function sheetColumns(fields) {
+    if (!fields || !fields.length) return SHEET_COLUMNS;
+    const wanted = new Set(['title', ...fields]);
+    return SHEET_COLUMNS.filter(c => wanted.has(c.field));
+}
+
+/** Width the frozen table needs for these columns, so a column subset
+ *  hands the difference to the timeline. */
+export function columnsWidth(columns) {
+    return Math.round(columns.reduce((sum, c) => sum + (parseFloat(c.width) || 0), 0));
+}
+
 export function groupKeyOf(node) {
     return `job-${node.job_no}`;
 }
@@ -169,7 +181,7 @@ export function groupKeyOf(node) {
  * job folds its own tasks AND every sub-job under it — nodes come in DFS
  * order, so a job whose parent is hidden or collapsed is skipped whole.
  */
-export function buildSheetRows(sheet, collapsed = new Set()) {
+export function buildSheetRows(sheet, collapsed = new Set(), { mainOnly = false } = {}) {
     const rows = [];
     const hiddenJobs = new Set();
     for (const { node, rows: taskRows } of groupRows(sheet)) {
@@ -207,6 +219,8 @@ export function buildSheetRows(sheet, collapsed = new Set()) {
             collapsed: collapsed.has(groupKey),
         });
         for (const r of taskRows) {
+            // A customer's view: the department tasks, not the crews under them.
+            if (mainOnly && r.depth > 0) continue;
             rows.push({
                 key: r.key,
                 groupKey,
@@ -298,6 +312,16 @@ function projectionTailHtml(row, timeline) {
         </div>`;
 }
 
+// The plan bar, widened to the projected end: what the timeline's domain
+// pass sees, so a tail never runs off the lane.
+export function domainBarOf(planBar) {
+    return (row) => {
+        const bar = planBar(row);
+        if (!bar || !row.projected_end || row.projected_end <= bar.end) return bar;
+        return { ...bar, end: row.projected_end };
+    };
+}
+
 // The grid sizes its timeline through the bar accessor (start/end of every
 // bar), so a projected tail past the last plan end would run off the right
 // edge. The domain pass therefore sees the projected end as the bar's end;
@@ -306,11 +330,7 @@ export class SheetGrid extends PlanningGrid {
     render() {
         const planBar = this.options.bar;
         this._planBar = planBar;
-        this.options.bar = (row) => {
-            const bar = planBar(row);
-            if (!bar || !row.projected_end || row.projected_end <= bar.end) return bar;
-            return { ...bar, end: row.projected_end };
-        };
+        this.options.bar = domainBarOf(planBar);
         try {
             super.render();
         } finally {
@@ -365,29 +385,34 @@ function terminGapPillHtml(row, timeline) {
 
 /**
  * Render (or re-render) the sheet into `containerId`. `state` keeps the
- * zoom and the collapsed groups across slides; returns the grid.
+ * zoom and the collapsed groups across slides, and may narrow the sheet:
+ * `columns` (field names, Görev always), `mainOnly` (department tasks
+ * only), `gridWidth` / `colWidth` (print geometry). Returns the grid.
  */
 export function renderPlanSheet(containerId, sheet, state) {
     const calendar = createWorkdayCalendar(sheet.holidays || []);
-    const rows = buildSheetRows(sheet, state.collapsed);
+    const columns = sheetColumns(state.columns);
+    const rowOptions = { mainOnly: !!state.mainOnly };
+    const rows = buildSheetRows(sheet, state.collapsed, rowOptions);
     const groupKeys = (sheet.nodes || []).map(groupKeyOf);
     const allCollapsed = () => groupKeys.length > 0 && groupKeys.every(k => state.collapsed.has(k));
     const refresh = () => {
         grid.options.allCollapsed = allCollapsed();
-        grid.setRows(buildSheetRows(sheet, state.collapsed));
+        grid.setRows(buildSheetRows(sheet, state.collapsed, rowOptions));
     };
     const grid = new SheetGrid(containerId, {
-        columns: SHEET_COLUMNS,
+        columns,
         rows,
         zoom: SHEET_ZOOMS.includes(state.zoom) ? state.zoom : 'week',
-        gridWidth: state.gridWidth || SHEET_GRID_WIDTH,
+        gridWidth: state.gridWidth || columnsWidth(columns),
+        colWidth: state.colWidth || null,
         collapsed: state.collapsed,
         allCollapsed: allCollapsed(),
         isCellEditable: () => false,
         rowAttributes: (row) => ({ class: rowClasses(row) }),
         bar: rowBar,
         isNonWorkingDay: (d) => calendar.isNonWorkingDay(d),
-        today: new Date(),
+        today: state.today || new Date(),
         onToggleGroup: (row) => {
             if (state.collapsed.has(row.key)) state.collapsed.delete(row.key);
             else state.collapsed.add(row.key);
@@ -415,59 +440,9 @@ function scrollTimelineToToday(containerId, grid, sheet, state) {
     const scroller = host ? host.querySelector('.pg-scroll') : null;
     const timeline = grid.timeline;
     if (!scroller || !timeline || !sheet.today) return;
-    const lane = scroller.clientWidth - (state.gridWidth || SHEET_GRID_WIDTH);
+    const lane = scroller.clientWidth - grid.options.gridWidth;
     if (lane <= 0 || timeline.width <= lane) return;
     const x = timeline.xOf(String(sheet.today).slice(0, 10));
     if (x === null) return;
     scroller.scrollLeft = Math.max(0, Math.round(x - lane / 3));
-}
-
-/**
- * The sheet on paper: the chosen columns (Görev always), the groups as they
- * stand on screen or every job open, the same bars, tails and gap pills —
- * re-scaled to A4 landscape by the welding board's exporter (a second grid at
- * page geometry, never a screenshot).
- *
- * @param {Object}   arg
- * @param {SheetGrid} arg.grid     the live sheet grid (its options are the export's)
- * @param {Object}   arg.sheet     the /plan-sheet/ payload behind it
- * @param {Object}   arg.item      the portfolio item (job no, title)
- * @param {string[]} arg.fields    column fields to include
- * @param {boolean}  arg.expandAll print collapsed jobs open
- * @param {Function} arg.onProgress (done, total) => void
- */
-export async function exportPlanSheetPdf({ grid, sheet, item, fields, expandAll, onProgress }) {
-    if (!grid || !sheet) throw new Error('Plan tablosu hazır değil.');
-    const wanted = new Set(['title', ...(fields || [])]);
-    const columns = SHEET_COLUMNS.filter(c => wanted.has(c.field));
-    const collapsed = expandAll ? new Set() : (grid.options.collapsed || new Set());
-    const rows = buildSheetRows(sheet, collapsed);
-    const visible = rows.filter(r => !(r.groupKey && collapsed.has(r.groupKey)));
-    const source = {
-        options: { ...grid.options, columns, rows, collapsed, allCollapsed: false },
-        visibleRows: () => visible,
-    };
-    const jobOrder = sheet.job_order || {};
-    const jobNo = jobOrder.job_no || (item && item.job_no) || '';
-    const title = jobOrder.title || (item && item.title) || '';
-    const dev = Number(sheet.deviation_wd || 0);
-    const devText = dev ? ` (plana göre ${dev > 0 ? '+' : '−'}${Math.abs(dev)} iş günü)` : '';
-    const context = [
-        sheet.termin ? `Termin ${fmtDateTr(sheet.termin)}` : '',
-        sheet.plan_end ? `Plan bitişi ${fmtDateTr(sheet.plan_end)}` : '',
-        sheet.projected_end ? `Öngörülen ${fmtDateTr(sheet.projected_end)}${devText}` : '',
-    ].filter(Boolean).join(' · ');
-    const now = new Date();
-    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-        + `-${String(now.getDate()).padStart(2, '0')}`;
-    return exportPlanningPdf({
-        grid: source,
-        gridClass: SheetGrid,
-        title: 'Plan ve Sapmalar',
-        subtitle: [jobNo, title].filter(Boolean).join(' · '),
-        context,
-        legend: document.querySelector('.pp-sheet-legend'),
-        fileName: `Plan ve Sapmalar - ${jobNo || 'is emri'} - ${stamp}`,
-        onProgress,
-    });
 }

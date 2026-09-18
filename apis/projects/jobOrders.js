@@ -1011,3 +1011,36 @@ export async function forceCompleteJobOrders(jobNos, { includeDescendants = true
 
     return data;
 }
+
+/**
+ * Plan sheet share links: a temporary, login-free link a customer can open
+ * (projects/plan-sheet/?share=<token>).
+ * POST /projects/job-orders/{job_no}/plan-sheet/share/
+ * @param {string} jobNo
+ * @param {Object} payload {columns: string[], options: {expand_all, main_only, collapsed}, expires_in_days}
+ */
+export async function createPlanSheetShareLink(jobNo, payload) {
+    const response = await authedFetch(
+        `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/plan-sheet/share/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload || {}),
+        });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+}
+
+/** DELETE /projects/job-orders/{job_no}/plan-sheet/share/{token}/ */
+export async function revokePlanSheetShareLink(jobNo, token) {
+    const response = await authedFetch(
+        `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/plan-sheet/share/${encodeURIComponent(token)}/`,
+        { method: 'DELETE' });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+}
