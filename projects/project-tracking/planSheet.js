@@ -4,10 +4,11 @@
  *
  * One group row per job order (root and sub-jobs), the department tasks
  * beneath it. The BAR is the plan window with the progress fill; a hatched
- * tail after it is the projected overrun (labelled with its working days);
- * the violet line is the termin, tagged only with the gap to it ("+25g" —
- * the date itself is in the columns); today is red. The Sapma column says
- * how far the row is from its plan and the Neden column why. Sentences come from planSheetText.js (tested under
+ * tail after it is the projected overrun (on task rows labelled with its
+ * working days); the violet line is the termin; on a job row a pill after
+ * the projection's end says how far that end sits from the termin ("+25g");
+ * today is red. The Sapma column says how far the row is from its plan and
+ * the Neden column why. Sentences come from planSheetText.js (tested under
  * node).
  */
 
@@ -292,7 +293,7 @@ function projectionTailHtml(row, timeline) {
     return `
         <div class="ps-bar-ext${chainOnly ? ' ps-bar-ext-chain' : ''}" style="left:${left}px;width:${width}px"
              title="Öngörülen bitiş ${fmtDateTr(projected)}: plana göre ${label} iş günü${chainOnly ? ' (zincir)' : ''}">
-            ${width > 34 ? `<span>${label}</span>` : ''}
+            ${row.kind !== 'group' && width > 34 ? `<span>${label}</span>` : ''}
         </div>`;
 }
 
@@ -320,23 +321,45 @@ class SheetGrid extends PlanningGrid {
         const domainBar = this.options.bar;
         this.options.bar = this._planBar || domainBar;
         try {
-            return gapOnlyTerminTag(super._barHtml(row, timeline)) + projectionTailHtml(row, timeline);
+            return stripTerminTag(super._barHtml(row, timeline))
+                + projectionTailHtml(row, timeline) + terminGapPillHtml(row, timeline);
         } finally {
             this.options.bar = domainBar;
         }
     }
 }
 
-// The grid's termin tag reads "⚑ 30.09.2026 +25g". On the slide the date is
-// already in the Termin figure and the columns, so the tag keeps only the
-// gap; a tag with no gap (job exactly on its termin) is dropped.
-const TERMIN_TAG_RE = /(<div class="pg-target-tag[^"]*"[^>]*>)\s*<i class="fas fa-flag-checkered"><\/i>\d{2}\.\d{2}\.\d{4}([^<]*?)\s*(<\/div>)/g;
+// The grid pins its termin tag ("⚑ 30.09.2026 +25g") to the termin line —
+// where a late job's bar runs straight through it. The sheet drops that tag
+// and draws the gap itself, after the projection's end.
+const TERMIN_TAG_RE = /<div class="pg-target-tag[^"]*"[^>]*>[\s\S]*?<\/div>/g;
 
-function gapOnlyTerminTag(html) {
-    return html.replace(TERMIN_TAG_RE, (match, open, gap, close) => {
-        const text = gap.trim();
-        return text ? `${open}${text}${close}` : '';
-    });
+function stripTerminTag(html) {
+    return html.replace(TERMIN_TAG_RE, '');
+}
+
+// Job rows: "+25g" just past the end of the projection (the hatched tail, or
+// the bar when there is no overrun) — the space there is clear, and the pill
+// reads as "ends here, 25 working days past the termin". The date itself is
+// in the Termin figure and the columns.
+function terminGapPillHtml(row, timeline) {
+    if (row.kind !== 'group' || !row.job_target) return '';
+    const delta = Number(row.job_target_delta_wd || 0);
+    if (!delta) return '';
+    const planEnd = row.plan_end;
+    const projected = row.projected_end;
+    const endDate = projected && planEnd && projected > planEnd ? projected : (planEnd || projected);
+    if (!endDate) return '';
+    const x = timeline.xOf(endDate);
+    if (x === null) return '';
+    const oneUnit = timeline.unit === 'day' ? timeline.colWidth
+        : timeline.colWidth / (timeline.unit === 'week' ? 7 : 30);
+    const late = delta > 0;
+    const label = `${late ? '+' : '−'}${Math.abs(delta)}g`;
+    const title = `Termin ${fmtDateTr(row.job_target)}: öngörülen bitiş termini ${Math.abs(delta)} iş günü ${late ? 'aşıyor' : 'önce'}`;
+    return `
+        <div class="pg-target-tag ps-gap-pill${late ? ' is-late' : ' is-early'}" style="left:${x + oneUnit}px"
+             title="${escapeHtml(title)}">${label}</div>`;
 }
 
 /**

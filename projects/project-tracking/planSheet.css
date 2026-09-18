@@ -597,9 +597,15 @@ body.pp-meeting-fullscreen #pp-meeting-container { grid-template-columns: minmax
 .pp-sheet-body > .pg { min-width: 0; }
 .pp-sheet-head { flex-wrap: wrap; row-gap: 4px; }
 
-/* The termin tag on the timeline carries only the gap ("+25g"); the date is
-   in the columns. Bold so it reads from the back of the room. */
-.pp-sheet .pg-target-tag { font-weight: 700; font-size: 11px; }
+/* The termin gap pill sits just past the projection's end on job rows; bold
+   so it reads from the back of the room. Late = red on rose, early = green. */
+.pp-sheet .ps-gap-pill {
+    font-weight: 700;
+    font-size: 11px;
+    margin-left: 6px;
+}
+.pp-sheet .ps-gap-pill.is-late { color: #a71d2a; background: #fde2e5; border-color: rgba(189, 33, 48, 0.45); }
+.pp-sheet .ps-gap-pill.is-early { color: #146c43; background: #d9f2e3; border-color: rgba(20, 108, 67, 0.4); }
 
 /* Finans seal: a coloured disc with the verdict's icon, the word beside it;
    Riskli / Kritik pulse a sonar ring so the eye lands on them. */
