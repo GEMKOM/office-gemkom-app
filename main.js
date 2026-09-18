@@ -164,6 +164,21 @@ async function handleLandingPage() {
                     ]
                 },
                 {
+                    title: 'İSG',
+                    description: 'İş sağlığı ve güvenliği bildirimlerini takip edin, üzerinize atanan aksiyonları kapatın.',
+                    icon: 'fas fa-helmet-safety',
+                    iconColor: 'dark',
+                    link: '/isg',
+                    features: [
+                        {
+                            label: 'İSG Bildirimleri',
+                            icon: 'fas fa-triangle-exclamation',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/isg/issues'
+                        }
+                    ]
+                },
+                {
                     title: 'İmalat',
                     description: 'Üretim süreçlerini yönetin, üretim planlarını takip edin ve kalite standartlarını izleyin.',
                     icon: 'fas fa-industry',

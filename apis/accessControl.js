@@ -10,8 +10,14 @@ import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authS
 
 // '/general/notifications' is personal rather than departmental: it only ever
 // shows the signed-in user's own notifications, so it needs no page permission.
+//
+// The İSG pages are open by design: a safety finding concerns everyone in the
+// plant, and anyone can be assigned one. Raising or closing an issue still
+// needs `create_isg_issues`, which the API enforces (isg/views.py) and the
+// page reads from /isg/issues/my-permissions/ to hide the buttons.
 const ALWAYS_ALLOWED_ROUTES = new Set([
     '/', '/login', '/login/', '/general/notifications',
+    '/isg', '/isg/issues',
 ]);
 
 // Routes that are additionally unlocked by a non-page permission codename.

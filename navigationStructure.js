@@ -209,6 +209,17 @@ export const NAVIGATION_STRUCTURE = {
             }
         }
     },
+    '/isg': {
+        label: 'İSG',
+        icon: 'fas fa-helmet-safety',
+        children: {
+            '/isg/issues': {
+                label: 'İSG Bildirimleri',
+                icon: 'fas fa-triangle-exclamation',
+                children: {}
+            }
+        }
+    },
     '/manufacturing': {
         label: 'İmalat',
         icon: 'fas fa-industry',
