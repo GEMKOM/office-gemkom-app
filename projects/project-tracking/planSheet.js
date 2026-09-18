@@ -4,10 +4,10 @@
  *
  * One group row per job order (root and sub-jobs), the department tasks
  * beneath it. The BAR is the plan window with the progress fill; a hatched
- * tail after it is the projected overrun; the violet line is the termin,
- * today is red — no date pills on the timeline, the columns carry the
- * dates. The Sapma column says how far the row is from its plan and the
- * Neden column why. Sentences come from planSheetText.js (tested under
+ * tail after it is the projected overrun (labelled with its working days);
+ * the violet line is the termin, tagged only with the gap to it ("+25g" —
+ * the date itself is in the columns); today is red. The Sapma column says
+ * how far the row is from its plan and the Neden column why. Sentences come from planSheetText.js (tested under
  * node).
  */
 
@@ -200,6 +200,7 @@ export function buildSheetRows(sheet, collapsed = new Set()) {
             cause: rootCauseText,
             job_target: node.termin,
             job_target_late: targetLate,
+            job_target_delta_wd: node.termin_gap_wd,
             late_count: node.late_count,
             collapsed: collapsed.has(groupKey),
         });
@@ -291,6 +292,7 @@ function projectionTailHtml(row, timeline) {
     return `
         <div class="ps-bar-ext${chainOnly ? ' ps-bar-ext-chain' : ''}" style="left:${left}px;width:${width}px"
              title="Öngörülen bitiş ${fmtDateTr(projected)}: plana göre ${label} iş günü${chainOnly ? ' (zincir)' : ''}">
+            ${width > 34 ? `<span>${label}</span>` : ''}
         </div>`;
 }
 
@@ -318,11 +320,23 @@ class SheetGrid extends PlanningGrid {
         const domainBar = this.options.bar;
         this.options.bar = this._planBar || domainBar;
         try {
-            return super._barHtml(row, timeline) + projectionTailHtml(row, timeline);
+            return gapOnlyTerminTag(super._barHtml(row, timeline)) + projectionTailHtml(row, timeline);
         } finally {
             this.options.bar = domainBar;
         }
     }
+}
+
+// The grid's termin tag reads "⚑ 30.09.2026 +25g". On the slide the date is
+// already in the Termin figure and the columns, so the tag keeps only the
+// gap; a tag with no gap (job exactly on its termin) is dropped.
+const TERMIN_TAG_RE = /(<div class="pg-target-tag[^"]*"[^>]*>)\s*<i class="fas fa-flag-checkered"><\/i>\d{2}\.\d{2}\.\d{4}([^<]*?)\s*(<\/div>)/g;
+
+function gapOnlyTerminTag(html) {
+    return html.replace(TERMIN_TAG_RE, (match, open, gap, close) => {
+        const text = gap.trim();
+        return text ? `${open}${text}${close}` : '';
+    });
 }
 
 /**

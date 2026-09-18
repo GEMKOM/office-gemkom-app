@@ -597,10 +597,9 @@ body.pp-meeting-fullscreen #pp-meeting-container { grid-template-columns: minmax
 .pp-sheet-body > .pg { min-width: 0; }
 .pp-sheet-head { flex-wrap: wrap; row-gap: 4px; }
 
-/* The columns already carry the termin and the deviation: the timeline keeps
-   the termin line and the hatched tail, not the date pills. */
-.pp-sheet .pg-target-flag,
-.pp-sheet .pg-target-delta { display: none; }
+/* The termin tag on the timeline carries only the gap ("+25g"); the date is
+   in the columns. Bold so it reads from the back of the room. */
+.pp-sheet .pg-target-tag { font-weight: 700; font-size: 11px; }
 
 /* Finans seal: a coloured disc with the verdict's icon, the word beside it;
    Riskli / Kritik pulse a sonar ring so the eye lands on them. */
