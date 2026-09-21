@@ -1,4 +1,4 @@
-import { navigateTo, ROUTES, shouldBeOnResetPasswordPage, getUser } from '../../authService.js';
+import { navigateTo, ROUTES, shouldBeOnResetPasswordPage, getUser, takeReturnUrl } from '../../authService.js';
 import { resetPassword } from '../../apis/users.js';
 
 document.addEventListener('DOMContentLoaded', function() {
@@ -48,15 +48,20 @@ document.addEventListener('DOMContentLoaded', function() {
                     localStorage.setItem('user', JSON.stringify(cachedUser));
                 }
                 
-                successDiv.textContent = 'Şifreniz başarıyla güncellendi. Ana sayfaya yönlendiriliyorsunuz...';
+                // A notification link the user opened before signing in is still
+                // parked; send them there rather than to the home page.
+                const returnUrl = takeReturnUrl();
+
+                successDiv.textContent = returnUrl
+                    ? 'Şifreniz başarıyla güncellendi. Yönlendiriliyorsunuz...'
+                    : 'Şifreniz başarıyla güncellendi. Ana sayfaya yönlendiriliyorsunuz...';
                 successDiv.style.display = 'block';
-                
+
                 // Clear the form
                 form.reset();
-                
+
                 setTimeout(() => {
-                    // Force navigation to home page
-                    window.location.href = ROUTES.HOME;
+                    window.location.href = returnUrl || ROUTES.HOME;
                 }, 1500);
             } else {
                 const data = await res.json().catch(() => ({}));

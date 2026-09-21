@@ -292,7 +292,14 @@ export async function login(username, password) {
     return data;
 }
 
-export function logout() {
+// rememberReturn is for sessions that ended on their own (expired refresh token,
+// missing access token) -- there the user was in the middle of something and
+// should come back to it. A deliberate sign-out from the navbar passes nothing,
+// so it keeps landing on the login screen with no pending redirect.
+export function logout({ rememberReturn = false } = {}) {
+    if (rememberReturn) {
+        rememberReturnUrl();
+    }
     clearTokens();
     clearCachedUser();
     // Ensure in-memory permission caches are also dropped immediately.
@@ -489,6 +496,50 @@ export function navigateByTeamIfFreshLogin() {
     }
 }
 
+// Notification e-mails deep-link into pages like
+// /procurement/purchase-requests/pending/?talep=SAT-123, and the query string is
+// what opens the right record. A recipient who is not signed in gets sent to the
+// login screen by guardRoute(); without parking the URL first, the deep link is
+// lost and they land on their department home page, having to dig the mail out
+// again. The login screen consumes whatever we park here.
+const RETURN_URL_KEY = 'postLoginReturnUrl';
+
+// Only same-origin, path-relative targets come back out: absolute and
+// protocol-relative ("//host") values are rejected so a crafted entry can never
+// turn the login screen into an open redirect, and the auth pages themselves are
+// rejected so we cannot bounce in a loop. ROUTES.RESET_PASSWORD lives under
+// ROUTES.LOGIN, so the one prefix check covers both.
+function sanitizeReturnUrl(raw) {
+    if (typeof raw !== 'string') return null;
+    if (!raw.startsWith('/') || raw.startsWith('//')) return null;
+    if (raw.startsWith(ROUTES.LOGIN)) return null;
+    return raw;
+}
+
+export function rememberReturnUrl(url) {
+    const target = url ?? (window.location.pathname + window.location.search + window.location.hash);
+    const safe = sanitizeReturnUrl(target);
+    if (!safe) return;
+    try {
+        sessionStorage.setItem(RETURN_URL_KEY, safe);
+    } catch (error) {
+        // Storage disabled (private mode, locked-down browser): landing on the
+        // deep link is a convenience, not a requirement, so let the normal
+        // home-page landing take over rather than breaking the login.
+    }
+}
+
+// Read-and-clear: a parked URL is good for exactly one landing.
+export function takeReturnUrl() {
+    try {
+        const stored = sessionStorage.getItem(RETURN_URL_KEY);
+        sessionStorage.removeItem(RETURN_URL_KEY);
+        return sanitizeReturnUrl(stored);
+    } catch (error) {
+        return null;
+    }
+}
+
 // Route guard functions
 export function shouldBeOnLoginPage() {
     return !isLoggedIn();
@@ -519,6 +570,7 @@ export function guardRoute() {
     // If not logged in, should be on login page
     if (!isLoggedIn()) {
         if (currentPath !== ROUTES.LOGIN) {
+            rememberReturnUrl(); // so the login screen can send them back here
             navigateTo(ROUTES.LOGIN);
             return false;
         }
@@ -537,7 +589,7 @@ export function guardRoute() {
     // If logged in and doesn't need password reset, should be on main page
     // (not on login or reset password pages)
     if (currentPath === ROUTES.LOGIN || currentPath === ROUTES.RESET_PASSWORD) {
-        navigateTo(ROUTES.HOME);
+        navigateTo(takeReturnUrl() || ROUTES.HOME);
         return false;
     }
     
@@ -553,7 +605,7 @@ export function enforceAuth() {
 
 async function refreshAccessToken() {
     if (!refreshToken) {
-        logout();
+        logout({ rememberReturn: true });
         throw new Error('No refresh token available');
     }
 
@@ -574,14 +626,14 @@ async function refreshAccessToken() {
         setTokens(data.access, refreshToken); // Keep the same refresh token
         return accessToken;
     } catch(e) {
-        logout();
+        logout({ rememberReturn: true });
         throw e;
     }
 }
 
 export async function authedFetch(url, options = {}) {
     if (!accessToken) {
-       logout();
+       logout({ rememberReturn: true });
        throw new Error('Not authenticated');
     }
 

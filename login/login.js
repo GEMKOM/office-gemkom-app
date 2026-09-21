@@ -1,5 +1,5 @@
 // login/login.js
-import { login, navigateTo, ROUTES, shouldBeOnLoginPage, navigateByTeamIfFreshLogin } from '../authService.js';
+import { login, navigateTo, ROUTES, shouldBeOnLoginPage, navigateByTeamIfFreshLogin, takeReturnUrl } from '../authService.js';
 import { forgotPassword } from '../apis/users.js';
 
 // Enhanced error handling and display
@@ -321,9 +321,18 @@ async function handleLogin(username, password) {
         await new Promise(resolve => setTimeout(resolve, 500));
         
         if (user.must_reset_password) {
+            // The parked URL stays in session storage: the reset page hands the
+            // user on to it once the new password is set.
             navigateTo(ROUTES.RESET_PASSWORD);
         } else {
-            navigateByTeamIfFreshLogin();
+            // Came in from a notification e-mail link? Land there instead of on
+            // the department home page, so the mail does not have to be reopened.
+            const returnUrl = takeReturnUrl();
+            if (returnUrl) {
+                navigateTo(returnUrl);
+            } else {
+                navigateByTeamIfFreshLogin();
+            }
         }
     } catch (error) {
         console.error('Login error:', error);
@@ -341,7 +350,14 @@ async function handleLogin(username, password) {
 document.addEventListener('DOMContentLoaded', async () => {
     // Check if user should be on this page
     if (!shouldBeOnLoginPage()) {
-        navigateByTeamIfFreshLogin();
+        // Already signed in (e.g. signed in from another tab while this one sat
+        // on the login screen) -- honour a parked deep link before anything else.
+        const returnUrl = takeReturnUrl();
+        if (returnUrl) {
+            navigateTo(returnUrl);
+        } else {
+            navigateByTeamIfFreshLogin();
+        }
         return;
     }
 
