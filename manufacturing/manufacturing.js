@@ -206,8 +206,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 description: 'Taşeron yönetimi, fiyat kademeleri ve hakediş işlemleri.',
                 icon: 'fas fa-handshake',
                 iconColor: 'primary',
-                link: '/manufacturing/subcontracting/subcontractors',
+                link: '/manufacturing/subcontracting',
                 features: [
+                    {
+                        label: 'Genel Bakış',
+                        icon: 'fas fa-eye',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/subcontracting/overview'
+                    },
                     {
                         label: 'Taşeronlar',
                         icon: 'fas fa-building',
@@ -219,6 +225,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-file-invoice-dollar',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/subcontracting/statements'
+                    },
+                    {
+                        label: 'Düzeltmeler',
+                        icon: 'fas fa-sliders-h',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/subcontracting/adjustments'
                     }
                 ]
             },

@@ -81,6 +81,13 @@ async function handleITPage() {
                 link: '/it/permissions'
             },
             {
+                title: 'Onay Yönetimi',
+                description: 'Onay akışlarını ve adım şablonlarını görüntüleyin ve düzenleyin.',
+                icon: 'fas fa-check-circle',
+                iconColor: 'success',
+                link: '/it/approvals'
+            },
+            {
                 title: 'Organizasyon Grupları',
                 description: 'Pozisyon gruplarını oluşturun, düzenleyin ve gruba toplu pozisyon atayın.',
                 icon: 'fas fa-object-group',
@@ -100,6 +107,13 @@ async function handleITPage() {
                 icon: 'fas fa-robot',
                 iconColor: 'primary',
                 link: '/it/neo'
+            },
+            {
+                title: 'Geri Bildirimler',
+                description: 'Kullanıcı geri bildirimlerini triyaj edin, durumlarını ve yanıtlarını yönetin.',
+                icon: 'fas fa-comment-dots',
+                iconColor: 'info',
+                link: '/it/feedback'
             }
         ];
 

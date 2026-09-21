@@ -37,6 +37,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 features: []
             },
             {
+                title: 'İmalat Planlama',
+                description: 'Kaynaklı imalat iş planını kurun, kapasite önerilerini ve sapmaları takip edin.',
+                icon: 'fas fa-calendar-alt',
+                iconColor: 'info',
+                link: '/manufacturing/welding/capacity-planning',
+                features: []
+            },
+            {
                 title: 'Raporlar',
                 description: 'Kaynak zaman kayıtları analizleri ve performans raporları.',
                 icon: 'fas fa-chart-bar',

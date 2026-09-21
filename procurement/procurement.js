@@ -49,6 +49,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ]
             },
             {
+                title: 'Kritik Malzemeler',
+                description: 'Kritik olarak işaretlenen malzemeleri ve tedarik durumlarını izleyin.',
+                icon: 'fas fa-exclamation-triangle',
+                iconColor: 'danger',
+                link: '/procurement/critical-items'
+            },
+            {
                 title: 'Satın Alma Talepleri',
                 description: 'Satın alma taleplerinin oluşturulması, onay süreçleri ve takip yönetimi.',
                 icon: 'fas fa-shopping-cart',

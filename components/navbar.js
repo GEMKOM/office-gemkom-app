@@ -173,8 +173,13 @@ function renderNavigationItems(items, currentPath, level = 0) {
                     </li>
                 `;
             }
-        } else if (level === 1) {
-            // Second level items
+        } else {
+            // Second level and deeper. This has to keep nesting rather than
+            // flatten: "Daha Fazla" renders the sections it holds starting at
+            // level 1, so its sections' own children land here, and stopping
+            // the recursion dropped every page below them from the menu
+            // entirely (İmalat > Kaynaklı İmalat > İmalat Planlama, and ~17
+            // more across Satın Alma, Finans, İnsan Kaynakları and Yönetim).
             if (hasChildren) {
                 html += `
                     <li class="dropend">
@@ -198,19 +203,9 @@ function renderNavigationItems(items, currentPath, level = 0) {
                     </li>
                 `;
             }
-        } else {
-            // Third level and deeper items
-            html += `
-                <li>
-                    <a class="dropdown-item ${activeClass}" href="#" data-path="${path}">
-                        <i class="${item.icon} me-1"></i>
-                        <span>${item.label}</span>
-                    </a>
-                </li>
-            `;
         }
     }
-    
+
     return html;
 }
 
@@ -770,7 +765,12 @@ export function initNavbar() {
                 const dropendItem = toggle.closest('.dropend');
                 const dropdownMenu = toggle.nextElementSibling;
                 
-                if (dropendItem !== exceptElement && dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                // An ancestor of the item being hovered has to stay open, or
+                // opening a third-level submenu would close the second-level
+                // menu it lives in -- taking the submenu down with it.
+                const isAncestorOfHovered = exceptElement && dropendItem.contains(exceptElement);
+
+                if (dropendItem !== exceptElement && !isAncestorOfHovered && dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
                     dropdownMenu.classList.remove('show');
                 }
             });
