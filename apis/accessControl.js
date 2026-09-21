@@ -15,8 +15,13 @@ import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authS
 // plant, and anyone can be assigned one. Raising or closing an issue still
 // needs `create_isg_issues`, which the API enforces (isg/views.py) and the
 // page reads from /isg/issues/my-permissions/ to hide the buttons.
+//
+// İSG Bildirimleri now hangs off Genel in the menus, so '/general' is open too
+// — otherwise the entry would disappear for anyone without an access_general
+// grant. Both Genel landing pages filter their cards by route access, so this
+// only opens the hub, not the pages under it.
 const ALWAYS_ALLOWED_ROUTES = new Set([
-    '/', '/login', '/login/', '/general/notifications',
+    '/', '/login', '/login/', '/general', '/general/notifications',
     '/isg', '/isg/issues',
 ]);
 

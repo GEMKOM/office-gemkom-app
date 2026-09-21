@@ -30,7 +30,7 @@ async function handleLandingPage() {
         const allCards = [
                 {
                     title: 'Genel',
-                    description: 'Çalışanlar, makineler ve mesai yönetimi ile genel iş süreçlerini yönetin.',
+                    description: 'Çalışanlar, makineler, mesai ve İSG bildirimleri ile genel iş süreçlerini yönetin.',
                     icon: 'fas fa-cogs',
                     iconColor: 'secondary',
                     link: '/general',
@@ -52,6 +52,12 @@ async function handleLandingPage() {
                             icon: 'fas fa-boxes',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/general/department-requests'
+                        },
+                        {
+                            label: 'İSG Bildirimleri',
+                            icon: 'fas fa-helmet-safety',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/isg/issues'
                         }
                     ]
                 },
@@ -160,21 +166,6 @@ async function handleLandingPage() {
                             icon: 'fas fa-file-alt',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/quality-control/documents'
-                        }
-                    ]
-                },
-                {
-                    title: 'İSG',
-                    description: 'İş sağlığı ve güvenliği bildirimlerini takip edin, üzerinize atanan aksiyonları kapatın.',
-                    icon: 'fas fa-helmet-safety',
-                    iconColor: 'dark',
-                    link: '/isg',
-                    features: [
-                        {
-                            label: 'İSG Bildirimleri',
-                            icon: 'fas fa-triangle-exclamation',
-                            iconColor: 'rgba(139, 0, 0, 1)',
-                            link: '/isg/issues'
                         }
                     ]
                 },

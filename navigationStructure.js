@@ -101,6 +101,14 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            // İSG lives under Genel: the page is open to everyone, so it is a
+            // company-wide entry rather than a module of its own. The route
+            // stays /isg/issues (ALWAYS_ALLOWED_ROUTES in apis/accessControl.js).
+            '/isg/issues': {
+                label: 'İSG Bildirimleri',
+                icon: 'fas fa-helmet-safety',
+                children: {}
             }
         }
     },
@@ -205,17 +213,6 @@ export const NAVIGATION_STRUCTURE = {
             '/quality-control/documents': {
                 label: 'Kalite Evrakları',
                 icon: 'fas fa-file-alt',
-                children: {}
-            }
-        }
-    },
-    '/isg': {
-        label: 'İSG',
-        icon: 'fas fa-helmet-safety',
-        children: {
-            '/isg/issues': {
-                label: 'İSG Bildirimleri',
-                icon: 'fas fa-triangle-exclamation',
                 children: {}
             }
         }

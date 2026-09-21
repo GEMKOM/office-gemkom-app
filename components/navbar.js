@@ -126,12 +126,21 @@ function renderNavigationWithMore(items, currentPath) {
     return html;
 }
 
+// A menu entry can sit under a parent whose path it does not share — İSG
+// Bildirimleri hangs off Genel but keeps its /isg/issues route — so a parent is
+// active when the current path matches it or any of its descendants.
+function isPathActive(path, item, currentPath) {
+    if (currentPath === path || currentPath.startsWith(path + '/')) return true;
+    return Object.entries(item.children || {})
+        .some(([childPath, child]) => isPathActive(childPath, child, currentPath));
+}
+
 // Helper function to render navigation items recursively
 function renderNavigationItems(items, currentPath, level = 0) {
     let html = '';
     
     for (const [path, item] of Object.entries(items)) {
-        const isActive = currentPath === path || currentPath.startsWith(path + '/');
+        const isActive = isPathActive(path, item, currentPath);
         const hasChildren = Object.keys(item.children).length > 0;
         // Keep dropdowns closed by default - only show when explicitly clicked
         const isExpanded = false; // Changed from: isActive && hasChildren
