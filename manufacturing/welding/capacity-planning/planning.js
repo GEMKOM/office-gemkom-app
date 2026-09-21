@@ -2058,7 +2058,14 @@ function rederiveDerivedDurations() {
         };
 
         const weldSlice = top * w(weld && weld.weight) / sibSum;
-        setSlice(weld, weldSlice);
+        // Kaynaklı İmalat contracts onto its teams once every one of them
+        // carries an entered span (see rederivePlanWindows), so re-imposing
+        // the inherited share here would print "≈28,5 g" over a 20-day window.
+        // The server already sends the contracted number; leave it alone.
+        const weldBlocks = (jobBlocks[jobNo] || []).filter(b => !b.deleted);
+        const weldFits = weldBlocks.length > 0
+            && weldBlocks.every(b => b.subtask.entered_duration_wd != null);
+        if (!weldFits) setSlice(weld, weldSlice);
         setSlice(paint, top * w(paint && paint.weight) / sibSum);
 
         const blocks = (jobBlocks[jobNo] || []);
@@ -2207,9 +2214,21 @@ function rederivePlanWindows() {
         if (mach) parallelEnd = later(parallelEnd, spanEnd(start, total * w(mach.weight) / sibSum));
         if (weld) {
             const weldDays = total * w(weld.weight) / sibSum;
-            let weldEnd = set(weld, start, weldDays);
+            const derivedEnd = set(weld, start, weldDays);
             const blocks = jobBlocks[jobNo] || [];
             const kgSum = blocks.reduce((acc, b) => acc + w(b.allocated_weight_kg), 0);
+            // Kaynaklı İmalat has no duration of its own and the sheet offers
+            // no cell to give it one, so once EVERY team under it carries an
+            // entered span the teams ARE the row — it contracts onto them
+            // instead of keeping the share it inherited from İmalat (user
+            // 2026-09-21, 009-37: teams entered at 10 g and 20 g finished
+            // 25.09 under a row still claiming 08.10). One unentered team and
+            // the derived span has to stand: that team is defined as spanning
+            // this very window.
+            const live = blocks.filter(b => !b.deleted);
+            const fitsBlocks = live.length > 0
+                && live.every(b => b.subtask.entered_duration_wd != null);
+            let weldEnd = fitsBlocks ? null : derivedEnd;
             blocks.forEach(b => {
                 if (kgSum <= 0) return;
                 // Simultaneous teams span the whole welding window — the
@@ -2242,6 +2261,14 @@ function rederivePlanWindows() {
                 }
             });
             weld.end_date = weldEnd;
+            if (fitsBlocks && weld.start_date && weldEnd) {
+                // The window is the number now — keep the Süre cell from
+                // disagreeing with the dates beside it.
+                const span = calendar.workingDaysInclusive(weld.start_date, weldEnd);
+                weld.duration_wd = Math.round(span * 10) / 10;
+                weld.duration_is_derived = true;
+                weld.duration_source = 'children_span';
+            }
             parallelEnd = later(parallelEnd, weldEnd);
         }
         let latest = parallelEnd;
