@@ -1,7 +1,7 @@
 /**
  * Tests for the sheet's job-group ordering (İş No / Başlangıç toggle).
  *
- *     node manufacturing/welding/capacity-planning/jobSort.test.mjs
+ *     node planning/project-planning/jobSort.test.mjs
  */
 
 import assert from 'node:assert/strict';

@@ -165,6 +165,15 @@ async function initializeFiltersComponent() {
         }
     });
 
+    // Free-text search: planning request codes (GS-10162, BK-588) are what users
+    // quote, so the backend `search` also covers them, not just this request.
+    departmentRequestsFilters.addTextFilter({
+        id: 'search-filter',
+        label: 'Ara',
+        placeholder: 'Talep kodu veya başlık (örn. GS-10162)',
+        colSize: 2
+    });
+
     // Status filter
     departmentRequestsFilters.addDropdownFilter({
         id: 'status-filter',
@@ -373,6 +382,10 @@ async function loadRequests() {
         if (departmentRequestsFilters) {
             const filterValues = departmentRequestsFilters.getFilterValues();
             
+            const searchTerm = (filterValues['search-filter'] || '').trim();
+            if (searchTerm !== '') {
+                filters.search = searchTerm;
+            }
             if (filterValues['status-filter'] && filterValues['status-filter'] !== '') {
                 filters.status = filterValues['status-filter'];
             }

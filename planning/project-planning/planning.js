@@ -8,22 +8,22 @@
 // Everything is edited in memory (workday-aware date↔duration sync) and
 // committed with one bulk save.
 
-import { guardRoute } from '../../../authService.js';
-import { initRouteProtection } from '../../../apis/routeProtection.js';
-import { initNavbar } from '../../../components/navbar.js';
-import { HeaderComponent } from '../../../components/header/header.js';
+import { guardRoute } from '../../authService.js';
+import { initRouteProtection } from '../../apis/routeProtection.js';
+import { initNavbar } from '../../components/navbar.js';
+import { HeaderComponent } from '../../components/header/header.js';
 import { PlanningGrid } from './grid.js';
 import { defaultStagesFrom } from './defaultStages.js';
-import { showNotification } from '../../../components/notification/notification.js';
-import { EditModal } from '../../../components/edit-modal/edit-modal.js';
-import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
-import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
+import { showNotification } from '../../components/notification/notification.js';
+import { EditModal } from '../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
+import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import {
     getWeldingPlanningBoard,
     bulkSaveWeldingPlanning,
-} from '../../../apis/welding/planning.js';
-import { fetchPriceTiers } from '../../../apis/subcontracting/priceTiers.js';
-import { createWorkdayCalendar, reconcileScheduleEdit } from '../../../utils/workdays.js';
+} from '../../apis/welding/planning.js';
+import { fetchPriceTiers } from '../../apis/subcontracting/priceTiers.js';
+import { createWorkdayCalendar, reconcileScheduleEdit } from '../../utils/workdays.js';
 import { deptSchedulePatch } from './deptSchedulePatch.js';
 import { blockSchedulePatch } from './blockSchedulePatch.js';
 import { compareJobsBy, earliestDate, normalizeSortMode } from './jobSort.js';
@@ -75,6 +75,7 @@ let snapBlocks = new Map();       // block.key -> {allocated_weight_kg, notes, s
 let dirtyBlocks = new Set();      // block.key
 let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
 let dirtyMachining = new Map();   // job_no -> Set of edited field names
+let dirtyLogistics = new Map();   // job_no -> Set of edited field names
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
 // Bumped on every working-copy mutation. Save + background board rebuild
 // compare this to the value at send time: a later bump means the planner
@@ -224,7 +225,8 @@ function findBlock(blockRef) {
 
 function hasUnsavedChanges() {
     return dirtyBlocks.size > 0 || dirtyDept.size > 0
-        || dirtyMachining.size > 0 || deletedBlocks.length > 0;
+        || dirtyMachining.size > 0 || dirtyLogistics.size > 0
+        || deletedBlocks.length > 0;
 }
 
 // ---- capacity decorations (advisory) --------------------------------------
@@ -460,6 +462,7 @@ function hydrate(boardData) {
     dirtyBlocks = new Set();
     dirtyDept = new Map();
     dirtyMachining = new Map();
+    dirtyLogistics = new Map();
     deletedBlocks = [];
 
     if (activeResourceKey !== 'all'
@@ -570,6 +573,15 @@ function markDeptDirty(jobNo, slot, field) {
     const fields = dirtyDept.get(key) || new Set();
     if (field) fields.add(field);
     dirtyDept.set(key, fields);
+    liveForecastJobs.add(jobNo);
+    bumpMutation();
+    updateSaveState();
+}
+
+function markLogisticsDirty(jobNo, field) {
+    const fields = dirtyLogistics.get(jobNo) || new Set();
+    if (field) fields.add(field);
+    dirtyLogistics.set(jobNo, fields);
     liveForecastJobs.add(jobNo);
     bumpMutation();
     updateSaveState();
@@ -1619,6 +1631,11 @@ function buildSheetRows(res) {
                 shipping.start_date_source = 'plan_tail';
                 shipping.end_date_source = 'plan_tail';
             }
+            // ...and its LENGTH is the one thing on this row that is a
+            // decision rather than a consequence (user 2026-09-22). Without
+            // an entry it takes the department default, the same number the
+            // plan sheet uses, so the two pages agree either way.
+            shipping.editable_duration = true;
             rows.push(shipping);
         }
     });
@@ -1892,6 +1909,11 @@ function isCellEditable(row, field) {
     // The capacity column reports; stage rows would otherwise fall through
     // to the editable default at the end.
     if (field === 'cap_finish') return false;
+    // Lojistik is an info row — it reports — but its duration is an entry.
+    // Checked BEFORE the read-only kinds, which would otherwise swallow it.
+    if (field === 'duration_wd' && row.editable_duration) {
+        return !['skipped', 'cancelled', 'completed'].includes(row.status);
+    }
     if (READ_ONLY_KINDS.includes(row.kind)) return false;
     // Adet is never typed here: the order's count belongs to the job order and
     // a block's is arithmetic on its kg. Guarded by name because the fallthrough
@@ -2211,6 +2233,11 @@ function rederivePlanWindows() {
         };
 
         let parallelEnd = null;
+        // Only a row the board PAINTS can end the İmalat bar. Talaşlı İmalat
+        // keeps no window of its own, so its share still holds İmalat open but
+        // must never be what the bar contracts onto — the mirror of
+        // plan_windows' drawn_latest.
+        let drawnLatest = null;
         if (mach) parallelEnd = later(parallelEnd, spanEnd(start, total * w(mach.weight) / sibSum));
         if (weld) {
             const weldDays = total * w(weld.weight) / sibSum;
@@ -2270,16 +2297,50 @@ function rederivePlanWindows() {
                 weld.duration_source = 'children_span';
             }
             parallelEnd = later(parallelEnd, weldEnd);
+            drawnLatest = later(drawnLatest, weldEnd);
         }
         let latest = parallelEnd;
         if (paint) {
             const paintStart = parallelEnd ? nextWorkday(parallelEnd) : start;
-            latest = later(latest, set(paint, paintStart, total * w(paint.weight) / sibSum));
+            const paintEnd = set(paint, paintStart, total * w(paint.weight) / sibSum);
+            latest = later(latest, paintEnd);
+            drawnLatest = later(drawnLatest, paintEnd);
         }
+
+        // The mirror of plan_windows.children_settle. A row settles its own
+        // span three ways: an entered duration, children that all settle
+        // themselves, or being finished. While ONE phase is still taking a
+        // weight share of the İmalat entry, that entry is the schedule and the
+        // row keeps its full span; once none is, the number has nothing left
+        // to size and stretching the bar to it claims weeks nobody is working
+        // — 009-37 was entered at 30 g, handed both teams out at 10 g and
+        // 20 g, and drew İmalat to 09.10 over welding that ends 25.09 (user
+        // 2026-09-22). The entry itself is untouched: it drives the split
+        // again the moment any unsettled work appears.
+        const settles = (vm) => !!vm
+            && (vm.entered_duration_wd != null || vm.status === 'completed');
+        const openStages = (b) => b.stages.filter(
+            st => !st.deleted && !['cancelled', 'skipped'].includes(st.status));
+        const blockSettles = (b) => settles(b.subtask)
+            || (openStages(b).length > 0 && openStages(b).every(settles));
+        const openBlocks = (jobBlocks[jobNo] || []).filter(
+            b => !b.deleted && !['cancelled', 'skipped'].includes(b.subtask.status));
+        const phases = [weld, paint, mach].filter(Boolean);
+        const allSettle = phases.length > 0 && phases.every(vm => settles(vm)
+            || (vm === weld && openBlocks.length > 0 && openBlocks.every(blockSettles)));
+
         // The İmalat row covers what it contains — its own span, extended if
-        // the paint tail spills past it, and opened backwards if a pinned
-        // team starts before it.
-        imalat.end_date = later(spanEnd(start, total), latest);
+        // the paint tail spills past it, contracted onto the work below when
+        // nothing down there still takes its span from above, and opened
+        // backwards if a pinned team starts before it.
+        const ownEnd = spanEnd(start, total);
+        if (latest && latest > ownEnd) {
+            imalat.end_date = latest;
+        } else if (allSettle && drawnLatest && drawnLatest < ownEnd) {
+            imalat.end_date = drawnLatest;
+        } else {
+            imalat.end_date = ownEnd;
+        }
         imalat.end_is_actual = false;
         if (weld && weld.start_date && weld.start_date < imalat.start_date) {
             imalat.start_date = weld.start_date;
@@ -2293,10 +2354,18 @@ function rederivePlanWindows() {
     });
 }
 
+// The department default, mirroring plan_sheet.DEFAULT_DURATIONS['logistics']
+// on the server. Only reached when the row arrived with no window at all —
+// the server sizes the plan tail with the same number.
+const LOGISTICS_DEFAULT_WD = 3;
+
 // How long shipping takes, from whatever was known about it — an entered
 // duration, else the span it was last laid out over, else a day. Re-reading a
 // window this file wrote is safe: every pass writes the same number of days.
 function logisticsDays(row) {
+    if (row.entered_duration_wd != null) {
+        return Math.max(Number(row.entered_duration_wd), 0.1);
+    }
     if (row.duration_wd != null) return Math.max(Number(row.duration_wd), 0.1);
     const start = row.projected_start_date || row.start_date;
     const end = row.projected_end_date || row.end_date;
@@ -2305,7 +2374,7 @@ function logisticsDays(row) {
     if (start && end && end >= start) {
         return Math.max(calendar.workingDaysInclusive(start, end), 1);
     }
-    return 1;
+    return LOGISTICS_DEFAULT_WD;
 }
 
 // Live parent-progress rollup (user: "when a subtask's progress changes,
@@ -3114,12 +3183,15 @@ function onCellEdit(row, field, newValue) {
         target = deptOf(row.job_no, row.slot);
     } else if (row.kind === 'block') {
         target = block && block.subtask;
+    } else if (row.editable_duration) {
+        target = (jobInfo[row.job_no] || {}).logistics;
     }
     if (!target) return;
 
     const markDirty = () => {
         if (row.kind === 'dept') markDeptDirty(row.job_no, row.slot, field);
         else if (row.kind === 'machining') markMachiningDirty(row.job_no, field);
+        else if (row.editable_duration) markLogisticsDirty(row.job_no, field);
         else markBlockDirty(block.key);
     };
 
@@ -3216,8 +3288,9 @@ function onCellEdit(row, field, newValue) {
         // Mirror of the server-side purge: asserting the İmalat number
         // re-bases the WHOLE subtree on it, stray child entries included —
         // cleared here too so the redistribution shows immediately, before
-        // any save (the save clears them in the DB).
-        if (num != null) {
+        // any save (the save clears them in the DB). Shipping sits beside
+        // İmalat, not under it, so its own number re-bases nothing.
+        if (num != null && !row.editable_duration) {
             const clearEntry = (vm) => {
                 if (!vm) return;
                 vm.entered_duration_wd = null;
@@ -4208,6 +4281,18 @@ function buildPayload() {
         payload.department_tasks.push({ task_id: vm.task_id, weight: vm.weight });
     });
 
+    // Lojistik travels it too, and only ever its duration: the server refuses
+    // a date or a status on this row, because the window is the tail of the
+    // İmalat plan and follows it.
+    dirtyLogistics.forEach((fields, jobNo) => {
+        const vm = (jobInfo[jobNo] || {}).logistics;
+        if (!vm || !fields.has('duration_wd')) return;
+        payload.department_tasks.push({
+            task_id: vm.task_id,
+            duration_wd: vm.entered_duration_wd ?? null,
+        });
+    });
+
     return payload;
 }
 
@@ -4249,6 +4334,7 @@ async function onSave() {
             dirtyBlocks = new Set();
             dirtyDept = new Map();
             dirtyMachining = new Map();
+            dirtyLogistics = new Map();
             updateSaveState();
             if (board) {
                 hydrate(board);
@@ -4375,7 +4461,7 @@ function init() {
         showBackButton: 'block',
         showRefreshButton: 'block',
         refreshButtonText: 'Yenile',
-        backUrl: '/manufacturing/welding/',
+        backUrl: '/planning/',
         onRefreshClick: () => {
             if (hasUnsavedChanges() && !confirm('Kaydedilmemiş değişiklikler var. Yenilemek istediğinize emin misiniz?')) {
                 return;

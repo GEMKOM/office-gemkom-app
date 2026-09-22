@@ -49,6 +49,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/planning/projects'
             },
             {
+                title: 'Proje Planlama',
+                description: 'İmalat iş planını kurun, kapasite önerilerini ve sapmaları takip edin.',
+                icon: 'fas fa-calendar-alt',
+                iconColor: 'primary',
+                link: '/planning/project-planning'
+            },
+            {
                 title: 'Malzeme Maliyeti Satırları',
                 description: 'Satın alma bekleyen iş emirleri ve malzeme maliyeti satırlarını yönetin.',
                 icon: 'fas fa-shopping-cart',

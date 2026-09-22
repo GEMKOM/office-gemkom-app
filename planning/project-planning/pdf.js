@@ -17,7 +17,7 @@
 // from the live grid's own options, so what prints is what is on screen.
 
 import { PlanningGrid, ZOOMS, buildTimeline } from './grid.js';
-import { exportPagesToPdf } from '../../../utils/pdfExport.js';
+import { exportPagesToPdf } from '../../utils/pdfExport.js';
 
 // A4 landscape, 8 mm margins: 281 × 189 mm of content. The capture width is
 // the one number the rest follows from — 1460 px across 281 mm puts the

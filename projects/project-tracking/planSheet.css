@@ -1,6 +1,6 @@
 /* Sunum Modu slide, plan-sheet edition.
    Rows: strip / hero / tiles / sheet. The sheet is the İmalat Planlama grid
-   (../../manufacturing/welding/capacity-planning/grid.css) rendered
+   (../../planning/project-planning/grid.css) rendered
    read-only; this file is the chrome around it plus the sheet's own cell
    styles (ps-*). Colours are the house palette — never yellow. */
 
@@ -14,7 +14,9 @@
     box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
     padding: 12px 18px 10px;
     display: grid;
-    grid-template-columns: minmax(240px, 1fr) auto;
+    /* The id keeps a readable title; the chain takes the rest and caps
+       itself, so on a wide projector it does not stretch across the room. */
+    grid-template-columns: minmax(240px, 420px) minmax(0, 1fr);
     grid-template-areas:
         "id figures"
         "progress progress";
@@ -62,48 +64,262 @@
     color: #6c757d;
 }
 
-.ps-hero-figures {
-    grid-area: figures;
-    display: flex;
-    gap: 24px;
-    justify-content: flex-end;
-    flex-wrap: wrap;
-}
-
-.ps-fig {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-width: 118px;
-}
-
-.ps-fig label {
-    font-size: 0.64rem;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: #8a919c;
-    margin: 0 0 1px;
-}
-
-.ps-fig-value {
-    font-size: 1.22rem;
-    font-weight: 800;
-    color: #1f2530;
-    line-height: 1.15;
-    white-space: nowrap;
-}
-
-.ps-fig-primary .ps-fig-value { font-size: 1.42rem; }
 .ps-fig-late { color: #c62839; }
 .ps-fig-early { color: #1f8a4c; }
 .ps-fig-ok { color: #1f8a4c; }
 .ps-fig-muted { color: #9aa1ab; }
 
-.ps-fig-note {
-    font-size: 0.7rem;
+/* ---- the date chain -----------------------------------------------------
+   Four figures in one fixed row — Başlangıç, Termin, Plan bitişi, Öngörülen —
+   so the eye finds each date in the same place on every slide. The
+   connectors carry the comparisons (plan vs termin, öngörülen vs plan) and
+   the bracket above the termin-to-öngörülen total; each number appears once.
+   An arrow means "compared with", never "later than": a plan that ends
+   before its termin shows a green −N on the same connector. Markup comes
+   from heroChain.js. Rows: 1 bracket · 2 labels · 3 values + connectors ·
+   4 baseline. */
+
+.ps-chain {
+    grid-area: figures;
+    justify-self: end;
+    width: 100%;
+    max-width: 1180px;
+    min-width: 0;
+    display: grid;
+    /* A connector is never narrower than its pill plus the arrowhead room
+       (the pill's margins); the fr share soaks up any extra width. The
+       bracket row is reserved even when there is no bracket, so the hero
+       does not jump when the sheet arrives or between slides. */
+    grid-template-columns: auto minmax(28px, 0.6fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto;
+    grid-template-rows: minmax(25px, auto) auto auto auto;
+    align-items: end;
+    text-align: center;
+}
+
+/* A figure is two grid items (label, value) in one column */
+.ps-cf { display: contents; }
+.ps-cf-start { --ps-col: 1; }
+.ps-cf-termin { --ps-col: 3; }
+.ps-cf-plan { --ps-col: 5; }
+.ps-cf-proj { --ps-col: 7; }
+
+.ps-cf label {
+    grid-column: var(--ps-col);
+    grid-row: 2;
+    margin: 0;
+    padding: 0 6px 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
     color: #8a919c;
     white-space: nowrap;
+}
+
+.ps-cf-value {
+    grid-column: var(--ps-col);
+    grid-row: 3;
+    position: relative;
+    padding: 0 6px;
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #1f2530;
+    white-space: nowrap;
+}
+
+/* The dot on the baseline under each date */
+.ps-cf-value::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -11px;
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
+    border-radius: 50%;
+    background: #1f2530;
+    box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* Başlangıç is context, Öngörülen is the answer */
+.ps-cf-start .ps-cf-value { font-size: 1rem; font-weight: 600; color: #6c757d; }
+.ps-cf-start .ps-cf-value::after { background: #9aa3b2; }
+.ps-cf-plan.is-late .ps-cf-value::after { background: #fd7e14; }
+.ps-cf-plan.is-early .ps-cf-value::after,
+.ps-cf-plan.is-ok .ps-cf-value::after { background: #198754; }
+.ps-cf-proj .ps-cf-value { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; }
+.ps-cf-proj.is-late .ps-cf-value { color: #c62839; }
+.ps-cf-proj.is-late .ps-cf-value::after { background: #dc3545; }
+.ps-cf-proj.is-early .ps-cf-value,
+.ps-cf-proj.is-ok .ps-cf-value { color: #1f8a4c; }
+.ps-cf-proj.is-early .ps-cf-value::after,
+.ps-cf-proj.is-ok .ps-cf-value::after { background: #198754; }
+.ps-theme-red .ps-cf-proj label { color: #dc3545; }
+.ps-theme-orange .ps-cf-proj label { color: #fd7e14; }
+.ps-theme-green .ps-cf-proj label { color: #198754; }
+
+/* Connectors: a line with an arrowhead, the comparison in a pill on it */
+.ps-ck {
+    --ps-lc: #d3d9e1;
+    grid-row: 3;
+    align-self: end;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.55rem;
+    min-width: 0;
+}
+
+.ps-ck-1 { grid-column: 2; }
+.ps-ck-2 { grid-column: 4; }
+.ps-ck-3 { grid-column: 6; }
+
+.ps-ck::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 9px;
+    top: 50%;
+    margin-top: -1px;
+    border-top: 2px solid var(--ps-lc);
+}
+
+.ps-ck::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    top: 50%;
+    margin-top: -4px;
+    border-left: 7px solid var(--ps-lc);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+}
+
+.ps-ck span {
+    position: relative;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 4px 9px;
+    margin: 0 14px 0 8px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px #ffffff;
+    white-space: nowrap;
+}
+
+/* Late: the plan past its termin is orange, the forecast past its plan is
+   red (the sheet's own vocabulary). Early and on time are green. */
+.ps-ck-2.is-late { --ps-lc: #fd7e14; }
+.ps-ck-2.is-late span { background: #fff1e3; color: #b5500a; }
+.ps-ck-3.is-late { --ps-lc: #dc3545; }
+.ps-ck-3.is-late span { background: #fde2e5; color: #a71d2a; }
+.ps-ck.is-early,
+.ps-ck.is-ok { --ps-lc: #198754; }
+.ps-ck.is-early span,
+.ps-ck.is-ok span { background: #d9f2e3; color: #146c43; }
+
+/* The bracket: termin to öngörülen, the one number the room asks for */
+.ps-chain-brk {
+    --ps-bc: #dc3545;
+    --ps-bbg: #fde2e5;
+    --ps-bfg: #a71d2a;
+    grid-column: 3 / -1;
+    grid-row: 1;
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    height: 18px;
+    margin: 0 8px 7px;
+    padding-right: 14px;
+}
+
+.ps-chain-brk::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 8px;
+    margin-top: -1px;
+    border: 2px solid var(--ps-bc);
+    border-bottom: 0;
+    border-radius: 3px 3px 0 0;
+}
+
+.ps-chain-brk span {
+    position: relative;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ps-bfg);
+    background: var(--ps-bbg);
+    padding: 3px 10px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px #ffffff;
+    white-space: nowrap;
+}
+
+.ps-chain-brk b { font-size: 14px; font-weight: 800; }
+
+.ps-chain-brk.is-early,
+.ps-chain-brk.is-ok { --ps-bc: #198754; --ps-bbg: #d9f2e3; --ps-bfg: #146c43; }
+
+/* The baseline the dots sit on: a chain, not a scale */
+.ps-chain-base {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    height: 1px;
+    margin-top: 7px;
+    background: linear-gradient(90deg, rgba(211, 217, 225, 0), #d3d9e1 6%, #d3d9e1 94%, rgba(211, 217, 225, 0));
+}
+
+/* Short screens (laptop 768p): one size step down. This block comes BEFORE
+   the width steps so that a screen that is both short and narrow takes the
+   narrower step (same specificity, later rule wins). */
+@media (max-height: 860px) {
+    .ps-cf label { padding: 0 4px 4px; }
+    .ps-cf-value { padding: 0 4px; font-size: 1.15rem; }
+    .ps-cf-start .ps-cf-value { font-size: 0.9rem; }
+    .ps-cf-proj .ps-cf-value { font-size: 1.5rem; }
+    .ps-ck { height: 1.4rem; }
+    .ps-ck span { font-size: 12.5px; padding: 3px 7px; }
+    .ps-chain { grid-template-rows: minmax(21px, auto) auto auto auto; }
+    .ps-chain-brk { height: 16px; margin-bottom: 5px; }
+}
+
+/* Width steps. The base layout needs about 1090px of chain for the longest
+   month ("23 Temmuz 2026" three times over); each step first takes width
+   from the id, then shrinks the figures, so the row survives down to the
+   1240px stacking point. */
+@media (max-width: 1640px) {
+    .pp-hero-ps { grid-template-columns: minmax(240px, 360px) minmax(0, 1fr); }
+    .ps-cf label { padding: 0 4px 4px; }
+    .ps-cf-value { padding: 0 4px; font-size: 1.15rem; }
+    .ps-cf-start .ps-cf-value { font-size: 0.9rem; }
+    .ps-cf-proj .ps-cf-value { font-size: 1.5rem; }
+    .ps-ck span { font-size: 12.5px; padding: 3px 7px; }
+}
+
+@media (max-width: 1400px) {
+    .pp-hero-ps { grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); }
+    .ps-chain { grid-template-columns: auto minmax(16px, 0.5fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto; }
+    .ps-cf label { font-size: 0.68rem; }
+    .ps-cf-value { font-size: 1.1rem; }
+    .ps-cf-start .ps-cf-value { font-size: 0.85rem; }
+    .ps-cf-proj .ps-cf-value { font-size: 1.4rem; }
+    .ps-ck span { font-size: 12px; padding: 3px 6px; margin: 0 12px 0 6px; }
+}
+
+/* Below this the row cannot hold four dates beside the id: stack them */
+@media (max-width: 1240px) {
+    .pp-hero-ps {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "id" "figures" "progress";
+    }
+    .ps-chain { justify-self: start; max-width: none; }
 }
 
 .ps-hero-lines {
@@ -550,8 +766,6 @@
     .pp-hero-ps { padding: 9px 16px 8px; row-gap: 4px; }
     .ps-hero-jobno { font-size: 1.55rem; }
     .ps-hero-title { font-size: 0.94rem; }
-    .ps-fig-value { font-size: 1.05rem; }
-    .ps-fig-primary .ps-fig-value { font-size: 1.2rem; }
     .ps-hero-lines { font-size: 0.82rem; }
     .pp-tile { padding: 6px 10px 6px; gap: 1px; }
     .pp-tile-big { font-size: 1.25rem; }
@@ -560,30 +774,12 @@
 @media (max-width: 1200px) {
     .pp-tiles { flex-wrap: wrap; }
     .pp-tile { flex: 1 1 calc(25% - 10px); }
-    .pp-hero-ps {
-        grid-template-columns: minmax(0, 1fr);
-        grid-template-areas: "id" "figures" "progress";
-    }
-    .ps-hero-figures { justify-content: flex-start; }
 }
 
 /* ---- v13: the dates ARE the hero --------------------------------------- */
 
-/* No sentences above the sheet any more: four dates, each with its distance
-   to the others beneath it. */
-.ps-hero-figures { gap: 30px; }
-.ps-fig { min-width: 150px; }
-.ps-fig label { font-size: 0.68rem; }
-.ps-fig-value { font-size: 1.55rem; }
-.ps-fig-primary .ps-fig-value { font-size: 1.8rem; }
-.ps-fig-note {
-    display: block;
-    font-size: 0.74rem;
-    font-weight: 600;
-    margin-top: 2px;
-    white-space: nowrap;
-}
-.ps-fig-note.ps-fig-ok { color: #1f8a4c; }
+/* No sentences above the sheet any more: the date chain (above) carries the
+   distances, once each. */
 
 /* The slide must never grow past the viewport: the sheet's canvas is wider
    than any screen, and a grid item's minimum width is its content unless
@@ -673,8 +869,6 @@ body.pp-meeting-fullscreen #pp-meeting-container { grid-template-columns: minmax
 }
 
 @media (max-height: 860px) {
-    .ps-fig-value { font-size: 1.25rem; }
-    .ps-fig-primary .ps-fig-value { font-size: 1.45rem; }
     .pp-fin-seal i { flex-basis: 30px; width: 30px; height: 30px; font-size: 0.95rem; }
     .pp-fin-word { font-size: 1.15rem; }
 }

@@ -1,7 +1,7 @@
 /**
  * Tests for the subtask_schedule a dirty block sends on bulk-save.
  *
- *     node manufacturing/welding/capacity-planning/blockSchedulePatch.test.mjs
+ *     node planning/project-planning/blockSchedulePatch.test.mjs
  */
 
 import assert from 'node:assert/strict';

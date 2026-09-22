@@ -1,7 +1,7 @@
 /**
  * Tests for post-save working-copy reconciliation.
  *
- *     node manufacturing/welding/capacity-planning/saveReconcile.test.mjs
+ *     node planning/project-planning/saveReconcile.test.mjs
  */
 
 import assert from 'node:assert/strict';

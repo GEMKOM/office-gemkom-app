@@ -12,7 +12,7 @@
  * node).
  */
 
-import { PlanningGrid, ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
+import { PlanningGrid, ZOOMS } from '../../planning/project-planning/grid.js';
 import { createWorkdayCalendar } from '../../utils/workdays.js';
 import { escapeHtml } from '../../utils/text.js';
 import {

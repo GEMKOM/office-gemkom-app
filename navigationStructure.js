@@ -153,6 +153,11 @@ export const NAVIGATION_STRUCTURE = {
                 icon: 'fas fa-project-diagram',
                 children: {}
             },
+            '/planning/project-planning': {
+                label: 'Proje Planlama',
+                icon: 'fas fa-calendar-alt',
+                children: {}
+            },
             '/planning/department-requests': {
                 label: 'Departman Talepleri',
                 icon: 'fas fa-boxes',
@@ -238,11 +243,6 @@ export const NAVIGATION_STRUCTURE = {
                     '/manufacturing/welding/teams': {
                         label: 'Ekipler',
                         icon: 'fas fa-users',
-                        children: {}
-                    },
-                    '/manufacturing/welding/capacity-planning': {
-                        label: 'İmalat Planlama',
-                        icon: 'fas fa-calendar-alt',
                         children: {}
                     },
                     '/manufacturing/welding/reports': {

@@ -13,10 +13,10 @@
  * drawer is open. Sentences come from capacityText.js (tested under node).
  */
 
-import { getWeldingCapacityReport } from '../../../apis/welding/planning.js';
-import { updateTeam } from '../../../apis/welding/teams.js';
-import { updateSubcontractor } from '../../../apis/subcontracting/subcontractors.js';
-import { showNotification } from '../../../components/notification/notification.js';
+import { getWeldingCapacityReport } from '../../apis/welding/planning.js';
+import { updateTeam } from '../../apis/welding/teams.js';
+import { updateSubcontractor } from '../../apis/subcontracting/subcontractors.js';
+import { showNotification } from '../../components/notification/notification.js';
 import {
     SUGGESTION_ICONS, backlogSentence, blockVerdictLabel, deadlineText,
     difficultySentence, fmtDateTr, fmtKgText, fmtPerWeek, formatTonnes,

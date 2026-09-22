@@ -1,7 +1,7 @@
 /**
  * Tests for the capacity panel copy (pure functions over the capacity payload).
  *
- *     node manufacturing/welding/capacity-planning/capacityText.test.mjs
+ *     node planning/project-planning/capacityText.test.mjs
  */
 
 import assert from 'node:assert/strict';

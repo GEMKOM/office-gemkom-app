@@ -1,7 +1,7 @@
 /**
  * Tests for which schedule keys a dirty department row sends on bulk-save.
  *
- *     node manufacturing/welding/capacity-planning/deptSchedulePatch.test.mjs
+ *     node planning/project-planning/deptSchedulePatch.test.mjs
  */
 
 import assert from 'node:assert/strict';

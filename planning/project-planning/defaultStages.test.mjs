@@ -1,7 +1,7 @@
 /**
  * Default-stage seeding for İmalat Planlama.
  *
- *     node manufacturing/welding/capacity-planning/defaultStages.test.mjs
+ *     node planning/project-planning/defaultStages.test.mjs
  */
 
 import assert from 'node:assert/strict';

@@ -44,6 +44,14 @@
     grid-template-areas: "id figures";
 }
 
+/* No progress row here, so the id block and the chain share the height */
+.ps-page-hero .ps-hero-id { align-self: center; }
+
+/* The base "id figures" above would otherwise beat planSheet.css's stacking */
+@media (max-width: 1240px) {
+    .ps-page-hero { grid-template-areas: "id" "figures"; }
+}
+
 .ps-page-tools {
     display: flex;
     align-items: center;
@@ -98,6 +106,31 @@
         border-color: #c9ced4;
         break-inside: avoid;
     }
+
+    /* A4 landscape is 1062px of content: a tighter id and a smaller chain
+       keep the four dates on one row. */
+    .ps-page-hero {
+        grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
+        grid-template-areas: "id figures";
+    }
+    /* The title may take two lines on paper rather than lose its end */
+    .ps-page-hero .ps-hero-title {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        font-size: 0.92rem;
+        line-height: 1.25;
+    }
+    .ps-chain {
+        max-width: none;
+        justify-self: end;
+        grid-template-columns: auto minmax(16px, 0.5fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto;
+    }
+    .ps-cf label { font-size: 0.68rem; padding: 0 2px 4px; }
+    .ps-cf-value { font-size: 1.1rem; padding: 0 2px; }
+    .ps-cf-start .ps-cf-value { font-size: 0.85rem; }
+    .ps-cf-proj .ps-cf-value { font-size: 1.2rem; }
+    .ps-ck span { font-size: 11.5px; padding: 3px 6px; margin: 0 12px 0 6px; }
 
     /* Nothing scrolls and nothing sticks on paper; every row has a box. */
     .pp-sheet { overflow: visible; border-radius: 0; }

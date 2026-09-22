@@ -15,11 +15,12 @@
  * only, day → week → month), and when even that does not fit, the whole
  * page is zoomed down. The screen layout comes back after the dialog.
  */
-import { buildTimeline, ZOOMS } from '../../manufacturing/welding/capacity-planning/grid.js';
+import { buildTimeline, ZOOMS } from '../../planning/project-planning/grid.js';
 import {
     columnsWidth, domainBarOf, renderPlanSheet, sheetColumns, SHEET_ZOOMS,
 } from '../project-tracking/planSheet.js';
 import { headerSummary } from '../project-tracking/planSheetText.js';
+import { heroChainHtml } from '../project-tracking/heroChain.js';
 import { getSharedPlanSheet } from '../../apis/projects/planSheetPublic.js';
 import { escapeHtml } from '../../utils/text.js';
 
@@ -45,47 +46,20 @@ let link = null;
 let grid = null;
 let screenLayout = null;   // what to restore after printing
 
-function formatWd(value) {
-    const abs = Math.abs(Number(value) || 0);
-    return (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1)).replace('.', ',');
-}
-
-function signedWd(value) {
-    if (value === null || value === undefined) return null;
-    const n = Number(value);
-    if (n > 0) return { text: `+${formatWd(n)} iş günü`, cls: 'ps-fig-late' };
-    if (n < 0) return { text: `−${formatWd(n)} iş günü`, cls: 'ps-fig-early' };
-    return { text: 'tam gününde', cls: 'ps-fig-ok' };
-}
-
-function formatDateLong(value) {
-    if (!value) return '—';
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-}
-
+// The same date chain as the meeting slide's hero (heroChain.js), minus the
+// progress row — the customer reads dates and distances, not our percentages.
 function headerHtml() {
     const jo = sheet.job_order || {};
     const theme = headerSummary(sheet).theme;
-    const fig = (label, value, notes = [], cls = '', primary = false) => `
-        <div class="ps-fig${primary ? ' ps-fig-primary' : ''}">
-            <label>${label}</label>
-            <span class="ps-fig-value ${cls}">${value}</span>
-            ${notes.filter(Boolean).map(n => `<span class="ps-fig-note ${n.cls}">${escapeHtml(n.text)}</span>`).join('')}
-        </div>`;
-    const dev = signedWd(sheet.deviation_wd);
-    const gap = signedWd(sheet.termin_gap_wd);
-    const planVs = signedWd(sheet.plan_vs_termin_wd);
-    const figures = fig('Başlangıç', formatDateLong(jo.created_at))
-        + fig('Termin', formatDateLong(sheet.termin))
-        + fig('Plan bitişi', formatDateLong(sheet.plan_end),
-            [planVs && { text: `termine göre ${planVs.text}`, cls: planVs.cls }],
-            planVs && planVs.cls === 'ps-fig-late' ? 'ps-fig-late' : '')
-        + fig('Öngörülen', formatDateLong(sheet.projected_end),
-            [dev && { text: `plana göre ${dev.text}`, cls: dev.cls },
-             gap && { text: `termine göre ${gap.text}`, cls: gap.cls }],
-            dev ? dev.cls : '', true);
+    const chain = heroChainHtml({
+        start: jo.created_at,
+        termin: sheet.termin,
+        planEnd: sheet.plan_end,
+        projectedEnd: sheet.projected_end,
+        planVsTerminWd: sheet.plan_vs_termin_wd,
+        deviationWd: sheet.deviation_wd,
+        terminGapWd: sheet.termin_gap_wd,
+    });
     return `
         <div class="ps-page-brand">
             <span class="ps-page-logo">GEMKOM</span>
@@ -97,7 +71,7 @@ function headerHtml() {
                 <div class="ps-hero-title" title="${escapeHtml(jo.title || '')}">${escapeHtml(jo.title || '')}</div>
                 ${jo.customer_name ? `<div class="ps-hero-customer">${escapeHtml(jo.customer_name)}</div>` : ''}
             </div>
-            <div class="ps-hero-figures">${figures}</div>
+            ${chain}
         </div>`;
 }
 
