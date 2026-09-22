@@ -25,6 +25,7 @@ import {
 import { fetchPriceTiers } from '../../apis/subcontracting/priceTiers.js';
 import { createWorkdayCalendar, reconcileScheduleEdit } from '../../utils/workdays.js';
 import { deptSchedulePatch } from './deptSchedulePatch.js';
+import { canRederiveForecast, forecastRemainingWd } from './forecastLayout.js';
 import { blockSchedulePatch } from './blockSchedulePatch.js';
 import { compareJobsBy, earliestDate, normalizeSortMode } from './jobSort.js';
 import {
@@ -360,6 +361,7 @@ function stageVM(s) {
         completed_at: s.completed_at || null,
         forecast_date: s.forecast_date || null,
         forecast_kind: s.forecast_kind || null,
+        forecast_elapsed_wd: s.forecast_elapsed_wd ?? null,
         note: s.note || '',
         deleted: false,
     };
@@ -400,6 +402,7 @@ function blockVM(b, res) {
             completed_at: b.subtask.completed_at || null,
             forecast_date: b.subtask.forecast_date || null,
             forecast_kind: b.subtask.forecast_kind || null,
+            forecast_elapsed_wd: b.subtask.forecast_elapsed_wd ?? null,
             projected_start_date: b.subtask.projected_start_date || null,
             projected_end_date: b.subtask.projected_end_date || null,
         },
@@ -536,6 +539,7 @@ function deptVM(row) {
         completed_at: row.completed_at || null,
         forecast_date: row.forecast_date || null,
         forecast_kind: row.forecast_kind || null,
+        forecast_elapsed_wd: row.forecast_elapsed_wd ?? null,
         has_subtasks: !!row.has_subtasks,
         // Which parts the planner did not type: the date may be first real
         // progress, the duration a weight share, the window widened to cover a
@@ -2454,9 +2458,9 @@ function rederiveEngineDates() {
         return c;
     };
     // One row's window: unstarted work spans its full duration from the
-    // chained anchor; started work keeps its real start and finishes at the
-    // EARLIER of the anchored budget and the remaining share from today —
-    // exactly Kural 1's calendar-budget clamp, on the workday calendar.
+    // chained anchor; started work keeps its real start and runs on for what
+    // its own measured tempo says is left — the board's preview of the
+    // engine's `rate` path (see forecastLayout.js for what this replaced).
     const layout = (vm, chainedStart, durationWd) => {
         const d = Number(durationWd || 0);
         const p = Math.min(Number(vm.progress || 0), 99);
@@ -2471,9 +2475,26 @@ function rederiveEngineDates() {
             return end;
         }
         const anchor = vm.start_date || vm.projected_start_date || chainedStart || today;
-        const full = calendar.spanEnd(anchor, d);
-        const scaled = calendar.spanEnd(today, Math.max(d * (100 - p) / 100, 0.1));
-        let end = full < scaled ? full : scaled;
+        // A row the board cannot honestly re-derive keeps the engine's date
+        // (see canRederiveForecast); the rollups above still need a value.
+        if (!canRederiveForecast(vm.forecast_kind)) {
+            const kept = vm.forecast_date || vm.projected_end_date;
+            if (kept) {
+                vm.projected_end_date = kept;
+                vm.forecast_date = kept;
+                return kept;
+            }
+        }
+        // The tempo window: the engine's own measured one when it sent it —
+        // it carries the right anchor and has any material wait discounted
+        // off it — else the row's start up to today. A row starting today or
+        // later has none yet, and forecastRemainingWd falls back to the
+        // entered duration's remaining share.
+        const elapsed = vm.forecast_elapsed_wd != null
+            ? Number(vm.forecast_elapsed_wd)
+            : (anchor <= today ? calendar.workingDaysInclusive(anchor, today) : 0);
+        let end = calendar.spanEnd(
+            nextWorkday(today), forecastRemainingWd(p, elapsed, d));
         if (end < today) end = today;
         vm.projected_start_date = anchor;
         vm.projected_end_date = end;

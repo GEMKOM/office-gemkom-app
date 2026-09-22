@@ -486,6 +486,11 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-building',
                         children: {}
                     },
+                    '/manufacturing/subcontracting/labor-pricing': {
+                        label: 'İşçilik Fiyatı',
+                        icon: 'fas fa-calculator',
+                        children: {}
+                    },
                     '/manufacturing/subcontracting/statements': {
                         label: 'Hakedişler',
                         icon: 'fas fa-file-invoice-dollar',

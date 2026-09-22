@@ -37,6 +37,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 features: []
             },
             {
+                title: 'İşçilik Fiyatı',
+                description: 'Satış fiyatından geriye giderek taşerona verilebilecek €/kg işçiliği hesaplayın.',
+                icon: 'fas fa-calculator',
+                iconColor: 'primary',
+                link: '/manufacturing/subcontracting/labor-pricing',
+                features: []
+            },
+            {
                 title: 'Hakedişler',
                 description: 'Aylık taşeron hakedişlerini oluşturun, onaylayın ve takip edin.',
                 icon: 'fas fa-file-invoice-dollar',

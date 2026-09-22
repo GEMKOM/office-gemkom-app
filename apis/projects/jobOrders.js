@@ -737,11 +737,18 @@ export async function recalculateJobOrderProgress(jobNo) {
 /**
  * Get job orders for dropdown (simplified list with job_no and title)
  * @param {boolean} includeAll - Include completed/cancelled job orders
+ * @param {Object} options - Opt-in extras; omit them and the payload is unchanged
+ * @param {boolean} options.rootOnly - Only top-level job orders (drops children and phases)
+ * @param {boolean} options.withCustomer - Add customer_name to each row
  * @returns {Promise<Array>} Array of job orders with job_no and title
  */
-export async function getJobOrderDropdown(includeAll = false) {
+export async function getJobOrderDropdown(includeAll = false, options = {}) {
     try {
-        const query = includeAll ? '?all=true' : '';
+        const params = new URLSearchParams();
+        if (includeAll) params.append('all', 'true');
+        if (options.rootOnly) params.append('root_only', 'true');
+        if (options.withCustomer) params.append('with_customer', 'true');
+        const query = params.toString() ? `?${params}` : '';
         const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/${query}`);
 
         if (!response.ok) {

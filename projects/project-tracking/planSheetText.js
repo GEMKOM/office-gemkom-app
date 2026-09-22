@@ -186,6 +186,13 @@ export function signedFigure(value) {
 /** "%38 (beklenen %55)" for the İlerleme column. */
 export function progressText(row) {
     if (!row) return '';
+    // Atlanan (ve iptal edilen) iş YAPILMADI. `progress_pct` is 100 for a
+    // skipped row on purpose — a skipped task must not drag its parent's
+    // roll-up down — but printing that %100 next to a finish date made the
+    // row read as completed: 055-18-01's CNC Kesim was skipped on 15.09 and
+    // showed "%100" (user 2026-09-22). The Durum badge already says Atlandı;
+    // the progress column must not contradict it.
+    if (row.dead) return '—';
     const p = fmtPct(row.progress_pct);
     if (row.done) return p;
     if (row.expected_pct == null) return p;

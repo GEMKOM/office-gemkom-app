@@ -105,6 +105,14 @@ check('figures, progress text and grouping', () => {
     assert.deepEqual(signedFigure(null), { text: '—', cls: '' });
     assert.equal(progressText({ progress_pct: 38, expected_pct: 55 }), '%38 / %55');
     assert.equal(progressText({ progress_pct: 100, expected_pct: 100, done: true }), '%100');
+    // Skipped work carries 100 % so it does not drag a roll-up down, but it
+    // was never done — printing the number read as "Tamamlandı".
+    assert.equal(
+        progressText({ progress_pct: 100, expected_pct: 40, done: true, dead: true }),
+        '—');
+    assert.equal(
+        progressText({ progress_pct: 0, expected_pct: 40, done: false, dead: true }),
+        '—');
     const groups = groupRows({ nodes: [{ job_no: 'A' }, { job_no: 'B' }], rows: [{ job_no: 'B', title: 'x' }, { job_no: 'A', title: 'y' }] });
     assert.deepEqual(groups.map(g => [g.node.job_no, g.rows.length]), [['A', 1], ['B', 1]]);
 });

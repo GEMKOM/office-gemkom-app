@@ -92,7 +92,12 @@ function deviationCell(row) {
 }
 
 function progressCell(row) {
-    const pct = Math.max(0, Math.min(100, Math.round(Number(row.progress || 0))));
+    // A dead row's bar is empty for the same reason its text is an em-dash:
+    // the work was not done (see progressText).
+    const dead = row.kind === 'task' && !!(row.row && row.row.dead);
+    const pct = dead
+        ? 0
+        : Math.max(0, Math.min(100, Math.round(Number(row.progress || 0))));
     const text = row.kind === 'group' ? `%${pct}` : progressText(row.row);
     const expected = row.kind === 'task' && row.row.expected_pct != null
         ? Math.max(0, Math.min(100, Math.round(Number(row.row.expected_pct)))) : null;

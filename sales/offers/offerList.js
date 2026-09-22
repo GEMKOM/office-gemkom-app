@@ -4876,7 +4876,7 @@ function renderPricingV3Totals() {
     if (weightEl) weightEl.textContent = totalWeight > 0 ? `${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg` : '—';
     const avgKgEl = document.getElementById('pricing-avg-kg-price');
     const avgKg = totalWeight > 0 ? (itemsTotal / totalWeight) : null;
-    if (avgKgEl) avgKgEl.textContent = avgKg != null ? formatPricingV3Money(avgKg) : '—';
+    if (avgKgEl) avgKgEl.textContent = avgKg != null ? formatPricingV3Money2(avgKg) : '—';
 }
 
 function markPricingV3Unsaved(hasChanges) {
