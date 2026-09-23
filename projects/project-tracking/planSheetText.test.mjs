@@ -7,7 +7,8 @@
 import assert from 'node:assert/strict';
 import {
     barState, causeSentence, deviationChip, fmtDateTr, fmtWd, groupRows,
-    headerSummary, isDefaultDuration, planSourceLabel, progressText, signedFigure,
+    headerSummary, isDefaultDuration, planSourceLabel, progressText,
+    rootCauseLabel, signedFigure,
 } from './planSheetText.js';
 
 let failures = 0;
@@ -127,3 +128,23 @@ check('house tone: no exclamation marks', () => {
 
 console.log(failures ? `\n${failures} failing` : '\nall passed');
 process.exit(failures ? 1 : 0);
+
+test('a root cause is named by its own row, not its department', () => {
+    // 061-60: the headline said "Üretim" — the department shared by Talaşlı
+    // İmalat, Kaynaklı İmalat, Boya and every assignment — so the row that
+    // had actually not started was never named.
+    assert.equal(
+        rootCauseLabel({ kind: 'phase', title: 'Talaşlı İmalat',
+                         department_display: 'Üretim' }),
+        'Talaşlı İmalat');
+    assert.equal(
+        rootCauseLabel({ kind: 'block', title: 'ERK MAKİNE',
+                         department_display: 'Üretim' }),
+        'ERK MAKİNE');
+    // A MAIN's title is the product name, so there the department says more.
+    assert.equal(
+        rootCauseLabel({ kind: 'main', title: 'LF ROOF',
+                         department_display: 'Üretim' }),
+        'Üretim');
+    assert.equal(rootCauseLabel(null), '');
+});

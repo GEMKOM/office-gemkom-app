@@ -130,6 +130,26 @@ export function causeSentence(row) {
     return text;
 }
 
+/**
+ * How to name the row a root cause points at.
+ *
+ * A MAIN carries the product name as its title (every main of 061-60-02 is
+ * "LF ROOF"), so there its department says more. Every other row's own title
+ * IS the useful name — and `department_display` is "Üretim" for Talaşlı
+ * İmalat, Kaynaklı İmalat, Boya and every taşeron/ekip assignment alike, so
+ * preferring it threw away the one thing the reader needed.
+ *
+ * User 2026-09-23, 061-60: the headline read "Üretim: Plan başlangıcı 12 iş
+ * günü önce geçti, başlanmadı" while Üretim itself was %13 and running — the
+ * row that had not started was Talaşlı İmalat, and it was never named.
+ */
+export function rootCauseLabel(rc) {
+    if (!rc) return '';
+    return (rc.kind === 'main'
+        ? (rc.department_display || rc.title)
+        : (rc.title || rc.department_display)) || '';
+}
+
 // ---- header -----------------------------------------------------------------
 
 function signed(value) {
@@ -152,7 +172,7 @@ export function headerSummary(sheet) {
         planLine = `Plan bitişi ${fmtDateTr(sheet.plan_end)}.`;
     } else if (dev > 0) {
         const rc = sheet.root_cause;
-        const why = rc ? ` Nedeni: ${rc.title}${rc.job_no ? ` (${rc.job_no})` : ''} — ${causeSentence({ cause: rc.cause, own_deviation_wd: rc.own_deviation_wd })}` : '';
+        const why = rc ? ` Nedeni: ${rootCauseLabel(rc)}${rc.job_no ? ` (${rc.job_no})` : ''} — ${causeSentence({ cause: rc.cause, own_deviation_wd: rc.own_deviation_wd })}` : '';
         planLine = `Plana göre ${signed(dev)} geride: plan bitişi ${fmtDateTr(sheet.plan_end)}, öngörülen ${fmtDateTr(sheet.projected_end)}.${why}`;
     } else if (dev < 0) {
         planLine = `Planın ${fmtWd(dev)} önünde: plan bitişi ${fmtDateTr(sheet.plan_end)}, öngörülen ${fmtDateTr(sheet.projected_end)}.`;

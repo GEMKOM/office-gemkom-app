@@ -17,7 +17,7 @@ import { createWorkdayCalendar } from '../../utils/workdays.js';
 import { escapeHtml } from '../../utils/text.js';
 import {
     barState, causeSentence, deviationChip, fmtDateTr, groupRows,
-    isDefaultDuration, planSourceLabel, progressText,
+    isDefaultDuration, planSourceLabel, progressText, rootCauseLabel,
 } from './planSheetText.js';
 
 const STATUS_META = {
@@ -197,7 +197,7 @@ export function buildSheetRows(sheet, collapsed = new Set(), { mainOnly = false 
         }
         const rc = node.root_cause;
         const rootCauseText = rc
-            ? `${rc.department_display || rc.title}${rc.job_no && rc.job_no !== node.job_no ? ` (${rc.job_no})` : ''}: `
+            ? `${rootCauseLabel(rc)}${rc.job_no && rc.job_no !== node.job_no ? ` (${rc.job_no})` : ''}: `
                 + causeSentence({ cause: rc.cause, own_deviation_wd: rc.own_deviation_wd })
             : '';
         const targetLate = Number(node.termin_gap_wd || 0) > 0;
@@ -242,6 +242,9 @@ export function buildSheetRows(sheet, collapsed = new Set(), { mainOnly = false 
                 status: r.status,
                 deviation: r.deviation_wd,
                 projected_end: r.projected_end,
+                // What the Neden cell shows, so an editable link's editor
+                // opens on it (and can clear it) instead of on nothing.
+                cause: causeSentence(r),
                 job_target: node.termin,
                 job_target_late: targetLate,
             });
@@ -255,7 +258,10 @@ function rowBar(row) {
     const start = row.plan_start;
     const end = row.plan_end;
     if (!start || !end || end < start) return null;
-    const state = row.kind === 'group'
+    // An edited deviation or status is the sales team's word over the
+    // computed one, so the bar reads from the row like a job row does.
+    const edited = row.edited && (row.edited.has('deviation') || row.edited.has('status'));
+    const state = row.kind === 'group' || edited
         ? (row.status === 'completed' ? 'done'
             : (row.status === 'on_hold' ? 'hold' : (Number(row.deviation || 0) > 0 ? 'late' : 'on-time')))
         : barState(row.row, row.node);
@@ -307,7 +313,7 @@ function projectionTailHtml(row, timeline) {
     const left = x0 + oneUnit;
     const width = Math.max(4, x1 - x0);
     const dev = Number(row.deviation || 0);
-    const chainOnly = row.kind === 'task'
+    const chainOnly = row.kind === 'task' && !(row.edited && row.edited.has('deviation'))
         && Number(row.row.own_deviation_wd || 0) <= 0 && Number(row.row.chain_deviation_wd || 0) > 0;
     const label = `${dev > 0 ? '+' : ''}${dev}`;
     return `
@@ -332,6 +338,23 @@ export function domainBarOf(planBar) {
 // edge. The domain pass therefore sees the projected end as the bar's end;
 // the drawing pass switches back to the plan bar and adds the tail itself.
 export class SheetGrid extends PlanningGrid {
+    // A job row's Görev cell shows its number and name; on an editable link
+    // the name is what changes, never the number.
+    _startEdit(cell) {
+        const row = this._rowByKey(cell.dataset.row);
+        if (row && row.kind === 'group' && cell.dataset.field === 'title') {
+            const number = row.title;
+            row.title = row.job_title || '';
+            try {
+                super._startEdit(cell);
+            } finally {
+                row.title = number;
+            }
+            return;
+        }
+        super._startEdit(cell);
+    }
+
     render() {
         const planBar = this.options.bar;
         this._planBar = planBar;
@@ -388,34 +411,119 @@ function terminGapPillHtml(row, timeline) {
              title="${escapeHtml(title)}">${label}</div>`;
 }
 
+// ---- editable links ---------------------------------------------------------
+//
+// A sales link (PlanSheetShareLink.editable) lets every cell be changed
+// before the PDF is printed. The edits are overrides keyed by row key
+// ("task:12", "job-009-37") and field; they sit on top of the computed rows
+// and never reach the plan itself.
+
+const EDIT_TYPES = {
+    title: 'text', plan_start: 'date', plan_end: 'date', plan_wd: 'number',
+    progress: 'number', status: 'select', deviation: 'number', projected_end: 'date',
+    cause: 'text',
+};
+export const NUMBER_FIELDS = new Set(['plan_wd', 'progress', 'deviation']);
+const STATUS_OPTIONS = Object.entries(STATUS_META)
+    .filter(([value]) => !['active', 'draft'].includes(value))
+    .map(([value, [label]]) => ({ value, label }));
+
+/** The override field an edit of `field` on `row` lands in: a job row's
+ *  Görev cell edits the job's name. */
+export function overrideFieldOf(row, field) {
+    return row.kind === 'group' && field === 'title' ? 'job_title' : field;
+}
+
+/** Rows with the link's edits laid over them; `base` keeps the computed row
+ *  so an edit back to the original can drop the override. */
+export function applyRowOverrides(rows, overrides) {
+    if (!overrides) return rows;
+    return rows.map((row) => {
+        const fields = overrides[row.key];
+        if (!fields || !Object.keys(fields).length) return { ...row, base: row };
+        return { ...row, ...fields, base: row, edited: new Set(Object.keys(fields)) };
+    });
+}
+
+// The formatters above read task rows' computed payload (row.row) for their
+// sentences and chips; an edited value has to win over that.
+function editedHtml(field, value, row) {
+    if (field === 'deviation') {
+        return deviationCell({ kind: 'group', deviation: value });
+    }
+    if (field === 'progress') {
+        const pct = Math.max(0, Math.min(100, Math.round(Number(value || 0))));
+        return `
+            <span class="ps-progress">
+                <span class="ps-progress-track"><span class="ps-progress-fill" style="width:${pct}%"></span></span>
+                <span class="ps-progress-text">%${pct}</span>
+            </span>`;
+    }
+    if (field === 'cause') {
+        // Cleared on purpose: blank, not the "—" of a row with no reason.
+        return `<span class="ps-cause" title="${escapeHtml(value || '')}">${escapeHtml(value || '')}</span>`;
+    }
+    return null;
+}
+
+function editableColumns(columns) {
+    return columns.map(col => ({
+        ...col,
+        type: EDIT_TYPES[col.field] || 'text',
+        options: col.field === 'status' ? STATUS_OPTIONS : undefined,
+        min: col.field === 'progress' ? 0 : undefined,
+        max: col.field === 'progress' ? 100 : undefined,
+        step: NUMBER_FIELDS.has(col.field) ? 'any' : undefined,
+        formatter: (v, row) => {
+            const field = overrideFieldOf(row, col.field);
+            const edited = row.edited && row.edited.has(field);
+            const html = (edited && editedHtml(col.field, v, row)) || col.formatter(v, row);
+            return edited
+                ? `${html}<span class="ps-edit-dot" title="Bu bağlantıda değiştirildi"></span>`
+                : html;
+        },
+    }));
+}
+
 /**
  * Render (or re-render) the sheet into `containerId`. `state` keeps the
  * zoom and the collapsed groups across slides, and may narrow the sheet:
  * `columns` (field names, Görev always), `mainOnly` (department tasks
- * only), `gridWidth` / `colWidth` (print geometry). Returns the grid.
+ * only), `gridWidth` / `colWidth` (print geometry). An editable link
+ * adds `overrides` (row key → field → value) and `onEdit(row, field, value)`,
+ * which stores the edit; every cell then takes a click. Returns the grid.
  */
 export function renderPlanSheet(containerId, sheet, state) {
     const calendar = createWorkdayCalendar(sheet.holidays || []);
-    const columns = sheetColumns(state.columns);
+    const editable = typeof state.onEdit === 'function';
+    const baseColumns = sheetColumns(state.columns);
+    const columns = editable ? editableColumns(baseColumns) : baseColumns;
     const rowOptions = { mainOnly: !!state.mainOnly };
-    const rows = buildSheetRows(sheet, state.collapsed, rowOptions);
+    const rowsNow = () => applyRowOverrides(
+        buildSheetRows(sheet, state.collapsed, rowOptions), editable ? state.overrides : null);
+    const rows = rowsNow();
     const groupKeys = (sheet.nodes || []).map(groupKeyOf);
     const allCollapsed = () => groupKeys.length > 0 && groupKeys.every(k => state.collapsed.has(k));
     const refresh = () => {
         grid.options.allCollapsed = allCollapsed();
-        grid.setRows(buildSheetRows(sheet, state.collapsed, rowOptions));
+        grid.setRows(rowsNow());
     };
     const grid = new SheetGrid(containerId, {
         columns,
         rows,
         zoom: SHEET_ZOOMS.includes(state.zoom) ? state.zoom : 'week',
-        gridWidth: state.gridWidth || columnsWidth(columns),
+        gridWidth: state.gridWidth || columnsWidth(baseColumns),
         // No cap: the grip may widen the table (and so Neden) all the way.
         maxGridWidth: Infinity,
         colWidth: state.colWidth || null,
         collapsed: state.collapsed,
         allCollapsed: allCollapsed(),
-        isCellEditable: () => false,
+        isCellEditable: () => editable,
+        onEdit: editable ? async (row, field, value) => {
+            await state.onEdit(row, overrideFieldOf(row, field), value);
+            refresh();
+        } : null,
+        onEditError: editable ? state.onEditError || null : null,
         rowAttributes: (row) => ({ class: rowClasses(row) }),
         bar: rowBar,
         isNonWorkingDay: (d) => calendar.isNonWorkingDay(d),

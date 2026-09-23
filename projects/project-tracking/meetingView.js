@@ -1290,7 +1290,7 @@ function sheetShareDefaults() {
     } catch (error) {
         // no stored preference
     }
-    return { fields: null, expandAll: true, mainOnly: false, days: 7 };
+    return { fields: null, expandAll: true, mainOnly: false, showHeader: true, days: 7 };
 }
 
 function sheetPageUrl(item, prefs, print) {
@@ -1298,6 +1298,7 @@ function sheetPageUrl(item, prefs, print) {
     params.set('job_no', item.job_no);
     if (prefs.fields && prefs.fields.length) params.set('cols', prefs.fields.join(','));
     if (prefs.mainOnly) params.set('main', '1');
+    if (prefs.showHeader === false) params.set('head', '0');
     if (!prefs.expandAll && sheetState.collapsed.size) params.set('collapsed', [...sheetState.collapsed].join(','));
     params.set('zoom', sheetState.zoom);
     if (print) params.set('print', '1');
@@ -1336,6 +1337,10 @@ function openSheetShareDialog() {
                 gerektirmeyen geçici bir bağlantı verebilirsiniz.</p>
             <div class="pp-sheetpdf-cols">${boxes}</div>
             <label class="pp-sheetpdf-opt">
+                <input type="checkbox" data-opt="head" ${prefs.showHeader !== false ? 'checked' : ''}>
+                <span>Başlık bölümünü göster (iş emri, müşteri ve tarih zinciri)</span>
+            </label>
+            <label class="pp-sheetpdf-opt pp-sheetpdf-opt-tight">
                 <input type="checkbox" data-opt="expand" ${prefs.expandAll !== false ? 'checked' : ''}>
                 <span>Katlanmış iş emirlerini de açık göster</span>
             </label>
@@ -1354,6 +1359,10 @@ function openSheetShareDialog() {
                         title="Yeni sekmede açılır; tarayıcının yazdırma penceresinden PDF olarak kaydedin">
                     <i class="fas fa-print me-1"></i>Yazdır / PDF
                 </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" data-sheet-action="share-edit"
+                        title="Satış ekibi için: her hücre düzenlenebilir, sonra PDF olarak indirilir. Gerçek plan değişmez.">
+                    <i class="fas fa-pen-to-square me-1"></i>Düzenlenebilir bağlantı
+                </button>
                 <button type="button" class="btn btn-danger btn-sm" data-sheet-action="share">
                     <i class="fas fa-link me-1"></i>Müşteri bağlantısı oluştur
                 </button>
@@ -1368,9 +1377,10 @@ function readSheetDialog(modal) {
     const fields = [...modal.querySelectorAll('input[data-col]:checked')].map(el => el.dataset.col);
     const expandAll = !!modal.querySelector('input[data-opt="expand"]:checked');
     const mainOnly = !!modal.querySelector('input[data-opt="main"]:checked');
+    const showHeader = !!modal.querySelector('input[data-opt="head"]:checked');
     const daysEl = modal.querySelector('select[data-opt="days"]');
     const days = Number(daysEl ? daysEl.value : 7) || 7;
-    const prefs = { fields, expandAll, mainOnly, days };
+    const prefs = { fields, expandAll, mainOnly, showHeader, days };
     try {
         localStorage.setItem(SHEET_SHARE_KEY, JSON.stringify(prefs));
     } catch (error) {
@@ -1401,7 +1411,8 @@ async function onSheetDialogAction(btn) {
         window.open(sheetPageUrl(item, prefs, true), '_blank', 'noopener');
         return;
     }
-    if (action !== 'share') return;
+    if (action !== 'share' && action !== 'share-edit') return;
+    const editable = action === 'share-edit';
     const original = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Oluşturuluyor';
@@ -1409,9 +1420,11 @@ async function onSheetDialogAction(btn) {
         const link = await createPlanSheetShareLink(item.job_no, {
             columns: prefs.fields,
             expires_in_days: prefs.days,
+            editable,
             options: {
                 expand_all: prefs.expandAll,
                 main_only: prefs.mainOnly,
+                show_header: prefs.showHeader,
                 collapsed: prefs.expandAll ? [] : [...sheetState.collapsed],
             },
         });
@@ -1422,7 +1435,11 @@ async function onSheetDialogAction(btn) {
             box.hidden = false;
             box.innerHTML = `
                 <div class="pp-sheetpdf-link-head">
-                    <i class="fas fa-link me-1"></i>Müşteri bağlantısı hazır: ${escapeHtml(until)} tarihine kadar geçerli, giriş gerektirmez.
+                    ${editable
+                        ? `<i class="fas fa-pen-to-square me-1"></i>Düzenlenebilir bağlantı hazır: ${escapeHtml(until)} tarihine kadar geçerli.
+                           Açıp hücreleri düzenleyin, sonra Yazdır / PDF ile indirin. Değişiklikler yalnızca bu bağlantıda
+                           saklanır; gerçek plan değişmez. Müşteriye göndermeyin: açan herkes düzenleyebilir.`
+                        : `<i class="fas fa-link me-1"></i>Müşteri bağlantısı hazır: ${escapeHtml(until)} tarihine kadar geçerli, giriş gerektirmez.`}
                 </div>
                 <div class="pp-sheetpdf-link-row">
                     <input id="pp-share-url" class="form-control form-control-sm" type="text" readonly value="${escapeHtml(url)}">
