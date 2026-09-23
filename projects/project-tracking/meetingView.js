@@ -1290,7 +1290,7 @@ function sheetShareDefaults() {
     } catch (error) {
         // no stored preference
     }
-    return { fields: null, expandAll: true, mainOnly: false, showHeader: true, days: 7 };
+    return { fields: null, expandAll: true, mainOnly: false, showHeader: true, language: 'tr', days: 7 };
 }
 
 function sheetPageUrl(item, prefs, print) {
@@ -1299,14 +1299,15 @@ function sheetPageUrl(item, prefs, print) {
     if (prefs.fields && prefs.fields.length) params.set('cols', prefs.fields.join(','));
     if (prefs.mainOnly) params.set('main', '1');
     if (prefs.showHeader === false) params.set('head', '0');
+    if (prefs.language === 'en') params.set('lang', 'en');
     if (!prefs.expandAll && sheetState.collapsed.size) params.set('collapsed', [...sheetState.collapsed].join(','));
     params.set('zoom', sheetState.zoom);
     if (print) params.set('print', '1');
     return `${window.location.origin}/projects/plan-sheet/?${params.toString()}`;
 }
 
-function sheetShareUrl(token) {
-    return `${window.location.origin}/projects/plan-sheet/?share=${encodeURIComponent(token)}`;
+function sheetShareUrl(token, language) {
+    return `${window.location.origin}/projects/plan-sheet/?share=${encodeURIComponent(token)}${language === 'en' ? '&lang=en' : ''}`;
 }
 
 function openSheetShareDialog() {
@@ -1349,12 +1350,18 @@ function openSheetShareDialog() {
                 <span>Yalnızca departman görevleri (alt satırlar, ekip ve taşeron adları gizli)</span>
             </label>
             <div class="pp-sheetpdf-row">
+                <label for="pp-share-lang">Dil (PDF ve müşteri sayfası)</label>
+                <select id="pp-share-lang" class="form-select form-select-sm" data-opt="lang">
+                    <option value="tr"${prefs.language !== 'en' ? ' selected' : ''}>Türkçe</option>
+                    <option value="en"${prefs.language === 'en' ? ' selected' : ''}>English</option>
+                </select>
+            </div>
+            <div class="pp-sheetpdf-row pp-sheetpdf-row-tight">
                 <label for="pp-share-days">Bağlantının geçerlilik süresi</label>
                 <select id="pp-share-days" class="form-select form-select-sm" data-opt="days">${dayOptions}</select>
             </div>
             <div class="pp-sheetpdf-link" id="pp-share-result" hidden></div>
             <div class="pp-sheetpdf-actions">
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-modal-close>Kapat</button>
                 <button type="button" class="btn btn-outline-danger btn-sm" data-sheet-action="print"
                         title="Yeni sekmede açılır; tarayıcının yazdırma penceresinden PDF olarak kaydedin">
                     <i class="fas fa-print me-1"></i>Yazdır / PDF
@@ -1364,7 +1371,7 @@ function openSheetShareDialog() {
                     <i class="fas fa-pen-to-square me-1"></i>Düzenlenebilir bağlantı
                 </button>
                 <button type="button" class="btn btn-danger btn-sm" data-sheet-action="share">
-                    <i class="fas fa-link me-1"></i>Müşteri bağlantısı oluştur
+                    <i class="fas fa-link me-1"></i>Müşteri bağlantısı
                 </button>
             </div>
         </div>`;
@@ -1378,9 +1385,11 @@ function readSheetDialog(modal) {
     const expandAll = !!modal.querySelector('input[data-opt="expand"]:checked');
     const mainOnly = !!modal.querySelector('input[data-opt="main"]:checked');
     const showHeader = !!modal.querySelector('input[data-opt="head"]:checked');
+    const langEl = modal.querySelector('select[data-opt="lang"]');
+    const language = langEl && langEl.value === 'en' ? 'en' : 'tr';
     const daysEl = modal.querySelector('select[data-opt="days"]');
     const days = Number(daysEl ? daysEl.value : 7) || 7;
-    const prefs = { fields, expandAll, mainOnly, showHeader, days };
+    const prefs = { fields, expandAll, mainOnly, showHeader, language, days };
     try {
         localStorage.setItem(SHEET_SHARE_KEY, JSON.stringify(prefs));
     } catch (error) {
@@ -1425,10 +1434,11 @@ async function onSheetDialogAction(btn) {
                 expand_all: prefs.expandAll,
                 main_only: prefs.mainOnly,
                 show_header: prefs.showHeader,
+                language: prefs.language,
                 collapsed: prefs.expandAll ? [] : [...sheetState.collapsed],
             },
         });
-        const url = sheetShareUrl(link.token);
+        const url = sheetShareUrl(link.token, prefs.language);
         const until = new Date(link.expires_at).toLocaleDateString('tr-TR');
         const box = modal.querySelector('#pp-share-result');
         if (box) {

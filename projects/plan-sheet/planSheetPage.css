@@ -266,6 +266,8 @@
 .ps-print-col.is-locked { color: #8a919c; cursor: default; }
 .ps-print-col small { color: #8a919c; }
 .ps-print-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.ps-print-lang { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.ps-print-lang select { width: auto; }
 
 @media print {
     .ps-edit-dot { display: none; }

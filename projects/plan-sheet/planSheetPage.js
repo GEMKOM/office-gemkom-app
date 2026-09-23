@@ -2,7 +2,7 @@
  * Plan ve Sapmalar on its own page — nothing else: the job order's dates,
  * the legend and the sheet. Two doors in:
  *
- *   ?job_no=009-37[&cols=a,b&main=1&head=0&collapsed=job-X&zoom=week&print=1]
+ *   ?job_no=009-37[&cols=a,b&main=1&head=0&lang=en&collapsed=job-X&zoom=week&print=1]
  *       the office session (tokens in localStorage). print=1 opens the
  *       browser's print dialog once the sheet is drawn; "Save as PDF" there
  *       gives a vector PDF laid out for A4 landscape.
@@ -13,14 +13,18 @@
  *       edits are saved on the link (never on the plan), and the PDF prints
  *       them. See "editing" below.
  *
+ * lang=en (or the link's options.language) draws everything WE write in
+ * English (sheetLang.js). The sales team's editing controls stay Turkish.
+ *
  * Printing re-lays the grid out for the page: the frozen table takes the
  * width its columns need, the timeline is re-scaled to the rest (coarser
  * only, day → week → month), and when even that does not fit, the whole
  * page is zoomed down. The screen layout comes back after the dialog.
  */
 import {
-    buildTimeline, DATE_ENTRY_PLACEHOLDER, formatDMY, maskDMY, parseDMY, ZOOMS,
+    buildTimeline, DATE_ENTRY_PLACEHOLDER, formatDMY, maskDMY, parseDMY, setGridLocale, ZOOMS,
 } from '../../planning/project-planning/grid.js';
+import { dateLocale, setSheetLang, sheetLang, tr } from '../project-tracking/sheetLang.js';
 import {
     columnsWidth, domainBarOf, NUMBER_FIELDS, renderPlanSheet, SHEET_COLUMNS, sheetColumns, SHEET_ZOOMS,
 } from '../project-tracking/planSheet.js';
@@ -59,6 +63,16 @@ let grid = null;
 let screenLayout = null;   // what to restore after printing
 let editing = null;        // { token, header, saveTimer, status, ... } on an editable link
 
+// The page's language, set before anything is drawn (and again when the
+// sales team switches it in the print dialog).
+function applyLanguage(lang) {
+    setSheetLang(lang);
+    setGridLocale(sheetLang());
+    document.documentElement.lang = sheetLang();
+}
+
+const ZOOM_EN = { day: 'Day', week: 'Week', month: 'Month' };
+
 // The same date chain as the meeting slide's hero (heroChain.js), minus the
 // progress row — the customer reads dates and distances, not our percentages.
 function headerHtml() {
@@ -82,14 +96,14 @@ function headerHtml() {
         return `
         <div class="ps-page-brand">
             <span class="ps-page-logo">GEMKOM</span>
-            <span class="ps-page-doc">Plan ve Sapmalar</span>
+            <span class="ps-page-doc">${tr('Plan ve Sapmalar', 'Plan and Deviations')}</span>
             <span class="ps-page-job">${escapeHtml([jo.job_no, jo.title, jo.customer_name].filter(Boolean).join(' · '))}</span>
         </div>${note}`;
     }
     return `
         <div class="ps-page-brand">
             <span class="ps-page-logo">GEMKOM</span>
-            <span class="ps-page-doc">Plan ve Sapmalar</span>
+            <span class="ps-page-doc">${tr('Plan ve Sapmalar', 'Plan and Deviations')}</span>
         </div>
         <div class="pp-hero-ps ps-theme-${theme} ps-page-hero">
             <div class="ps-hero-id">
@@ -104,30 +118,32 @@ function headerHtml() {
 function toolbarHtml() {
     const zoom = SHEET_ZOOMS.map(z => `
         <button type="button" class="btn btn-outline-secondary${state.zoom === z ? ' active' : ''}"
-                data-zoom="${z}">${ZOOMS[z].label}</button>`).join('');
+                data-zoom="${z}">${tr(ZOOMS[z].label, ZOOM_EN[z] || ZOOMS[z].label)}</button>`).join('');
     return `
         <div class="ps-page-tools">
             <span class="pp-sheet-legend ps-page-legend">
                 <span><i class="lg-ontime"></i>plan</span>
-                <span><i class="lg-late"></i>geride</span>
-                <span><i class="lg-ext"></i>öngörülen uzama</span>
-                <span><i class="lg-termin"></i>termin</span>
-                <span><i class="lg-today"></i>bugün</span>
+                <span><i class="lg-late"></i>${tr('geride', 'behind')}</span>
+                <span><i class="lg-ext"></i>${tr('öngörülen uzama', 'projected overrun')}</span>
+                <span><i class="lg-termin"></i>${tr('termin', 'due date')}</span>
+                <span><i class="lg-today"></i>${tr('bugün', 'today')}</span>
             </span>
             <span class="pp-sheet-zoom btn-group ps-print-hide">${zoom}</span>
             <button type="button" class="btn btn-danger btn-sm ps-print-hide" data-action="print"
-                    title="Tarayıcının yazdırma penceresi açılır; PDF olarak kaydedebilirsiniz">
-                <i class="fas fa-print me-1"></i>Yazdır / PDF
+                    title="${tr('Tarayıcının yazdırma penceresi açılır; PDF olarak kaydedebilirsiniz',
+                        "Opens the browser's print dialog; choose Save as PDF there")}">
+                <i class="fas fa-print me-1"></i>${tr('Yazdır / PDF', 'Print / PDF')}
             </button>
         </div>`;
 }
 
 function footerHtml() {
-    const stamp = new Date().toLocaleDateString('tr-TR');
+    const stamp = new Date().toLocaleDateString(dateLocale());
     // An editable link's PDF goes to the customer; the link's own expiry is
     // nothing to them.
     const until = link && link.expires_at && !editing
-        ? ` · Bu bağlantı ${new Date(link.expires_at).toLocaleDateString('tr-TR')} tarihine kadar geçerlidir`
+        ? tr(` · Bu bağlantı ${new Date(link.expires_at).toLocaleDateString('tr-TR')} tarihine kadar geçerlidir`,
+            ` · This link is valid until ${new Date(link.expires_at).toLocaleDateString('en-GB')}`)
         : '';
     return `<div class="ps-page-foot">GEMKOM · ${escapeHtml(stamp)}${escapeHtml(until)}</div>`;
 }
@@ -140,7 +156,7 @@ function drawGrid() {
 }
 
 function render() {
-    document.title = `Plan ve Sapmalar · ${(view().job_order || {}).job_no || ''}`;
+    document.title = `${tr('Plan ve Sapmalar', 'Plan and Deviations')} · ${(view().job_order || {}).job_no || ''}`;
     document.getElementById('ps-head').innerHTML = headerHtml() + toolbarHtml();
     drawGrid();
     document.getElementById('ps-foot').innerHTML = footerHtml();
@@ -423,6 +439,7 @@ function applyViewChoices() {
     if (Array.isArray(v.columns)) state.columns = v.columns.length ? v.columns : null;
     if (hasOwn(v, 'show_header')) state.showHeader = v.show_header !== false;
     if (hasOwn(v, 'main_only')) state.mainOnly = !!v.main_only;
+    if (hasOwn(v, 'language')) applyLanguage(v.language);
 }
 
 function printDialogHtml() {
@@ -448,6 +465,12 @@ function printDialogHtml() {
             ${opt('head', state.showHeader, 'Başlık bölümünü göster (iş emri, müşteri ve tarih zinciri)')}
             ${opt('expand', editing.view.expand_all !== false, 'Katlanmış iş emirlerini de açık göster')}
             ${opt('main', state.mainOnly, 'Yalnızca departman görevleri (alt satırlar, ekip ve taşeron adları gizli)')}
+            <label class="ps-print-lang">Dil (PDF)
+                <select class="form-select form-select-sm" data-opt="lang">
+                    <option value="tr"${sheetLang() !== 'en' ? ' selected' : ''}>Türkçe</option>
+                    <option value="en"${sheetLang() === 'en' ? ' selected' : ''}>English</option>
+                </select>
+            </label>
             <div class="ps-print-actions">
                 <button type="button" class="btn btn-outline-secondary btn-sm" data-print-dialog="close">Vazgeç</button>
                 <button type="button" class="btn btn-outline-danger btn-sm" data-print-dialog="apply">Uygula</button>
@@ -492,7 +515,9 @@ function applyPrintDialog(overlay) {
         show_header: checked('head'),
         main_only: checked('main'),
         expand_all: checked('expand'),
+        language: overlay.querySelector('select[data-opt="lang"]').value === 'en' ? 'en' : 'tr',
     };
+    applyLanguage(editing.view.language);
     state.columns = allColumns ? null : columns;
     state.showHeader = editing.view.show_header;
     state.mainOnly = editing.view.main_only;
@@ -586,6 +611,8 @@ document.addEventListener('click', (e) => {
 // ---- loading ---------------------------------------------------------------
 
 async function load() {
+    // An English link's own errors read in English before the link says so.
+    applyLanguage(params.get('lang'));
     const share = params.get('share');
     const jobNo = params.get('job_no');
     try {
@@ -597,6 +624,7 @@ async function load() {
             state.columns = link && link.columns && link.columns.length ? link.columns : null;
             state.mainOnly = !!options.main_only;
             state.showHeader = options.show_header !== false;
+            applyLanguage(options.language);
             state.collapsed = new Set(options.expand_all === false && Array.isArray(options.collapsed)
                 ? options.collapsed : []);
             if (link && link.editable) startEditing(share, link.overrides);
@@ -609,9 +637,10 @@ async function load() {
             state.columns = cols.length ? cols : null;
             state.mainOnly = params.get('main') === '1';
             state.showHeader = params.get('head') !== '0';
+            applyLanguage(params.get('lang'));
             state.collapsed = new Set((params.get('collapsed') || '').split(',').filter(Boolean));
         } else {
-            throw new Error('İş emri belirtilmedi.');
+            throw new Error(tr('İş emri belirtilmedi.', 'No job order given.'));
         }
         render();
         if (params.get('print') === '1') setTimeout(() => window.print(), 500);
@@ -619,7 +648,7 @@ async function load() {
         console.error('Plan sheet page failed:', error);
         document.getElementById('ps-head').innerHTML = `
             <div class="ps-page-error">
-                <i class="fas fa-triangle-exclamation me-2"></i>${escapeHtml(error && error.message ? error.message : 'Plan yüklenemedi.')}
+                <i class="fas fa-triangle-exclamation me-2"></i>${escapeHtml(error && error.message ? error.message : tr('Plan yüklenemedi.', 'The plan could not be loaded.'))}
             </div>`;
     }
 }

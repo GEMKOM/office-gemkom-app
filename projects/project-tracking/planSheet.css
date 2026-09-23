@@ -941,11 +941,16 @@ body.pp-meeting-fullscreen #pp-meeting-container { grid-template-columns: minmax
 
 .pp-sheetpdf-actions {
     display: flex;
+    flex-wrap: wrap;
     justify-content: flex-end;
     gap: 8px;
 }
 
+/* Three actions side by side: one line each, wrapping as a whole button */
+.pp-sheetpdf-actions .btn { white-space: nowrap; }
+
 .pp-sheetpdf-opt-tight { padding-top: 0; border-top: 0; margin-top: -6px; }
+.pp-sheetpdf-row-tight { margin-top: -6px; }
 
 .pp-sheetpdf-row {
     display: flex;

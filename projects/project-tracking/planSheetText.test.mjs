@@ -10,6 +10,7 @@ import {
     headerSummary, isDefaultDuration, planSourceLabel, progressText,
     rootCauseLabel, signedFigure,
 } from './planSheetText.js';
+import { setSheetLang, taskTitle } from './sheetLang.js';
 
 let failures = 0;
 function check(name, fn) {
@@ -126,10 +127,7 @@ check('house tone: no exclamation marks', () => {
     for (const s of samples) assert.ok(!s.includes('!'), s);
 });
 
-console.log(failures ? `\n${failures} failing` : '\nall passed');
-process.exit(failures ? 1 : 0);
-
-test('a root cause is named by its own row, not its department', () => {
+check('a root cause is named by its own row, not its department', () => {
     // 061-60: the headline said "Üretim" — the department shared by Talaşlı
     // İmalat, Kaynaklı İmalat, Boya and every assignment — so the row that
     // had actually not started was never named.
@@ -148,3 +146,37 @@ test('a root cause is named by its own row, not its department', () => {
         'Üretim');
     assert.equal(rootCauseLabel(null), '');
 });
+
+// The English page (lang=en) — everything we write, in English; free text as
+// entered. Last, so the Turkish checks above run on the default.
+check('english: units, chips, causes, names', () => {
+    setSheetLang('en');
+    try {
+        assert.equal(fmtWd(12), '12 working days');
+        assert.equal(fmtWd(1), '1 working day');
+        assert.equal(progressText({ progress_pct: 38, expected_pct: 55 }), '38% / 55%');
+        assert.equal(deviationChip({ deviation_wd: 19, own_deviation_wd: 8, chain_deviation_wd: 11 }).text,
+            '+19 (8 own)');
+        assert.equal(deviationChip({ deviation_wd: 9, own_deviation_wd: 0, chain_deviation_wd: 9 }).text,
+            '+9 chain');
+        assert.equal(causeSentence({ cause: { code: 'progress', progress: 99, expected: 100 } }),
+            'Progress 99%; the plan expected 100% by now.');
+        assert.equal(
+            causeSentence({ cause: { code: 'material', what: 'boru/profil', pending: 3 } }),
+            'waiting for pipe/profile: 3 items.');
+        assert.equal(
+            causeSentence({ pushed_by_title: 'Dizayn', chain_deviation_wd: 11 }),
+            'Design finishing late (+11 working days, chained).');
+        assert.equal(rootCauseLabel({ kind: 'main', title: 'LF ROOF', department: 'manufacturing',
+                                      department_display: 'Üretim' }), 'Manufacturing');
+        assert.equal(rootCauseLabel({ kind: 'block', title: 'ERK MAKİNE' }), 'ERK MAKİNE');
+        assert.equal(taskTitle('CNC Kesim'), 'CNC Cutting');
+        assert.equal(taskTitle('Talaşlı İmalat'), 'Machining');
+    } finally {
+        setSheetLang('tr');
+    }
+    assert.equal(fmtWd(12), '12 iş günü');
+});
+
+console.log(failures ? `\n${failures} failing` : '\nall passed');
+process.exit(failures ? 1 : 0);

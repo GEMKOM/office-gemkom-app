@@ -31,6 +31,21 @@ const MONTHS_TR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
     'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
 const MONTHS_TR_SHORT = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz',
     'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+const MONTHS_EN = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'];
+const MONTHS_EN_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// The timeline's month names: Turkish in the app; the plan sheet's English
+// page (a PDF for a foreign customer) switches it once before drawing.
+let monthLocale = 'tr';
+
+export function setGridLocale(locale) {
+    monthLocale = locale === 'en' ? 'en' : 'tr';
+}
+
+const monthName = (i) => (monthLocale === 'en' ? MONTHS_EN : MONTHS_TR)[i];
+const monthShort = (i) => (monthLocale === 'en' ? MONTHS_EN_SHORT : MONTHS_TR_SHORT)[i];
 
 // ---- date entry (gg.aa.yyyy) --------------------------------------------
 //
@@ -219,7 +234,7 @@ export function buildTimeline(rows, zoom, today, barOf, minWidth = 0, colWidthOv
             columns.push({
                 start: new Date(cursor.getTime()),
                 top: String(cursor.getFullYear()),
-                label: MONTHS_TR_SHORT[cursor.getMonth()],
+                label: monthShort(cursor.getMonth()),
                 nonWorking: false,
             });
             cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
@@ -230,7 +245,7 @@ export function buildTimeline(rows, zoom, today, barOf, minWidth = 0, colWidthOv
         while (cursor <= max || columns.length < needed) {
             columns.push({
                 start: new Date(cursor.getTime()),
-                top: `${MONTHS_TR[cursor.getMonth()]} ${cursor.getFullYear()}`,
+                top: `${monthName(cursor.getMonth())} ${cursor.getFullYear()}`,
                 label: unit === 'day' ? String(cursor.getDate()) : String(cursor.getDate()),
                 nonWorking: false,
             });
@@ -441,7 +456,9 @@ export class PlanningGrid {
                         <div class="pg-hcell ${c.headerClass || ''} ${c.grow ? 'pg-grow' : ''}" style="${colStyle(c)}"${c.title ? ` title="${esc(c.title)}"` : ''}>
                             ${i === 0 ? `
                                 <i class="fas ${this.options.allCollapsed ? 'fa-angles-down' : 'fa-angles-up'} pg-toggle-all"
-                                   title="${this.options.allCollapsed ? 'Tümünü aç' : 'Tümünü kapat'}"></i>` : ''}
+                                   title="${monthLocale === 'en'
+                                       ? (this.options.allCollapsed ? 'Expand all' : 'Collapse all')
+                                       : (this.options.allCollapsed ? 'Tümünü aç' : 'Tümünü kapat')}"></i>` : ''}
                             ${esc(c.label)}
                         </div>`).join('')}
                     <div class="pg-hcell pg-hcell-actions">

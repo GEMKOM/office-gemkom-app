@@ -14,7 +14,9 @@ export async function getSharedPlanSheet(token) {
         `${backendBase}/projects/plan-sheet/shared/${encodeURIComponent(token)}/`,
         { headers: { Accept: 'application/json' } });
     if (response.status === 404) {
-        throw new Error('Bu bağlantı bulunamadı ya da süresi dolmuş.');
+        throw new Error(new URLSearchParams(window.location.search).get('lang') === 'en'
+            ? 'This link was not found or has expired.'
+            : 'Bu bağlantı bulunamadı ya da süresi dolmuş.');
     }
     if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

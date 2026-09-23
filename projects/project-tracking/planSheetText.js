@@ -5,12 +5,12 @@
  *
  * House rules: badge classes only from components/badges/badges.css (never
  * yellow), no exclamation marks, working days are "iş günü", dates are
- * dd.mm.yyyy.
+ * dd.mm.yyyy. English (sheetLang.js, lang=en pages only) mirrors every
+ * sentence; the Turkish output is unchanged by it.
  */
-
-function num(value, digits = 1) {
-    return Number(value).toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: digits });
-}
+import {
+    departmentName, materialName, num, pct, taskTitle, tr, wdText,
+} from './sheetLang.js';
 
 export function fmtDateTr(iso) {
     if (!iso) return '—';
@@ -20,12 +20,12 @@ export function fmtDateTr(iso) {
 
 export function fmtWd(value) {
     if (value == null || Number.isNaN(Number(value))) return '—';
-    return `${num(Math.abs(Number(value)))} iş günü`;
+    return wdText(value);
 }
 
 export function fmtPct(value) {
     if (value == null || Number.isNaN(Number(value))) return '—';
-    return `%${num(Number(value), 0)}`;
+    return pct(Number(value));
 }
 
 // ---- deviation ----------------------------------------------------------------
@@ -36,11 +36,13 @@ export function deviationChip(row) {
     const dev = row.deviation_wd == null ? null : Number(row.deviation_wd);
     const own = Number(row.own_deviation_wd || 0);
     const chain = Number(row.chain_deviation_wd || 0);
-    if (dev == null) return { text: 'plan yok', cls: 'ps-chip-muted', kind: 'none' };
+    if (dev == null) return { text: tr('plan yok', 'no plan'), cls: 'ps-chip-muted', kind: 'none' };
     if (dev > 0) {
-        if (own > 0 && chain > 0) return { text: `+${num(dev)} (${num(own)} kendi)`, cls: 'ps-chip-late', kind: 'own' };
+        if (own > 0 && chain > 0) {
+            return { text: `+${num(dev)} (${num(own)} ${tr('kendi', 'own')})`, cls: 'ps-chip-late', kind: 'own' };
+        }
         if (own > 0) return { text: `+${num(dev)}`, cls: 'ps-chip-late', kind: 'own' };
-        return { text: `+${num(dev)} zincir`, cls: 'ps-chip-chain', kind: 'chain' };
+        return { text: `+${num(dev)} ${tr('zincir', 'chain')}`, cls: 'ps-chip-chain', kind: 'chain' };
     }
     if (dev < 0) return { text: `−${num(Math.abs(dev))}`, cls: 'ps-chip-early', kind: 'early' };
     return { text: '0', cls: 'ps-chip-ok', kind: 'ontime' };
@@ -58,6 +60,16 @@ export function barState(row, node) {
 
 // ---- plan provenance --------------------------------------------------------
 
+const PLAN_SOURCE_TEXT_EN = {
+    entered: 'entered dates',
+    entered_start: 'entered start + duration',
+    entered_end: 'entered end + duration',
+    chain: "from the previous task's end",
+    imalat_split: 'from the manufacturing plan (weight share)',
+    parent: "the parent task's window",
+    none: 'no plan',
+};
+
 const PLAN_SOURCE_TEXT = {
     entered: 'girilen tarihler',
     entered_start: 'girilen başlangıç + süre',
@@ -70,8 +82,8 @@ const PLAN_SOURCE_TEXT = {
 
 export function planSourceLabel(row) {
     if (!row) return '';
-    const base = PLAN_SOURCE_TEXT[row.plan_source] || row.plan_source || '';
-    if (row.duration_source === 'default') return `${base} · varsayılan süre`;
+    const base = tr(PLAN_SOURCE_TEXT, PLAN_SOURCE_TEXT_EN)[row.plan_source] || row.plan_source || '';
+    if (row.duration_source === 'default') return `${base} · ${tr('varsayılan süre', 'default duration')}`;
     if (row.duration_source === 'share') return base;
     return base;
 }
@@ -83,10 +95,15 @@ export function isDefaultDuration(row) {
 // ---- causes -----------------------------------------------------------------
 
 function materialSentence(c, verb) {
-    const parts = [`${c.what || 'malzeme'} ${verb}: ${num(c.pending || 0, 0)} kalem`];
-    if (c.unordered) parts[0] += ` (${num(c.unordered, 0)} sipariş verilmemiş)`;
-    if (c.until) parts.push(`tahmini teslim ${fmtDateTr(c.until)}`);
-    if (c.overdue) parts.push('söz verilen tarih geçti');
+    const what = materialName(c.what || 'malzeme');
+    const items = num(c.pending || 0, 0);
+    const parts = [tr(`${what} ${verb}: ${items} kalem`,
+        verb === 'bekleyen' ? `pending ${what}: ${items} items` : `waiting for ${what}: ${items} items`)];
+    if (c.unordered) {
+        parts[0] += tr(` (${num(c.unordered, 0)} sipariş verilmemiş)`, ` (${num(c.unordered, 0)} not yet ordered)`);
+    }
+    if (c.until) parts.push(tr(`tahmini teslim ${fmtDateTr(c.until)}`, `expected delivery ${fmtDateTr(c.until)}`));
+    if (c.overdue) parts.push(tr('söz verilen tarih geçti', 'the promised date has passed'));
     return `${parts.join(', ')}.`;
 }
 
@@ -100,31 +117,42 @@ export function causeSentence(row) {
     if (c && c.code) {
         switch (c.code) {
             case 'revision_hold':
-                text = 'İş emri çizim revizyonunda bekliyor.'; break;
+                text = tr('İş emri çizim revizyonunda bekliyor.', 'The job is on hold for a drawing revision.'); break;
             case 'material':
                 text = materialSentence(c, 'bekleniyor'); break;
             case 'procurement_pending':
                 text = materialSentence({ ...c, what: 'teslim' }, 'bekleyen'); break;
             case 'ncr_open':
-                text = `${num(c.count || 0, 0)} açık NCR tamamlamayı engelliyor.`; break;
-            case 'cnc_plan':
-                text = `Kesim planı ${fmtDateTr(c.plan_end)} tarihinde bitiyor${c.unplanned_cuts ? ` (${num(c.unplanned_cuts, 0)} kesim planlanmamış)` : ''}.`; break;
+                text = tr(`${num(c.count || 0, 0)} açık NCR tamamlamayı engelliyor.`,
+                    `${num(c.count || 0, 0)} open NCR(s) blocking completion.`); break;
+            case 'cnc_plan': {
+                const unplanned = c.unplanned_cuts;
+                text = tr(`Kesim planı ${fmtDateTr(c.plan_end)} tarihinde bitiyor${unplanned ? ` (${num(unplanned, 0)} kesim planlanmamış)` : ''}.`,
+                    `The cutting plan ends on ${fmtDateTr(c.plan_end)}${unplanned ? ` (${num(unplanned, 0)} cuts not yet planned)` : ''}.`);
+                break;
+            }
             case 'machining_plan':
-                text = `Talaşlı imalat planı ${fmtDateTr(c.plan_end)} tarihinde bitiyor.`; break;
+                text = tr(`Talaşlı imalat planı ${fmtDateTr(c.plan_end)} tarihinde bitiyor.`,
+                    `The machining plan ends on ${fmtDateTr(c.plan_end)}.`); break;
             case 'finished_late':
-                text = `${fmtWd(own)} geç bitti.`; break;
+                text = tr(`${fmtWd(own)} geç bitti.`, `Finished ${fmtWd(own)} late.`); break;
             case 'not_started':
-                text = `Plan başlangıcı ${fmtWd(c.late_start_wd)} önce geçti, başlanmadı.`; break;
+                text = tr(`Plan başlangıcı ${fmtWd(c.late_start_wd)} önce geçti, başlanmadı.`,
+                    `Planned start passed ${fmtWd(c.late_start_wd)} ago; not started yet.`); break;
             case 'progress':
-                text = `İlerleme ${fmtPct(c.progress)}, plana göre ${fmtPct(c.expected)} olmalıydı.`; break;
+                text = tr(`İlerleme ${fmtPct(c.progress)}, plana göre ${fmtPct(c.expected)} olmalıydı.`,
+                    `Progress ${fmtPct(c.progress)}; the plan expected ${fmtPct(c.expected)} by now.`); break;
             default:
                 text = '';
         }
-        if (text && c.via) text = `${c.via}: ${text}`;
+        if (text && c.via) text = `${taskTitle(c.via)}: ${text}`;
     }
     if (chain > 0) {
-        const pusher = row.pushed_by_title ? `${row.pushed_by_title} geç bitiyor` : 'önceki görev geç bitiyor';
-        const chainText = `${pusher} (+${num(chain)} iş günü zincir).`;
+        const pusher = row.pushed_by_title
+            ? tr(`${row.pushed_by_title} geç bitiyor`, `${taskTitle(row.pushed_by_title)} finishing late`)
+            : tr('önceki görev geç bitiyor', 'previous task finishing late');
+        const chainText = tr(`${pusher} (+${num(chain)} iş günü zincir).`,
+            `${pusher} (+${num(chain)} working days, chained).`);
         text = text ? `${text} ${chainText}` : chainText;
     }
     return text;
@@ -145,9 +173,10 @@ export function causeSentence(row) {
  */
 export function rootCauseLabel(rc) {
     if (!rc) return '';
+    const dept = rc.department_display ? departmentName(rc.department, rc.department_display) : '';
     return (rc.kind === 'main'
-        ? (rc.department_display || rc.title)
-        : (rc.title || rc.department_display)) || '';
+        ? (dept || taskTitle(rc.title))
+        : (taskTitle(rc.title) || dept)) || '';
 }
 
 // ---- header -----------------------------------------------------------------

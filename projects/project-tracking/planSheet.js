@@ -19,6 +19,7 @@ import {
     barState, causeSentence, deviationChip, fmtDateTr, groupRows,
     isDefaultDuration, planSourceLabel, progressText, rootCauseLabel,
 } from './planSheetText.js';
+import { departmentName, pct, taskTitle, tr, wdText } from './sheetLang.js';
 
 const STATUS_META = {
     pending: ['Başlamadı', 'status-grey'],
@@ -42,6 +43,11 @@ const DEPT_ICONS = {
     manufacturing: 'fas fa-industry', painting: 'fas fa-fill-drip', logistics: 'fas fa-truck',
 };
 
+const STATUS_EN = {
+    pending: 'Not started', blocked: 'Blocked', in_progress: 'In progress', completed: 'Completed',
+    on_hold: 'On hold', cancelled: 'Cancelled', skipped: 'Skipped', active: 'Active', draft: 'Draft',
+};
+
 export const SHEET_ZOOMS = Object.keys(ZOOMS);
 
 function iconFor(row) {
@@ -53,24 +59,27 @@ function iconFor(row) {
 // "LOWER SHELL"), so the department is the label; the title is added only
 // when it says more than the job's own title.
 export function rowLabel(row, node) {
-    const dept = row.department_display || row.department || '';
+    const dept = departmentName(row.department, row.department_display);
     if (row.kind === 'main') {
         const title = (row.title || '').trim();
-        return title && title !== (node.title || '').trim() ? `${dept} · ${title}` : dept;
+        return title && title !== (node.title || '').trim() ? `${dept} · ${taskTitle(title)}` : dept;
     }
-    return row.title || dept;
+    return taskTitle(row.title) || dept;
 }
 
 function statusBadge(status) {
     const [label, cls] = STATUS_META[status] || [status || '—', 'status-grey'];
-    return `<span class="status-badge ${cls}">${escapeHtml(label)}</span>`;
+    const shown = tr(label, STATUS_EN[status] || label);
+    return `<span class="status-badge ${cls}">${escapeHtml(shown)}</span>`;
 }
 
 function dateCell(value, row, field) {
     if (!value) return '<span class="text-muted">—</span>';
     const tip = row.kind === 'task'
         ? planSourceLabel(row.row)
-        : (field === 'plan_end' ? 'planın son görevinin bitişi' : 'planın ilk görevinin başlangıcı');
+        : (field === 'plan_end'
+            ? tr('planın son görevinin bitişi', "the plan's last task end")
+            : tr('planın ilk görevinin başlangıcı', "the plan's first task start"));
     const cls = row.kind === 'task' && isDefaultDuration(row.row) ? ' ps-date-default' : '';
     return `<span class="ps-date${cls}" title="${escapeHtml(tip)}">${fmtDateTr(value)}</span>`;
 }
@@ -91,6 +100,8 @@ function deviationCell(row) {
     return `<span class="ps-chip ${chip.cls}">${escapeHtml(chip.text)}</span>`;
 }
 
+const pctText = value => pct(value);
+
 function progressCell(row) {
     // A dead row's bar is empty for the same reason its text is an em-dash:
     // the work was not done (see progressText).
@@ -98,11 +109,13 @@ function progressCell(row) {
     const pct = dead
         ? 0
         : Math.max(0, Math.min(100, Math.round(Number(row.progress || 0))));
-    const text = row.kind === 'group' ? `%${pct}` : progressText(row.row);
+    const text = row.kind === 'group' ? pctText(pct) : progressText(row.row);
     const expected = row.kind === 'task' && row.row.expected_pct != null
         ? Math.max(0, Math.min(100, Math.round(Number(row.row.expected_pct)))) : null;
     const behind = expected != null && expected > pct;
-    const tip = row.kind === 'task' ? 'gerçekleşen / plana göre bugün beklenen' : 'iş emri ilerlemesi';
+    const tip = row.kind === 'task'
+        ? tr('gerçekleşen / plana göre bugün beklenen', 'actual / expected today by the plan')
+        : tr('iş emri ilerlemesi', 'job progress');
     return `
         <span class="ps-progress${behind ? ' ps-progress-behind' : ''}" title="${tip}">
             <span class="ps-progress-track">
@@ -127,11 +140,12 @@ function titleCell(value, row) {
             <span class="pg-title" title="${escapeHtml(row.job_title || '')}">
                 <strong>${escapeHtml(row.title)}</strong>
                 <span class="pg-sub">${escapeHtml(row.job_title || '')}</span>
-                ${row.late_count ? `<span class="block-count">${row.late_count} geride</span>` : ''}
+                ${row.late_count ? `<span class="block-count">${row.late_count} ${tr('geride', 'behind')}</span>` : ''}
             </span>`;
     }
     const mark = isDefaultDuration(row.row)
-        ? '<span class="ps-default" title="Bu görev için süre girilmemiş; departman varsayılanı kullanıldı">varsayılan süre</span>'
+        ? `<span class="ps-default" title="${escapeHtml(tr('Bu görev için süre girilmemiş; departman varsayılanı kullanıldı',
+            'No duration entered for this task; the department default was used'))}">${tr('varsayılan süre', 'default duration')}</span>`
         : '';
     return `<span class="pg-title"><i class="${iconFor(row.row)} pg-ico"></i>${escapeHtml(row.title)}${mark}</span>`;
 }
@@ -164,11 +178,27 @@ export const SHEET_COLUMNS = [
 // column ends and the timeline takes whatever the slide has left.
 export const SHEET_GRID_WIDTH = 1116;
 
-/** The sheet's columns, or the subset named by `fields` (Görev always). */
+const COLUMN_TEXT_EN = {
+    title: ['Task'],
+    plan_start: ['Plan start'],
+    plan_end: ['Plan end'],
+    plan_wd: ['Days', 'Length of the plan window in working days'],
+    progress: ['Progress', 'Actual progress; the light fill is what the plan expects today'],
+    status: ['Status'],
+    deviation: ['Deviation', 'Working days against the plan: + behind, − ahead; "chain" = because the previous task finished late'],
+    projected_end: ['Projected', 'Plan window plus deviation: the end date at the current pace'],
+    cause: ['Reason'],
+};
+
+/** The sheet's columns, or the subset named by `fields` (Görev always),
+ *  labelled in the sheet's language. */
 export function sheetColumns(fields) {
-    if (!fields || !fields.length) return SHEET_COLUMNS;
-    const wanted = new Set(['title', ...fields]);
-    return SHEET_COLUMNS.filter(c => wanted.has(c.field));
+    const wanted = fields && fields.length ? new Set(['title', ...fields]) : null;
+    return SHEET_COLUMNS.filter(c => !wanted || wanted.has(c.field)).map((c) => {
+        const en = COLUMN_TEXT_EN[c.field];
+        if (!en) return c;
+        return { ...c, label: tr(c.label, en[0]), title: c.title ? tr(c.title, en[1] || c.title) : c.title };
+    });
 }
 
 /** Width the frozen table needs for these columns, so a column subset
@@ -270,7 +300,7 @@ function rowBar(row) {
     const dev = Number(row.deviation || 0);
     const signed = `${dev > 0 ? '+' : ''}${dev}`;
     const title = `${row.title} · plan ${fmtDateTr(start)} – ${fmtDateTr(end)}`
-        + (deviates ? ` · öngörülen ${fmtDateTr(projected)} (${signed} iş günü)` : '');
+        + (deviates ? ` · ${tr('öngörülen', 'projected')} ${fmtDateTr(projected)} (${signed} ${tr('iş günü', 'working days')})` : '');
     return {
         start, end,
         progress: Math.max(0, Math.min(100, Number(row.progress || 0))),
@@ -318,7 +348,8 @@ function projectionTailHtml(row, timeline) {
     const label = `${dev > 0 ? '+' : ''}${dev}`;
     return `
         <div class="ps-bar-ext${chainOnly ? ' ps-bar-ext-chain' : ''}" style="left:${left}px;width:${width}px"
-             title="Öngörülen bitiş ${fmtDateTr(projected)}: plana göre ${label} iş günü${chainOnly ? ' (zincir)' : ''}">
+             title="${escapeHtml(tr(`Öngörülen bitiş ${fmtDateTr(projected)}: plana göre ${label} iş günü${chainOnly ? ' (zincir)' : ''}`,
+                 `Projected end ${fmtDateTr(projected)}: ${label} working days against the plan${chainOnly ? ' (chained)' : ''}`))}">
             ${row.kind !== 'group' && width > 34 ? `<span>${label}</span>` : ''}
         </div>`;
 }
@@ -404,8 +435,9 @@ function terminGapPillHtml(row, timeline) {
     const oneUnit = timeline.unit === 'day' ? timeline.colWidth
         : timeline.colWidth / (timeline.unit === 'week' ? 7 : 30);
     const late = delta > 0;
-    const label = `${late ? '+' : '−'}${Math.abs(delta)}g`;
-    const title = `Termin ${fmtDateTr(row.job_target)}: öngörülen bitiş termini ${Math.abs(delta)} iş günü ${late ? 'aşıyor' : 'önce'}`;
+    const label = `${late ? '+' : '−'}${Math.abs(delta)}${tr('g', 'd')}`;
+    const title = tr(`Termin ${fmtDateTr(row.job_target)}: öngörülen bitiş termini ${Math.abs(delta)} iş günü ${late ? 'aşıyor' : 'önce'}`,
+        `Due date ${fmtDateTr(row.job_target)}: the projected end is ${wdText(delta)} ${late ? 'past it' : 'before it'}`);
     return `
         <div class="pg-target-tag ps-gap-pill${late ? ' is-late' : ' is-early'}" style="left:${x + oneUnit}px"
              title="${escapeHtml(title)}">${label}</div>`;
@@ -456,7 +488,7 @@ function editedHtml(field, value, row) {
         return `
             <span class="ps-progress">
                 <span class="ps-progress-track"><span class="ps-progress-fill" style="width:${pct}%"></span></span>
-                <span class="ps-progress-text">%${pct}</span>
+                <span class="ps-progress-text">${pctText(pct)}</span>
             </span>`;
     }
     if (field === 'cause') {

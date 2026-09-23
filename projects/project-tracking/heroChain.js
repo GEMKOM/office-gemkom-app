@@ -16,10 +16,17 @@
  * House rules: no yellow, no exclamation marks, working days are "iş günü".
  */
 import { escapeHtml } from '../../utils/text.js';
+import { dateLocale, sheetLang, tr } from './sheetLang.js';
 
 function formatWd(value) {
     const abs = Math.abs(Number(value) || 0);
-    return (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1)).replace('.', ',');
+    const text = abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1);
+    return sheetLang() === 'en' ? text : text.replace('.', ',');
+}
+
+// "iş günü" / "working days" after a signed figure.
+function wdUnit(n) {
+    return tr('iş günü', Math.abs(n) === 1 ? 'working day' : 'working days');
 }
 
 /**
@@ -33,9 +40,9 @@ export function signedWd(value) {
     // The text shows one decimal, so anything that would print as 0,0 is
     // "tam gününde" rather than a red +0,0.
     const n = Math.round(raw * 10) / 10;
-    if (n > 0) return { text: `+${formatWd(n)} iş günü`, cls: 'ps-fig-late', kind: 'late' };
-    if (n < 0) return { text: `−${formatWd(n)} iş günü`, cls: 'ps-fig-early', kind: 'early' };
-    return { text: 'tam gününde', cls: 'ps-fig-ok', kind: 'ok' };
+    if (n > 0) return { text: `+${formatWd(n)} ${wdUnit(n)}`, cls: 'ps-fig-late', kind: 'late' };
+    if (n < 0) return { text: `−${formatWd(n)} ${wdUnit(n)}`, cls: 'ps-fig-early', kind: 'early' };
+    return { text: tr('tam gününde', 'on the day'), cls: 'ps-fig-ok', kind: 'ok' };
 }
 
 // "30 Eylül 2026". A date-only value ("2026-09-30") is a calendar day, not
@@ -46,7 +53,7 @@ export function formatDateLong(value) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
     const date = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
     if (isNaN(date.getTime())) return '—';
-    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+    return date.toLocaleDateString(dateLocale(), { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 const PENDING = '<span class="ps-fig-muted">…</span>';
@@ -89,9 +96,9 @@ export function heroChainHtml({
     const dev = signedWd(deviationWd);
     const gap = signedWd(terminGapWd);
     const bracket = gap ? `
-            <div class="ps-chain-brk is-${gap.kind}"><span>Termine göre <b>${escapeHtml(gap.text)}</b></span></div>` : '';
+            <div class="ps-chain-brk is-${gap.kind}"><span>${tr('Termine göre', 'Against due date')} <b>${escapeHtml(gap.text)}</b></span></div>` : '';
     return `
-        <div class="ps-chain">${bracket}${figure('start', 'Başlangıç', start, pending, null)}${connector('1', null)}${figure('termin', 'Termin', termin, pending, null)}${connector('2', planVs)}${figure('plan', 'Plan bitişi', planEnd, pending, planVs)}${connector('3', dev)}${figure('proj', 'Öngörülen', projectedEnd, pending, dev)}
+        <div class="ps-chain">${bracket}${figure('start', tr('Başlangıç', 'Start'), start, pending, null)}${connector('1', null)}${figure('termin', tr('Termin', 'Due date'), termin, pending, null)}${connector('2', planVs)}${figure('plan', tr('Plan bitişi', 'Plan end'), planEnd, pending, planVs)}${connector('3', dev)}${figure('proj', tr('Öngörülen', 'Projected'), projectedEnd, pending, dev)}
             <div class="ps-chain-base"></div>
         </div>`;
 }
