@@ -157,7 +157,7 @@ export const SHEET_COLUMNS = [
     { field: 'projected_end', label: 'Öngörülen', width: '86px', headerClass: 'col-center', cellClass: 'col-center col-date',
       title: 'Plan penceresi artı sapma: bu hızla, bu malzemeyle biteceği tarih',
       formatter: (v, row) => projectedCell(v, row) },
-    { field: 'cause', label: 'Neden', width: '264px', formatter: (v, row) => causeCell(row) },
+    { field: 'cause', label: 'Neden', width: '264px', grow: true, formatter: (v, row) => causeCell(row) },
 ];
 
 // Sum of the column widths above: the grid lane starts where the last
@@ -410,6 +410,8 @@ export function renderPlanSheet(containerId, sheet, state) {
         rows,
         zoom: SHEET_ZOOMS.includes(state.zoom) ? state.zoom : 'week',
         gridWidth: state.gridWidth || columnsWidth(columns),
+        // No cap: the grip may widen the table (and so Neden) all the way.
+        maxGridWidth: Infinity,
         colWidth: state.colWidth || null,
         collapsed: state.collapsed,
         allCollapsed: allCollapsed(),

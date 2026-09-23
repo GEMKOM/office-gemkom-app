@@ -284,6 +284,13 @@ function nonWorkingBackground(timeline, isNonWorkingDay) {
 // Grid
 // ---------------------------------------------------------------------------
 
+// A `grow` column takes whatever the frozen table has beyond the column
+// widths, so dragging the grip wider widens THAT column instead of adding
+// blank space after the last one.
+function colStyle(col) {
+    return col.grow ? `width:${col.width};flex:1 0 ${col.width}` : `width:${col.width}`;
+}
+
 export class PlanningGrid {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
@@ -292,6 +299,10 @@ export class PlanningGrid {
             rows: [],
             rowHeight: 30,
             gridWidth: 560,
+            // How far the grip may drag the frozen table. The planning board
+            // keeps its 1100 px; the meeting sheet lifts it (user 2026-09-23:
+            // the Neden column must be as wide as the reader wants).
+            maxGridWidth: 1100,
             zoom: 'week',
             // Screen scale comes from the zoom preset; the PDF export sets its
             // own so a whole plan fits the page width.
@@ -340,7 +351,7 @@ export class PlanningGrid {
     }
 
     setGridWidth(px) {
-        this.options.gridWidth = Math.max(260, Math.min(1100, px));
+        this.options.gridWidth = Math.max(260, Math.min(this.options.maxGridWidth, px));
         const el = this.container;
         if (el) el.style.setProperty('--pg-grid-w', `${this.options.gridWidth}px`);
     }
@@ -427,7 +438,7 @@ export class PlanningGrid {
             <div class="pg-header">
                 <div class="pg-header-grid">
                     ${cols.map((c, i) => `
-                        <div class="pg-hcell ${c.headerClass || ''}" style="width:${c.width}"${c.title ? ` title="${esc(c.title)}"` : ''}>
+                        <div class="pg-hcell ${c.headerClass || ''} ${c.grow ? 'pg-grow' : ''}" style="${colStyle(c)}"${c.title ? ` title="${esc(c.title)}"` : ''}>
                             ${i === 0 ? `
                                 <i class="fas ${this.options.allCollapsed ? 'fa-angles-down' : 'fa-angles-up'} pg-toggle-all"
                                    title="${this.options.allCollapsed ? 'Tümünü aç' : 'Tümünü kapat'}"></i>` : ''}
@@ -476,8 +487,8 @@ export class PlanningGrid {
             const canEdit = this.options.isCellEditable(row, col.field);
             const html = col.formatter ? col.formatter(value, row) : esc(value ?? '');
             return `
-                <div class="pg-cell ${col.cellClass || ''} ${canEdit ? 'pg-editable' : ''}"
-                     style="width:${col.width}"
+                <div class="pg-cell ${col.cellClass || ''} ${col.grow ? 'pg-grow' : ''} ${canEdit ? 'pg-editable' : ''}"
+                     style="${colStyle(col)}"
                      data-field="${esc(col.field)}" data-row="${esc(row.key)}">
                     ${html}
                 </div>`;

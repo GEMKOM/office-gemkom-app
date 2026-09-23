@@ -77,6 +77,7 @@ let dirtyBlocks = new Set();      // block.key
 let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
 let dirtyMachining = new Map();   // job_no -> Set of edited field names
 let dirtyLogistics = new Map();   // job_no -> Set of edited field names
+let dirtyCutting = new Map();     // task_id -> Set of edited field names (Kesim)
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
 // Bumped on every working-copy mutation. Save + background board rebuild
 // compare this to the value at send time: a later bump means the planner
@@ -227,6 +228,7 @@ function findBlock(blockRef) {
 function hasUnsavedChanges() {
     return dirtyBlocks.size > 0 || dirtyDept.size > 0
         || dirtyMachining.size > 0 || dirtyLogistics.size > 0
+        || dirtyCutting.size > 0
         || deletedBlocks.length > 0;
 }
 
@@ -466,6 +468,7 @@ function hydrate(boardData) {
     dirtyDept = new Map();
     dirtyMachining = new Map();
     dirtyLogistics = new Map();
+    dirtyCutting = new Map();
     deletedBlocks = [];
 
     if (activeResourceKey !== 'all'
@@ -589,6 +592,20 @@ function markLogisticsDirty(jobNo, field) {
     liveForecastJobs.add(jobNo);
     bumpMutation();
     updateSaveState();
+}
+
+// Kesim sits upstream of İmalat and nothing on the sheet derives from it, so
+// an edit does NOT switch the job to live forecasts — only the row moves.
+function markCuttingDirty(taskId, field) {
+    const fields = dirtyCutting.get(taskId) || new Set();
+    if (field) fields.add(field);
+    dirtyCutting.set(taskId, fields);
+    bumpMutation();
+    updateSaveState();
+}
+
+function cuttingOf(jobNo, taskId) {
+    return ((jobInfo[jobNo] || {}).cutting || []).find(c => c.task_id === taskId) || null;
 }
 
 function updateSaveState() {
@@ -1481,8 +1498,16 @@ function buildSheetRows(res) {
         if (info.material_supply) {
             otherRows.push(infoRow(info.material_supply, 'Malzeme Tedarik', 'info', 2));
         }
-        cuttingRows.forEach(c => otherRows.push(infoRow(
-            c, `Kesim${cuttingRows.length > 1 ? ` — ${c.title}` : ''}`, 'info', 2)));
+        // Kesim's start and duration are typed here; its end follows from
+        // the two (user 2026-09-23). Still an info row: nothing else on it is
+        // this sheet's, and nothing below derives from it.
+        cuttingRows.forEach(c => {
+            const cut = infoRow(
+                c, `Kesim${cuttingRows.length > 1 ? ` — ${c.title}` : ''}`, 'info', 2);
+            cut.editable_schedule = true;
+            cut.cutting_task_id = c.task_id;
+            otherRows.push(cut);
+        });
         if (otherRows.length) {
             rows.push({
                 ...base,
@@ -1916,6 +1941,10 @@ function isCellEditable(row, field) {
     // Lojistik is an info row — it reports — but its duration is an entry.
     // Checked BEFORE the read-only kinds, which would otherwise swallow it.
     if (field === 'duration_wd' && row.editable_duration) {
+        return !['skipped', 'cancelled', 'completed'].includes(row.status);
+    }
+    // Kesim likewise: start and duration are entries, the end is computed.
+    if ((field === 'start_date' || field === 'duration_wd') && row.editable_schedule) {
         return !['skipped', 'cancelled', 'completed'].includes(row.status);
     }
     if (READ_ONLY_KINDS.includes(row.kind)) return false;
@@ -3193,6 +3222,10 @@ function scheduleRefresh() {
 // ---- inline editing ------------------------------------------------------
 
 function onCellEdit(row, field, newValue) {
+    if (row.editable_schedule) {
+        onCuttingEdit(row, field, newValue);
+        return;
+    }
     const block = row.blockRef ? findBlock(row.blockRef) : null;
 
     let target = null;
@@ -3420,6 +3453,51 @@ function onCellEdit(row, field, newValue) {
     if (['duration_wd', 'progress', 'start_date', 'status', 'weight'].includes(field)) {
         liveForecastJobs.add(row.job_no);
     }
+    scheduleRefresh();
+}
+
+// Kesim: a typed start and duration, and an end that is always span_end of
+// the two — the server computes the same (planning_views._apply_cutting_schedule)
+// and clears the end when either input is cleared.
+function onCuttingEdit(row, field, newValue) {
+    const vm = cuttingOf(row.job_no, row.cutting_task_id);
+    if (!vm) return;
+    if (field === 'start_date') {
+        vm.start_date = newValue || null;
+        vm.entered_start_date = vm.start_date;
+        vm.start_is_actual = false;
+    } else if (field === 'duration_wd') {
+        const raw = String(newValue ?? '').trim();
+        const num = raw === '' ? null : Number(raw);
+        if (num != null && (!Number.isFinite(num) || num <= 0)) {
+            throw new Error('Süre 0’dan büyük olmalıdır.');
+        }
+        vm.duration_wd = num;
+        vm.entered_duration_wd = num;
+        vm.duration_is_derived = false;
+        vm.duration_source = null;
+        // A duration typed under a start the row is only SHOWING (the first
+        // cut, or the engine's projection) adopts that start — otherwise the
+        // date the planner was looking at would vanish from the cell.
+        if (num != null && !vm.entered_start_date && row.start_date) {
+            vm.entered_start_date = row.start_date;
+            vm.start_date = row.start_date;
+            vm.start_is_actual = false;
+            markCuttingDirty(vm.task_id, 'start_date');
+        }
+    } else {
+        return;
+    }
+    const start = vm.entered_start_date ?? null;
+    const days = vm.entered_duration_wd ?? null;
+    vm.end_date = start && days ? calendar.spanEnd(start, days) : null;
+    vm.end_is_actual = false;
+    vm.date_source = null;
+    // The engine's window is what the row borrowed while it had no plan;
+    // once the planner has typed one it must not leak back into an empty cell.
+    vm.projected_start_date = null;
+    vm.projected_end_date = null;
+    markCuttingDirty(vm.task_id, field);
     scheduleRefresh();
 }
 
@@ -4314,6 +4392,17 @@ function buildPayload() {
         });
     });
 
+    // Kesim: start and/or duration; the server computes the end.
+    dirtyCutting.forEach((fields, taskId) => {
+        let vm = null;
+        Object.keys(jobInfo).some(j => (vm = cuttingOf(j, taskId)));
+        if (!vm) return;
+        const item = { task_id: taskId };
+        if (fields.has('start_date')) item.start_date = vm.entered_start_date ?? null;
+        if (fields.has('duration_wd')) item.duration_wd = vm.entered_duration_wd ?? null;
+        payload.department_tasks.push(item);
+    });
+
     return payload;
 }
 
@@ -4356,6 +4445,7 @@ async function onSave() {
             dirtyDept = new Map();
             dirtyMachining = new Map();
             dirtyLogistics = new Map();
+            dirtyCutting = new Map();
             updateSaveState();
             if (board) {
                 hydrate(board);
