@@ -28,7 +28,16 @@ import {
 } from '../../apis/feedback.js';
 import { getDailySummary, listDailySummaries } from '../../apis/dailySummary.js';
 import { ensureDailySummaryStyles, relativeDayLabel } from '../daily-summary/render.js';
-import { openDailySummaryModal } from '../daily-summary/daily-summary.js';
+
+// The popup lives in daily-summary.js, whose first release exported only
+// initDailySummary. A static named import of openDailySummaryModal is a
+// link-time SyntaxError against a cached old copy and would take the whole
+// widget down with it; a dynamic import degrades to null instead.
+function loadSummaryModal() {
+    return import('../daily-summary/daily-summary.js')
+        .then((mod) => (typeof mod.openDailySummaryModal === 'function' ? mod.openDailySummaryModal : null))
+        .catch(() => null);
+}
 
 const STORAGE_OPEN = 'assistantOpen';
 const STORAGE_CONVERSATION = 'assistantConversationId';
@@ -968,7 +977,14 @@ async function openSummaryPopup(wrap, summary) {
     item.dataset.loading = '1';
     item.classList.add('summary-item-loading');
     try {
-        const detail = await fetchSummaryDetail(summary.id);
+        const [detail, openDailySummaryModal] = await Promise.all([
+            fetchSummaryDetail(summary.id),
+            loadSummaryModal(),
+        ]);
+        if (!openDailySummaryModal) {
+            showNotification('Özet açılamadı; lütfen sayfayı yenileyin.', 'error');
+            return;
+        }
         const latest = state.summaries[0];
         openDailySummaryModal(detail, {
             isLatest: Boolean(latest && latest.id === summary.id),

@@ -1,0 +1,47 @@
+<!doctype html>
+<!-- TEMPORARY QA harness (untracked; deleted at the end of the session).
+     Seeds auth in localStorage, rewrites API calls from the hardcoded 8001
+     backend to the QA server on the given port, shims requestAnimationFrame
+     (never fires in the embedded browser pane), then loads the page in place.
+     /_qa_harness_ds.html?page=/&port=8003&token=…&user=…&perms=…&clear=1&q=?ozet=1&ref=login -->
+<html lang="tr"><head><meta charset="utf-8"><title>QA harness (daily summary)</title></head>
+<body>
+<script>
+(async () => {
+  const q = new URLSearchParams(location.search);
+  const page = q.get('page') || '/';
+  const token = q.get('token') || '';
+  const port = q.get('port') || '8003';
+  const extra = q.get('q') || '';
+  if (q.get('clear') === '1') {
+    Object.keys(localStorage).forEach(k => localStorage.removeItem(k));
+    sessionStorage.clear();
+  }
+  if (q.get('cleards') === '1') {
+    Object.keys(localStorage).filter(k => k.startsWith('ds:')).forEach(k => localStorage.removeItem(k));
+    sessionStorage.removeItem('ds:shown');
+  }
+  if (token) {
+    localStorage.setItem('accessToken', token);
+    localStorage.setItem('refreshToken', 'qa-refresh');
+  }
+  if (q.get('user')) localStorage.setItem('user', q.get('user'));
+  if (q.get('perms')) localStorage.setItem('permissions', q.get('perms'));
+  // Simulate the referrer the app sees right after login vs. in-app navigation.
+  const ref = q.get('ref');
+  if (ref) Object.defineProperty(document, 'referrer', { get: () => (ref === 'login' ? location.origin + '/login/' : location.origin + '/general/'), configurable: true });
+  const rewrite = u => typeof u === 'string'
+    ? u.replace('127.0.0.1:8001', '127.0.0.1:' + port).replace('localhost:8001', 'localhost:' + port)
+    : u;
+  const origFetch = window.fetch.bind(window);
+  window.fetch = (u, o) => origFetch(u instanceof Request ? new Request(rewrite(u.url), u) : rewrite(u), o);
+  const origOpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function (m, u, ...r) { return origOpen.call(this, m, rewrite(u), ...r); };
+  window.requestAnimationFrame = cb => setTimeout(() => cb(performance.now()), 0);
+  window.__qaPort = port;
+  const html = await (await origFetch((page.endsWith('/') ? page + 'index.html' : page), { cache: 'reload' })).text();
+  history.replaceState(null, '', page + extra);
+  document.open(); document.write(html); document.close();
+})();
+</script>
+</body></html>

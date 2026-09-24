@@ -331,9 +331,11 @@ function buildModal(summary, { fromWidget = false } = {}) {
           '<i class="far fa-clock me-1"></i>Daha sonra</button>';
     const readLabel = (fromWidget && summary.is_read) ? 'Kapat' : 'Okudum';
 
+    // The server's for_you.department_code is current; the cached `user`
+    // record only covers the window before the backend ships it.
     const body = renderDailySummary(summary, {
         layer: 'brief',
-        areaOrder: areaOrderFor(currentDepartmentCode()),
+        areaOrder: areaOrderFor(summary.for_you?.department_code || currentDepartmentCode()),
     });
 
     // `ds-modal-v2`, not `ds-modal`: a cached first-release stylesheet paints
