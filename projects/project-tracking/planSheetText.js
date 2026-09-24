@@ -48,6 +48,49 @@ export function deviationChip(row) {
     return { text: '0', cls: 'ps-chip-ok', kind: 'ontime' };
 }
 
+/**
+ * The chips over the sheet: what the summary counted, in order.
+ * Returns [{text, cls, title}] — no HTML, so it can be tested.
+ *
+ * The all-clear is last and only fires when nothing else did. A row with no
+ * plan is NOT a row that is on plan: without its own chip the slide read
+ * "tüm görevler planında" on 096-22, where nobody had entered a single date
+ * on any of its ten rows (user 2026-09-24).
+ */
+export function summaryChips(summary) {
+    const s = summary || {};
+    const chips = [];
+    if (s.late_rows) {
+        chips.push({ text: tr(`${s.late_rows} görev planın gerisinde`, `${s.late_rows} tasks behind plan`),
+            cls: 'ps-chip-late', title: '' });
+    }
+    if (s.own_late_rows) {
+        chips.push({ text: tr(`${s.own_late_rows} kendi`, `${s.own_late_rows} own`), cls: 'ps-chip-late',
+            title: tr('Kendi kaybı olan görevler', 'Tasks that lost time of their own') });
+    }
+    if (s.chain_only_rows) {
+        chips.push({ text: tr(`${s.chain_only_rows} zincir`, `${s.chain_only_rows} chain`), cls: 'ps-chip-chain',
+            title: tr('Yalnızca önceki görev geç bitirdiği için geride',
+                'Behind only because the task before it finished late') });
+    }
+    if (s.default_duration_rows) {
+        chips.push({ text: tr(`${s.default_duration_rows} varsayılan süre`, `${s.default_duration_rows} default duration`),
+            cls: 'ps-chip-muted',
+            title: tr('Süre girilmemiş, departman varsayılanı kullanıldı',
+                'No duration entered; the department default was used') });
+    }
+    if (s.unplanned_rows) {
+        chips.push({ text: tr(`${s.unplanned_rows} görevde plan yok`, `${s.unplanned_rows} tasks with no plan`),
+            cls: 'ps-chip-muted',
+            title: tr('Bu görevlerde tarih ya da süre girilmemiş; gösterilen yalnızca öngörü',
+                'No date or duration entered on these tasks; only the projection is shown') });
+    }
+    if (!chips.length && s.rows) {
+        chips.push({ text: tr('tüm görevler planında', 'every task is on plan'), cls: 'ps-chip-ok', title: '' });
+    }
+    return chips;
+}
+
 /** Sheet bar state in the welding grid's vocabulary. */
 export function barState(row, node) {
     if (!row) return 'on-time';

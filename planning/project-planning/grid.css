@@ -416,6 +416,16 @@ body.pg-resizing * {
 .pg-bar-late { background: linear-gradient(180deg, #e2515f 0%, #bd2130 100%); }
 .pg-bar-hold { background: linear-gradient(180deg, #f0bf3f 0%, #d99e00 100%); }
 .pg-bar-done { background: linear-gradient(180deg, #34ad51 0%, #248239 100%); }
+/* A row nobody planned: the forecast drawn in the plan bar's place. Hollow
+   and dashed so it never reads as a commitment somebody made. */
+.pg-bar-projected {
+    background: repeating-linear-gradient(135deg,
+        rgba(108, 117, 125, .20) 0 6px, rgba(108, 117, 125, .06) 6px 12px);
+    border: 1px dashed #8b949e;
+    box-shadow: none;
+}
+.pg-bar-projected .pg-bar-fill { background: rgba(108, 117, 125, .38); }
+.pg-bar-projected .pg-bar-label { color: #5a6570; }
 
 .pg-bar-fill {
     position: absolute;

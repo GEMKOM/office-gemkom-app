@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import {
     barState, causeSentence, deviationChip, fmtDateTr, fmtWd, groupRows,
     headerSummary, isDefaultDuration, planSourceLabel, progressText,
-    rootCauseLabel, signedFigure,
+    rootCauseLabel, signedFigure, summaryChips,
 } from './planSheetText.js';
 import { setSheetLang, taskTitle } from './sheetLang.js';
 
@@ -176,6 +176,33 @@ check('english: units, chips, causes, names', () => {
         setSheetLang('tr');
     }
     assert.equal(fmtWd(12), '12 iş günü');
+});
+
+check('summaryChips: a job nobody planned does not claim to be on plan', () => {
+    // 096-22: ten live rows, not one entered date, nothing "late" because
+    // there is no plan to be late against -- which used to fall straight
+    // through to the all-clear.
+    const chips = summaryChips({ rows: 10, late_rows: 0, own_late_rows: 0,
+        chain_only_rows: 0, default_duration_rows: 0, unplanned_rows: 10 });
+
+    assert.equal(chips.length, 1);
+    assert.equal(chips[0].text, '10 görevde plan yok');
+    assert.ok(!chips.some(c => c.cls === 'ps-chip-ok'));
+});
+
+check('summaryChips: the all-clear still fires when everything is planned', () => {
+    const chips = summaryChips({ rows: 10, late_rows: 0, unplanned_rows: 0 });
+
+    assert.equal(chips.length, 1);
+    assert.equal(chips[0].cls, 'ps-chip-ok');
+});
+
+check('summaryChips: partly planned reports both the late rows and the gap', () => {
+    const chips = summaryChips({ rows: 12, late_rows: 3, own_late_rows: 2,
+        chain_only_rows: 1, unplanned_rows: 4 });
+
+    assert.deepEqual(chips.map(c => c.text),
+        ['3 görev planın gerisinde', '2 kendi', '1 zincir', '4 görevde plan yok']);
 });
 
 console.log(failures ? `\n${failures} failing` : '\nall passed');

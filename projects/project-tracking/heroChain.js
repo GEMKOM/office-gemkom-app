@@ -58,10 +58,18 @@ export function formatDateLong(value) {
 
 const PENDING = '<span class="ps-fig-muted">…</span>';
 
+const FIGURE_TITLE = {
+    // Baslangic is when the ORDER was opened, not when the plan starts --
+    // worth saying, now that a job with no plan shows "Plan bitisi —" right
+    // beside it and the two would otherwise read as one window.
+    start: () => tr('İş emrinin açıldığı tarih', 'When the order was opened'),
+};
+
 function figure(key, label, iso, pending, state) {
     const value = iso ? escapeHtml(formatDateLong(iso)) : (pending ? PENDING : '—');
+    const tip = FIGURE_TITLE[key] ? ` title="${escapeHtml(FIGURE_TITLE[key]())}"` : '';
     return `
-            <div class="ps-cf ps-cf-${key}${state ? ` is-${state.kind}` : ''}">
+            <div class="ps-cf ps-cf-${key}${state ? ` is-${state.kind}` : ''}"${tip}>
                 <label>${label}</label>
                 <span class="ps-cf-value">${value}</span>
             </div>`;

@@ -245,6 +245,7 @@ export function buildSheetRows(sheet, collapsed = new Set(), { mainOnly = false 
             progress: node.completion_percentage,
             status: node.status,
             deviation: node.deviation_wd,
+            projected_start: node.projected_start,
             projected_end: node.projected_end,
             cause: rootCauseText,
             job_target: node.termin,
@@ -271,6 +272,7 @@ export function buildSheetRows(sheet, collapsed = new Set(), { mainOnly = false 
                 progress: r.progress_pct,
                 status: r.status,
                 deviation: r.deviation_wd,
+                projected_start: r.projected_start,
                 projected_end: r.projected_end,
                 // What the Neden cell shows, so an editable link's editor
                 // opens on it (and can clear it) instead of on nothing.
@@ -285,9 +287,28 @@ export function buildSheetRows(sheet, collapsed = new Set(), { mainOnly = false 
 
 function rowBar(row) {
     if (row.kind === 'task' && row.row.dead) return null;
-    const start = row.plan_start;
-    const end = row.plan_end;
+    let start = row.plan_start;
+    let end = row.plan_end;
+    // Nobody entered a plan for this row, so there is no plan bar to draw.
+    // The forecast takes its place — outlined instead of solid, and with no
+    // deviation tail, because there is nothing to deviate from. Leaving the
+    // row bare would hide work that is still very much scheduled.
+    const projectedOnly = !start && !end && !!row.projected_end;
+    if (projectedOnly) {
+        start = row.projected_start || row.projected_end;
+        end = row.projected_end;
+    }
     if (!start || !end || end < start) return null;
+    if (projectedOnly) {
+        return {
+            start, end,
+            progress: Math.max(0, Math.min(100, Number(row.progress || 0))),
+            state: 'projected',
+            label: row.title,
+            title: `${row.title} · ${tr('plan girilmemiş', 'no plan entered')}`
+                + ` · ${tr('öngörülen', 'projected')} ${fmtDateTr(start)} – ${fmtDateTr(end)}`,
+        };
+    }
     // An edited deviation or status is the sales team's word over the
     // computed one, so the bar reads from the row like a job row does.
     const edited = row.edited && (row.edited.has('deviation') || row.edited.has('status'));

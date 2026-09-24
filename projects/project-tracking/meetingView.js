@@ -27,7 +27,7 @@ import {
 } from '../../apis/planning/planningRequestItems.js';
 import { ZOOMS } from '../../planning/project-planning/grid.js';
 import { renderPlanSheet, SHEET_COLUMNS, SHEET_ZOOMS } from './planSheet.js';
-import { headerSummary } from './planSheetText.js';
+import { headerSummary, summaryChips } from './planSheetText.js';
 import { heroChainHtml } from './heroChain.js';
 import { FINANCIAL_META, FILE_GROUP_LABELS, renderTilesHtml, tilesSkeletonHtml } from './meetingTiles.js';
 
@@ -1228,13 +1228,8 @@ function sheetSkeletonHtml() {
 
 // Sheet header: what the summary counted, the legend, the zoom.
 function sheetHeadHtml(sheet) {
-    const s = sheet.summary || {};
-    const chips = [];
-    if (s.late_rows) chips.push(`<span class="ps-chip ps-chip-late">${s.late_rows} görev planın gerisinde</span>`);
-    if (s.own_late_rows) chips.push(`<span class="ps-chip ps-chip-late" title="Kendi kaybı olan görevler">${s.own_late_rows} kendi</span>`);
-    if (s.chain_only_rows) chips.push(`<span class="ps-chip ps-chip-chain" title="Yalnızca önceki görev geç bitirdiği için geride">${s.chain_only_rows} zincir</span>`);
-    if (s.default_duration_rows) chips.push(`<span class="ps-chip ps-chip-muted" title="Süre girilmemiş, departman varsayılanı kullanıldı">${s.default_duration_rows} varsayılan süre</span>`);
-    if (!chips.length && s.rows) chips.push('<span class="ps-chip ps-chip-ok">tüm görevler planında</span>');
+    const chips = summaryChips(sheet.summary).map(c =>
+        `<span class="ps-chip ${c.cls}"${c.title ? ` title="${escapeHtml(c.title)}"` : ''}>${escapeHtml(c.text)}</span>`);
     const zoom = SHEET_ZOOMS.map(z => `
         <button type="button" class="btn btn-outline-secondary${sheetState.zoom === z ? ' active' : ''}"
                 data-zoom="${z}">${ZOOMS[z].label}</button>`).join('');
