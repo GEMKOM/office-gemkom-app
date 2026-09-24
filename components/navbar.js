@@ -99,6 +99,22 @@ function findNavigationItem(path, structure = NAVIGATION_STRUCTURE) {
 // Maximum number of top-level nav items shown in the bar; rest go into "Daha Fazla" dropdown
 const MAX_VISIBLE_NAV_ITEMS = 7;
 
+// /general/* paths that have a page. Anything else under /general is still a
+// placeholder and gets the "geliştirilme aşamasında" alert — so a new Genel
+// page has to be listed here, or its menu entry refuses to open it.
+const BUILT_GENERAL_PAGES = [
+    '/general/machines',
+    '/general/overtime',
+    '/general/vacation',
+    '/general/department-requests',
+    '/general/crane-requests',
+    '/general/discussions',
+];
+
+function isUnbuiltGeneralPage(path) {
+    return path.startsWith('/general/') && !BUILT_GENERAL_PAGES.some(page => path.startsWith(page));
+}
+
 // Helper: split filtered nav into visible + more, return HTML for both (more as one dropdown)
 function renderNavigationWithMore(items, currentPath) {
     const entries = Object.entries(items);
@@ -429,6 +445,9 @@ export function initNavbar() {
                                 <li><a class="dropdown-item" href="#" id="edit-profile-btn">
                                     <i class="fas fa-user-edit me-2"></i>Profili Düzenle
                                 </a></li>
+                                <li><a class="dropdown-item" href="/general/discussions">
+                                    <i class="fas fa-comments me-2"></i>Tartışmalarım
+                                </a></li>
                                 <li><h6 class="dropdown-item">Departman: ${user?.position?.department_code || user?.department_code || 'Atanmamış'}</h6></li>
                                 <li><hr class="dropdown-divider"></li>
                                 ${stopImpersonationItem}
@@ -459,6 +478,14 @@ export function initNavbar() {
           initAssistantWidget(navbarContainer.querySelector('#assistant-launcher-li'));
       } catch (e) {
           console.error('Assistant widget failed to initialize:', e);
+      }
+
+      // Günlük Özet first-open modal, fenced the same way.
+      try {
+          const { initDailySummary } = await import('./daily-summary/daily-summary.js');
+          initDailySummary();
+      } catch (e) {
+          console.error('Daily summary failed to initialize:', e);
       }
 
       // Attendance indicator (check-in / check-out)
@@ -951,7 +978,7 @@ export function initNavbar() {
                             return;
                         }
                         
-                                        if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests') && !path.startsWith('/general/crane-requests')) {
+                                        if (isUnbuiltGeneralPage(path)) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
@@ -1074,7 +1101,7 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests') && !path.startsWith('/general/crane-requests')) {
+                if (isUnbuiltGeneralPage(path)) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;

@@ -9,7 +9,7 @@
  * Streams answers over SSE (fetch + ReadableStream). Authorization lives in
  * the backend's tool layer — this widget only renders what the API releases.
  */
-import { isLoggedIn } from '../../authService.js';
+import { isImpersonating, isLoggedIn } from '../../authService.js';
 import { showNotification } from '../notification/notification.js';
 import { renderRichText } from '../../utils/richText.js';
 import { escapeHtml } from '../../utils/text.js';
@@ -26,6 +26,20 @@ import {
     listMyFeedbackReports,
     respondFeedbackReport,
 } from '../../apis/feedback.js';
+import {
+    getDailySummary,
+    listDailySummaries,
+    markDailySummaryRead,
+} from '../../apis/dailySummary.js';
+import {
+    bindDailySummaryInteractions,
+    currentUserId,
+    ensureDailySummaryStyles,
+    relativeDayLabel,
+    renderDailySummary,
+    seenValue,
+    setSeen,
+} from '../daily-summary/render.js';
 
 const STORAGE_OPEN = 'assistantOpen';
 const STORAGE_CONVERSATION = 'assistantConversationId';
@@ -33,6 +47,11 @@ const STORAGE_CONVERSATION = 'assistantConversationId';
 // Report id from a bell-notification deep link (/?bildirim=<id>), if any.
 const DEEPLINK_REPORT_ID = Number(
     new URLSearchParams(window.location.search).get('bildirim'),
+) || null;
+
+// Daily-summary id from a deep link (/?ozet=<id>), if any.
+const DEEPLINK_SUMMARY_ID = Number(
+    new URLSearchParams(window.location.search).get('ozet'),
 ) || null;
 
 const TOOL_LABELS = {
@@ -44,11 +63,13 @@ const TOOL_LABELS = {
     get_discussions: 'Tartışmalar okunuyor',
     get_my_mentions: 'Etiketlenmeler alınıyor',
     get_my_summary: 'Kişisel özet alınıyor',
+    get_daily_summary: 'Günlük özet okunuyor',
     search_docs: 'Rehber dokümanlar aranıyor',
     read_doc: 'Rehber okunuyor',
 };
 
 const SUGGESTIONS = [
+    'Dün neler oldu?',
     'İş emri nasıl açılır?',
     'Aktif iş emirlerini listele',
     'Bu ay kaç saat çalışmışım?',
@@ -90,6 +111,12 @@ const state = {
     reportSending: false,
     reports: [],
     reportsExpanded: false,
+    summaries: [],
+    summaryCache: {},          // id → Promise<Detail>, so a double click fetches once
+    summariesLoaded: false,
+    summariesLoading: false,
+    summariesDays: 0,          // 30 after the first load, 90 after "Daha eski özetler"
+    summaryPendingId: null,    // row to open once the list holds it (deep link / modal)
 };
 
 const el = {};
@@ -103,6 +130,11 @@ export function initAssistantWidget(launcherMount) {
     buildLauncher(launcherMount);
     buildPanel();
 
+    // The daily-summary modal drives the widget through this event; the flag
+    // tells it the summaries pane exists (stale widget code → no button).
+    document.addEventListener('assistant:open', onAssistantOpenEvent);
+    window.__assistantSummariesReady = true;
+
     state.conversationId = Number(sessionStorage.getItem(STORAGE_CONVERSATION)) || null;
     if (sessionStorage.getItem(STORAGE_OPEN) === '1') {
         openPanel({ instant: true });
@@ -113,6 +145,27 @@ export function initAssistantWidget(launcherMount) {
     if (new URLSearchParams(window.location.search).has('bildirim')) {
         openPanel({ instant: true });
         toggleReportView();
+    }
+
+    // Daily-summary deep link (/?ozet=<id>): open straight onto that summary.
+    if (DEEPLINK_SUMMARY_ID) {
+        openPanel({ instant: true });
+        showSummariesView(DEEPLINK_SUMMARY_ID);
+    }
+}
+
+function onAssistantOpenEvent(event) {
+    const detail = (event && event.detail) || {};
+    openPanel();
+    if (detail.view === 'summaries') {
+        showSummariesView(Number(detail.summaryId) || null);
+        return;
+    }
+    showChatView();
+    if (detail.prefill && !state.locked) {
+        el.input.value = String(detail.prefill);
+        el.input.dispatchEvent(new Event('input'));  // autosize
+        el.input.focus();
     }
 }
 
@@ -146,6 +199,7 @@ function buildPanel() {
     panel.innerHTML = `
         <div class="aw-header">
             <span class="aw-title"><i class="fas fa-robot"></i> Neo</span>
+            <button type="button" class="aw-btn" data-action="summaries" title="Günlük özetler"><i class="fas fa-newspaper"></i></button>
             <button type="button" class="aw-btn" data-action="report" title="Hata / öneri bildir"><i class="fas fa-bug"></i></button>
             <button type="button" class="aw-btn" data-action="history" title="Sohbet geçmişi"><i class="fas fa-history"></i></button>
             <button type="button" class="aw-btn" data-action="new" title="Yeni sohbet"><i class="fas fa-plus"></i></button>
@@ -183,6 +237,10 @@ function buildPanel() {
                 <div class="aw-report-list-title">Bildirim Geçmişim</div>
                 <div class="aw-report-list"></div>
             </div>
+            <div class="aw-summaries" style="display:none">
+                <div class="aw-summaries-title"><i class="fas fa-newspaper me-2"></i>Günlük Özetler</div>
+                <div class="aw-summaries-list"></div>
+            </div>
             <div class="aw-input-area">
                 <form>
                     <textarea class="form-control" rows="1" maxlength="4000"
@@ -215,11 +273,15 @@ function buildPanel() {
     el.reportBtn = panel.querySelector('[data-action="report"]');
     el.reportForm = panel.querySelector('.aw-report-form');
     el.reportList = panel.querySelector('.aw-report-list');
+    el.summaries = panel.querySelector('.aw-summaries');
+    el.summariesBtn = panel.querySelector('[data-action="summaries"]');
+    el.summariesList = panel.querySelector('.aw-summaries-list');
 
     panel.querySelector('[data-action="close"]').addEventListener('click', () => closePanel());
     panel.querySelector('[data-action="new"]').addEventListener('click', () => startNewChat());
     el.historyBtn.addEventListener('click', () => toggleHistoryView());
     el.reportBtn.addEventListener('click', () => toggleReportView());
+    el.summariesBtn.addEventListener('click', () => toggleSummariesView());
     el.reportForm.addEventListener('submit', (event) => {
         event.preventDefault();
         submitReport();
@@ -321,32 +383,37 @@ async function refreshQuota() {
     }
 }
 
-// ---------------------------------------------------------------- history
+// ------------------------------------------------------------------ views
 
-function toggleHistoryView() {
-    if (state.view !== 'history') {
-        state.view = 'history';
-        el.messages.style.display = 'none';
-        el.inputArea.style.display = 'none';
-        el.report.style.display = 'none';
-        el.reportBtn.classList.remove('active');
-        el.history.style.display = 'block';
-        el.historyBtn.classList.add('active');
-        refreshConversationList();
-    } else {
-        showChatView();
-    }
+// One switch for the four panes; the toggle functions below stay as thin
+// wrappers so their call sites (bootstrap, list clicks, send) are unchanged.
+function setView(view) {
+    state.view = view;
+    el.messages.style.display = view === 'chat' ? 'flex' : 'none';
+    el.history.style.display = view === 'history' ? 'block' : 'none';
+    el.report.style.display = view === 'report' ? 'block' : 'none';
+    el.summaries.style.display = view === 'summaries' ? 'block' : 'none';
+    // Locked users keep chat input hidden (bootstrap) but can still report
+    // and read the daily summaries.
+    el.inputArea.style.display = view === 'chat' && !state.locked ? 'block' : 'none';
+    el.historyBtn.classList.toggle('active', view === 'history');
+    el.reportBtn.classList.toggle('active', view === 'report');
+    el.summariesBtn.classList.toggle('active', view === 'summaries');
 }
 
 function showChatView() {
-    state.view = 'chat';
-    el.history.style.display = 'none';
-    el.report.style.display = 'none';
-    el.messages.style.display = 'flex';
-    // Locked users keep chat input hidden (bootstrap) but can still report.
-    el.inputArea.style.display = state.locked ? 'none' : 'block';
-    el.historyBtn.classList.remove('active');
-    el.reportBtn.classList.remove('active');
+    setView('chat');
+}
+
+// ---------------------------------------------------------------- history
+
+function toggleHistoryView() {
+    if (state.view === 'history') {
+        showChatView();
+        return;
+    }
+    setView('history');
+    refreshConversationList();
 }
 
 async function refreshConversationList() {
@@ -444,13 +511,7 @@ function toggleReportView() {
         showChatView();
         return;
     }
-    state.view = 'report';
-    el.messages.style.display = 'none';
-    el.inputArea.style.display = 'none';
-    el.history.style.display = 'none';
-    el.historyBtn.classList.remove('active');
-    el.report.style.display = 'block';
-    el.reportBtn.classList.add('active');
+    setView('report');
     refreshMyReports();
     el.reportForm.querySelector('[name="title"]').focus();
 }
@@ -691,6 +752,189 @@ async function submitReport() {
         state.reportSending = false;
         submitBtn.disabled = false;
         submitBtn.innerHTML = '<i class="fas fa-paper-plane me-1"></i>Gönder';
+    }
+}
+
+// --------------------------------------------------------- daily summaries
+
+// Header button: toggles like history/report (second click → chat).
+function toggleSummariesView() {
+    if (state.view === 'summaries') {
+        showChatView();
+        return;
+    }
+    showSummariesView();
+}
+
+// Modal / deep link entry: always lands on the pane, optionally on one row.
+function showSummariesView(summaryId = null) {
+    setView('summaries');
+    ensureDailySummaryStyles();
+    if (summaryId) state.summaryPendingId = summaryId;
+    if (!state.summariesLoaded) {
+        loadSummaries(30);
+    } else {
+        revealPendingSummary();
+    }
+}
+
+async function loadSummaries(days) {
+    if (state.summariesLoading) return;
+    state.summariesLoading = true;
+    if (!state.summaries.length) {
+        el.summariesList.innerHTML =
+            '<div class="aw-muted-block"><span class="spinner-border spinner-border-sm me-1" style="width:0.8rem;height:0.8rem"></span>Yükleniyor...</div>';
+    }
+    let rows;
+    try {
+        rows = await listDailySummaries({ days });
+    } catch (error) {
+        el.summariesList.innerHTML = error && error.status === 403
+            ? '<div class="aw-muted-block">Günlük özetler yalnızca ofis kullanıcılarına açıktır.</div>'
+            : '<div class="aw-muted-block">Özetler yüklenemedi.</div>';
+        return;
+    } finally {
+        // Cleared before rendering: the render may chain a 90-day load.
+        state.summariesLoading = false;
+    }
+    state.summaries = Array.isArray(rows) ? rows : ((rows && rows.results) || []);
+    state.summariesDays = days;
+    state.summariesLoaded = true;
+    renderSummaryList();
+}
+
+function renderSummaryList() {
+    const rows = state.summaries || [];
+    el.summariesList.innerHTML = '';
+    if (!rows.length) {
+        el.summariesList.innerHTML = '<div class="aw-muted-block">Henüz özet yok.</div>';
+    }
+    for (const summary of rows) {
+        el.summariesList.appendChild(buildSummaryItem(summary));
+    }
+    if (state.summariesDays < 90) {
+        const more = document.createElement('button');
+        more.type = 'button';
+        more.className = 'report-show-all';
+        more.textContent = 'Daha eski özetler';
+        more.addEventListener('click', () => loadSummaries(90));
+        el.summariesList.appendChild(more);
+    }
+    revealPendingSummary();
+}
+
+// Opens the row a deep link / the modal asked for once the list holds it;
+// falls back to the 90-day list once when the 30-day page doesn't have it.
+function revealPendingSummary() {
+    const id = state.summaryPendingId;
+    if (!id) return;
+    const wrap = el.summariesList.querySelector(`[data-summary-id="${Number(id)}"]`);
+    if (wrap) {
+        state.summaryPendingId = null;
+        const summary = state.summaries.find((row) => Number(row.id) === Number(id));
+        if (summary && summary.status !== 'empty') toggleSummaryRow(wrap, summary, { open: true });
+        wrap.scrollIntoView({ block: 'nearest' });
+        return;
+    }
+    if (state.summariesDays && state.summariesDays < 90 && !state.summariesLoading) {
+        loadSummaries(90);
+    } else if (state.summariesDays >= 90) {
+        state.summaryPendingId = null;
+    }
+}
+
+function summaryMiniStats(summary) {
+    const stats = summary.stats || {};
+    const num = (key) => Number(stats[key]) || 0;
+    const jobs = num('new_jobs_root') + num('new_jobs_child');
+    return `${jobs} iş emri · ${num('topics_new')} konu · ${num('comments')} yorum`;
+}
+
+function buildSummaryItem(summary) {
+    const isEmpty = summary.status === 'empty';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'summary-entry';
+    wrap.dataset.summaryId = String(summary.id);
+
+    const item = document.createElement('div');
+    item.className = 'summary-item ' + (isEmpty ? 'summary-item-empty' : 'summary-item-clickable');
+    const headline = isEmpty ? '' : String(summary.headline || '');
+    item.innerHTML = `
+        <span class="summary-day">${escapeHtml(relativeDayLabel(summary.summary_date))}</span>
+        <span class="summary-mini">${escapeHtml(isEmpty ? 'Hareket yok' : summaryMiniStats(summary))}</span>
+        ${!isEmpty && !summary.is_read ? '<span class="report-status report-status-blue summary-new">Yeni</span>' : ''}
+        ${isEmpty ? '' : '<i class="fas fa-chevron-down report-caret"></i>'}
+        ${headline ? `<span class="summary-headline" title="${escapeHtml(headline)}">${escapeHtml(headline)}</span>` : ''}`;
+    wrap.appendChild(item);
+
+    const details = document.createElement('div');
+    details.className = 'summary-detail';
+    wrap.appendChild(details);
+
+    if (!isEmpty) {
+        item.title = 'Ayrıntılar için tıklayın';
+        item.addEventListener('click', () => toggleSummaryRow(wrap, summary));
+    }
+    return wrap;
+}
+
+function fetchSummaryDetail(id) {
+    if (!state.summaryCache[id]) {
+        state.summaryCache[id] = getDailySummary(id).catch((error) => {
+            delete state.summaryCache[id];  // let the next click retry
+            throw error;
+        });
+    }
+    return state.summaryCache[id];
+}
+
+async function toggleSummaryRow(wrap, summary, { open = null } = {}) {
+    const item = wrap.querySelector('.summary-item');
+    const details = wrap.querySelector('.summary-detail');
+    const next = open === null ? !details.classList.contains('open') : open;
+    details.classList.toggle('open', next);
+    item.classList.toggle('summary-item-open', next);
+    if (!next) return;
+
+    if (!details.dataset.loaded) {
+        if (details.dataset.loading) return;
+        details.dataset.loading = '1';
+        details.innerHTML = '<div class="aw-muted-block">Yükleniyor...</div>';
+        try {
+            const detail = await fetchSummaryDetail(summary.id);
+            details.innerHTML = renderDailySummary(detail, { compact: true });
+            bindDailySummaryInteractions(details);
+            details.dataset.loaded = '1';
+        } catch (error) {
+            details.innerHTML = '<div class="aw-muted-block">Özet yüklenemedi.</div>';
+            return;
+        } finally {
+            delete details.dataset.loading;
+        }
+    }
+    markSummaryRead(summary, wrap);
+}
+
+async function markSummaryRead(summary, wrap) {
+    if (summary.is_read || isImpersonating()) return;
+    summary.is_read = true;  // optimistic: the chip goes away now
+    const chip = wrap.querySelector('.summary-new');
+    if (chip) chip.remove();
+    try {
+        await markDailySummaryRead(summary.id);
+    } catch (error) {
+        // Not fatal: the row simply shows 'Yeni' again on the next load.
+    }
+    // The seen key describes the newest summary only; reading an older one
+    // must not make the modal think the latest was seen.
+    const latest = state.summaries[0];
+    if (latest && latest.id === summary.id) {
+        try {
+            setSeen(currentUserId(), seenValue(summary));
+        } catch (error) {
+            // localStorage may be unavailable (private window); server read is enough.
+        }
     }
 }
 

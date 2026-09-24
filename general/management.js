@@ -52,11 +52,19 @@ document.addEventListener('DOMContentLoaded', async () => {
             icon: 'fas fa-helmet-safety',
             iconColor: 'danger',
             link: '/isg/issues'
+        },
+        {
+            title: 'Tartışmalarım',
+            description: 'Açtığınız tartışma konuları ve yazdığınız yorumlar; yanıt gelenleri görün, yerinde yanıtlayın.',
+            icon: 'fas fa-comments',
+            iconColor: 'primary',
+            link: '/general/discussions'
         }
     ];
 
-    // The İSG card is open to everyone, so this page can be reached by users
-    // who hold none of the other Genel pages: only show what they can open.
+    // The İSG and Tartışmalarım cards are open to everyone, so this page can be
+    // reached by users who hold none of the other Genel pages: only show what
+    // they can open.
     const cards = allCards.filter(card => hasRouteAccess(card.link));
 
     // Initialize menu component

@@ -1,0 +1,368 @@
+/* Günlük Özet — shared styles for the first-open modal, the Neo widget's
+   summaries pane (.aw-summaries .ds-*) and the IT preview. Every rule is
+   prefixed .ds- so it never leaks into page styles. No yellow (house rule). */
+
+/* --- modal shell ---------------------------------------------------------- */
+
+/* Bootstrap's backdrop sits at 1050, the same layer as the Neo panel; drop the
+   panel under the backdrop while the summary modal is open. */
+body.ds-modal-open .assistant-panel { z-index: 1040; }
+
+.ds-modal .modal-content {
+    border: 0;
+    border-radius: var(--border-radius, 12px);
+    box-shadow: var(--card-shadow, 0 4px 6px rgba(0, 0, 0, 0.1));
+    overflow: hidden;
+}
+
+.ds-modal .modal-header {
+    align-items: flex-start;
+    background: var(--gradient-primary, linear-gradient(135deg, #8b0000, #a52a2a));
+    color: #fff;
+    border-bottom: 0;
+    padding: 1rem 1.25rem 0.85rem;
+}
+
+.ds-modal .ds-modal-heading {
+    flex: 1;
+    min-width: 0;
+}
+
+.ds-modal .ds-modal-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    line-height: 1.3;
+    margin: 0;
+}
+
+.ds-modal .ds-modal-window {
+    font-size: 0.8rem;
+    opacity: 0.85;
+    margin-top: 0.15rem;
+}
+
+.ds-modal .modal-header .ds-stats {
+    margin-top: 0.6rem;
+}
+
+.ds-modal .modal-header .ds-chip {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    border-color: rgba(255, 255, 255, 0.28);
+}
+
+.ds-modal .modal-body {
+    padding: 1rem 1.25rem;
+    background: #fff;
+    color: var(--text-color, #2c3e50);
+}
+
+.ds-modal .modal-footer {
+    border-top: 1px solid #edf0f2;
+    background: var(--light-bg, #f8f9fa);
+    padding: 0.65rem 1rem;
+    gap: 0.4rem;
+}
+
+.ds-modal .modal-footer .btn {
+    font-size: 0.88rem;
+    border-radius: 8px;
+}
+
+.ds-modal .modal-footer .btn-primary {
+    background: var(--gradient-primary, linear-gradient(135deg, #8b0000, #a52a2a));
+    border-color: transparent;
+}
+
+.ds-modal .modal-footer .btn-outline-primary {
+    color: var(--primary-color, #8b0000);
+    border-color: var(--primary-color, #8b0000);
+}
+
+.ds-modal .modal-footer .btn-outline-primary:hover {
+    background: var(--primary-color, #8b0000);
+    color: #fff;
+}
+
+/* --- root / typography ---------------------------------------------------- */
+
+.ds-root {
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-color, #2c3e50);
+}
+
+.ds-root a { text-decoration: none; }
+
+.ds-headline {
+    font-size: 1.02rem;
+    font-weight: 600;
+    line-height: 1.45;
+    margin: 0 0 0.75rem;
+    padding: 0.7rem 0.9rem;
+    border-left: 4px solid var(--primary-color, #8b0000);
+    background: var(--light-bg, #f8f9fa);
+    border-radius: 0 8px 8px 0;
+}
+
+.ds-muted {
+    color: #7d8790;
+    font-size: 0.85em;
+}
+
+.ds-empty .ds-muted {
+    display: block;
+    padding: 1rem;
+    text-align: center;
+}
+
+/* --- chips (grey / green / blue / red / purple / orange only) ---------------- */
+
+.ds-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-bottom: 0.9rem;
+}
+
+.ds-chip {
+    display: inline-block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.25;
+    padding: 0.18rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.ds-chip-grey   { background: #e5e7eb; color: #374151; border-color: #d1d5db; }
+.ds-chip-green  { background: #d1fae5; color: #065f46; border-color: #10b981; }
+.ds-chip-blue   { background: #dbeafe; color: #1e40af; border-color: #3b82f6; }
+.ds-chip-red    { background: #fee2e2; color: #991b1b; border-color: #ef4444; }
+.ds-chip-purple { background: #ede9fe; color: #5b21b6; border-color: #8b5cf6; }
+.ds-chip-orange { background: #ffedd5; color: #9a3412; border-color: #f97316; }
+
+.ds-stat { font-weight: 500; }
+
+.ds-count {
+    display: inline-block;
+    min-width: 1.4em;
+    padding: 0 0.4em;
+    margin-left: 0.25rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1.5;
+    text-align: center;
+    color: #374151;
+    background: #e5e7eb;
+    border-radius: 999px;
+    vertical-align: middle;
+}
+
+/* --- sections ------------------------------------------------------------- */
+
+.ds-section {
+    margin: 0 0 1rem;
+    padding-top: 0.6rem;
+    border-top: 1px solid #edf0f2;
+}
+
+.ds-section:first-child { border-top: 0; padding-top: 0; }
+
+.ds-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-color, #2c3e50);
+    margin-bottom: 0.45rem;
+}
+
+.ds-section-title i {
+    color: var(--primary-color, #8b0000);
+    width: 1.1em;
+    text-align: center;
+}
+
+.ds-subsection { margin: 0.3rem 0 0.5rem; }
+
+.ds-subtitle {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #5b6670;
+    margin: 0.25rem 0 0.25rem;
+}
+
+.ds-subtitle i {
+    color: #9aa3ab;
+    width: 1.1em;
+    text-align: center;
+    font-size: 0.75em;
+}
+
+.ds-area-note {
+    margin: 0 0 0.45rem;
+    color: #3d4a55;
+}
+
+/* --- lists / items -------------------------------------------------------- */
+
+.ds-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ds-item {
+    position: relative;
+    padding: 0.3rem 0 0.3rem 1rem;
+    border-bottom: 1px dashed #eef1f3;
+}
+
+.ds-item:last-child { border-bottom: 0; }
+
+.ds-item::before {
+    content: '';
+    position: absolute;
+    left: 0.1rem;
+    top: 0.85em;
+    width: 0.38rem;
+    height: 0.38rem;
+    border-radius: 50%;
+    background: #c9cfd5;
+}
+
+.ds-section-highlights .ds-item::before {
+    background: var(--primary-color, #8b0000);
+}
+
+.ds-item-text { margin-right: 0.25rem; }
+
+.ds-refs {
+    display: inline;
+    margin-left: 0.15rem;
+}
+
+.ds-ref,
+.ds-ref-plain {
+    display: inline-block;
+    font-size: 0.74rem;
+    font-weight: 600;
+    line-height: 1.3;
+    padding: 0.1rem 0.45rem;
+    margin: 0.1rem 0.2rem 0.1rem 0;
+    border-radius: 6px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.ds-ref {
+    color: var(--primary-color, #8b0000);
+    background: rgba(139, 0, 0, 0.07);
+    border: 1px solid rgba(139, 0, 0, 0.18);
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ds-ref:hover {
+    color: #fff;
+    background: var(--primary-color, #8b0000);
+    border-color: var(--primary-color, #8b0000);
+}
+
+.ds-ref-plain {
+    color: #4b5560;
+    background: #f1f3f5;
+    border: 1px solid #e1e5e9;
+}
+
+/* job rows */
+.ds-job .ds-job-title { font-weight: 500; }
+
+/* discussion rows */
+.ds-topic-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem 0.4rem;
+}
+
+.ds-topic-title {
+    font-weight: 600;
+    color: var(--text-color, #2c3e50);
+}
+
+a.ds-topic-title:hover {
+    color: var(--primary-color, #8b0000);
+    text-decoration: underline;
+}
+
+.ds-topic-chips {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.ds-gist {
+    margin-top: 0.2rem;
+    color: #3d4a55;
+    font-size: 0.87em;
+}
+
+.ds-omitted {
+    margin-top: 0.3rem;
+    color: #7d8790;
+    font-size: 0.78rem;
+    font-style: italic;
+}
+
+/* collapse toggle */
+.ds-more-btn {
+    display: inline-block;
+    margin-top: 0.35rem;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--primary-color, #8b0000);
+    background: transparent;
+    border: 1px solid rgba(139, 0, 0, 0.3);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ds-more-btn:hover {
+    color: #fff;
+    background: var(--primary-color, #8b0000);
+    border-color: var(--primary-color, #8b0000);
+}
+
+/* --- compact (widget pane) ------------------------------------------------ */
+
+.ds-compact { font-size: 0.83rem; }
+.ds-compact .ds-headline { font-size: 0.9rem; padding: 0.5rem 0.7rem; margin-bottom: 0.55rem; }
+.ds-compact .ds-section { margin-bottom: 0.65rem; padding-top: 0.45rem; }
+.ds-compact .ds-section-title { font-size: 0.85rem; margin-bottom: 0.3rem; }
+.ds-compact .ds-item { padding: 0.22rem 0 0.22rem 0.85rem; }
+.ds-compact .ds-chip { font-size: 0.68rem; padding: 0.12rem 0.42rem; }
+.ds-compact .ds-ref,
+.ds-compact .ds-ref-plain { font-size: 0.7rem; padding: 0.08rem 0.38rem; }
+.ds-compact .ds-gist { font-size: 0.85em; }
+
+/* inside the Neo panel the rows sit on the panel's own padding */
+.aw-summaries .ds-root { padding: 0.15rem 0 0.4rem; }
+
+/* --- responsive ----------------------------------------------------------- */
+
+@media (max-width: 575.98px) {
+    .ds-modal .modal-header { padding: 0.85rem 1rem 0.7rem; }
+    .ds-modal .ds-modal-title { font-size: 1rem; }
+    .ds-modal .modal-body { padding: 0.85rem 1rem; }
+    .ds-modal .modal-footer { flex-wrap: wrap; }
+    .ds-modal .modal-footer .btn { flex: 1 1 auto; }
+    .ds-root { font-size: 0.86rem; }
+    .ds-ref,
+    .ds-ref-plain { white-space: normal; }
+}

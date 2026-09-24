@@ -109,6 +109,12 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'İSG Bildirimleri',
                 icon: 'fas fa-helmet-safety',
                 children: {}
+            },
+            // Personal, open to everyone like İSG (ALWAYS_ALLOWED_ROUTES).
+            '/general/discussions': {
+                label: 'Tartışmalarım',
+                icon: 'fas fa-comments',
+                children: {}
             }
         }
     },

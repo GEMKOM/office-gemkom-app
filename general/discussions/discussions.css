@@ -1,0 +1,426 @@
+/* Tartışmalarım — own topics and comments.
+ *
+ * Deliberately the same shape as Bildirimlerim (general/notifications): a tab
+ * rail card on top, a dated list below, type squares on the left. Someone who
+ * knows one page should read the other without learning anything.
+ */
+
+:root {
+    --disc-brand: #8B0000;
+    --disc-border: #e9ecef;
+    --disc-muted: #6c757d;
+}
+
+/* ------------------------------------------------------------------ cards */
+
+.disc-card {
+    padding: 0;
+    /* dropdown.css force-opens overflow on every .dashboard-card; these hold
+       no dropdowns and need to clip their rows to the rounded corners. */
+    overflow: hidden !important;
+    border-radius: 15px;
+}
+
+.disc-card:hover {
+    transform: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* ---------------------------------------------------------- tabs + sorting */
+
+.disc-toolbar {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0 0.75rem;
+}
+
+.disc-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 0.15rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.disc-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.85rem 0.9rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--disc-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+    border-radius: 6px 6px 0 0;
+}
+
+.disc-tab i { font-size: 0.82rem; opacity: 0.75; }
+
+.disc-tab:hover { color: #212529; background: #f6f7f9; }
+
+.disc-tab.active {
+    color: var(--disc-brand);
+    border-bottom-color: var(--disc-brand);
+    background: transparent;
+}
+
+.disc-tab.active i { opacity: 1; }
+
+.disc-tab-count {
+    background: #eef1f5;
+    color: #52606d;
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    min-width: 1.35rem;
+    text-align: center;
+}
+
+.disc-tab.active .disc-tab-count {
+    background: var(--disc-brand);
+    color: #fff;
+}
+
+.disc-sort {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.5rem 0.5rem;
+}
+
+.disc-sort-label {
+    font-size: 0.8rem;
+    color: var(--disc-muted);
+    margin-right: 0.2rem;
+}
+
+.disc-sort-btn {
+    border: 1px solid var(--disc-border);
+    background: #fff;
+    color: #52606d;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 0.3rem 0.7rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.disc-sort-btn:hover:not(.active) {
+    background: #f6f7f9;
+    color: #212529;
+}
+
+.disc-sort-btn.active {
+    background: var(--disc-brand);
+    border-color: var(--disc-brand);
+    color: #fff;
+}
+
+/* ------------------------------------------------------------------- list */
+
+.disc-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.disc-day {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f7f8fa;
+    border-top: 1px solid var(--disc-border);
+    border-bottom: 1px solid var(--disc-border);
+    padding: 0.4rem 1.25rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #7b8794;
+}
+
+.disc-list .disc-day:first-child { border-top: none; }
+
+.disc-row {
+    display: grid;
+    grid-template-columns: 38px 1fr auto;
+    align-items: start;
+    gap: 0.9rem;
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid #f2f4f6;
+    transition: background-color 0.15s ease;
+}
+
+.disc-row:last-child { border-bottom: none; }
+
+.disc-row:hover { background: #f8f9fb; }
+
+.disc-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+}
+
+.disc-row-main {
+    min-width: 0;
+    cursor: pointer;
+}
+
+.disc-row-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+}
+
+.disc-row-title {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #212529;
+    line-height: 1.4;
+    min-width: 0;
+    flex: 1;
+}
+
+.disc-row-time {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: #9aa3af;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.disc-source {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--disc-muted);
+    margin-top: 0.1rem;
+    min-width: 0;
+}
+
+.disc-source i { font-size: 0.72rem; color: #9aa3af; }
+
+.disc-source-label {
+    font-weight: 700;
+    color: #3e4c59;
+    white-space: nowrap;
+}
+
+.disc-source-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.disc-row-body,
+.disc-quote,
+.disc-last-comment {
+    font-size: 0.85rem;
+    line-height: 1.5;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 0.3rem;
+}
+
+.disc-row-body {
+    color: var(--disc-muted);
+    -webkit-line-clamp: 2;
+}
+
+/* The user's own words, set off as a quote so the topic title above reads as
+   the context and this as the content. */
+.disc-quote {
+    color: #3e4c59;
+    border-left: 3px solid #dfe3e8;
+    padding-left: 0.65rem;
+    -webkit-line-clamp: 3;
+}
+
+.disc-last-comment {
+    color: #3e4c59;
+    background: #f4f6f9;
+    border-radius: 8px;
+    padding: 0.35rem 0.6rem;
+    -webkit-line-clamp: 2;
+}
+
+.disc-last-comment-who {
+    font-weight: 700;
+    color: #1f4e8c;
+}
+
+.disc-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+}
+
+/* badges.css centres .status-badge with margin: 0 auto for table cells; in a
+   flex row that spreads the badges across the whole width. */
+.disc-row-meta .status-badge {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.disc-row-meta .status-badge i { font-size: 0.7rem; }
+
+.disc-tag {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #52606d;
+    background: #f1f3f6;
+    border-radius: 999px;
+    padding: 0.12rem 0.55rem;
+    white-space: nowrap;
+}
+
+.disc-tag-outline {
+    background: transparent;
+    border: 1px solid #e3e7ec;
+    color: #7b8794;
+}
+
+/* Actions stay out of the way until the row is hovered; touch devices never
+   hover, so they get them permanently. */
+.disc-row-actions {
+    display: flex;
+    gap: 0.3rem;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.disc-row:hover .disc-row-actions,
+.disc-row:focus-within .disc-row-actions {
+    opacity: 1;
+}
+
+.disc-action {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--disc-border);
+    background: #fff;
+    color: var(--disc-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.disc-action:hover {
+    background: var(--disc-brand);
+    border-color: var(--disc-brand);
+    color: #fff;
+}
+
+@media (hover: none) {
+    .disc-row-actions { opacity: 1; }
+}
+
+/* ------------------------------------------------------------- pager/state */
+
+.disc-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--disc-border);
+    background: #fafbfc;
+    font-size: 0.82rem;
+    color: var(--disc-muted);
+}
+
+.disc-pager .btn { font-size: 0.8rem; }
+
+.disc-pager-position {
+    font-weight: 600;
+    color: #52606d;
+    padding: 0 0.5rem;
+}
+
+.disc-state {
+    /* Keeps the card from collapsing between loads, which made the page jump. */
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: var(--disc-muted);
+    padding: 2rem 1.25rem;
+    text-align: center;
+}
+
+.disc-state-compact { min-height: 160px; }
+
+.disc-state i {
+    font-size: 2rem;
+    color: #d7dce2;
+}
+
+.disc-state-title {
+    font-weight: 600;
+    color: #52606d;
+}
+
+/* ------------------------------------------------------------------ modal */
+
+.disc-modal-source .disc-source {
+    font-size: 0.88rem;
+    margin-top: 0;
+}
+
+/* The comment the user clicked through from, found again inside the thread. */
+.disc-comment-highlight {
+    background: #fbecec;
+    border-radius: 8px;
+    box-shadow: inset 3px 0 0 var(--disc-brand);
+    padding: 0.5rem 0.5rem 0.75rem 0.75rem;
+}
+
+/* --------------------------------------------------------------- responsive */
+
+@media (max-width: 768px) {
+    .disc-row {
+        grid-template-columns: 32px 1fr;
+        grid-template-areas:
+            "icon main"
+            "actions actions";
+        row-gap: 0.5rem;
+        padding: 0.85rem 1rem;
+    }
+
+    .disc-icon { grid-area: icon; width: 32px; height: 32px; }
+    .disc-row-main { grid-area: main; }
+    .disc-row-actions { grid-area: actions; justify-content: flex-end; }
+
+    .disc-row-head { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
+    .disc-row-time { margin-left: 0; }
+
+    .disc-toolbar { padding: 0 0.5rem; }
+    .disc-sort { width: 100%; padding-top: 0; justify-content: flex-end; }
+}

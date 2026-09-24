@@ -75,6 +75,7 @@ import {
 } from '../../apis/subcontracting/priceTiers.js';
 import { listNCRs } from '../../apis/qualityControl.js';
 import { escapeHtml } from '../../utils/text.js';
+import { mountDiscussionSummary } from '../../components/discussion-summary/discussion-summary.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -88,6 +89,8 @@ let jobOrders = [];
 let totalJobOrders = 0;
 let isLoading = false;
 let jobOrdersStats = null; // Statistics Cards component instance
+// Neo Özeti card above the open job's discussion list (stops its polling on close)
+let topicsSummaryHandle = null;
 let jobOrderFilters = null; // Filters component instance
 let jobOrdersTable = null; // Table component instance
 let statusOptions = STATUS_OPTIONS; // Status options
@@ -1487,6 +1490,8 @@ function initializeModalComponents() {
 
     // Set up close callback to clean up URL and clear cache
     viewJobOrderModal.onCloseCallback(() => {
+        topicsSummaryHandle?.destroy();
+        topicsSummaryHandle = null;
         // Clear tab cache when modal closes
         jobOrderTabCache = {
             jobNo: null,
@@ -5166,6 +5171,8 @@ function renderTopicsUI(container, topics, jobNo) {
                 </button>
             </div>
             
+            <div id="topics-neo-summary" class="mb-3"></div>
+
             <div id="topics-list">
                 ${topics.length === 0 ? `
                     <div class="text-center py-5 text-muted">
@@ -5219,6 +5226,15 @@ function renderTopicsUI(container, topics, jobNo) {
             }
         });
     });
+
+    // The card covers the whole subtree, so it shows even when this job has
+    // no topics of its own; it renders nothing without Neo access.
+    topicsSummaryHandle?.destroy();
+    topicsSummaryHandle = mountDiscussionSummary(
+        container.querySelector('#topics-neo-summary'),
+        jobNo,
+        { openTopic: (topicId) => viewTopicDetail(topicId, jobNo) },
+    );
 }
 
 function redirectToReleaseReview(topic) {
@@ -5272,6 +5288,8 @@ async function viewTopicDetail(topicId, jobNo) {
             const url = new URL(window.location);
             url.searchParams.delete('topic_id');
             window.history.replaceState({}, '', url);
+            // A comment written in the thread makes the Neo summary stale.
+            topicsSummaryHandle?.refresh();
         });
         
         const getPriorityBadgeClass = (priority) => {

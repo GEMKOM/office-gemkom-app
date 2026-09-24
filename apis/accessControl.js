@@ -8,8 +8,9 @@ import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authS
  * - Dashes in path segments are converted to underscores.
  */
 
-// '/general/notifications' is personal rather than departmental: it only ever
-// shows the signed-in user's own notifications, so it needs no page permission.
+// '/general/notifications' and '/general/discussions' are personal rather than
+// departmental: they only ever show the signed-in user's own notifications,
+// topics and comments, so they need no page permission.
 //
 // The İSG pages are open by design: a safety finding concerns everyone in the
 // plant, and anyone can be assigned one. Raising or closing an issue still
@@ -21,7 +22,7 @@ import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authS
 // grant. Both Genel landing pages filter their cards by route access, so this
 // only opens the hub, not the pages under it.
 const ALWAYS_ALLOWED_ROUTES = new Set([
-    '/', '/login', '/login/', '/general', '/general/notifications',
+    '/', '/login', '/login/', '/general', '/general/notifications', '/general/discussions',
     '/isg', '/isg/issues',
 ]);
 

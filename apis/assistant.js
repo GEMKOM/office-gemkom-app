@@ -120,6 +120,39 @@ export function getAnalyticsConversation(conversationId) {
     );
 }
 
+// ---------------------------------------------------------------------------
+// Job-order discussion summaries (Neo Özeti — components/discussion-summary)
+// ---------------------------------------------------------------------------
+
+async function summaryFetch(url, options, defaultMessage) {
+    const response = await authedFetch(url, options);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const error = new Error(data.detail || defaultMessage);
+        error.status = response.status;
+        throw error;
+    }
+    return data;
+}
+
+/** The saved summary for a job order and whether it is still current. */
+export function getDiscussionSummary(jobNo) {
+    return summaryFetch(`${ASSISTANT_BASE}/discussion-summaries/${encodeURI(jobNo)}/`, undefined, 'Özet yüklenemedi');
+}
+
+/**
+ * Ask for a summary. The server only calls the model when the discussions
+ * changed since the last one; otherwise it returns the saved summary.
+ * Errors carry `status`: 409 someone else is generating it, 429 budget spent.
+ */
+export function generateDiscussionSummary(jobNo) {
+    return summaryFetch(
+        `${ASSISTANT_BASE}/discussion-summaries/${encodeURI(jobNo)}/`,
+        { method: 'POST' },
+        'Özet oluşturulamadı',
+    );
+}
+
 /**
  * Send one question and stream the answer.
  *

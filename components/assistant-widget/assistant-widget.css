@@ -615,3 +615,75 @@
 .report-status-orange { background: #ffe3cc; color: #b35900; }
 .report-status-green  { background: #d6f2e0; color: #146c43; }
 .report-status-red    { background: #f8d7da; color: #b02a37; }
+
+/* --- daily summaries view ------------------------------------------------ */
+
+.aw-summaries {
+    flex: 1;
+    overflow-y: auto;
+    background: #fff;
+}
+
+.aw-summaries .aw-summaries-title {
+    padding: 0.65rem 1rem;
+    font-weight: 600;
+    font-size: 0.88rem;
+    color: var(--text-color, #2c3e50);
+    border-bottom: 1px solid #e9ecef;
+}
+
+.aw-summaries-list .summary-item {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.15rem 0.5rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.82rem;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.summary-item .summary-day {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--text-color, #2c3e50);
+    white-space: nowrap;
+}
+
+.summary-item .summary-mini {
+    flex: 1;
+    min-width: 0;
+    color: #8a939b;
+    font-size: 0.76rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Second line: the model's one-line headline, truncated. */
+.summary-item .summary-headline {
+    flex-basis: 100%;
+    min-width: 0;
+    color: #495057;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.summary-item-clickable { cursor: pointer; }
+.summary-item-clickable:hover { background: #f8f9fa; }
+.summary-item-open { background: #f8f9fa; }
+.summary-item-open .report-caret { transform: rotate(180deg); }
+
+.summary-item-empty .summary-day { color: #8a939b; font-weight: 500; }
+
+/* Expanded summary body (rendered by components/daily-summary/render.js). */
+.summary-detail {
+    display: none;
+    padding: 0.55rem 1rem 0.8rem;
+    font-size: 0.82rem;
+    background: #fbf9f9;
+    border-bottom: 1px solid #f1f3f5;
+}
+
+.summary-detail.open { display: block; }

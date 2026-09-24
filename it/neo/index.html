@@ -16,6 +16,9 @@
     <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../components/table/table.css">
     <link rel="stylesheet" href="../../components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="../../components/confirmation-modal/confirmation-modal.css">
+    <link rel="stylesheet" href="../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../components/daily-summary/daily-summary.css">
     <link rel="stylesheet" href="./neo.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
 </head>
@@ -43,6 +46,17 @@
 
                 <!-- Statistics cards -->
                 <div id="neo-stats"></div>
+
+                <!-- Daily summary generation log -->
+                <div class="neo-card mb-4">
+                    <div class="neo-card-title d-flex align-items-center justify-content-between flex-wrap gap-2">
+                        <span><i class="fas fa-newspaper me-2"></i>Günlük Özetler</span>
+                        <button type="button" class="btn btn-sm btn-primary" id="neo-summary-run-btn">
+                            <i class="fas fa-play me-1"></i>Bugünkü özeti üret
+                        </button>
+                    </div>
+                    <div id="neo-summaries-table"></div>
+                </div>
 
                 <!-- Breakdown tables -->
                 <div class="row g-3 mb-4">
@@ -75,8 +89,10 @@
         </div>
     </section>
 
-    <!-- Conversation transcript modal mount -->
+    <!-- Conversation transcript / daily summary modal mount -->
     <div id="neo-modal-container"></div>
+    <!-- Regenerate confirmation mount -->
+    <div id="neo-confirm-container"></div>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
