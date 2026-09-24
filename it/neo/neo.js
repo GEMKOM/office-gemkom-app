@@ -85,6 +85,7 @@ const RUN_MESSAGES = {
 
 const PAGE_SIZE = 25;
 const SUMMARY_COST_CARD_ID = 'neo-stat-summary-cost';
+const SUMMARY_READ_CARD_ID = 'neo-stat-summary-read';
 
 const state = {
     days: 30,
@@ -322,7 +323,7 @@ function renderStats(summary, summaryRows = state.summaryRows) {
             title: 'Ort. Yanıt Süresi',
             value: `${(summary.avg_latency_ms / 1000).toFixed(1)} sn`,
             icon: 'fas fa-stopwatch',
-            color: 'warning',
+            color: 'secondary',
         },
         {
             title: declined ? `Geri Bildirim · ${declined} red` : 'Geri Bildirim',
@@ -336,6 +337,13 @@ function renderStats(summary, summaryRows = state.summaryRows) {
             value: usd(sumSummaryCost(summaryRows)),
             icon: 'fas fa-newspaper',
             color: 'dark',
+        },
+        {
+            id: SUMMARY_READ_CARD_ID,
+            title: 'Ort. okuma süresi',
+            value: readSecondsLabel(avgReadSeconds(summaryRows)),
+            icon: 'fas fa-book-open-reader',
+            color: 'info',
         },
     ]);
 }
@@ -438,6 +446,14 @@ function setupSummariesCard() {
                 formatter: (v) => Number(v || 0).toLocaleString('tr-TR'),
             },
             {
+                field: 'avg_read_seconds', label: 'Ort. okuma', sortable: false, width: '90px',
+                formatter: (v) => readSecondsLabel(v),
+            },
+            {
+                field: 'expand_rate', label: 'Detay %', sortable: false, width: '80px',
+                formatter: (v) => expandRateLabel(v),
+            },
+            {
                 field: 'latency_ms', label: 'Süre', sortable: false, width: '75px',
                 formatter: (v) => (v == null ? '—' : `${(v / 1000).toFixed(1)} sn`),
             },
@@ -501,11 +517,14 @@ async function loadSummaryRows() {
     return state.summaryRows;
 }
 
-/** Re-fetches the summaries and refreshes only the cost card (no re-animation). */
+/** Re-fetches the summaries and refreshes only their two cards (no re-animation). */
 async function reloadSummaries() {
     const rows = await loadSummaryRows();
     if (state.lastSummary) {
         statsCards.updateCardById(SUMMARY_COST_CARD_ID, { value: usd(sumSummaryCost(rows)) });
+        statsCards.updateCardById(SUMMARY_READ_CARD_ID, {
+            value: readSecondsLabel(avgReadSeconds(rows)),
+        });
     }
 }
 
@@ -514,6 +533,15 @@ function sumSummaryCost(rows) {
         const n = Number.parseFloat(row.cost_usd);
         return acc + (Number.isFinite(n) ? n : 0);
     }, 0);
+}
+
+/** Plain mean of the per-summary averages; null until some read carried metrics. */
+function avgReadSeconds(rows) {
+    const values = (rows || [])
+        .map((row) => Number.parseFloat(row.avg_read_seconds))
+        .filter(Number.isFinite);
+    if (!values.length) return null;
+    return values.reduce((acc, n) => acc + n, 0) / values.length;
 }
 
 async function runTodaySummary(button) {
@@ -635,6 +663,8 @@ function renderSummaryMeta(detail) {
         ['Tetik', TRIGGER_LABELS[detail.triggered_by] || detail.triggered_by || '—'],
         ['Üretildi', detail.generated_at ? formatDateTime(detail.generated_at) : '—'],
         ['Okuma', fmtInt(detail.read_count)],
+        ['Ort. okuma', readSecondsLabel(detail.avg_read_seconds)],
+        ['Detay', expandRateLabel(detail.expand_rate)],
     ];
     if (detail.redactions) items.push(['Sansürlenen', fmtInt(detail.redactions)]);
     if (detail.facts_chars) items.push(['Girdi metni', `${fmtInt(detail.facts_chars)} karakter`]);
@@ -682,6 +712,18 @@ function safeWindowLabel(detail) {
 function fmtInt(value) {
     const n = Number(value);
     return (Number.isFinite(n) ? n : 0).toLocaleString('tr-TR');
+}
+
+/** avg_read_seconds → '42 sn'; '—' while no read of that summary carried metrics. */
+function readSecondsLabel(value) {
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) ? `${Math.round(n)} sn` : '—';
+}
+
+/** expand_rate (0..1) → '35%'; '—' when null. */
+function expandRateLabel(value) {
+    const n = Number.parseFloat(value);
+    return Number.isFinite(n) ? `${Math.round(n * 100)}%` : '—';
 }
 
 function truncate(text, max) {

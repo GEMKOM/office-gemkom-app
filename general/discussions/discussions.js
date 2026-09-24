@@ -351,85 +351,129 @@ function renderGrouped(rows, rowHtml) {
     }).join('');
 }
 
+/*
+ * A row is three short lines — title, where it lives, the one sentence worth
+ * reading — plus a side column with the time and whether an answer is
+ * waiting. Rows where someone else has had the last word carry the same
+ * rail + tint as an unread notification: that is what the page is for.
+ */
+
 function renderTopicRow(topic) {
     const meta = TYPE_META[topic.topic_type] || TYPE_FALLBACK;
-    return `
-        <div class="disc-row" data-topic-id="${topic.id}" data-row-id="${topic.id}">
-            <div class="disc-icon" style="background:${meta.bg};color:${meta.color}">
-                <i class="fas ${meta.icon}"></i>
-            </div>
-            <div class="disc-row-main" data-action="open">
-                <div class="disc-row-head">
-                    <span class="disc-row-title">${escapeHtml(topic.title || '-')}</span>
-                    <span class="disc-row-time" title="Açıldı: ${escapeHtml(formatDateTime(topic.created_at))}">
-                        ${escapeHtml(formatTime(state.filters.ordering === 'created' ? topic.created_at : topic.last_activity_at))}
-                    </span>
-                </div>
-                ${renderSource(topic.source)}
-                ${topic.excerpt ? `<div class="disc-row-body">${escapeHtml(plainText(topic.excerpt))}</div>` : ''}
-                ${renderLastComment(topic)}
-                <div class="disc-row-meta">
-                    ${renderReplyState(topic.reply_count, topic.last_comment_by_me)}
-                    <span class="disc-tag"><i class="far fa-comment"></i> ${topic.comment_count} yorum</span>
-                    <span class="disc-tag">${escapeHtml(topic.topic_type_display || '')}</span>
-                    ${renderPriority(topic.priority, topic.priority_display)}
-                    ${topic.revision_status_display
-                        ? `<span class="disc-tag disc-tag-outline">${escapeHtml(topic.revision_status_display)}</span>`
-                        : ''}
-                </div>
-            </div>
-            ${renderActions(topic.source)}
-        </div>
-    `;
-}
+    // Someone answered and the user has not spoken since.
+    const awaiting = topic.reply_count > 0 && !topic.last_comment_by_me;
+    const facts = [
+        sourceFact(topic.source),
+        topic.topic_type !== 'general' ? escapeHtml(topic.topic_type_display || '') : '',
+        topic.revision_status_display ? escapeHtml(topic.revision_status_display) : '',
+        `${topic.comment_count} yorum`,
+    ];
 
-/** The latest word on the topic, when it is not the user's own. */
-function renderLastComment(topic) {
-    if (!topic.last_comment_excerpt || topic.last_comment_by_me) return '';
-    return `
-        <div class="disc-last-comment">
-            <span class="disc-last-comment-who">${escapeHtml(topic.last_comment_by || 'Bilinmeyen')}:</span>
-            ${escapeHtml(plainText(topic.last_comment_excerpt))}
-        </div>
-    `;
+    let line;
+    if (awaiting && topic.last_comment_excerpt) {
+        line = `
+            <div class="disc-row-line is-reply">
+                <i class="fas fa-reply"></i>
+                <span class="disc-row-who">${escapeHtml(topic.last_comment_by || 'Bilinmeyen')}</span>
+                ${escapeHtml(plainText(topic.last_comment_excerpt))}
+            </div>`;
+    } else if (topic.excerpt) {
+        line = `<div class="disc-row-line">${escapeHtml(plainText(topic.excerpt))}</div>`;
+    } else {
+        line = '';
+    }
+
+    let status;
+    if (awaiting) status = '<span class="status-badge status-blue disc-state-badge">Yeni yanıt</span>';
+    else if (topic.reply_count) status = '<span class="disc-state-text"><i class="fas fa-check"></i> Son yorum sizde</span>';
+    else status = '<span class="disc-state-text">Yanıt yok</span>';
+
+    return renderRow({
+        attrs: `data-topic-id="${topic.id}" data-row-id="${topic.id}"`,
+        awaiting,
+        icon: meta.icon,
+        meta,
+        title: topic.title,
+        titleExtra: renderPriority(topic.priority, topic.priority_display),
+        facts,
+        line,
+        time: state.filters.ordering === 'created' ? topic.created_at : topic.last_activity_at,
+        timeTitle: `Açıldı: ${formatDateTime(topic.created_at)}`,
+        status,
+        source: topic.source,
+    });
 }
 
 function renderCommentRow(comment) {
     const topic = comment.topic || {};
     const meta = TYPE_META[topic.topic_type] || TYPE_FALLBACK;
-    const replied = comment.reply_count > 0;
+    // Answered after this comment, and the answer is still the topic's last word.
+    const awaiting = comment.reply_count > 0 && !!comment.last_reply_at
+        && comment.last_reply_at === topic.last_comment_at;
+    const facts = [
+        sourceFact(comment.source),
+        topic.is_mine ? 'Sizin konunuz' : `Konu: ${escapeHtml(topic.created_by || '-')}`,
+        topic.topic_type !== 'general' ? escapeHtml(topic.topic_type_display || '') : '',
+        comment.attachment_count ? `<i class="fas fa-paperclip"></i> ${comment.attachment_count}` : '',
+        comment.is_edited ? 'düzenlendi' : '',
+    ];
+
+    let status;
+    if (awaiting) {
+        status = `<span class="status-badge status-blue disc-state-badge"
+                        title="${escapeHtml(`${comment.last_reply_by || ''} · ${formatDateTime(comment.last_reply_at)}`)}">Yeni yanıt</span>`;
+    } else if (comment.reply_count) {
+        status = `<span class="disc-state-text" title="Son yanıt: ${escapeHtml(comment.last_reply_by || '')}">
+                      <i class="fas fa-reply"></i> ${comment.reply_count} yanıt
+                  </span>`;
+    } else {
+        status = '<span class="disc-state-text">Yanıt yok</span>';
+    }
+
+    return renderRow({
+        attrs: `data-topic-id="${topic.id}" data-comment-id="${comment.id}" data-row-id="${comment.id}"`,
+        awaiting,
+        icon: 'fa-comment-dots',
+        meta,
+        title: topic.title,
+        titleExtra: '',
+        facts,
+        line: `<div class="disc-row-line is-own">${escapeHtml(plainText(comment.content))}</div>`,
+        time: state.filters.ordering === 'created' ? comment.created_at : comment.last_activity_at,
+        timeTitle: `Yazıldı: ${formatDateTime(comment.created_at)}`,
+        status,
+        source: comment.source,
+    });
+}
+
+function renderRow({ attrs, awaiting, icon, meta, title, titleExtra, facts, line, time, timeTitle, status, source }) {
+    const factsHtml = facts.filter(Boolean).join('<span class="disc-sep">·</span>');
     return `
-        <div class="disc-row" data-topic-id="${topic.id}" data-comment-id="${comment.id}" data-row-id="${comment.id}">
+        <div class="disc-row ${awaiting ? 'is-awaiting' : ''}" ${attrs}>
             <div class="disc-icon" style="background:${meta.bg};color:${meta.color}">
-                <i class="fas fa-comment-dots"></i>
+                <i class="fas ${icon}"></i>
             </div>
             <div class="disc-row-main" data-action="open">
-                <div class="disc-row-head">
-                    <span class="disc-row-title">${escapeHtml(topic.title || '-')}</span>
-                    <span class="disc-row-time" title="Yazıldı: ${escapeHtml(formatDateTime(comment.created_at))}">
-                        ${escapeHtml(formatTime(state.filters.ordering === 'created' ? comment.created_at : comment.last_activity_at))}
-                    </span>
+                <div class="disc-row-title">
+                    <span class="disc-row-title-text">${escapeHtml(title || '-')}</span>
+                    ${titleExtra}
                 </div>
-                ${renderSource(comment.source)}
-                <div class="disc-quote">${escapeHtml(plainText(comment.content))}</div>
-                <div class="disc-row-meta">
-                    ${replied
-                        ? `<span class="status-badge status-green" title="Son yanıt: ${escapeHtml(formatDateTime(comment.last_reply_at))}">
-                               <i class="fas fa-reply"></i>
-                               ${comment.reply_count} yanıt · ${escapeHtml(comment.last_reply_by || '')}
-                           </span>`
-                        : '<span class="status-badge status-grey">Yanıt gelmedi</span>'}
-                    <span class="disc-tag">${topic.is_mine ? 'Sizin konunuz' : `Konu: ${escapeHtml(topic.created_by || '-')}`}</span>
-                    <span class="disc-tag">${escapeHtml(topic.topic_type_display || '')}</span>
-                    ${comment.attachment_count
-                        ? `<span class="disc-tag"><i class="fas fa-paperclip"></i> ${comment.attachment_count}</span>`
-                        : ''}
-                    ${comment.is_edited ? '<span class="disc-tag disc-tag-outline">Düzenlendi</span>' : ''}
-                </div>
+                <div class="disc-row-facts">${factsHtml}</div>
+                ${line}
             </div>
-            ${renderActions(comment.source)}
+            <div class="disc-row-side">
+                <span class="disc-row-time" title="${escapeHtml(timeTitle)}">${escapeHtml(formatTime(time))}</span>
+                ${status}
+                ${renderActions(source)}
+            </div>
         </div>
     `;
+}
+
+/** "293-12 COPPER PANEL" — the job number carries the weight. */
+function sourceFact(source) {
+    if (!source || !source.label) return '';
+    return `<span class="disc-fact-job">${escapeHtml(source.label)}</span>${source.detail ? ` ${escapeHtml(source.detail)}` : ''}`;
 }
 
 function renderSource(source) {
@@ -444,17 +488,9 @@ function renderSource(source) {
     `;
 }
 
-function renderReplyState(replyCount, lastByMe) {
-    if (!replyCount) return '<span class="status-badge status-grey">Yanıt gelmedi</span>';
-    // Someone answered and the user has not spoken since: that is the row they
-    // came here for.
-    if (!lastByMe) return '<span class="status-badge status-blue"><i class="fas fa-reply"></i> Yanıt geldi</span>';
-    return '<span class="status-badge status-green"><i class="fas fa-check"></i> Son yorum sizde</span>';
-}
-
 function renderPriority(priority, label) {
-    if (priority === 'urgent') return `<span class="status-badge status-red">${escapeHtml(label)}</span>`;
-    if (priority === 'high') return `<span class="status-badge status-orange">${escapeHtml(label)}</span>`;
+    if (priority === 'urgent') return `<span class="status-badge status-red disc-state-badge">${escapeHtml(label)}</span>`;
+    if (priority === 'high') return `<span class="status-badge status-orange disc-state-badge">${escapeHtml(label)}</span>`;
     return '';
 }
 

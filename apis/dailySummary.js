@@ -15,7 +15,10 @@ async function dsFetch(url, options, defaultMessage) {
     const response = await authedFetch(url, options);
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: defaultMessage }));
-        const error = new Error(errorData.detail || defaultMessage);
+        // The task/run endpoints answer a failed generation with 500 {status, error}
+        // (no `detail`), so the real reason (cost_cap, refusal…) lives in `error`.
+        const message = [errorData.detail, errorData.error].find((v) => typeof v === 'string' && v);
+        const error = new Error(message || defaultMessage);
         error.status = response.status;
         throw error;
     }
@@ -55,11 +58,29 @@ export function getDailySummary(id) {
     return dsFetch(`${BASE}/daily-summary/${encodeURIComponent(id)}/`, undefined, 'Özet yüklenemedi');
 }
 
-/** Idempotent; the server ignores it during impersonation (JWT `imp`). */
-export function markDailySummaryRead(id) {
+const READ_SOURCES = new Set(['modal', 'pane', 'deeplink', 'banner']);
+
+// Only the metric keys the API stores, each coerced to the type it expects;
+// anything else is dropped so a bad caller can never turn the POST into a 400.
+function readMeta(meta) {
+    const body = {};
+    if (!meta || typeof meta !== 'object') return body;
+    const seconds = Number(meta.seconds_open);
+    if (Number.isFinite(seconds) && seconds >= 0) body.seconds_open = Math.round(seconds);
+    if (typeof meta.expanded === 'boolean') body.expanded = meta.expanded;
+    if (READ_SOURCES.has(meta.source)) body.source = meta.source;
+    return body;
+}
+
+/**
+ * Idempotent; the server ignores it during impersonation (JWT `imp`).
+ * `meta` = read metrics {seconds_open, expanded, source: modal|pane|deeplink|banner};
+ * omitted or empty → `{}` body, exactly what the first release sent.
+ */
+export function markDailySummaryRead(id, meta = {}) {
     return dsFetch(
         `${BASE}/daily-summary/${encodeURIComponent(id)}/read/`,
-        { method: 'POST', body: '{}' },
+        { method: 'POST', body: JSON.stringify(readMeta(meta)) },
         'Okundu bilgisi kaydedilemedi',
     );
 }

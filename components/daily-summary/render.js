@@ -7,6 +7,11 @@
  * text. Python owns the lists and ids; this file only turns ids into links
  * (refUrl) and lays the sections out. Every class is prefixed `ds-` so the
  * same markup works inside a Bootstrap modal and inside `.aw-summaries`.
+ *
+ * Two layers: `full` (default, the whole summary at once — widget pane, IT
+ * preview) and `brief` (the modal: hero headline, four KPI tiles, "Sizinle
+ * ilgili", five highlights, then a "Tümünü gör" button that reveals the rest
+ * inline with the areas as an accordion).
  */
 import { escapeHtml } from '../../utils/text.js';
 
@@ -23,6 +28,30 @@ export const AREAS = [
     ['satis', 'Satış', 'fa-handshake'],
     ['diger', 'Diğer', 'fa-ellipsis'],
 ];
+
+// users.Position.department_code → the area the reader wants first.
+export const AREA_BY_DEPARTMENT = {
+    design: 'tasarim',
+    planning: 'planlama',
+    procurement: 'satinalma',
+    manufacturing: 'uretim',
+    machining: 'uretim',
+    maintenance: 'uretim',
+    welding: 'uretim',
+    qualitycontrol: 'kalite',
+    quality_control: 'kalite',
+    quality: 'kalite',
+    sales: 'satis',
+};
+
+// There is no single "my approvals" page in white-app (the inbox API has no
+// consumer); the general landing lists every pending-approval page.
+export const APPROVALS_INBOX_URL = '/general/';
+
+const FOR_YOU_LIMIT = 6;
+const BRIEF_HIGHLIGHT_LIMIT = 5;
+const BRIEF_COLLAPSE_AFTER = 3;
+const FULL_COLLAPSE_AFTER = 8;
 
 // ------------------------------------------------------------------ deep links
 
@@ -190,6 +219,26 @@ export function renderStatChips(stats, { limit = 0 } = {}) {
     return chips.length ? `<div class="ds-stats">${chips.join('')}</div>` : '';
 }
 
+// The four numbers the brief layer leads with. Always rendered, zeros included:
+// a row of tiles that appears and disappears reads as broken, not as calm.
+const KPI_META = [
+    ['jobs', 'iş emri', (s) => statNumber(s.new_jobs_root) + statNumber(s.new_jobs_child)],
+    ['topics', 'tartışma', (s) => statNumber(s.topics_new)],
+    ['comments', 'yorum', (s) => statNumber(s.comments)],
+    ['tasks', 'tamamlanan görev', (s) => statNumber(s.tasks_completed)],
+];
+
+/** Four KPI tiles: iş emri (root + child), tartışma, yorum, tamamlanan görev. */
+export function renderKpiTiles(stats) {
+    const s = stats && typeof stats === 'object' ? stats : {};
+    const tiles = KPI_META.map(([key, label, get]) =>
+        `<div class="ds-kpi" data-kpi="${key}">` +
+        `<div class="ds-kpi-num">${escapeHtml(numberFmt.format(get(s)))}</div>` +
+        `<div class="ds-kpi-label">${escapeHtml(label)}</div>` +
+        '</div>');
+    return `<div class="ds-kpis">${tiles.join('')}</div>`;
+}
+
 // ------------------------------------------------------------------ lists
 
 // Long lists show the first `collapseAfter` rows and a "Tümünü göster (N)"
@@ -210,23 +259,55 @@ function collapsibleList(itemsHtml, collapseAfter, listClass = 'ds-list') {
         '</div>';
 }
 
-function renderItem(item) {
+// Bold lead-in for a highlight: the first clause up to a ':' or ';' that is
+// followed by whitespace (so "05:20" never splits), else the first six words.
+// Returns null when the sentence is too short for a split to help.
+const LEAD_CLAUSE = /^([^:;]{2,90}[:;])\s+(\S[\s\S]*)$/;
+const LEAD_WORDS = 6;
+
+export function splitLeadIn(text) {
+    const t = String(text || '').trim();
+    if (!t) return null;
+    const m = LEAD_CLAUSE.exec(t);
+    if (m) return [m[1], m[2]];
+    const words = t.split(/\s+/);
+    if (words.length < LEAD_WORDS + 3) return null;
+    return [words.slice(0, LEAD_WORDS).join(' '), words.slice(LEAD_WORDS).join(' ')];
+}
+
+function renderItemText(text, leadIn) {
+    const split = leadIn ? splitLeadIn(text) : null;
+    if (!split) return `<span class="ds-item-text">${escapeHtml(text || '')}</span>`;
+    return `<span class="ds-item-text"><strong class="ds-lead">${escapeHtml(split[0])}</strong> ${escapeHtml(split[1])}</span>`;
+}
+
+function renderItem(item, { leadIn = false } = {}) {
     if (!item || typeof item !== 'object') return '';
     const kind = escapeHtml(item.kind || '');
     return `<li class="ds-item" data-kind="${kind}">` +
-        `<span class="ds-item-text">${escapeHtml(item.text || '')}</span>` +
+        renderItemText(item.text, leadIn) +
         renderRefs(item.refs) +
         '</li>';
 }
 
-function renderItems(items, collapseAfter) {
-    const list = Array.isArray(items) ? items.filter((it) => it && (it.text || (it.refs && it.refs.length))) : [];
-    return collapsibleList(list.map(renderItem), collapseAfter);
+function validItems(items) {
+    return Array.isArray(items) ? items.filter((it) => it && (it.text || (it.refs && it.refs.length))) : [];
+}
+
+function renderItems(items, collapseAfter, opts) {
+    return collapsibleList(validItems(items).map((it) => renderItem(it, opts)), collapseAfter);
 }
 
 function sectionTitle(icon, text, count) {
     const badge = count ? ` <span class="ds-count">${escapeHtml(String(count))}</span>` : '';
     return `<div class="ds-section-title"><i class="fas ${icon}"></i> ${escapeHtml(text)}${badge}</div>`;
+}
+
+function renderHighlights(items, { title = 'Öne çıkanlar', leadIn = false, extraClass = '' } = {}) {
+    if (!items.length) return '';
+    const list = collapsibleList(items.map((it) => renderItem(it, { leadIn })), 0);
+    return `<section class="ds-section ds-section-highlights${extraClass ? ` ${extraClass}` : ''}">` +
+        sectionTitle('fa-star', title) + list + '</section>';
 }
 
 // ------------------------------------------------------------------ job orders
@@ -268,16 +349,19 @@ function renderJobOrders(jobOrders, collapseAfter) {
 
 // ------------------------------------------------------------------ discussions
 
+function topicTitleHtml(topic) {
+    const title = topic.title || 'Başlıksız konu';
+    const url = refUrl({ type: 'topic', id: topic.topic_id, job_no: topic.job_no });
+    return url
+        ? `<a class="ds-topic-title" href="${escapeHtml(url)}">${escapeHtml(title)}</a>`
+        : `<span class="ds-topic-title">${escapeHtml(title)}</span>`;
+}
+
 function renderDiscussion(topic) {
     if (!topic || typeof topic !== 'object') return '';
     const head = [];
     if (topic.job_no) head.push(renderRef({ type: 'job', id: topic.job_no }));
-    const title = topic.title || 'Başlıksız konu';
-    const topicRef = { type: 'topic', id: topic.topic_id, job_no: topic.job_no, label: title };
-    const url = refUrl(topicRef);
-    head.push(url
-        ? `<a class="ds-topic-title" href="${escapeHtml(url)}">${escapeHtml(title)}</a>`
-        : `<span class="ds-topic-title">${escapeHtml(title)}</span>`);
+    head.push(topicTitleHtml(topic));
 
     const chips = [];
     if (topic.is_new) chips.push(chip('Yeni', 'blue'));
@@ -312,7 +396,28 @@ function renderDiscussions(discussions, omittedTopics, collapseAfter) {
 
 // ------------------------------------------------------------------ areas
 
-function renderArea([key, label, icon], area, omittedLines, collapseAfter) {
+/** Area keys with the reader's own department first, then the default order. */
+export function areaOrderFor(departmentCode) {
+    const order = AREAS.map((a) => a[0]);
+    const first = AREA_BY_DEPARTMENT[String(departmentCode || '').toLowerCase()];
+    if (!first) return order;
+    return [first, ...order.filter((k) => k !== first)];
+}
+
+// AREAS in the caller's order; unknown keys ignored, missing keys appended.
+function orderedAreas(areaOrder) {
+    if (!Array.isArray(areaOrder) || areaOrder.length === 0) return AREAS;
+    const byKey = new Map(AREAS.map((a) => [a[0], a]));
+    const out = [];
+    for (const key of areaOrder) {
+        const area = byKey.get(key);
+        if (area && !out.includes(area)) out.push(area);
+    }
+    for (const area of AREAS) if (!out.includes(area)) out.push(area);
+    return out;
+}
+
+function renderArea([key, label, icon], area, omittedLines, collapseAfter, { accordion = false } = {}) {
     const a = area && typeof area === 'object' ? area : {};
     const lines = Array.isArray(a.lines) ? a.lines : [];
     const note = a.note ? String(a.note) : '';
@@ -321,59 +426,233 @@ function renderArea([key, label, icon], area, omittedLines, collapseAfter) {
     const omitted = omittedLines
         ? `<div class="ds-omitted">+${escapeHtml(String(omittedLines))} satır daha</div>`
         : '';
-    return `<section class="ds-section ds-area" data-area="${escapeHtml(key)}">` +
-        sectionTitle(icon, label, lines.length) +
-        noteHtml +
-        renderItems(lines, collapseAfter) +
-        omitted +
+    if (!accordion) {
+        return `<section class="ds-section ds-area" data-area="${escapeHtml(key)}">` +
+            sectionTitle(icon, label, lines.length) +
+            noteHtml +
+            renderItems(lines, collapseAfter) +
+            omitted +
+            '</section>';
+    }
+    // Accordion: icon + label + count on a clickable header, the note always
+    // visible, the lines hidden until the header is clicked. An area with a
+    // note but no lines gets a static header (nothing to unfold).
+    const count = lines.length ? ` <span class="ds-count">${lines.length}</span>` : '';
+    const inner = `<i class="fas ${icon} ds-area-icon"></i><span class="ds-area-label">${escapeHtml(label)}</span>${count}`;
+    const head = lines.length
+        ? `<button type="button" class="ds-area-head" data-ds-area-toggle="1" aria-expanded="false">${inner}<i class="fas fa-chevron-down ds-area-chev"></i></button>`
+        : `<div class="ds-area-head ds-area-head-static">${inner}</div>`;
+    const body = lines.length
+        ? `<div class="ds-area-body" hidden>${renderItems(lines, collapseAfter)}${omitted}</div>`
+        : omitted;
+    return `<section class="ds-section ds-area ds-area-acc" data-area="${escapeHtml(key)}">${head}${noteHtml}${body}</section>`;
+}
+
+// ------------------------------------------------------------------ "Sizinle ilgili"
+
+// for_you comes from the user endpoints only and describes the requesting
+// user alone (their topics/mentions, their job orders, their approval queue),
+// so rendering it in a modal every office user sees leaks nothing.
+function forYouSets(forYou) {
+    const fy = forYou && typeof forYou === 'object' ? forYou : null;
+    if (!fy) return null;
+    const topicIds = new Set((Array.isArray(fy.topic_ids) ? fy.topic_ids : []).map((v) => String(v)));
+    const jobNos = new Set((Array.isArray(fy.job_nos) ? fy.job_nos : []).map((v) => String(v)));
+    const pending = statNumber(fy.pending_approvals);
+    if (!topicIds.size && !jobNos.size && pending <= 0) return null;
+    return { topicIds, jobNos, pending };
+}
+
+function refsTouchJobs(refs, jobNos) {
+    if (!Array.isArray(refs)) return false;
+    return refs.some((r) => r && typeof r === 'object' && (
+        (r.type === 'job' && jobNos.has(String(r.id))) ||
+        (r.job_no && jobNos.has(String(r.job_no)))
+    ));
+}
+
+const FOR_YOU_JOB_GROUPS = [['new', 'yeni açıldı'], ['completed', 'tamamlandı'], ['started', 'başladı']];
+
+/**
+ * Items about the reader: pending approvals, their discussions, their job
+ * orders, area lines that reference their job orders. Capped; '' when empty
+ * or when the row carries no `for_you` (older backend, analytics rows).
+ */
+export function renderForYou(summary, { forYou, limit = FOR_YOU_LIMIT } = {}) {
+    const sets = forYouSets(forYou === undefined ? summary?.for_you : forYou);
+    if (!sets) return '';
+    const payload = summary?.payload && typeof summary.payload === 'object' ? summary.payload : {};
+    const items = [];
+
+    if (sets.pending > 0) {
+        const text = `Onayınızı bekleyen ${numberFmt.format(sets.pending)} talep`;
+        items.push(`<li class="ds-item ds-fy ds-fy-approvals"><i class="fas fa-check-double ds-fy-icon"></i>` +
+            `<a class="ds-fy-link" href="${APPROVALS_INBOX_URL}">${escapeHtml(text)}</a></li>`);
+    }
+
+    for (const topic of (Array.isArray(payload.discussions) ? payload.discussions : [])) {
+        if (!topic || !sets.topicIds.has(String(topic.topic_id))) continue;
+        const head = [];
+        if (topic.job_no) head.push(renderRef({ type: 'job', id: topic.job_no }));
+        head.push(topicTitleHtml(topic));
+        const gist = topic.gist ? `<div class="ds-gist">${escapeHtml(topic.gist)}</div>` : '';
+        items.push(`<li class="ds-item ds-fy ds-fy-topic" data-topic-id="${escapeHtml(String(topic.topic_id ?? ''))}">` +
+            `<i class="fas fa-comments ds-fy-icon"></i><span class="ds-fy-main">${head.join(' ')}</span>${gist}</li>`);
+    }
+
+    const jo = payload.job_orders && typeof payload.job_orders === 'object' ? payload.job_orders : {};
+    const seenJobs = new Set();
+    for (const [group, label] of FOR_YOU_JOB_GROUPS) {
+        for (const job of (Array.isArray(jo[group]) ? jo[group] : [])) {
+            if (!job || !job.job_no || !sets.jobNos.has(String(job.job_no)) || seenJobs.has(String(job.job_no))) continue;
+            seenJobs.add(String(job.job_no));
+            const title = job.title ? ` <span class="ds-job-title">${escapeHtml(job.title)}</span>` : '';
+            items.push(`<li class="ds-item ds-fy ds-fy-job" data-group="${group}"><i class="fas fa-briefcase ds-fy-icon"></i>` +
+                `${renderRef({ type: 'job', id: job.job_no })}${title} <span class="ds-muted">· ${escapeHtml(label)}</span></li>`);
+        }
+    }
+
+    const areas = payload.areas && typeof payload.areas === 'object' ? payload.areas : {};
+    const seenText = new Set();
+    for (const [key, , icon] of AREAS) {
+        const lines = areas[key] && Array.isArray(areas[key].lines) ? areas[key].lines : [];
+        for (const line of lines) {
+            if (!line || typeof line !== 'object' || !refsTouchJobs(line.refs, sets.jobNos)) continue;
+            const text = String(line.text || '').trim();
+            if (!text || seenText.has(text)) continue;
+            seenText.add(text);
+            items.push(`<li class="ds-item ds-fy ds-fy-line" data-fy-area="${escapeHtml(key)}"><i class="fas ${icon} ds-fy-icon"></i>` +
+                `<span class="ds-item-text">${escapeHtml(text)}</span>${renderRefs(line.refs)}</li>`);
+        }
+    }
+
+    if (!items.length) return '';
+    const shown = limit ? items.slice(0, limit) : items;
+    const more = items.length - shown.length;
+    return `<section class="ds-section ds-foryou">` +
+        sectionTitle('fa-user-check', 'Sizinle ilgili') +
+        `<ul class="ds-list">${shown.join('')}</ul>` +
+        (more > 0 ? `<div class="ds-omitted">+${more} kayıt daha aşağıda</div>` : '') +
         '</section>';
 }
 
 // ------------------------------------------------------------------ main render
 
 /**
- * Full summary body as an HTML string. Order: headline → stat chips →
- * Öne çıkanlar → İş Emirleri → Tartışmalar → one block per area.
- * `compact` tightens spacing for the widget pane and hides the stat chips
- * unless `showStats` says otherwise (the pane's row already shows them).
+ * Summary body as an HTML string.
+ *
+ * Options (all optional; the bare call renders the full layer exactly as the
+ * first release did):
+ *   layer          'full' (default) | 'brief' — brief = hero headline, KPI
+ *                  tiles, "Sizinle ilgili", ≤5 highlights, then a "Tümünü gör"
+ *                  button that reveals İş Emirleri / Tartışmalar / areas inline.
+ *   areaOrder      array of area keys in display order (see areaOrderFor).
+ *   forYou         override for summary.for_you (null hides the block).
+ *   accordion      areas as click-to-open headers (default: brief only).
+ *   highlightLimit highlights shown before the fold (default 5 brief, all full).
+ *   leadIn         bold lead-in on highlights (default: brief only).
+ *   collapseAfter  list fold size (default 3 brief, 8 full).
+ *   compact        tighter spacing for the widget pane; hides stat chips
+ *                  unless `showStats` says otherwise (full layer only).
  */
-export function renderDailySummary(summary, { compact = false, collapseAfter = 8, showStats } = {}) {
+export function renderDailySummary(summary, options = {}) {
     if (!summary || typeof summary !== 'object') return '';
+    const {
+        compact = false,
+        showStats,
+        layer = 'full',
+        areaOrder = null,
+        forYou,
+        accordion,
+        highlightLimit,
+        leadIn,
+        collapseAfter,
+    } = options;
+    const brief = layer === 'brief';
+    const fold = collapseAfter === undefined ? (brief ? BRIEF_COLLAPSE_AFTER : FULL_COLLAPSE_AFTER) : collapseAfter;
+    const useAccordion = accordion === undefined ? brief : !!accordion;
+    const hlLimit = highlightLimit === undefined ? (brief ? BRIEF_HIGHLIGHT_LIMIT : 0) : highlightLimit;
+    const useLead = leadIn === undefined ? brief : !!leadIn;
+
     const payload = summary.payload && typeof summary.payload === 'object' ? summary.payload : {};
     const stats = payload.stats && typeof payload.stats === 'object' ? payload.stats : (summary.stats || {});
     const headline = payload.headline || summary.headline || '';
     const omitted = payload.omitted && typeof payload.omitted === 'object' ? payload.omitted : {};
     const omittedLines = omitted.lines && typeof omitted.lines === 'object' ? omitted.lines : {};
-    const withStats = showStats === undefined ? !compact : !!showStats;
-
-    const sections = [];
-    const highlights = renderItems(payload.highlights, 0);
-    if (highlights) {
-        sections.push(`<section class="ds-section ds-section-highlights">${sectionTitle('fa-star', 'Öne çıkanlar')}${highlights}</section>`);
-    }
-    sections.push(renderJobOrders(payload.job_orders, collapseAfter));
-    sections.push(renderDiscussions(payload.discussions, statNumber(omitted.topics), collapseAfter));
-
     const areas = payload.areas && typeof payload.areas === 'object' ? payload.areas : {};
-    for (const area of AREAS) {
-        sections.push(renderArea(area, areas[area[0]], statNumber(omittedLines[area[0]]), collapseAfter));
-    }
 
-    const content = sections.filter(Boolean).join('');
-    if (!headline && !content) {
+    const forYouHtml = renderForYou(summary, { forYou });
+    const hlItems = validItems(payload.highlights);
+    const hlShown = hlLimit ? hlItems.slice(0, hlLimit) : hlItems;
+    const hlRest = hlLimit ? hlItems.slice(hlLimit) : [];
+    const highlights = renderHighlights(hlShown, { leadIn: useLead });
+
+    const detail = [
+        renderHighlights(hlRest, { title: 'Öne çıkanlar (devamı)', leadIn: useLead, extraClass: 'ds-section-highlights-more' }),
+        renderJobOrders(payload.job_orders, fold),
+        renderDiscussions(payload.discussions, statNumber(omitted.topics), fold),
+        ...orderedAreas(areaOrder).map((area) =>
+            renderArea(area, areas[area[0]], statNumber(omittedLines[area[0]]), fold, { accordion: useAccordion })),
+    ].filter(Boolean).join('');
+
+    if (!headline && !forYouHtml && !highlights && !detail) {
         // `empty` days and payload-less rows: zero chips would only add noise.
         return '<div class="ds-root ds-empty"><div class="ds-muted">Bu dönemde kayda değer bir hareket yok.</div></div>';
     }
+    const idAttr = `data-summary-id="${escapeHtml(String(summary.id ?? ''))}"`;
+
+    if (brief) {
+        const detailId = `ds-detail-${escapeHtml(String(summary.id ?? 'x'))}`;
+        const head = (headline ? `<p class="ds-headline ds-hero">${escapeHtml(headline)}</p>` : '') + renderKpiTiles(stats);
+        const reveal = detail
+            ? `<div class="ds-reveal"><button type="button" class="ds-reveal-btn" data-ds-reveal="1" aria-expanded="false" aria-controls="${detailId}">` +
+              '<i class="fas fa-list-ul me-1"></i>Tümünü gör</button></div>' +
+              `<div class="ds-detail" id="${detailId}" hidden>${detail}</div>`
+            : '';
+        return `<div class="ds-root ds-brief" ${idAttr}>${head}${forYouHtml}${highlights}${reveal}</div>`;
+    }
+
+    const withStats = showStats === undefined ? !compact : !!showStats;
     const head = (headline ? `<p class="ds-headline">${escapeHtml(headline)}</p>` : '') +
         (withStats ? renderStatChips(stats) : '');
-    return `<div class="ds-root${compact ? ' ds-compact' : ''}" data-summary-id="${escapeHtml(String(summary.id ?? ''))}">${head}${content}</div>`;
+    return `<div class="ds-root${compact ? ' ds-compact' : ''}" ${idAttr}>${head}${forYouHtml}${highlights}${detail}</div>`;
 }
 
-/** Wire the "Tümünü göster" toggles inside `container` (idempotent). */
-export function bindDailySummaryInteractions(container) {
+/**
+ * Wire the toggles inside `container` (idempotent): "Tümünü göster (N)" list
+ * folds, the brief layer's "Tümünü gör" reveal (one-way; `onReveal` fires
+ * once) and the area accordion headers.
+ */
+export function bindDailySummaryInteractions(container, { onReveal = null } = {}) {
     if (!container || container.dataset.dsBound === '1') return;
     container.dataset.dsBound = '1';
     container.addEventListener('click', (event) => {
+        const reveal = event.target.closest('[data-ds-reveal]');
+        if (reveal && container.contains(reveal)) {
+            event.preventDefault();
+            const root = reveal.closest('.ds-root') || container;
+            const detail = root.querySelector('.ds-detail');
+            if (detail) detail.removeAttribute('hidden');
+            reveal.setAttribute('aria-expanded', 'true');
+            (reveal.closest('.ds-reveal') || reveal).setAttribute('hidden', '');
+            if (typeof onReveal === 'function') {
+                try { onReveal(); } catch (error) { console.warn('Daily summary onReveal failed:', error); }
+            }
+            return;
+        }
+        const areaBtn = event.target.closest('[data-ds-area-toggle]');
+        if (areaBtn && container.contains(areaBtn)) {
+            event.preventDefault();
+            const section = areaBtn.closest('.ds-area');
+            const body = section && section.querySelector('.ds-area-body');
+            if (!body) return;
+            const open = body.hasAttribute('hidden');
+            if (open) body.removeAttribute('hidden');
+            else body.setAttribute('hidden', '');
+            areaBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+            section.classList.toggle('ds-area-open', open);
+            return;
+        }
         const btn = event.target.closest('[data-ds-toggle]');
         if (!btn || !container.contains(btn)) return;
         event.preventDefault();
@@ -452,17 +731,27 @@ export function formatWindowLabel(summary) {
     return `${rangeFmt.format(start)} – ${rangeFmt.format(end)}`;
 }
 
-// ------------------------------------------------------------------ seen state
+// ------------------------------------------------------------------ user / seen state
 
-/** Id of the logged-in user from the cached `user` record, or null. */
-export function currentUserId() {
+function cachedUser() {
     try {
-        const user = JSON.parse(localStorage.getItem('user') || 'null');
-        const id = user && user.id;
-        return id === null || id === undefined ? null : id;
+        return JSON.parse(localStorage.getItem('user') || 'null');
     } catch (error) {
         return null;
     }
+}
+
+/** Id of the logged-in user from the cached `user` record, or null. */
+export function currentUserId() {
+    const user = cachedUser();
+    const id = user && user.id;
+    return id === null || id === undefined ? null : id;
+}
+
+/** Department code of the logged-in user (position first, like navigateByTeam), or null. */
+export function currentDepartmentCode() {
+    const user = cachedUser();
+    return (user && (user.position?.department_code || user.department_code)) || null;
 }
 
 /** A regenerated summary (new generated_at) counts as unseen again. */

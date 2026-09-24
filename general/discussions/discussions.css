@@ -15,6 +15,12 @@
 
 .disc-card {
     padding: 0;
+    /* .dashboard-card gets its white ground from components/table/table.css,
+       which this page does not load (no tables here). Without it the page
+       gradient bled through the list while the day headers stayed opaque. */
+    background: #fff;
+    border: 1px solid #edf0f3;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
     /* dropdown.css force-opens overflow on every .dashboard-card; these hold
        no dropdowns and need to clip their rows to the rounded corners. */
     overflow: hidden !important;
@@ -152,11 +158,12 @@
 
 .disc-row {
     display: grid;
-    grid-template-columns: 38px 1fr auto;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
     align-items: start;
-    gap: 0.9rem;
-    padding: 0.85rem 1.25rem;
+    gap: 0.85rem;
+    padding: 0.75rem 1.25rem 0.75rem 1.1rem;
     border-bottom: 1px solid #f2f4f6;
+    border-left: 3px solid transparent;
     transition: background-color 0.15s ease;
 }
 
@@ -164,51 +171,158 @@
 
 .disc-row:hover { background: #f8f9fb; }
 
+/* Someone else had the last word: the same rail and tint as an unread
+   notification, so "who is waiting on me" reads at a glance. */
+.disc-row.is-awaiting {
+    border-left-color: var(--disc-brand);
+    background: #fbecec;
+}
+
+.disc-row.is-awaiting:hover { background: #f7e2e2; }
+
 .disc-icon {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
     border-radius: 10px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
+
+.disc-row:not(.is-awaiting) .disc-icon { opacity: 0.8; }
 
 .disc-row-main {
     min-width: 0;
     cursor: pointer;
 }
 
-.disc-row-head {
+.disc-row-title {
     display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
 }
 
-.disc-row-title {
+.disc-row-title-text {
     font-weight: 600;
     font-size: 0.92rem;
     color: #212529;
     line-height: 1.4;
     min-width: 0;
-    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.disc-row.is-awaiting .disc-row-title-text {
+    color: #7a0b0b;
+    font-weight: 700;
+}
+
+/* One quiet line: job, where the topic lives, counts. */
+.disc-row-facts {
+    margin-top: 0.1rem;
+    font-size: 0.78rem;
+    color: #7b8794;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.disc-row-facts i { font-size: 0.7rem; }
+
+.disc-fact-job {
+    font-weight: 700;
+    color: #3e4c59;
+}
+
+.disc-sep {
+    margin: 0 0.4rem;
+    color: #c4cad1;
+}
+
+/* The one sentence worth reading: the reply that is waiting, else the
+   opening of the topic, else (comments tab) what the user wrote. */
+.disc-row-line {
+    margin-top: 0.3rem;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--disc-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.disc-row-line.is-reply {
+    color: #3e4c59;
+    -webkit-line-clamp: 2;
+}
+
+.disc-row-line.is-reply > i {
+    font-size: 0.7rem;
+    color: var(--disc-brand);
+    margin-right: 0.3rem;
+    transform: scaleX(-1) rotate(180deg);
+    display: inline-block;
+}
+
+.disc-row-who {
+    font-weight: 700;
+    color: #212529;
+    margin-right: 0.25rem;
+}
+
+.disc-row-line.is-own {
+    color: #3e4c59;
+    border-left: 3px solid #dfe3e8;
+    padding-left: 0.6rem;
+    -webkit-line-clamp: 2;
+}
+
+/* Time on top, state under it, actions under that on hover. */
+.disc-row-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+    min-width: 96px;
 }
 
 .disc-row-time {
-    margin-left: auto;
     font-size: 0.75rem;
     color: #9aa3af;
     white-space: nowrap;
+}
+
+.disc-row.is-awaiting .disc-row-time { color: #52606d; }
+
+/* badges.css sizes .status-badge for table cells (min-width 80px, centred);
+   in a row it sits at text height. */
+.status-badge.disc-state-badge {
+    margin: 0;
+    min-width: 0;
+    font-size: 0.66rem;
+    padding: 0.15rem 0.45rem;
     flex-shrink: 0;
 }
 
+.disc-state-text {
+    font-size: 0.74rem;
+    color: #9aa3af;
+    white-space: nowrap;
+}
+
+.disc-state-text i { font-size: 0.66rem; }
+
+/* Where a topic lives — the discussion modal's header line. */
 .disc-source {
     display: flex;
     align-items: baseline;
     gap: 0.4rem;
     font-size: 0.8rem;
     color: var(--disc-muted);
-    margin-top: 0.1rem;
     min-width: 0;
 }
 
@@ -225,79 +339,6 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     min-width: 0;
-}
-
-.disc-row-body,
-.disc-quote,
-.disc-last-comment {
-    font-size: 0.85rem;
-    line-height: 1.5;
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    margin-top: 0.3rem;
-}
-
-.disc-row-body {
-    color: var(--disc-muted);
-    -webkit-line-clamp: 2;
-}
-
-/* The user's own words, set off as a quote so the topic title above reads as
-   the context and this as the content. */
-.disc-quote {
-    color: #3e4c59;
-    border-left: 3px solid #dfe3e8;
-    padding-left: 0.65rem;
-    -webkit-line-clamp: 3;
-}
-
-.disc-last-comment {
-    color: #3e4c59;
-    background: #f4f6f9;
-    border-radius: 8px;
-    padding: 0.35rem 0.6rem;
-    -webkit-line-clamp: 2;
-}
-
-.disc-last-comment-who {
-    font-weight: 700;
-    color: #1f4e8c;
-}
-
-.disc-row-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.4rem;
-    margin-top: 0.5rem;
-}
-
-/* badges.css centres .status-badge with margin: 0 auto for table cells; in a
-   flex row that spreads the badges across the whole width. */
-.disc-row-meta .status-badge {
-    margin: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-}
-
-.disc-row-meta .status-badge i { font-size: 0.7rem; }
-
-.disc-tag {
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: #52606d;
-    background: #f1f3f6;
-    border-radius: 999px;
-    padding: 0.12rem 0.55rem;
-    white-space: nowrap;
-}
-
-.disc-tag-outline {
-    background: transparent;
-    border: 1px solid #e3e7ec;
-    color: #7b8794;
 }
 
 /* Actions stay out of the way until the row is hovered; touch devices never
@@ -337,6 +378,25 @@
 
 @media (hover: none) {
     .disc-row-actions { opacity: 1; }
+}
+
+/* With a mouse the buttons float over the side column and stand in for the
+   time and state while the row is hovered — in the flow they would make
+   every short row as tall as the button stack. */
+@media (hover: hover) {
+    .disc-row { position: relative; }
+
+    .disc-row-actions {
+        position: absolute;
+        top: 50%;
+        right: 1.25rem;
+        transform: translateY(-50%);
+    }
+
+    .disc-row:hover .disc-row-side > :not(.disc-row-actions),
+    .disc-row:focus-within .disc-row-side > :not(.disc-row-actions) {
+        visibility: hidden;
+    }
 }
 
 /* ------------------------------------------------------------- pager/state */
@@ -406,20 +466,27 @@
 
 @media (max-width: 768px) {
     .disc-row {
-        grid-template-columns: 32px 1fr;
+        grid-template-columns: 32px minmax(0, 1fr);
         grid-template-areas:
             "icon main"
-            "actions actions";
-        row-gap: 0.5rem;
-        padding: 0.85rem 1rem;
+            ". side";
+        row-gap: 0.45rem;
+        padding: 0.75rem 1rem 0.75rem 0.85rem;
     }
 
     .disc-icon { grid-area: icon; width: 32px; height: 32px; }
     .disc-row-main { grid-area: main; }
-    .disc-row-actions { grid-area: actions; justify-content: flex-end; }
 
-    .disc-row-head { flex-direction: column; align-items: flex-start; gap: 0.1rem; }
-    .disc-row-time { margin-left: 0; }
+    /* The side column folds into one line under the text. */
+    .disc-row-side {
+        grid-area: side;
+        flex-direction: row;
+        align-items: center;
+        min-width: 0;
+        gap: 0.6rem;
+    }
+
+    .disc-row-actions { margin-left: auto; }
 
     .disc-toolbar { padding: 0 0.5rem; }
     .disc-sort { width: 100%; padding-top: 0; justify-content: flex-end; }

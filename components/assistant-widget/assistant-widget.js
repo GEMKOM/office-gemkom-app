@@ -26,20 +26,9 @@ import {
     listMyFeedbackReports,
     respondFeedbackReport,
 } from '../../apis/feedback.js';
-import {
-    getDailySummary,
-    listDailySummaries,
-    markDailySummaryRead,
-} from '../../apis/dailySummary.js';
-import {
-    bindDailySummaryInteractions,
-    currentUserId,
-    ensureDailySummaryStyles,
-    relativeDayLabel,
-    renderDailySummary,
-    seenValue,
-    setSeen,
-} from '../daily-summary/render.js';
+import { getDailySummary, listDailySummaries } from '../../apis/dailySummary.js';
+import { ensureDailySummaryStyles, relativeDayLabel } from '../daily-summary/render.js';
+import { openDailySummaryModal } from '../daily-summary/daily-summary.js';
 
 const STORAGE_OPEN = 'assistantOpen';
 const STORAGE_CONVERSATION = 'assistantConversationId';
@@ -113,10 +102,13 @@ const state = {
     reportsExpanded: false,
     summaries: [],
     summaryCache: {},          // id → Promise<Detail>, so a double click fetches once
+    summaryPendingOpen: false, // pop the pending row's popup too (deep links only)
     summariesLoaded: false,
     summariesLoading: false,
     summariesDays: 0,          // 30 after the first load, 90 after "Daha eski özetler"
     summaryPendingId: null,    // row to open once the list holds it (deep link / modal)
+    unreadSummary: null,       // {id, summary_date} while the launcher dot shows
+    unreadRedirected: false,   // the dot's "first click lands on the pane" already used
 };
 
 const el = {};
@@ -134,6 +126,10 @@ export function initAssistantWidget(launcherMount) {
     // tells it the summaries pane exists (stale widget code → no button).
     document.addEventListener('assistant:open', onAssistantOpenEvent);
     window.__assistantSummariesReady = true;
+    // Unread-latest signal from the same module (fires after its async check,
+    // so registering here is early enough); the dot lives on the launcher.
+    document.addEventListener('daily-summary:unread', onSummaryUnreadEvent);
+    document.addEventListener('daily-summary:read', onSummaryReadEvent);
 
     state.conversationId = Number(sessionStorage.getItem(STORAGE_CONVERSATION)) || null;
     if (sessionStorage.getItem(STORAGE_OPEN) === '1') {
@@ -150,7 +146,7 @@ export function initAssistantWidget(launcherMount) {
     // Daily-summary deep link (/?ozet=<id>): open straight onto that summary.
     if (DEEPLINK_SUMMARY_ID) {
         openPanel({ instant: true });
-        showSummariesView(DEEPLINK_SUMMARY_ID);
+        showSummariesView(DEEPLINK_SUMMARY_ID, { open: true });
     }
 }
 
@@ -189,8 +185,68 @@ function buildLauncher(mount) {
     button.innerHTML =
         '<i class="fas fa-robot"></i><span class="al-label">Neo</span>' +
         '<i class="fas fa-wand-magic-sparkles al-spark"></i>';
-    button.addEventListener('click', () => togglePanel());
+    button.addEventListener('click', () => onLauncherClick());
     mount.appendChild(button);
+    el.launcher = button;
+}
+
+// While the unread dot shows, the first click lands on the summaries pane
+// instead of chat — once; after that the launcher is a plain toggle again.
+function onLauncherClick() {
+    if (!state.open && state.unreadSummary && !state.unreadRedirected) {
+        state.unreadRedirected = true;
+        openPanel();
+        showSummariesView(state.unreadSummary.id);
+        return;
+    }
+    togglePanel();
+}
+
+// ------------------------------------------------------ launcher badge
+
+// Idempotent: one dot at most, appended to the launcher, removed on read.
+function setLauncherBadge(on) {
+    if (!el.launcher) return;
+    const dot = el.launcher.querySelector('.al-badge');
+    if (on && !dot) {
+        const badge = document.createElement('span');
+        badge.className = 'al-badge';
+        badge.title = 'Bugünün özeti okunmadı';
+        el.launcher.appendChild(badge);
+    } else if (!on && dot) {
+        dot.remove();
+    }
+}
+
+function onSummaryUnreadEvent(event) {
+    const detail = (event && event.detail) || {};
+    const id = Number(detail.id) || null;
+    if (!id) return;
+    // A newer unread summary re-arms the one-time redirect.
+    if (!state.unreadSummary || state.unreadSummary.id !== id) state.unreadRedirected = false;
+    state.unreadSummary = { id, summary_date: detail.summary_date || null };
+    setLauncherBadge(true);
+}
+
+function onSummaryReadEvent(event) {
+    const detail = (event && event.detail) || {};
+    const id = Number(detail.id) || null;
+    // Reads of older summaries (pane, deep link) leave the dot alone.
+    if (!id || !state.unreadSummary || state.unreadSummary.id === id) {
+        state.unreadSummary = null;
+        setLauncherBadge(false);
+    }
+    if (id) markPaneRowRead(id);
+}
+
+// A summary read outside the pane (morning popup, deep link) still has to
+// drop its 'Yeni' chip if the list is already rendered.
+function markPaneRowRead(id) {
+    const summary = state.summaries.find((row) => Number(row.id) === id);
+    if (summary) summary.is_read = true;
+    const chip = el.summariesList
+        && el.summariesList.querySelector(`[data-summary-id="${id}"] .summary-new`);
+    if (chip) chip.remove();
 }
 
 function buildPanel() {
@@ -345,6 +401,7 @@ async function bootstrap() {
     const hasAccess = await refreshQuota();
     if (!hasAccess) {
         state.locked = true;  // chat kapalı; hata/öneri bildirimi yine açık
+        window.__assistantLocked = true;  // the daily-summary modal hides "Neo'ya sor" on this
         el.messages.innerHTML =
             '<div class="aw-muted-block"><i class="fas fa-lock me-1"></i> ' +
             "Neo'ya erişiminiz kapatılmış görünüyor. Gerekli olduğunu düşünüyorsanız " +
@@ -766,11 +823,16 @@ function toggleSummariesView() {
     showSummariesView();
 }
 
-// Modal / deep link entry: always lands on the pane, optionally on one row.
-function showSummariesView(summaryId = null) {
+// Modal / deep link entry: always lands on the pane, optionally scrolled to
+// one row; `open` also pops that row's summary (deep links only — the modal's
+// own "Geçmiş özetler" button must not reopen what was just closed).
+function showSummariesView(summaryId = null, { open = false } = {}) {
     setView('summaries');
     ensureDailySummaryStyles();
-    if (summaryId) state.summaryPendingId = summaryId;
+    if (summaryId) {
+        state.summaryPendingId = summaryId;
+        state.summaryPendingOpen = open;
+    }
     if (!state.summariesLoaded) {
         loadSummaries(30);
     } else {
@@ -809,6 +871,14 @@ function renderSummaryList() {
     if (!rows.length) {
         el.summariesList.innerHTML = '<div class="aw-muted-block">Henüz özet yok.</div>';
     }
+    // Rows open a popup, which nothing in the list itself says; skipped when
+    // every row is a "Hareket yok" day, since those don't open anything.
+    if (rows.some((row) => row.status !== 'empty')) {
+        const hint = document.createElement('div');
+        hint.className = 'aw-summaries-hint';
+        hint.textContent = 'Bir özeti açmak için tıklayın.';
+        el.summariesList.appendChild(hint);
+    }
     for (const summary of rows) {
         el.summariesList.appendChild(buildSummaryItem(summary));
     }
@@ -832,8 +902,11 @@ function revealPendingSummary() {
     if (wrap) {
         state.summaryPendingId = null;
         const summary = state.summaries.find((row) => Number(row.id) === Number(id));
-        if (summary && summary.status !== 'empty') toggleSummaryRow(wrap, summary, { open: true });
         wrap.scrollIntoView({ block: 'nearest' });
+        if (state.summaryPendingOpen && summary && summary.status !== 'empty') {
+            openSummaryPopup(wrap, summary);
+        }
+        state.summaryPendingOpen = false;
         return;
     }
     if (state.summariesDays && state.summariesDays < 90 && !state.summariesLoading) {
@@ -864,17 +937,13 @@ function buildSummaryItem(summary) {
         <span class="summary-day">${escapeHtml(relativeDayLabel(summary.summary_date))}</span>
         <span class="summary-mini">${escapeHtml(isEmpty ? 'Hareket yok' : summaryMiniStats(summary))}</span>
         ${!isEmpty && !summary.is_read ? '<span class="report-status report-status-blue summary-new">Yeni</span>' : ''}
-        ${isEmpty ? '' : '<i class="fas fa-chevron-down report-caret"></i>'}
+        ${isEmpty ? '' : '<i class="fas fa-up-right-from-square summary-open-icon"></i>'}
         ${headline ? `<span class="summary-headline" title="${escapeHtml(headline)}">${escapeHtml(headline)}</span>` : ''}`;
     wrap.appendChild(item);
 
-    const details = document.createElement('div');
-    details.className = 'summary-detail';
-    wrap.appendChild(details);
-
     if (!isEmpty) {
-        item.title = 'Ayrıntılar için tıklayın';
-        item.addEventListener('click', () => toggleSummaryRow(wrap, summary));
+        item.title = 'Özeti aç';
+        item.addEventListener('click', () => openSummaryPopup(wrap, summary));
     }
     return wrap;
 }
@@ -889,52 +958,39 @@ function fetchSummaryDetail(id) {
     return state.summaryCache[id];
 }
 
-async function toggleSummaryRow(wrap, summary, { open = null } = {}) {
+// One popup for every summary — the same one the morning check shows — so a
+// past day reads exactly like today's did. The modal marks it read on close
+// (server + the local seen key when it is the newest); the pane only has to
+// drop the 'Yeni' chip.
+async function openSummaryPopup(wrap, summary) {
     const item = wrap.querySelector('.summary-item');
-    const details = wrap.querySelector('.summary-detail');
-    const next = open === null ? !details.classList.contains('open') : open;
-    details.classList.toggle('open', next);
-    item.classList.toggle('summary-item-open', next);
-    if (!next) return;
-
-    if (!details.dataset.loaded) {
-        if (details.dataset.loading) return;
-        details.dataset.loading = '1';
-        details.innerHTML = '<div class="aw-muted-block">Yükleniyor...</div>';
-        try {
-            const detail = await fetchSummaryDetail(summary.id);
-            details.innerHTML = renderDailySummary(detail, { compact: true });
-            bindDailySummaryInteractions(details);
-            details.dataset.loaded = '1';
-        } catch (error) {
-            details.innerHTML = '<div class="aw-muted-block">Özet yüklenemedi.</div>';
-            return;
-        } finally {
-            delete details.dataset.loading;
-        }
-    }
-    markSummaryRead(summary, wrap);
-}
-
-async function markSummaryRead(summary, wrap) {
-    if (summary.is_read || isImpersonating()) return;
-    summary.is_read = true;  // optimistic: the chip goes away now
-    const chip = wrap.querySelector('.summary-new');
-    if (chip) chip.remove();
+    if (!item || item.dataset.loading) return;
+    item.dataset.loading = '1';
+    item.classList.add('summary-item-loading');
     try {
-        await markDailySummaryRead(summary.id);
+        const detail = await fetchSummaryDetail(summary.id);
+        const latest = state.summaries[0];
+        openDailySummaryModal(detail, {
+            isLatest: Boolean(latest && latest.id === summary.id),
+            fromWidget: true,
+            onClose: () => {
+                if (summary.is_read || isImpersonating()) return;
+                summary.is_read = true;
+                const chip = wrap.querySelector('.summary-new');
+                if (chip) chip.remove();
+                // The modal also emits daily-summary:read; this only covers a
+                // cached older modal build that doesn't.
+                if (state.unreadSummary && state.unreadSummary.id === Number(summary.id)) {
+                    state.unreadSummary = null;
+                    setLauncherBadge(false);
+                }
+            },
+        });
     } catch (error) {
-        // Not fatal: the row simply shows 'Yeni' again on the next load.
-    }
-    // The seen key describes the newest summary only; reading an older one
-    // must not make the modal think the latest was seen.
-    const latest = state.summaries[0];
-    if (latest && latest.id === summary.id) {
-        try {
-            setSeen(currentUserId(), seenValue(summary));
-        } catch (error) {
-            // localStorage may be unavailable (private window); server read is enough.
-        }
+        showNotification('Özet yüklenemedi.', 'error');
+    } finally {
+        delete item.dataset.loading;
+        item.classList.remove('summary-item-loading');
     }
 }
 

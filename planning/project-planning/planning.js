@@ -24,6 +24,7 @@ import {
 } from '../../apis/welding/planning.js';
 import { fetchPriceTiers } from '../../apis/subcontracting/priceTiers.js';
 import { createWorkdayCalendar, reconcileScheduleEdit } from '../../utils/workdays.js';
+import { imalatPlanStart, imalatStageFractions, shippingAnchor } from './imalatPlan.js';
 import { deptSchedulePatch } from './deptSchedulePatch.js';
 import { canRederiveForecast, forecastRemainingWd } from './forecastLayout.js';
 import { blockSchedulePatch } from './blockSchedulePatch.js';
@@ -2101,9 +2102,15 @@ function rederiveDerivedDurations() {
         // A skipped row takes no share of the İmalat number — the server's
         // plan split drops it the same way (plan_windows.live()).
         const mach = skipped(machiningByJob[jobNo]) ? null : machiningByJob[jobNo];
-        const sibSum = w(weld && weld.weight) + w(paint && paint.weight)
-            + w(mach && mach.weight);
-        if (sibSum <= 0) return;
+        // By STAGE, the mirror of task_durations / plan_windows: welding and
+        // machining side by side, each spanning the first stage, then paint.
+        // Phase by phase, 097-42's Kaynaklı read "≈51 g" over a 57-day bar.
+        const share = imalatStageFractions([
+            weld && { key: 'weld', weight: weld.weight, paint: false },
+            mach && { key: 'mach', weight: mach.weight, paint: false, own: true },
+            paint && { key: 'paint', weight: paint.weight, paint: true },
+        ]);
+        if (!Object.keys(share).length) return;
 
         const setSlice = (vm, value) => {
             if (!vm || vm.entered_duration_wd != null) return;
@@ -2112,7 +2119,7 @@ function rederiveDerivedDurations() {
             vm.duration_source = 'weight_share';
         };
 
-        const weldSlice = top * w(weld && weld.weight) / sibSum;
+        const weldSlice = top * (share.weld || 0);
         // Kaynaklı İmalat contracts onto its teams once every one of them
         // carries an entered span (see rederivePlanWindows), so re-imposing
         // the inherited share here would print "≈28,5 g" over a 20-day window.
@@ -2120,8 +2127,8 @@ function rederiveDerivedDurations() {
         const weldBlocks = (jobBlocks[jobNo] || []).filter(b => !b.deleted);
         const weldFits = weldBlocks.length > 0
             && weldBlocks.every(b => b.subtask.entered_duration_wd != null);
-        if (!weldFits) setSlice(weld, weldSlice);
-        setSlice(paint, top * w(paint && paint.weight) / sibSum);
+        if (!weldFits && share.weld) setSlice(weld, weldSlice);
+        if (share.paint) setSlice(paint, top * share.paint);
 
         const blocks = (jobBlocks[jobNo] || []);
         const kgSum = blocks.reduce((acc, b) => acc + w(b.allocated_weight_kg), 0);
@@ -2178,7 +2185,7 @@ function rederivePlanWindows() {
     // entered İmalat duration took the split's early return and showed a block
     // pinned to 01.12 still ending 14.10, with nothing above it moving (user
     // 2026-09-17, 305-01 — 4 of that sheet's 9 jobs have no duration).
-    const honourPins = (jobNo) => {
+    const honourPins = (jobNo, planned) => {
         const slots = deptByJob[jobNo] || {};
         let earliest = null, latest = null;
         (jobBlocks[jobNo] || []).forEach(b => {
@@ -2199,6 +2206,10 @@ function rederivePlanWindows() {
             earliest = (earliest && earliest < from) ? earliest : from;
             latest = later(latest, b.subtask.end_date);
         });
+        // With no plan there is no window for a parent to widen: the server
+        // stopped drawing İmalat and Kaynaklı İmalat from the dates left on
+        // the rows below them (2026-09-24), and the preview must not either.
+        if (!planned) return;
         [slots.welding, slots.manufacturing].forEach(vm => {
             if (!vm) return;
             // Backwards only, and only over a start it already has. Pulling a
@@ -2222,38 +2233,101 @@ function rederivePlanWindows() {
     const chainLogistics = (jobNo) => {
         const imalat = (deptByJob[jobNo] || {}).manufacturing;
         const shipping = (jobInfo[jobNo] || {}).logistics;
-        if (!imalat || !imalat.end_date || !shipping) return;
+        if (!shipping) return;
         if (['completed', 'cancelled', 'skipped'].includes(shipping.status)) return;
+        // An entered window is the planner's; the server never recomputes it.
+        if (shipping.entered_start_date || shipping.entered_end_date) return;
+        // Shipping waits for İmalat AND whatever else it is linked to — the
+        // server sends that as shipping_after (plan_sheet's own pass), so the
+        // preview lands where the save will.
+        const anchor = shippingAnchor({
+            imalatLive: live(imalat),
+            imalatEnd: imalat ? imalat.end_date : null,
+            after: shipping.shipping_after || null,
+            afterInvented: !!shipping.shipping_after_invented,
+        });
+        if (!anchor) {
+            if (shipping.date_source === 'plan_tail') {
+                shipping.projected_start_date = null;
+                shipping.projected_end_date = null;
+                shipping.date_source = null;
+            }
+            return;
+        }
         // Measured BEFORE the window is touched: reading it back after
         // projected_start_date had already been overwritten measured the new
         // start against the OLD end, so every edit grew shipping by however
         // far İmalat had moved (12.10 -> 03.12 on 009-37, and it never shrank
         // back).
         const days = logisticsDays(shipping);
-        const from = nextWorkday(imalat.end_date);
+        const from = nextWorkday(anchor);
         shipping.projected_start_date = from;
         shipping.projected_end_date = spanEnd(from, days);
         shipping.date_source = 'plan_tail';
     };
 
+    // No plan (user 2026-09-24): nothing dates İmalat, so neither it nor the
+    // shipping day after it has one. The server sends exactly that; a window
+    // left over from before the edit would be the preview's own invention.
+    const clearPlan = (jobNo) => {
+        const imalat = (deptByJob[jobNo] || {}).manufacturing;
+        if (imalat && live(imalat) && imalat.status !== 'completed') {
+            imalat.end_date = null;
+            imalat.end_is_actual = false;
+        }
+        const shipping = (jobInfo[jobNo] || {}).logistics;
+        if (shipping && shipping.date_source === 'plan_tail') {
+            shipping.projected_start_date = null;
+            shipping.projected_end_date = null;
+            shipping.date_source = null;
+        }
+    };
+
+    // Returns whether the job HAS a plan to lay out.
     const splitFromImalat = (jobNo) => {
         const slots = deptByJob[jobNo] || {};
         const imalat = slots.manufacturing;
-        if (!imalat || !imalat.start_date) return;
+        if (!imalat) return false;
         const total = imalat.entered_duration_wd != null
             ? Number(imalat.entered_duration_wd)
             : (imalat.duration_wd != null ? Number(imalat.duration_wd) : null);
-        if (!total || total <= 0) return;
+        // Nothing to size a plan with: the server lays nothing out either and
+        // sends the row as stored, so leave it exactly as it arrived.
+        if (!total || total <= 0) return false;
 
-        const start = imalat.start_date;
+        // Where the plan starts — the mirror of plan_windows.imalat_plan_start.
+        // NOT the start the row is showing: that is the widened window (a team
+        // pinned before İmalat pulls it back) or, with no plan, the first
+        // progress — laying the split out from either moved every row the
+        // moment anything on the job was edited.
+        const { start } = imalatPlanStart({
+            enteredStart: imalat.entered_start_date,
+            enteredEnd: imalat.entered_end_date,
+            duration: total,
+            pins: (jobBlocks[jobNo] || [])
+                .filter(b => !b.deleted && live(b.subtask))
+                .map(b => b.subtask.actual_start_date),
+            spanStart: (end, days) => calendar.spanStart(end, days),
+        });
+        if (!start) {
+            clearPlan(jobNo);
+            return false;
+        }
+
         const weld = live(slots.welding) ? slots.welding : null;
         const paint = live(slots.painting) ? slots.painting : null;
         // A skipped Talaşlı takes no share — the server's split drops it the
         // same way, and counting it here shrank every other row's slice.
         const machRow = machiningByJob[jobNo];
         const mach = live(machRow) ? machRow : null;
-        const sibSum = w(weld && weld.weight) + w(paint && paint.weight) + w(mach && mach.weight);
-        if (sibSum <= 0) return;
+        // By STAGE (plan_windows.phase_share_fractions): welding and
+        // machining side by side, each spanning the first stage, then paint.
+        const share = imalatStageFractions([
+            weld && { key: 'weld', weight: weld.weight, paint: false },
+            mach && { key: 'mach', weight: mach.weight, paint: false, own: true },
+            paint && { key: 'paint', weight: paint.weight, paint: true },
+        ]);
+        if (!Object.keys(share).length) return false;
 
         const set = (vm, from, days) => {
             if (!vm) return null;
@@ -2271,9 +2345,9 @@ function rederivePlanWindows() {
         // must never be what the bar contracts onto — the mirror of
         // plan_windows' drawn_latest.
         let drawnLatest = null;
-        if (mach) parallelEnd = later(parallelEnd, spanEnd(start, total * w(mach.weight) / sibSum));
+        if (mach) parallelEnd = later(parallelEnd, spanEnd(start, total * share.mach));
         if (weld) {
-            const weldDays = total * w(weld.weight) / sibSum;
+            const weldDays = total * share.weld;
             const derivedEnd = set(weld, start, weldDays);
             const blocks = jobBlocks[jobNo] || [];
             const kgSum = blocks.reduce((acc, b) => acc + w(b.allocated_weight_kg), 0);
@@ -2335,7 +2409,7 @@ function rederivePlanWindows() {
         let latest = parallelEnd;
         if (paint) {
             const paintStart = parallelEnd ? nextWorkday(parallelEnd) : start;
-            const paintEnd = set(paint, paintStart, total * w(paint.weight) / sibSum);
+            const paintEnd = set(paint, paintStart, total * share.paint);
             latest = later(latest, paintEnd);
             drawnLatest = later(drawnLatest, paintEnd);
         }
@@ -2375,14 +2449,21 @@ function rederivePlanWindows() {
             imalat.end_date = ownEnd;
         }
         imalat.end_is_actual = false;
+        // The row's window starts at the plan's start, and opens backwards
+        // for a team pinned before it — as plan_windows draws it.
+        imalat.start_date = start;
+        imalat.start_is_actual = false;
         if (weld && weld.start_date && weld.start_date < imalat.start_date) {
             imalat.start_date = weld.start_date;
         }
+        return true;
     };
 
     liveForecastJobs.forEach(jobNo => {
-        splitFromImalat(jobNo);
-        honourPins(jobNo);
+        const planned = splitFromImalat(jobNo);
+        honourPins(jobNo, planned);
+        // Always: shipping can be planned from what else it waits for even
+        // when İmalat is not, and must lose its window when İmalat loses one.
         chainLogistics(jobNo);
     });
 }
@@ -3427,7 +3508,12 @@ function onCellEdit(row, field, newValue) {
         target.date_source = null;
         if (row.kind === 'dept') {
             target.entered_start_date = start;
-            target.entered_end_date = end;
+            // İmalat's end is its start's span, not an entry: the server drops
+            // the stored one whenever a start arrives alone
+            // (_apply_department_task_item). Kept here, imalatPlanStart would
+            // anchor the preview on it after the start was cleared.
+            target.entered_end_date = (row.slot === 'manufacturing' && field === 'start_date')
+                ? null : end;
         }
         // Scheduling a cancelled default stage brings it back.
         if (row.kind === 'stage' && target.status === 'cancelled' && start) {

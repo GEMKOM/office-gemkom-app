@@ -3,6 +3,7 @@
 /* --- launcher (lives in the navbar's right cluster) -------------------- */
 
 .assistant-launcher {
+    position: relative;  /* anchors the unread dot */
     display: inline-flex;
     align-items: center;
     gap: 0.45rem;
@@ -29,6 +30,20 @@
     font-size: 0.68rem;
     opacity: 0.95;
     transform: translateY(-4px);
+}
+
+/* Unread daily-summary dot; the white ring keeps house red visible on the
+   red launcher and on the dark navbar behind it. */
+.assistant-launcher .al-badge {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--primary-color, #8b0000);
+    box-shadow: 0 0 0 2px #fff;
+    pointer-events: auto;
 }
 
 @media (max-width: 991.98px) {
@@ -632,6 +647,12 @@
     border-bottom: 1px solid #e9ecef;
 }
 
+.aw-summaries-list .aw-summaries-hint {
+    padding: 0.45rem 1rem 0.25rem;
+    font-size: 0.74rem;
+    color: #8a939b;
+}
+
 .aw-summaries-list .summary-item {
     display: flex;
     flex-wrap: wrap;
@@ -672,18 +693,7 @@
 
 .summary-item-clickable { cursor: pointer; }
 .summary-item-clickable:hover { background: #f8f9fa; }
-.summary-item-open { background: #f8f9fa; }
-.summary-item-open .report-caret { transform: rotate(180deg); }
+.summary-item-loading { opacity: 0.6; pointer-events: none; }
+.summary-item .summary-open-icon { color: #8a939b; font-size: 0.7rem; margin-left: auto; }
 
 .summary-item-empty .summary-day { color: #8a939b; font-weight: 500; }
-
-/* Expanded summary body (rendered by components/daily-summary/render.js). */
-.summary-detail {
-    display: none;
-    padding: 0.55rem 1rem 0.8rem;
-    font-size: 0.82rem;
-    background: #fbf9f9;
-    border-bottom: 1px solid #f1f3f5;
-}
-
-.summary-detail.open { display: block; }
