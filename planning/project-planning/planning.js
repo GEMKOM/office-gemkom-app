@@ -28,6 +28,7 @@ import { imalatPlanStart, imalatStageFractions, shippingAnchor } from './imalatP
 import { deptSchedulePatch } from './deptSchedulePatch.js';
 import { canRederiveForecast, forecastRemainingWd } from './forecastLayout.js';
 import { blockSchedulePatch } from './blockSchedulePatch.js';
+import { indexMachining, machiningWeightItems } from './machiningWeight.js';
 import { compareJobsBy, earliestDate, normalizeSortMode } from './jobSort.js';
 import {
     assignmentKey,
@@ -71,12 +72,13 @@ let resources = [];               // [{resource_type, id, name, blocks: [BlockVM
 let weldingTasks = [];            // assignable jobs
 let jobInfo = {};                 // job_no -> {job_order, material_supply, machining[], cutting[], painting, logistics}
 let deptByJob = {};               // job_no -> {manufacturing, welding, painting} VMs
-let machiningByJob = {};          // job_no -> Talaşlı İmalat VM (weight only)
+let machiningByJob = {};          // job_no -> first Talaşlı VM (İmalat share)
+let machiningByTask = {};         // task_id -> Talaşlı İmalat VM (weight only)
 
 let snapBlocks = new Map();       // block.key -> {allocated_weight_kg, notes, subtask: {actual_start_date}}
 let dirtyBlocks = new Set();      // block.key
 let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
-let dirtyMachining = new Map();   // job_no -> Set of edited field names
+let dirtyMachining = new Map();   // task_id -> Set of edited field names
 let dirtyLogistics = new Map();   // job_no -> Set of edited field names
 let dirtyCutting = new Map();     // task_id -> Set of edited field names (Kesim)
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
@@ -428,21 +430,11 @@ function hydrate(boardData) {
     jobInfo = boardData.job_info || {};
 
     deptByJob = {};
-    machiningByJob = {};
+    ({ machiningByJob, machiningByTask } = indexMachining(jobInfo));
     Object.entries(jobInfo).forEach(([jobNo, info]) => {
         const slots = {};
         DEPT_SLOTS.forEach(slot => { slots[slot] = deptVM(info[slot]); });
         deptByJob[jobNo] = slots;
-        const machining = (info.machining || [])[0];
-        if (machining) {
-            machiningByJob[jobNo] = {
-                task_id: machining.task_id,
-                weight: machining.weight ?? null,
-                // The weight split has to know when this row is out of scope
-                // — a skipped Talaşlı takes no share of the İmalat number.
-                status: machining.status,
-            };
-        }
     });
 
     resources = (boardData.resources || []).map(res => ({
@@ -567,10 +559,10 @@ function deptOf(jobNo, slot) {
     return (deptByJob[jobNo] || {})[slot] || null;
 }
 
-function markMachiningDirty(jobNo, field) {
-    const fields = dirtyMachining.get(jobNo) || new Set();
+function markMachiningDirty(taskId, jobNo, field) {
+    const fields = dirtyMachining.get(taskId) || new Set();
     if (field) fields.add(field);
-    dirtyMachining.set(jobNo, fields);
+    dirtyMachining.set(taskId, fields);
     liveForecastJobs.add(jobNo);
     bumpMutation();
     updateSaveState();
@@ -1526,11 +1518,13 @@ function buildSheetRows(res) {
         if (manufacturing) rows.push(manufacturing);
 
         const machiningRows = info.machining || [];
-        machiningRows.forEach((x, i) => {
+        machiningRows.forEach((x) => {
             const row = infoRow(
                 x, `Talaşlı İmalat${machiningRows.length > 1 ? ` — ${x.title}` : ''}`,
                 'machining', 2);
-            if (i === 0 && machiningByJob[jobNo]) row.weight = machiningByJob[jobNo].weight;
+            row.machining_task_id = x.task_id;
+            const vm = machiningByTask[x.task_id];
+            if (vm) row.weight = vm.weight;
             rows.push(row);
         });
 
@@ -3313,7 +3307,7 @@ function onCellEdit(row, field, newValue) {
     if (row.kind === 'stage') {
         target = block && block.stages.find(s => s.cid === row.stageCid);
     } else if (row.kind === 'machining') {
-        target = machiningByJob[row.job_no];
+        target = machiningByTask[row.machining_task_id];
     } else if (row.kind === 'dept') {
         target = deptOf(row.job_no, row.slot);
     } else if (row.kind === 'block') {
@@ -3325,7 +3319,7 @@ function onCellEdit(row, field, newValue) {
 
     const markDirty = () => {
         if (row.kind === 'dept') markDeptDirty(row.job_no, row.slot, field);
-        else if (row.kind === 'machining') markMachiningDirty(row.job_no, field);
+        else if (row.kind === 'machining') markMachiningDirty(row.machining_task_id, row.job_no, field);
         else if (row.editable_duration) markLogisticsDirty(row.job_no, field);
         else markBlockDirty(block.key);
     };
@@ -4460,11 +4454,9 @@ function buildPayload() {
 
     // Talaşlı İmalat travels the same channel, but only ever its weight — the
     // server refuses a schedule on it, because those dates are its operations'.
-    dirtyMachining.forEach((fields, jobNo) => {
-        const vm = machiningByJob[jobNo];
-        if (!vm || !fields.has('weight') || vm.weight == null) return;
-        payload.department_tasks.push({ task_id: vm.task_id, weight: vm.weight });
-    });
+    // Keyed by task_id so a second Talaşlı row cannot overwrite the first.
+    payload.department_tasks.push(
+        ...machiningWeightItems(dirtyMachining, machiningByTask));
 
     // Lojistik travels it too, and only ever its duration: the server refuses
     // a date or a status on this row, because the window is the tail of the
