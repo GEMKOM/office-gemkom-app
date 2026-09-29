@@ -8,6 +8,7 @@ import { TableComponent } from '../../../../components/table/table.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 import { fetchLaborPricing, saveLaborPricingParams } from '../../../../apis/subcontracting/laborPricing.js';
+import { asJobNos, resolveSaveJobNos } from './laborPricingSelection.js';
 
 // filter id -> querystring key expected by the endpoint
 const PARAM_KEYS = {
@@ -90,8 +91,10 @@ async function initFilters() {
         applyButtonText: 'Hesapla',
         clearButtonText: 'Sıfırla',
         onApply: () => {
-            selected = asArray(filters.getFilterValues()['job-orders']);
-            difficulty = {};
+            selected = asJobNos(filters.getFilterValues()['job-orders']);
+            // Zorluk is keyed by line job_no (children/phases), not the root
+            // dropdown. Wiping it on every Hesapla dropped in-session overrides
+            // whenever a rate knob changed. Sıfırla still clears them.
             recompute();
         },
         onClear: () => {
@@ -175,12 +178,17 @@ function currentParams() {
 }
 
 async function saveParams() {
-    if (!selected.length) {
+    const jobNos = resolveSaveJobNos({
+        filterJobNos: filters ? filters.getFilterValues()['job-orders'] : [],
+        computedJobNos: selected,
+    });
+    if (!jobNos.length) {
         showNotification('Önce iş emri seçin', 'warning');
         return;
     }
     try {
-        const result = await saveLaborPricingParams(selected, currentParams());
+        const result = await saveLaborPricingParams(jobNos, currentParams());
+        selected = jobNos;
         showNotification(`${result.saved.length} iş emrine kaydedildi`, 'success');
     } catch (error) {
         showNotification(error.message, 'error');
@@ -521,11 +529,6 @@ async function recompute() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function asArray(value) {
-    if (Array.isArray(value)) return value.filter(Boolean);
-    return value ? [value] : [];
-}
 
 function fmt(value, digits) {
     if (!Number.isFinite(value)) return '—';
