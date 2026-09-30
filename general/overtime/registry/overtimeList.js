@@ -1005,12 +1005,18 @@ function initializeUserDropdown(index, prefill = null) {
     });
 
     // Set user options - try ID first, fallback to username
-    const userItems = allUsers.map(user => ({
-        value: user.id || user.username, // Try ID first, fallback to username
-        text: (user.first_name && user.last_name) ?
+    const userItems = allUsers.map(user => {
+        const text = (user.first_name && user.last_name) ?
             `${user.first_name} ${user.last_name}` :
-            user.username
-    }));
+            user.username;
+        return {
+            value: user.id || user.username, // Try ID first, fallback to username
+            text,
+            // Match the username too, so ASCII searches like "sendogan"
+            // still find "Şendoğan Şirin".
+            searchText: user.username ? `${text} ${user.username}` : text,
+        };
+    });
 
     dropdown.setItems(userItems);
 
