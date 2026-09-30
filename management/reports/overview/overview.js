@@ -80,7 +80,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 { value: 'current_month', label: 'Bu Ay' },
                 { value: 'last_3_months', label: 'Son 3 Ay' },
                 { value: 'last_6_months', label: 'Son 6 Ay' },
-                { value: 'last_year', label: 'Son 1 Yıl' }
+                { value: 'last_year', label: 'Son 1 Yıl' },
+                { value: 'all_time', label: 'Tüm Zamanlar' }
             ]
         })
         .addDateFilter({ id: 'date_from', label: 'Başlangıç', colSize: 3 })
@@ -163,7 +164,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const presetLabel = preset === 'current_month' ? 'Bu ay'
             : preset === 'last_3_months' ? 'Son 3 ay'
                 : preset === 'last_6_months' ? 'Son 6 ay'
-                    : preset === 'last_year' ? 'Son 1 yıl' : null;
+                    : preset === 'last_year' ? 'Son 1 yıl'
+                        : preset === 'all_time' ? 'Tüm zamanlar' : null;
 
         let primary = '';
         if (df && dt) {
@@ -269,7 +271,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         draft: 'Taslak',
         active: 'Aktif',
         completed: 'Tamamlandı',
-        on_hold: 'Beklemede'
+        on_hold: 'Beklemede',
+        cancelled: 'İptal Edildi'
     };
 
     /** API `sales_consults_by_department` anahtarları (slug) → Türkçe; bilinmeyen anahtar olduğu gibi gösterilir. */
@@ -343,6 +346,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ${extraHtml}
             </div>
         </div>`;
+    }
+
+    /** Replaces a chart canvas with a centered message when there is nothing to plot. */
+    function chartEmpty(canvasEl, message) {
+        const wrap = canvasEl?.parentElement;
+        if (wrap) wrap.innerHTML = `<div class="h-100 d-flex align-items-center justify-content-center text-muted small">${message}</div>`;
     }
 
     function kvRow(label, value, cls = '') {
@@ -595,6 +604,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     function tabJobOrders(data) {
         const jo = data?.job_orders || {};
         const jc = data?.job_orders_costs || {};
+        // Both charts cover the job orders opened in the selected period.
+        const scope = data?.meta?.preset === 'all_time' ? 'tüm iş emirleri' : 'dönemde açılan iş emirleri';
 
         return `
         <div class="row g-3">
@@ -610,10 +621,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `)}
             </div>
             <div class="col-lg-6">
-                ${chartCard('chart-bar', 'text-info', 'Duruma göre (snapshot)', 'chart-job-order-status', 'md')}
+                ${chartCard('chart-bar', 'text-info', `Duruma göre (${scope})`, 'chart-job-order-status', 'md')}
             </div>
             <div class="col-lg-6">
-                ${chartCard('chart-pie', 'text-success', 'Maliyet dağılımı (iş emirleri)', 'chart-job-order-costs', 'md', `
+                ${chartCard('chart-pie', 'text-success', `Maliyet dağılımı (${scope})`, 'chart-job-order-costs', 'md', `
                     <dl class="ov-kv mt-2">
                         ${kvRow('Maliyet verisi olan iş', num(jc.jobs_with_cost_data))}
                         ${kvRow('Satış fiyatı olan iş', num(jc.jobs_with_selling_price))}
@@ -1546,7 +1557,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!el) return;
 
         const keys = Object.keys(byStatus);
-        if (keys.length === 0) return;
+        if (keys.length === 0) {
+            chartEmpty(el, 'Bu dönemde açılan iş emri yok');
+            return;
+        }
 
         const colors = ['#6c757d', '#0d6efd', '#198754', '#fd7e14'];
         charts.push(new Chart(el, {
@@ -1598,7 +1612,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const subc = pf(c.total_subcontractor_cost_eur);
         const total = pf(c.total_actual_cost_eur);
         const other = Math.max(0, total - labor - material - subc);
-        if (total <= 0 && labor + material + subc + other <= 0) return;
+        if (total <= 0 && labor + material + subc + other <= 0) {
+            chartEmpty(el, 'Bu dönemde açılan iş emirlerinde maliyet yok');
+            return;
+        }
 
         charts.push(new Chart(el, {
             type: 'doughnut',

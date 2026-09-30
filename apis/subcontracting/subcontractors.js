@@ -184,6 +184,46 @@ export async function fetchSubcontractorsOverview(filters = {}) {
 }
 
 /**
+ * Monthly work report behind the "Taşeron Genel Bakış" page: flat facts keyed
+ * by subcontractor × month × fiyat kalemi × job order, plus the remaining-work
+ * backlog per subcontractor × kalem × job order.
+ *
+ * Endpoint:
+ * - GET /subcontracting/subcontractors/monthly-report/
+ *
+ * @param {Object} filters - Optional filter parameters
+ * @param {string} filters.start - First month, 'YYYY-MM' (inclusive)
+ * @param {string} filters.end - Last month, 'YYYY-MM' (inclusive)
+ * @param {string} filters.job_status - Comma separated job order statuses
+ * @param {boolean} filters.is_active - Filter by subcontractor active status
+ * @param {string} filters.search - Search in name, short_name, contact_person
+ * @returns {Promise<Object>} {period, current_period, subcontractors, kalems, statements, facts, backlog}
+ */
+export async function fetchSubcontractorMonthlyReport(filters = {}) {
+    const params = new URLSearchParams();
+
+    Object.keys(filters).forEach(key => {
+        if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
+            params.append(key, filters[key]);
+        }
+    });
+
+    const url = `${backendBase}/subcontracting/subcontractors/monthly-report/?${params.toString()}`;
+    const resp = await authedFetch(url);
+
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(
+            errorData.detail ||
+            errorData.message ||
+            'Taşeron aylık rapor verileri yüklenirken hata oluştu'
+        );
+    }
+
+    return await resp.json();
+}
+
+/**
  * Mark a subcontracting statement as paid.
  * Works only when statement status is "approved";
  * backend sets status to "paid" and stamps paid_at.

@@ -1,0 +1,310 @@
+/* Taşeron Genel Bakış — the tree table is page-specific (the shared table
+   component groups on one level only); the card around it is the shared
+   .dashboard-card from components/table/table.css. */
+
+.ov-card:hover {
+    transform: none;
+}
+
+.ov-card .card-header {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.ov-period-label {
+    margin-left: 0.5rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.ov-actions {
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.ov-actions-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.ov-actions .btn-group .btn.active {
+    background: var(--primary-color, #8b0000);
+    border-color: var(--primary-color, #8b0000);
+    color: #fff;
+}
+
+/* ---- table ---- */
+
+.ov-table {
+    font-size: 0.85rem;
+}
+
+.ov-table thead th {
+    background: #f8f9fa;
+    color: #495057;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+    vertical-align: bottom;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* The shared table styles centre every cell; a tree reads down its left edge. */
+.ov-table th,
+.ov-table td {
+    text-align: left;
+}
+
+.ov-table td {
+    vertical-align: middle;
+    border-color: #eef0f2;
+}
+
+.ov-table .num {
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.ov-table .ov-col-label {
+    min-width: 340px;
+}
+
+.ov-table .ov-col-backlog {
+    border-left: 1px solid #dee2e6;
+}
+
+.ov-table thead th.ov-col-backlog {
+    background: #f1f3f5;
+}
+
+/* Group rows get lighter the deeper they sit. */
+.ov-group.ov-expandable {
+    cursor: pointer;
+}
+
+.ov-depth-0 > td {
+    background: #e9ecef;
+    border-top: 2px solid #dee2e6;
+}
+
+.ov-depth-0 .ov-name {
+    font-weight: 700;
+}
+
+.ov-depth-1 > td {
+    background: #f4f5f7;
+}
+
+.ov-depth-1 .ov-name,
+.ov-depth-2 .ov-name {
+    font-weight: 600;
+}
+
+.ov-depth-2 > td {
+    background: #fafbfc;
+}
+
+.ov-group.ov-expandable:hover > td {
+    background: #e2e6ea;
+}
+
+.ov-leaf > td {
+    background: #fff;
+}
+
+.ov-leaf:hover > td {
+    background: #f8f9fa;
+}
+
+/* ---- label cell ---- */
+
+.ov-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.35rem;
+}
+
+.ov-label-body {
+    min-width: 0;
+}
+
+.ov-caret {
+    display: inline-block;
+    flex: none;
+    width: 0.9rem;
+    margin-top: 0.2rem;
+    font-size: 0.7rem;
+    color: #6c757d;
+    transition: transform 0.15s ease;
+}
+
+.ov-open .ov-caret {
+    transform: rotate(90deg);
+}
+
+.ov-icon {
+    margin-right: 0.4rem;
+    color: #8b9299;
+    font-size: 0.8rem;
+}
+
+.ov-sub {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: #6c757d;
+    margin-top: 0.1rem;
+}
+
+.ov-chip {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0 0.45rem;
+    font-size: 0.7rem;
+    font-weight: 500;
+    color: #6c757d;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 10px;
+    vertical-align: 1px;
+}
+
+/* Compact variant of the house status badge for inline use in a label. */
+.status-badge.ov-badge {
+    min-width: 0;
+    margin-left: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.65rem;
+    vertical-align: 1px;
+}
+
+.ov-statement-link {
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.ov-statement-link i {
+    font-size: 0.65rem;
+    color: #6c757d;
+}
+
+.ov-statement-link:hover i {
+    color: var(--primary-color, #8b0000);
+}
+
+.ov-job {
+    font-weight: 600;
+    margin-right: 0.35rem;
+}
+
+.ov-job-title {
+    color: #343a40;
+}
+
+.ov-kalem-pill {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.05rem 0.4rem;
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #5b21b6;
+    background: #ede9fe;
+    border: 1px solid #c4b5fd;
+    border-radius: 4px;
+    vertical-align: 1px;
+    white-space: nowrap;
+}
+
+.ov-reason {
+    font-size: 0.75rem;
+    font-style: italic;
+    color: #495057;
+    margin-top: 0.1rem;
+}
+
+/* ---- value cells ---- */
+
+.ov-unit {
+    font-size: 0.72rem;
+    color: #8b9299;
+}
+
+.ov-muted {
+    color: #c3c8cd;
+}
+
+.ov-neg {
+    color: #b91c1c;
+}
+
+.ov-pos {
+    color: #047857;
+}
+
+.ov-pending {
+    color: #c2410c;
+}
+
+.ov-progress-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 110px;
+}
+
+.ov-progress {
+    flex: 1;
+    height: 6px;
+    background: #dee2e6;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.ov-progress > span {
+    display: block;
+    height: 100%;
+    background: #10b981;
+}
+
+.ov-progress-text {
+    font-size: 0.75rem;
+    color: #495057;
+    font-variant-numeric: tabular-nums;
+    min-width: 2.5rem;
+    text-align: right;
+}
+
+.ov-progress-delta {
+    font-size: 0.78rem;
+    color: #495057;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
+.ov-progress-delta i {
+    font-size: 0.6rem;
+    margin: 0 0.15rem;
+    color: #adb5bd;
+}
+
+/* ---- total + legend ---- */
+
+.ov-total-row > td {
+    background: #f1f3f5;
+    border-top: 2px solid #adb5bd;
+    font-weight: 700;
+}
+
+.ov-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.5rem;
+    font-size: 0.78rem;
+    color: #6c757d;
+}
