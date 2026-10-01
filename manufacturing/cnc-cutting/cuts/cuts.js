@@ -33,6 +33,7 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { parsePartsFromText } from './partsPasteParser.js';
+import { nextRowIndex } from './partIndex.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
@@ -1560,7 +1561,10 @@ async function handleCreateCutSave(formData) {
 
 
     // Collect parts data from dynamic rows
-    const partRows = document.querySelectorAll('.part-row');
+    const partsContainer = document.getElementById('parts-container');
+    const partRows = partsContainer
+        ? partsContainer.querySelectorAll('.part-row')
+        : [];
     for (const row of partRows) {
         const partIndex = parseInt(row.dataset.index);
         // Get job_no from dropdown
@@ -3064,7 +3068,9 @@ function addPart() {
     if (!container) {
         return;
     }
-    const partIndex = container.children.length;
+    const partIndex = nextRowIndex(
+        [...container.querySelectorAll('.part-row')].map((row) => row.dataset.index)
+    );
     
     const partHtml = `
         <div class="part-row mb-3" data-index="${partIndex}">
@@ -3207,21 +3213,11 @@ function populatePartsFromParsed(parsedParts) {
 
 // Remove part
 function removePart(index) {
-    // Clean up dropdown reference
-    jobOrderDropdowns.delete(index);
-    
-    // Re-index dropdown references for remaining parts
-    const newDropdowns = new Map();
-    jobOrderDropdowns.forEach((dropdown, oldIndex) => {
-        if (oldIndex < index) {
-            newDropdowns.set(oldIndex, dropdown);
-        } else if (oldIndex > index) {
-            newDropdowns.set(oldIndex - 1, dropdown);
-        }
-    });
-    jobOrderDropdowns = newDropdowns;
-    const partRow = document.querySelector(`.part-row[data-index="${index}"]`);
+    const container = document.getElementById('parts-container');
+    if (!container) return;
+    const partRow = container.querySelector(`.part-row[data-index="${index}"]`);
     if (partRow) {
+        jobOrderDropdowns.delete(index);
         partRow.remove();
     }
 }
