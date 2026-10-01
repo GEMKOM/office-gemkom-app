@@ -604,8 +604,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     function tabJobOrders(data) {
         const jo = data?.job_orders || {};
         const jc = data?.job_orders_costs || {};
-        // Both charts cover the job orders opened in the selected period.
-        const scope = data?.meta?.preset === 'all_time' ? 'tüm iş emirleri' : 'dönemde açılan iş emirleri';
+        // The status chart covers the job orders opened in the period; the cost
+        // card the ones completed in it, whose costs are final.
+        const allTime = data?.meta?.preset === 'all_time';
+        const scope = allTime ? 'tüm iş emirleri' : 'dönemde açılan iş emirleri';
+        const costScope = allTime ? 'tüm tamamlanan iş emirleri' : 'dönemde tamamlanan iş emirleri';
 
         return `
         <div class="row g-3">
@@ -624,7 +627,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ${chartCard('chart-bar', 'text-info', `Duruma göre (${scope})`, 'chart-job-order-status', 'md')}
             </div>
             <div class="col-lg-6">
-                ${chartCard('chart-pie', 'text-success', `Maliyet dağılımı (${scope})`, 'chart-job-order-costs', 'md', `
+                ${chartCard('chart-pie', 'text-success', `Maliyet dağılımı (${costScope})`, 'chart-job-order-costs', 'md', `
                     <dl class="ov-kv mt-2">
                         ${kvRow('Maliyet verisi olan iş', num(jc.jobs_with_cost_data))}
                         ${kvRow('Satış fiyatı olan iş', num(jc.jobs_with_selling_price))}
@@ -1613,7 +1616,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const total = pf(c.total_actual_cost_eur);
         const other = Math.max(0, total - labor - material - subc);
         if (total <= 0 && labor + material + subc + other <= 0) {
-            chartEmpty(el, 'Bu dönemde açılan iş emirlerinde maliyet yok');
+            chartEmpty(el, 'Bu dönemde tamamlanan iş emirlerinde maliyet yok');
             return;
         }
 

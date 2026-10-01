@@ -341,7 +341,7 @@ async function handleLandingPage() {
                     title: 'Yönetim',
                     description: 'Şirket yönetimi ve analitik işlemlerinizi gerçekleştirin.',
                     icon: 'fas fa-chart-line',
-                    iconColor: 'warning',
+                    iconColor: 'primary',
                     link: '/management',
                     features: [
                         {

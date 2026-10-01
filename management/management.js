@@ -32,7 +32,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 title: 'Analitik',
                 description: 'Gelişmiş veri analizi, tahminleme modelleri ve stratejik öngörüler.',
                 icon: 'fas fa-chart-pie',
-                iconColor: 'warning',
+                iconColor: 'primary',
                 link: '/management/analytics'
             }
         ]

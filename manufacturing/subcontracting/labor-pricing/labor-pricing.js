@@ -28,11 +28,18 @@ const PARAM_DEFAULTS = {
     'factor-max': '2.00',
 };
 
+// Yevmiye inputs live in their own row of the Hesaplama card and are never
+// saved onto the job orders — a day count belongs to the quote, not to each
+// job order in the selection.
+const HOURS_PER_YEVMIYE = 9;
+
 // Cost bar segments, in the order they stack across a kilogram of steel.
+// The yevmiye segment only shows up when there is one.
 const SEGMENTS = [
     { key: 'material_per_kg', label: 'Malzeme', color: '#455a67' },
     { key: 'general_per_kg', label: 'Genel gider', color: '#7c909d' },
-    { key: 'labor_per_kg', label: 'İşçilik', color: '#c4470f' },
+    { key: 'kg_labor_per_kg', label: 'İşçilik (kg fiyatı)', color: '#c4470f' },
+    { key: 'support_per_kg', label: 'Yevmiye', color: '#e08a5b', optional: true },
     { key: 'profit_per_kg', label: 'Kâr', color: '#276b4c' },
 ];
 
@@ -44,10 +51,13 @@ let linesTable = null;
 let selected = [];
 let difficulty = {};
 let lastReport = null;
-// Rate thresholds: at or under `green` is comfortable, over `red` needs a look.
-// Both optional; red wins where the two overlap.
-let thresholds = { green: null, red: null };
-const THRESHOLD_KEY = 'labor-pricing-thresholds';
+// Rate thresholds: under `green` is comfortable, over `red` needs a look.
+// Either can be cleared; red wins where the two overlap.
+const THRESHOLD_DEFAULTS = { green: 1, red: 2 };
+let thresholds = { ...THRESHOLD_DEFAULTS };
+// v2: the first version started both limits empty, and anyone who had touched
+// them has nulls stored that would hide the 1 € / 2 € defaults.
+const THRESHOLD_KEY = 'labor-pricing-thresholds-v2';
 // Ticking a selection on quickly fires overlapping requests; without this the
 // slower earlier one can land last and paint a result for a stale selection.
 let requestSeq = 0;
@@ -89,15 +99,20 @@ async function initFilters() {
         title: 'Hesaplama',
         applyButtonText: 'Hesapla',
         clearButtonText: 'Sıfırla',
+        // Difficulties are keyed by job no and survive a recalculation — the
+        // backend ignores any that are not in the new selection. Only Sıfırla
+        // throws them away.
         onApply: () => {
             selected = asArray(filters.getFilterValues()['job-orders']);
-            difficulty = {};
             recompute();
         },
         onClear: () => {
             selected = [];
             difficulty = {};
             filters.setFilterValues({ ...PARAM_DEFAULTS, 'job-orders': [] });
+            document.getElementById('support-days').value = '0';
+            document.getElementById('support-rate').value = '';
+            renderSupportSummary();
             recompute();
         }
     });
@@ -155,7 +170,83 @@ async function initFilters() {
             'Sınır olmazsa en küçük parçalar kendi satış fiyatlarının üzerine çıkar ve o kalemin kârı sıfırlanır.')
     });
 
+    initSupportInputs();
     renderBreakdown(null);
+}
+
+/**
+ * Yevmiye support, as a second row of the Hesaplama card.
+ *
+ * The filter bar already shrinks its six knobs to one column each to fit the
+ * job order picker; two more would squeeze that picker to nothing. The row
+ * sits beside #filters-container rather than inside it, so the component's
+ * own re-renders leave it alone.
+ */
+function initSupportInputs() {
+    const body = document.querySelector('#filters-placeholder .card-body');
+    const row = document.createElement('div');
+    row.className = 'row g-2 mt-1 align-items-end lp-support';
+    // The pair takes the job order picker's width so the two rows line up.
+    row.innerHTML = `
+        <div class="col-md-3 col-12">
+            <div class="row g-2">
+                <div class="col-6">
+                    <label class="form-label small mb-1" for="support-days">Yevmiye (gün)${help(
+                        `Taşerona kilo fiyatının dışında gündelik olarak ödenecek iş. 1 yevmiye = 1 gün = ${HOURS_PER_YEVMIYE} saat. ` +
+                        'Tutarı işçilik havuzundan düşülür, kalanı kalemlere kilo fiyatı olarak dağıtılır; toplam kâr oranı değişmez.')}</label>
+                    <input type="number" class="form-control form-control-sm" id="support-days"
+                           min="0" step="0.5" value="0" placeholder="0">
+                </div>
+                <div class="col-6">
+                    <label class="form-label small mb-1" for="support-rate">Yevmiye Ücreti ₺</label>
+                    <input type="number" class="form-control form-control-sm" id="support-rate"
+                           min="0" step="50" value="" placeholder="örn. 3500">
+                </div>
+            </div>
+        </div>
+        <div class="col-md-9 col-12">
+            <div class="small text-muted text-start pb-1" id="support-summary"></div>
+        </div>`;
+    body.appendChild(row);
+
+    ['support-days', 'support-rate'].forEach(id => {
+        const input = document.getElementById(id);
+        input.addEventListener('input', renderSupportSummary);
+        // Same contract as the other Hesaplama fields: Enter recalculates.
+        input.addEventListener('keypress', event => {
+            if (event.key === 'Enter') filters.applyFilters();
+        });
+    });
+    renderSupportSummary();
+}
+
+function supportInputs() {
+    const days = Number(document.getElementById('support-days')?.value || 0);
+    const rate = Number(document.getElementById('support-rate')?.value || 0);
+    return {
+        days: Number.isFinite(days) && days > 0 ? days : 0,
+        rate: Number.isFinite(rate) && rate > 0 ? rate : 0,
+    };
+}
+
+/** Live total under the inputs; the € figure needs a calculated report for the rate. */
+function renderSupportSummary() {
+    const box = document.getElementById('support-summary');
+    if (!box) return;
+    const { days, rate } = supportInputs();
+    if (!days) {
+        box.innerHTML = `1 yevmiye = ${HOURS_PER_YEVMIYE} saat. Yevmiye girilirse tutarı işçilik havuzundan düşülür.`;
+        return;
+    }
+    const hours = `${fmt(days * HOURS_PER_YEVMIYE, days % 1 ? 1 : 0)} saat`;
+    if (!rate) {
+        box.innerHTML = `= ${hours} · <span class="text-danger">yevmiye ücreti girilmedi</span>`;
+        return;
+    }
+    const fx = Number(lastReport?.totals?.eur_try_rate);
+    const inEur = Number.isFinite(fx) && fx > 0 ? ` ≈ <strong>${eur(days * rate / fx)}</strong>` : '';
+    box.innerHTML = `= ${hours} · <strong>${tl(days * rate)}</strong>${inEur}
+        — işçilik havuzundan düşülür, kalanı kilo fiyatına dağıtılır.`;
 }
 
 /** A hoverable help marker inside a filter label (labels are injected raw). */
@@ -163,6 +254,7 @@ function help(text) {
     return ` <i class="fas fa-circle-question text-muted" title="${escapeAttr(text)}"></i>`;
 }
 
+/** The six knobs that are saved onto the job orders. */
 function currentParams() {
     const values = filters.getFilterValues();
     const params = {};
@@ -172,6 +264,12 @@ function currentParams() {
         }
     });
     return params;
+}
+
+/** Everything the calculation takes: the six knobs plus the yevmiye. */
+function calculationParams() {
+    const { days, rate } = supportInputs();
+    return { ...currentParams(), support_days: days, support_day_rate_try: rate };
 }
 
 async function saveParams() {
@@ -201,20 +299,27 @@ function renderStats(report) {
         return;
     }
     const t = report.totals;
-    stats.setCards([
+    const hasSupport = Number(t.support_eur) > 0;
+    const cards = [
         {
-            title: 'Taşerona verilebilir',
+            title: t.labor_per_kg_try !== null
+                ? `Taşerona verilebilir · ${fmt(Number(t.labor_per_kg_try), 2)} ₺/kg`
+                : 'Taşerona verilebilir',
             value: `${fmt(Number(t.labor_per_kg), 3)} €/kg`,
             icon: 'fas fa-hand-holding-dollar',
-            color: t.is_feasible ? 'primary' : 'danger',
-            tooltip: `Temel oran k = ${fmt(Number(t.base_rate_k), 4)} €/kg, referans ağırlık ${fmt(Number(t.reference_weight_kg), 0)} kg`
+            color: t.is_feasible && !t.support_exceeds_pool ? 'primary' : 'danger',
+            tooltip: `Temel oran k = ${fmt(Number(t.base_rate_k), 4)} €/kg, referans ağırlık ${fmt(Number(t.reference_weight_kg), 0)} kg` +
+                (hasSupport ? ` · yevmiye dahil; kilo fiyatına kalan ${fmt(Number(t.kg_labor_per_kg), 3)} €/kg` : '')
         },
         {
-            title: `İşçilik havuzu · ${t.line_count} kalem`,
+            title: hasSupport
+                ? `İşçilik havuzu · ${t.line_count} kalem · ${eur(t.support_eur)} yevmiye`
+                : `İşçilik havuzu · ${t.line_count} kalem`,
             value: eur(t.labor_pool_eur),
             icon: 'fas fa-coins',
-            color: 'info',
-            tooltip: `${t.piece_count} adet · kalemlere dağıtılan ${eur(t.labor_allocated_eur)}`
+            color: t.support_exceeds_pool ? 'danger' : 'info',
+            tooltip: `${t.piece_count} adet · kalemlere kilo fiyatıyla dağıtılan ${eur(t.labor_allocated_eur)}` +
+                (hasSupport ? ` · yevmiye ${tl(t.support_try)} ≈ ${eur(t.support_eur)}` : '')
         },
         {
             title: 'Toplam ağırlık',
@@ -235,7 +340,10 @@ function renderStats(report) {
             icon: 'fas fa-chart-line',
             color: 'success'
         }
-    ]);
+    ];
+    // No card of its own for the yevmiye: a sixth card wraps the headline
+    // rate at 1440px, and the breakdown bar and the input row already show it.
+    stats.setCards(cards);
 }
 
 // ---------------------------------------------------------------------------
@@ -249,9 +357,13 @@ function renderBreakdown(report) {
         return;
     }
     const t = report.totals;
-    const segments = SEGMENTS.map(s => ({ ...s, value: Math.max(0, Number(t[s.key])) }));
+    const segments = SEGMENTS
+        .map(s => ({ ...s, value: Math.max(0, Number(t[s.key])) }))
+        .filter(s => !s.optional || s.value > 0);
     const total = segments.reduce((sum, s) => sum + s.value, 0) || 1;
     const alpha = Number(report.params.alpha);
+    const hasSupport = Number(t.support_eur) > 0;
+    const laborTry = t.labor_per_kg_try !== null ? ` (${fmt(Number(t.labor_per_kg_try), 2)} ₺)` : '';
 
     box.innerHTML = `
         <div class="card mb-3">
@@ -266,13 +378,19 @@ function renderBreakdown(report) {
                 <p class="text-muted small mb-0 mt-3">
                     Kilogram başına <strong>${fmt(Number(t.revenue_per_kg), 4)} €</strong> satıyorsunuz,
                     <strong>${fmt(Number(t.profit_per_kg), 3)} €</strong> kâr olarak kalıyor,
-                    <strong>${fmt(Number(t.labor_per_kg), 3)} €</strong> taşerona verilebilir.
+                    <strong>${fmt(Number(t.labor_per_kg), 3)} €</strong>${laborTry} taşerona verilebilir.
+                    ${hasSupport ? `Bunun <strong>${fmt(Number(t.support_per_kg), 3)} €</strong>’su
+                    ${fmt(Number(t.support_days), Number(t.support_days) % 1 ? 1 : 0)} yevmiyeye
+                    (${tl(t.support_try)}) gidiyor; kalan
+                    <strong>${fmt(Number(t.kg_labor_per_kg), 3)} €</strong>${t.kg_labor_per_kg_try !== null
+                        ? ` (${fmt(Number(t.kg_labor_per_kg_try), 2)} ₺)` : ''} kilo fiyatı olarak dağıtılıyor.` : ''}
                     Nakliye bu hesaba girmez — ayrıca fiyatlanıyor.
                     α = ${fmt(alpha, 2)} olduğu için bir parçanın ağırlığı iki katına çıktığında işçiliği
                     %100 değil <strong>%${fmt((Math.pow(2, alpha) - 1) * 100, 0)}</strong> artar;
                     kilogram başına fiyatı %${fmt((1 - Math.pow(2, alpha - 1)) * 100, 0)} düşer.
                     Alt/üst kat sayılar bunu iki uçta sınırlar.
                 </p>
+                ${fxNoteHtml(t)}
                 ${warningHtml(report)}
             </div>
         </div>`;
@@ -303,8 +421,11 @@ function explainerHtml() {
                             <strong>0,75</strong>’te ağırlık iki katına çıkınca işçilik %68 artar.</li>
                             <li class="mb-2"><strong>Oran Üst Sınırı ×</strong> — en hafif parçaların
                             oranına tavan. Olmazsa küçük parçalar kendi satış fiyatlarının üzerine çıkar.</li>
-                            <li><strong>Oran Alt Sınırı ×</strong> — en ağır parçaların oranına taban.
+                            <li class="mb-2"><strong>Oran Alt Sınırı ×</strong> — en ağır parçaların oranına taban.
                             Taşeronun kabul etmeyeceği kadar düşük fiyat çıkmasını engeller.</li>
+                            <li><strong>Yevmiye</strong> — taşerona kilo fiyatının dışında gündelik ödenen iş
+                            (1 yevmiye = ${HOURS_PER_YEVMIYE} saat). Tutarı havuzdan önce düşülür, kalanı kalemlere
+                            kilo fiyatı olarak dağıtılır.</li>
                         </ul>
                     </div>
                 </div>
@@ -312,9 +433,38 @@ function explainerHtml() {
         </div>`;
 }
 
+/** Which rate the ₺ figures use. Snapshots are only taken on working days. */
+function fxNoteHtml(t) {
+    if (!t.eur_try_rate) {
+        return `<p class="small text-danger mb-0 mt-2">
+            <i class="fas fa-triangle-exclamation me-1"></i>Kayıtlı döviz kuru bulunamadı; ₺ karşılıkları gösterilemiyor.
+        </p>`;
+    }
+    const [y, m, d] = (t.fx_date || '').split('-');
+    const today = new Date();
+    const isToday = Number(y) === today.getFullYear()
+        && Number(m) === today.getMonth() + 1 && Number(d) === today.getDate();
+    return `<p class="small text-muted mb-0 mt-2">
+        <i class="fas fa-money-bill-transfer me-1"></i>₺ karşılıkları
+        ${isToday ? 'bugünün' : `<strong>${d}.${m}.${y}</strong> tarihli`} kuruyla:
+        <strong>1 € = ${fmt(Number(t.eur_try_rate), 4)} ₺</strong>${isToday ? '' : ' (bugüne ait kur henüz kaydedilmedi)'}.
+    </p>`;
+}
+
 function warningHtml(report) {
     const t = report.totals;
     const blocks = [];
+
+    if (t.is_feasible && t.support_exceeds_pool) {
+        blocks.push(`<div class="alert alert-danger mb-0 mt-3">
+            <i class="fas fa-triangle-exclamation me-1"></i>
+            <strong>Yevmiye işçilik havuzunu aşıyor.</strong>
+            ${fmt(Number(t.support_days), Number(t.support_days) % 1 ? 1 : 0)} yevmiye
+            ${tl(t.support_try)} (≈ ${eur(t.support_eur)}) ediyor; tüm işçilik havuzu ise
+            ${eur(t.labor_pool_eur)}. Kilo fiyatına para kalmıyor — yevmiye sayısını veya
+            ücretini düşürün.
+        </div>`);
+    }
 
     if (!t.is_feasible) {
         const costs = Number(t.material_per_kg) + Number(t.general_per_kg) + Number(t.profit_per_kg);
@@ -360,7 +510,12 @@ function initThresholds() {
     try {
         const saved = JSON.parse(localStorage.getItem(THRESHOLD_KEY) || 'null');
         if (saved && typeof saved === 'object') {
-            thresholds = { green: toLimit(saved.green), red: toLimit(saved.red) };
+            // A key that was never stored keeps its default; one stored as
+            // null was cleared on purpose and stays off.
+            thresholds = {
+                green: 'green' in saved ? toLimit(saved.green) : THRESHOLD_DEFAULTS.green,
+                red: 'red' in saved ? toLimit(saved.red) : THRESHOLD_DEFAULTS.red,
+            };
         }
     } catch (e) { /* private window or blocked storage — defaults are fine */ }
 
@@ -437,6 +592,10 @@ function initTable() {
               } },
             { field: 'labor_per_kg', label: 'İşçilik €/kg', sortable: true, type: 'number',
               formatter: v => window.isExporting ? Number(v) : `<span class="lp-rate">${fmt(Number(v), 3)}</span>` },
+            { field: 'labor_per_kg_try', label: 'İşçilik ₺/kg', sortable: true, type: 'number',
+              formatter: v => v === null || v === undefined
+                  ? (window.isExporting ? '' : '—')
+                  : window.isExporting ? Number(v) : `<span class="lp-rate">${fmt(Number(v), 2)}</span>` },
             { field: 'labor_per_piece_eur', label: '€ / adet', sortable: true, type: 'number',
               formatter: v => numCell(v, 0) },
             { field: 'labor_total_eur', label: 'Toplam €', sortable: true, type: 'number',
@@ -460,7 +619,9 @@ function initTable() {
             const parsed = Number(newValue);
             if (Number.isFinite(parsed) && parsed > 0) difficulty[row.job_no] = parsed;
             else delete difficulty[row.job_no];
-            await recompute();
+            // Quiet: swapping the table for a spinner and back on every
+            // keystroke-sized edit is what made the table jump.
+            await recompute({ quiet: true });
         },
         groupBy: 'root_job_no',
         groupHeaderFormatter: (groupValue, groupRows) => {
@@ -484,21 +645,22 @@ function initTable() {
 // Compute
 // ---------------------------------------------------------------------------
 
-async function recompute() {
+async function recompute({ quiet = false } = {}) {
     const seq = ++requestSeq;
 
     if (!selected.length) {
         lastReport = null;
         renderStats(null);
         renderBreakdown(null);
+        renderSupportSummary();
         linesTable.updateData([]);
         return;
     }
 
-    linesTable.setLoading(true);
+    if (!quiet) linesTable.setLoading(true);
     let report;
     try {
-        report = await fetchLaborPricing(selected, currentParams(), difficulty);
+        report = await fetchLaborPricing(selected, calculationParams(), difficulty);
     } catch (error) {
         if (seq !== requestSeq) return;
         lastReport = null;
@@ -512,9 +674,10 @@ async function recompute() {
     if (seq !== requestSeq) return;   // a newer selection already won
 
     lastReport = report;
-    linesTable.setLoading(false);
+    if (!quiet) linesTable.setLoading(false);
     renderStats(report);
     renderBreakdown(report);
+    renderSupportSummary();
     linesTable.updateData(report.lines);
 }
 
@@ -542,6 +705,10 @@ function numCell(value, digits) {
 
 function eur(value) {
     return `${fmt(Math.round(Number(value)), 0)} €`;
+}
+
+function tl(value) {
+    return `${fmt(Math.round(Number(value)), 0)} ₺`;
 }
 
 function escapeAttr(value) {
