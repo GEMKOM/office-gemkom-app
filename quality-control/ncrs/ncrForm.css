@@ -358,7 +358,8 @@
 }
 
 #ncr-edit-modal-container .ncr-form-num,
-#ncr-submit-modal-container .ncr-form-num {
+#ncr-submit-modal-container .ncr-form-num,
+#ncr-create-modal-container .ncr-form-num {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -375,7 +376,8 @@
 }
 
 #ncr-edit-modal-container .form-section,
-#ncr-submit-modal-container .form-section {
+#ncr-submit-modal-container .form-section,
+#ncr-create-modal-container .form-section {
     padding: 0;
     background: #fff;
     border: 1px solid #d5d9e0;
@@ -384,7 +386,8 @@
 }
 
 #ncr-edit-modal-container .form-section > .section-subtitle,
-#ncr-submit-modal-container .form-section > .section-subtitle {
+#ncr-submit-modal-container .form-section > .section-subtitle,
+#ncr-create-modal-container .form-section > .section-subtitle {
     margin: 0;
     padding: 0.5rem 1rem;
     background: #f6f7f9;
@@ -397,43 +400,50 @@
 }
 
 #ncr-edit-modal-container .form-section > .row,
-#ncr-submit-modal-container .form-section > .row {
+#ncr-submit-modal-container .form-section > .row,
+#ncr-create-modal-container .form-section > .row {
     margin: 0;
     padding: 0.75rem 0.5rem 0.25rem;
 }
 
 /* ModernDropdown is a fixed 46px tall; keep the number box beside it level */
-#ncr-edit-modal-container input[type="number"].field-input {
+#ncr-edit-modal-container input[type="number"].field-input,
+#ncr-create-modal-container input[type="number"].field-input {
     height: 46px;
 }
 
 #ncr-edit-modal-container .modal-body.compact,
-#ncr-submit-modal-container .modal-body.compact {
+#ncr-submit-modal-container .modal-body.compact,
+#ncr-create-modal-container .modal-body.compact {
     background: #eef0f3;
 }
 
 /* Empty required fields start neutral; red comes from EditModal's has-error once validated. */
 #ncr-edit-modal-container .field-group:not(.has-error) .field-input:invalid,
-#ncr-submit-modal-container .field-group:not(.has-error) .field-input:invalid {
+#ncr-submit-modal-container .field-group:not(.has-error) .field-input:invalid,
+#ncr-create-modal-container .field-group:not(.has-error) .field-input:invalid {
     border-color: #ced4da;
 }
 
 #ncr-edit-modal-container .field-group:not(.has-error) .field-input:invalid:focus,
-#ncr-submit-modal-container .field-group:not(.has-error) .field-input:invalid:focus {
+#ncr-submit-modal-container .field-group:not(.has-error) .field-input:invalid:focus,
+#ncr-create-modal-container .field-group:not(.has-error) .field-input:invalid:focus {
     border-color: #86b7fe;
     box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
 }
 
 /* Single-choice fields drawn as chips, the picked one in the accent colour */
 #ncr-edit-modal-container .radio-group,
-#ncr-submit-modal-container .radio-group {
+#ncr-submit-modal-container .radio-group,
+#ncr-create-modal-container .radio-group {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 0.4rem;
 }
 
 #ncr-edit-modal-container .radio-field,
-#ncr-submit-modal-container .radio-field {
+#ncr-submit-modal-container .radio-field,
+#ncr-create-modal-container .radio-field {
     padding: 0.35rem 0.7rem;
     border: 1px solid #d5d9e0;
     border-radius: 6px;
@@ -443,24 +453,28 @@
 }
 
 #ncr-edit-modal-container .radio-field:hover,
-#ncr-submit-modal-container .radio-field:hover {
+#ncr-submit-modal-container .radio-field:hover,
+#ncr-create-modal-container .radio-field:hover {
     border-color: #9ca3af;
 }
 
 #ncr-edit-modal-container .radio-field:has(.field-input:checked),
-#ncr-submit-modal-container .radio-field:has(.field-input:checked) {
+#ncr-submit-modal-container .radio-field:has(.field-input:checked),
+#ncr-create-modal-container .radio-field:has(.field-input:checked) {
     border-color: #8B0000;
     background: #fdf2f2;
 }
 
 #ncr-edit-modal-container .radio-field:has(.field-input:checked) .field-label,
-#ncr-submit-modal-container .radio-field:has(.field-input:checked) .field-label {
+#ncr-submit-modal-container .radio-field:has(.field-input:checked) .field-label,
+#ncr-create-modal-container .radio-field:has(.field-input:checked) .field-label {
     font-weight: 600;
     color: #8B0000;
 }
 
 #ncr-edit-modal-container .radio-field .field-input,
-#ncr-submit-modal-container .radio-field .field-input {
+#ncr-submit-modal-container .radio-field .field-input,
+#ncr-create-modal-container .radio-field .field-input {
     width: 15px;
     height: 15px;
     margin-right: 0.4rem;
@@ -529,6 +543,136 @@
 .ncr-modal-callout-text {
     margin-top: 0.2rem;
     color: #7f1d1d;
+}
+
+/* ---------- Ekler block in the create / edit modals (ncrFileStager.js) ---------- */
+.ncr-stager-body {
+    padding: 0.75rem 1rem 1rem;
+}
+
+.ncr-stager-drop {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 1.1rem 1rem;
+    border: 2px dashed #cbd2db;
+    border-radius: 8px;
+    background: #fafbfc;
+    color: #4b5563;
+    font-size: 0.85rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.ncr-stager-drop > i {
+    font-size: 1.4rem;
+    color: #8B0000;
+}
+
+.ncr-stager-drop:hover,
+.ncr-stager-drop:focus-visible,
+.ncr-stager-drop.is-dragover {
+    border-color: #8B0000;
+    background: #fdf2f2;
+    outline: none;
+}
+
+.ncr-stager-link {
+    color: #8B0000;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.ncr-stager-hint {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+.ncr-stager-caption {
+    margin: 0.75rem 0 0.35rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #6b7280;
+}
+
+.ncr-stager-existing .ncr-stager-caption {
+    margin-top: 0;
+}
+
+.ncr-stager-existing {
+    margin-bottom: 0.75rem;
+}
+
+.ncr-stager-existing .ncr-stager-hint {
+    margin-top: 0.3rem;
+}
+
+.ncr-stager-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.6rem;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.85rem;
+}
+
+.ncr-stager-row + .ncr-stager-row {
+    margin-top: 0.35rem;
+}
+
+.ncr-stager-row.is-existing {
+    background: #f9fafb;
+}
+
+.ncr-stager-row > i {
+    color: #6b7280;
+    width: 1rem;
+    text-align: center;
+}
+
+.ncr-stager-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ncr-stager-meta {
+    color: #6b7280;
+    font-size: 0.78rem;
+    white-space: nowrap;
+}
+
+.ncr-stager-type {
+    width: auto;
+    min-width: 8.5rem;
+}
+
+.ncr-stager-remove {
+    padding: 0.15rem 0.4rem;
+}
+
+.ncr-modal-note {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+    padding: 0.6rem 1rem;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 6px;
+    color: #1e40af;
+    font-size: 0.83rem;
+}
+
+.ncr-modal-note > i {
+    margin-top: 0.2rem;
 }
 
 /* ---------- Narrow screens ---------- */

@@ -31,6 +31,7 @@ import {
 } from '../../../apis/qualityControl.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 import { renderNcrForm, printNcrForm, renderNcrContext, numberedSectionTitle } from './ncrForm.js';
+import { mountNcrFileStager, uploadStagedFiles } from './ncrFileStager.js';
 
 // State management
 const urlParams = new URLSearchParams(window.location.search);
@@ -1436,21 +1437,27 @@ async function showNCRDetails(ncr) {
     }
 }
 
+/** Report how the post-save uploads went; the NCR itself is already saved either way. */
+function notifyStagedUploadResult({ uploaded, failed }) {
+    if (failed.length) {
+        showNotification(`${uploaded} dosya yüklendi, ${failed.length} dosya yüklenemedi: ${failed.join(', ')}`, 'warning');
+    } else if (uploaded) {
+        showNotification(`${uploaded} dosya yüklendi`, 'success');
+    }
+}
+
 async function showCreateNCRModal() {
     ncrCreateModal.clearAll();
 
     // Load job orders for dropdown
-    let jobOrderOptions = [{ value: '', label: 'İş emri seçin' }];
+    let jobOrderOptions = [];
     try {
         const jobOrders = await getJobOrderDropdown();
         if (Array.isArray(jobOrders)) {
-            jobOrderOptions = [
-                { value: '', label: 'İş emri seçin' },
-                ...jobOrders.map(jo => ({
-                    value: jo.job_no,
-                    label: `${jo.job_no}${jo.title ? ' - ' + jo.title : ''}`
-                }))
-            ];
+            jobOrderOptions = jobOrders.map(jo => ({
+                value: jo.job_no,
+                label: `${jo.job_no}${jo.title ? ' - ' + jo.title : ''}`
+            }));
         }
     } catch (error) {
         console.error('Error loading job orders:', error);
@@ -1461,120 +1468,171 @@ async function showCreateNCRModal() {
     if (!Array.isArray(ncrAssignableGroups) || ncrAssignableGroups.length === 0) {
         await loadNcrAssignableGroups();
     }
-    const assignedGroupOptions = buildAssignedGroupOptions({ includeEmpty: true });
+    const assignedGroupOptions = buildAssignedGroupOptions({ includeEmpty: false });
+    const me = currentUser?.id != null
+        ? [{ id: currentUser.id, name: currentUser.full_name || [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ') || currentUser.username }]
+        : [];
+    const userOptions = buildUserOptions(me);
 
     ncrCreateModal
         .addSection({
-            title: 'Temel Bilgiler',
-            icon: 'fas fa-info-circle',
+            title: numberedSectionTitle(1, 'Tanımlama'),
+            icon: 'd-none',
             fields: [
                 {
-                    id: 'job_order',
+                    id: 'create-job-order',
                     name: 'job_order',
                     label: 'İş Emri',
                     type: 'dropdown',
                     required: true,
                     searchable: true,
                     options: jobOrderOptions,
-                    placeholder: 'İş emri seçin'
+                    placeholder: 'İş emri seçin',
+                    colSize: 8
                 },
                 {
-                    id: 'title',
+                    id: 'create-affected-quantity',
+                    name: 'affected_quantity',
+                    label: 'Etkilenen Miktar (adet)',
+                    type: 'number',
+                    required: true,
+                    min: 1,
+                    value: 1,
+                    colSize: 4
+                },
+                {
+                    id: 'create-detected-by',
+                    name: 'detected_by',
+                    label: 'Tespit Eden',
+                    type: 'dropdown',
+                    required: true,
+                    searchable: true,
+                    value: currentUser?.id ?? '',
+                    options: userOptions,
+                    placeholder: 'Kişi seçin',
+                    colSize: 4
+                },
+                {
+                    id: 'create-assigned-team',
+                    name: 'assigned_team',
+                    label: 'Sorumlu Grup',
+                    type: 'dropdown',
+                    required: true,
+                    searchable: true,
+                    options: assignedGroupOptions,
+                    placeholder: 'Grup seçin',
+                    help: 'Kök neden ve düzeltici faaliyeti bu grup girer.',
+                    colSize: 4
+                },
+                {
+                    id: 'create-assigned-members',
+                    name: 'assigned_members',
+                    label: 'Sorumlu Kişiler',
+                    type: 'dropdown',
+                    multiple: true,
+                    searchable: true,
+                    options: userOptions,
+                    placeholder: 'İsteğe bağlı',
+                    help: 'Seçilen kişilere e-posta ile bildirilir.',
+                    colSize: 4
+                }
+            ]
+        })
+        .addSection({
+            title: numberedSectionTitle(2, 'Uygunsuzluk Tanımı'),
+            icon: 'd-none',
+            fields: [
+                {
+                    id: 'create-title',
                     name: 'title',
                     label: 'Başlık',
                     type: 'text',
                     required: true,
-                    placeholder: 'NCR başlığı'
+                    placeholder: 'Kısa ve açıklayıcı bir başlık — örn. Poz 01 bükme açısı resim dışı'
                 },
                 {
-                    id: 'description',
+                    id: 'create-description',
                     name: 'description',
                     label: 'Açıklama',
                     type: 'textarea',
+                    rows: 5,
                     required: true,
-                    placeholder: 'Detaylı açıklama'
-                }
-            ]
-        })
-        .addSection({
-            title: 'Kusur Bilgileri',
-            icon: 'fas fa-exclamation-triangle',
-            fields: [
+                    placeholder: 'Ne tespit edildi? Ölçülen ve istenen değerler, parça / poz numarası, nerede ve ne zaman'
+                },
                 {
-                    id: 'defect_type',
+                    id: 'create-defect-type',
                     name: 'defect_type',
                     label: 'Kusur Tipi',
-                    type: 'dropdown',
+                    type: 'radio',
                     required: true,
-                    options: DEFECT_TYPE_CHOICES.map(d => ({ value: d.value, label: d.label }))
+                    options: DEFECT_TYPE_CHOICES,
+                    colSize: 8
                 },
                 {
-                    id: 'severity',
+                    id: 'create-severity',
                     name: 'severity',
                     label: 'Önem Derecesi',
-                    type: 'dropdown',
+                    type: 'radio',
                     required: true,
-                    options: SEVERITY_CHOICES.map(s => ({ value: s.value, label: s.label }))
-                },
-                {
-                    id: 'affected_quantity',
-                    name: 'affected_quantity',
-                    label: 'Etkilenen Miktar',
-                    type: 'number',
-                    required: true,
-                    placeholder: '0'
+                    options: SEVERITY_CHOICES,
+                    colSize: 4
                 }
             ]
         })
         .addSection({
-            title: 'Atama',
-            icon: 'fas fa-users',
+            title: numberedSectionTitle(5, 'Karar (Uygunsuz Ürün)'),
+            icon: 'd-none',
             fields: [
                 {
-                    id: 'assigned_team',
-                    name: 'assigned_team',
-                    label: 'Atanan Grup',
-                    type: 'dropdown',
-                    required: true,
-                    options: assignedGroupOptions,
-                    placeholder: 'Grup seçin'
-                },
-                {
-                    id: 'disposition',
+                    id: 'create-disposition',
                     name: 'disposition',
-                    label: 'Karar',
-                    type: 'dropdown',
+                    label: 'Etkilenen ürün için karar',
+                    type: 'radio',
                     required: true,
-                    options: [
-                        { value: 'pending', label: 'Karar Bekliyor' },
-                        ...DISPOSITION_CHOICES.filter(d => d.value !== 'pending').map(d => ({ value: d.value, label: d.label }))
-                    ]
+                    value: 'pending',
+                    options: DISPOSITION_CHOICES
                 }
             ]
         });
 
     ncrCreateModal.render();
+    const note = document.createElement('div');
+    note.className = 'ncr-modal-note';
+    note.innerHTML = `<i class="fas fa-info-circle"></i>
+        <div>Kök neden ve düzeltici faaliyet (bölüm 3–4), NCR onaya gönderilirken sorumlu grup tarafından doldurulur.</div>`;
+    ncrCreateModal.form.insertBefore(note, ncrCreateModal.form.firstChild);
+    const stager = mountNcrFileStager(ncrCreateModal.form);
+
     ncrCreateModal.onSave = async (formData) => {
         try {
-            // Automatically set detected_by to current user
-            if (currentUser && currentUser.id) {
-                formData.detected_by = currentUser.id;
-            }
-
-            // Convert affected_quantity to integer if provided
-            if (formData.affected_quantity) {
-                formData.affected_quantity = parseInt(formData.affected_quantity);
-            }
-
             const groupPk = parseInt(String(formData.assigned_team), 10);
             if (!Number.isFinite(groupPk)) {
-                showNotification('Atanan grup seçilmelidir', 'error');
+                showNotification('Sorumlu grup seçilmelidir', 'error');
                 return;
             }
-            formData.assigned_team = groupPk;
+            const detectedBy = parseInt(String(formData.detected_by), 10);
+            const payload = {
+                job_order: formData.job_order,
+                title: String(formData.title || '').trim(),
+                description: String(formData.description || '').trim(),
+                defect_type: formData.defect_type,
+                severity: formData.severity,
+                affected_quantity: parseInt(formData.affected_quantity, 10),
+                detected_by: Number.isFinite(detectedBy) ? detectedBy : currentUser?.id,
+                assigned_team: groupPk,
+                assigned_members: (Array.isArray(formData.assigned_members) ? formData.assigned_members : [])
+                    .map(v => parseInt(String(v), 10)).filter(Number.isFinite),
+                disposition: formData.disposition || 'pending'
+            };
 
-            await createNCR(formData);
-            showNotification('NCR başarıyla oluşturuldu', 'success');
+            const created = await createNCR(payload);
+            showNotification(`${created.ncr_number || 'NCR'} oluşturuldu`, 'success');
+
+            const staged = stager.getStaged();
+            if (staged.length && created?.id) {
+                notifyStagedUploadResult(await uploadStagedFiles(created.id, staged));
+            }
+
             ncrCreateModal.hide();
             await loadNCRs();
         } catch (error) {
@@ -1632,7 +1690,12 @@ async function showEditNCRModal(ncr, { returnToDetails = false } = {}) {
             showNotification('Bu işlem için yetkiniz yok. Sadece "kalite-kontrol" grubu veya superuser düzenleyebilir.', 'warning');
             return;
         }
-        const fullNCR = await getNCR(ncr.id);
+        const [fullNCR, existingFiles] = await Promise.all([
+            getNCR(ncr.id),
+            listNCRFiles(ncr.id)
+                .then(data => (Array.isArray(data) ? data : (data.results || data.files || [])).map(normalizeNcrFile))
+                .catch(() => [])
+        ]);
 
         // Ensure groups are loaded for assigned-group dropdown
         if (!Array.isArray(ncrAssignableGroups) || ncrAssignableGroups.length === 0) {
@@ -1781,6 +1844,9 @@ async function showEditNCRModal(ncr, { returnToDetails = false } = {}) {
 
         ncrEditModal.render();
         insertNcrContext(ncrEditModal, fullNCR, { showDescription: false });
+        const stager = mountNcrFileStager(ncrEditModal.form, {
+            existingFiles: existingFiles.map(f => ({ name: f.filename, typeLabel: f.file_type_display }))
+        });
 
         ncrEditModal.onSave = async (formData) => {
             try {
@@ -1808,6 +1874,10 @@ async function showEditNCRModal(ncr, { returnToDetails = false } = {}) {
 
                 await updateNCR(fullNCR.id, payload);
                 showNotification('NCR başarıyla güncellendi', 'success');
+                const staged = stager.getStaged();
+                if (staged.length) {
+                    notifyStagedUploadResult(await uploadStagedFiles(fullNCR.id, staged));
+                }
                 ncrEditModal.hide();
                 await loadNCRs();
             } catch (error) {
