@@ -12,6 +12,7 @@ export class EditModal {
             title: 'Düzenle',
             icon: 'fas fa-edit',
             saveButtonText: 'Kaydet',
+            saveButtonIcon: 'fas fa-save',
             size: 'lg', // sm, lg, xl
             ...options
         };
@@ -61,7 +62,7 @@ export class EditModal {
                                 <i class="fas fa-times me-1"></i>İptal
                             </button>
                             <button type="button" class="btn btn-sm btn-primary" id="save-edit-btn">
-                                <i class="fas fa-save me-1"></i>
+                                <i class="${this.options.saveButtonIcon} me-1"></i>
                                 <span class="save-btn-text">${this.options.saveButtonText}</span>
                             </button>
                         </div>
@@ -817,7 +818,7 @@ export class EditModal {
             if (loadingElement) loadingElement.style.display = 'none';
             if (saveBtn) {
                 saveBtn.disabled = false;
-                saveBtn.innerHTML = `<i class="fas fa-save me-1"></i><span class="save-btn-text">${this.options.saveButtonText}</span>`;
+                saveBtn.innerHTML = `<i class="${this.options.saveButtonIcon} me-1"></i><span class="save-btn-text">${this.options.saveButtonText}</span>`;
             }
         }
     }

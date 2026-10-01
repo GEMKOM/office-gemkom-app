@@ -1,0 +1,617 @@
+/* NCR details modal — paper-style Non-Conformance Report form (see ncrForm.js) */
+
+/* The form draws its own frame; drop DisplayModal's grey section card in this modal only. */
+#ncr-details-modal-container .display-section {
+    padding: 0;
+    background: transparent;
+    border-left: 0;
+}
+
+#ncr-details-modal-container .modal-body.compact {
+    background: #eef0f3;
+}
+
+.ncr-form {
+    --ncr-line: #d5d9e0;
+    --ncr-ink: #1f2937;
+    --ncr-muted: #6b7280;
+    --ncr-accent: #8B0000;
+    --ncr-head-bg: #f6f7f9;
+    --ncr-pad: 1.25rem;
+    max-width: 1080px;
+    margin: 0 auto;
+    background: #fff;
+    border: 1px solid var(--ncr-line);
+    border-top: 4px solid var(--ncr-accent);
+    border-radius: 6px;
+    color: var(--ncr-ink);
+    font-size: 0.875rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+/* ---------- Header ---------- */
+.ncr-form-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: stretch;
+    gap: 1.5rem;
+    padding: 1.1rem var(--ncr-pad);
+    border-bottom: 2px solid var(--ncr-ink);
+}
+
+.ncr-form-brand {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.ncr-form-logo {
+    width: 52px;
+    height: 52px;
+    object-fit: contain;
+}
+
+.ncr-form-org {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ncr-accent);
+}
+
+.ncr-form-title {
+    margin: 0.1rem 0 0;
+    font-size: 1.45rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    color: var(--ncr-ink);
+}
+
+.ncr-form-subtitle {
+    font-size: 0.8rem;
+    color: var(--ncr-muted);
+}
+
+.ncr-form-meta {
+    border-collapse: collapse;
+    min-width: 290px;
+    align-self: center;
+}
+
+.ncr-form-meta th,
+.ncr-form-meta td {
+    border: 1px solid var(--ncr-line);
+    padding: 0.3rem 0.65rem;
+    font-size: 0.8rem;
+    vertical-align: middle;
+}
+
+.ncr-form-meta th {
+    background: var(--ncr-head-bg);
+    color: var(--ncr-muted);
+    font-weight: 600;
+    white-space: nowrap;
+    width: 1%;
+}
+
+.ncr-form-meta td {
+    font-weight: 600;
+}
+
+.ncr-form-meta .status-badge {
+    min-width: 0;
+    margin: 0;
+}
+
+.ncr-form-mono {
+    font-family: 'Courier New', monospace;
+    font-weight: 700;
+}
+
+/* ---------- Next-step strip ---------- */
+.ncr-form-next {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.55rem var(--ncr-pad);
+    background: #eff6ff;
+    border-bottom: 1px solid #bfdbfe;
+    color: #1e40af;
+    font-size: 0.82rem;
+}
+
+/* ---------- Sections ---------- */
+.ncr-form-section {
+    border-bottom: 1px solid var(--ncr-line);
+}
+
+.ncr-form-section:last-child {
+    border-bottom: 0;
+}
+
+.ncr-form-section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin: 0;
+    padding: 0.5rem var(--ncr-pad);
+    background: var(--ncr-head-bg);
+    border-bottom: 1px solid var(--ncr-line);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--ncr-ink);
+}
+
+.ncr-form-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.35rem;
+    height: 1.35rem;
+    border-radius: 50%;
+    background: var(--ncr-accent);
+    color: #fff;
+    font-size: 0.7rem;
+    letter-spacing: 0;
+}
+
+/* Cells share borders like a printed form: the grid's 1px gap shows the line colour. */
+.ncr-form-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--ncr-line);
+}
+
+.ncr-form-cell {
+    background: #fff;
+    padding: 0.55rem var(--ncr-pad) 0.65rem;
+    min-width: 0;
+}
+
+.ncr-form-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ncr-muted);
+    margin-bottom: 0.2rem;
+}
+
+.ncr-form-value {
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.ncr-form-value.is-empty,
+.ncr-form-narrative.is-empty,
+.ncr-form-sign-name.is-empty {
+    color: #9ca3af;
+    font-style: italic;
+}
+
+.ncr-form-sub {
+    font-size: 0.78rem;
+    color: var(--ncr-muted);
+}
+
+.ncr-form-narrative {
+    padding: 0.85rem var(--ncr-pad);
+    min-height: 4.25rem;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+/* ---------- Check boxes ---------- */
+.ncr-form-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 1.1rem;
+    padding-top: 0.15rem;
+}
+
+.ncr-form-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--ncr-muted);
+    white-space: nowrap;
+}
+
+.ncr-form-check.is-checked {
+    color: var(--ncr-ink);
+    font-weight: 600;
+}
+
+.ncr-form-box {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border: 1.5px solid #9ca3af;
+    border-radius: 3px;
+    font-size: 0.6rem;
+    flex-shrink: 0;
+}
+
+.ncr-form-check.is-checked .ncr-form-box {
+    border-color: var(--ncr-accent);
+    background: var(--ncr-accent);
+    color: #fff;
+}
+
+/* ---------- Sign-off ---------- */
+.ncr-form-signs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--ncr-line);
+}
+
+.ncr-form-sign {
+    background: #fff;
+    padding: 0.75rem var(--ncr-pad) 0.85rem;
+    min-width: 0;
+}
+
+.ncr-form-sign-role {
+    font-size: 0.68rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ncr-muted);
+}
+
+.ncr-form-sign-name {
+    margin-top: 1.1rem;
+    padding-bottom: 0.25rem;
+    border-bottom: 1px solid var(--ncr-ink);
+    font-weight: 600;
+    min-height: 1.6rem;
+}
+
+.ncr-form-sign-date {
+    margin-top: 0.25rem;
+    font-size: 0.75rem;
+    color: var(--ncr-muted);
+}
+
+.ncr-form-sign-note {
+    margin-top: 0.4rem;
+    font-size: 0.78rem;
+    color: var(--ncr-muted);
+}
+
+.ncr-form-sign-note .status-badge {
+    min-width: 0;
+    margin: 0;
+}
+
+.ncr-form-sign-comment {
+    margin-top: 0.35rem;
+    font-size: 0.8rem;
+    font-style: italic;
+    color: var(--ncr-ink);
+    overflow-wrap: anywhere;
+}
+
+.ncr-form-subhead {
+    padding: 0.6rem var(--ncr-pad) 0.4rem;
+    border-top: 1px solid var(--ncr-line);
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ncr-muted);
+}
+
+.ncr-form-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+}
+
+.ncr-form-table th,
+.ncr-form-table td {
+    border-top: 1px solid var(--ncr-line);
+    padding: 0.4rem 0.75rem;
+    vertical-align: top;
+}
+
+.ncr-form-table th:first-child,
+.ncr-form-table td:first-child {
+    padding-left: var(--ncr-pad);
+}
+
+.ncr-form-table th {
+    background: var(--ncr-head-bg);
+    color: var(--ncr-muted);
+    font-weight: 600;
+    text-align: left;
+}
+
+.ncr-form-table .status-badge {
+    min-width: 0;
+    margin: 0;
+}
+
+/* ---------- Attachments ---------- */
+.ncr-form-files-bar {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+    padding: 0.6rem var(--ncr-pad) 0;
+}
+
+.ncr-form-files #ncr-files-list {
+    padding: 0.5rem var(--ncr-pad) 1rem;
+}
+
+/* ---------- Edit / submit modals: same section language as the form ---------- */
+#ncr-edit-modal-container .ncr-form-num,
+#ncr-submit-modal-container .ncr-form-num,
+.ncr-modal-context .ncr-form-mono {
+    flex-shrink: 0;
+}
+
+#ncr-edit-modal-container .ncr-form-num,
+#ncr-submit-modal-container .ncr-form-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 1.35rem;
+    height: 1.35rem;
+    padding: 0 0.35rem;
+    margin-right: 0.6rem;
+    border-radius: 999px;
+    background: #8B0000;
+    color: #fff;
+    font-size: 0.7rem;
+    letter-spacing: 0;
+}
+
+#ncr-edit-modal-container .form-section,
+#ncr-submit-modal-container .form-section {
+    padding: 0;
+    background: #fff;
+    border: 1px solid #d5d9e0;
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+#ncr-edit-modal-container .form-section > .section-subtitle,
+#ncr-submit-modal-container .form-section > .section-subtitle {
+    margin: 0;
+    padding: 0.5rem 1rem;
+    background: #f6f7f9;
+    border-bottom: 1px solid #d5d9e0;
+    color: #1f2937 !important; /* beats Bootstrap's !important .text-primary that EditModal adds */
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+#ncr-edit-modal-container .form-section > .row,
+#ncr-submit-modal-container .form-section > .row {
+    margin: 0;
+    padding: 0.75rem 0.5rem 0.25rem;
+}
+
+/* ModernDropdown is a fixed 46px tall; keep the number box beside it level */
+#ncr-edit-modal-container input[type="number"].field-input {
+    height: 46px;
+}
+
+#ncr-edit-modal-container .modal-body.compact,
+#ncr-submit-modal-container .modal-body.compact {
+    background: #eef0f3;
+}
+
+/* Empty required fields start neutral; red comes from EditModal's has-error once validated. */
+#ncr-edit-modal-container .field-group:not(.has-error) .field-input:invalid,
+#ncr-submit-modal-container .field-group:not(.has-error) .field-input:invalid {
+    border-color: #ced4da;
+}
+
+#ncr-edit-modal-container .field-group:not(.has-error) .field-input:invalid:focus,
+#ncr-submit-modal-container .field-group:not(.has-error) .field-input:invalid:focus {
+    border-color: #86b7fe;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+/* Single-choice fields drawn as chips, the picked one in the accent colour */
+#ncr-edit-modal-container .radio-group,
+#ncr-submit-modal-container .radio-group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+#ncr-edit-modal-container .radio-field,
+#ncr-submit-modal-container .radio-field {
+    padding: 0.35rem 0.7rem;
+    border: 1px solid #d5d9e0;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+#ncr-edit-modal-container .radio-field:hover,
+#ncr-submit-modal-container .radio-field:hover {
+    border-color: #9ca3af;
+}
+
+#ncr-edit-modal-container .radio-field:has(.field-input:checked),
+#ncr-submit-modal-container .radio-field:has(.field-input:checked) {
+    border-color: #8B0000;
+    background: #fdf2f2;
+}
+
+#ncr-edit-modal-container .radio-field:has(.field-input:checked) .field-label,
+#ncr-submit-modal-container .radio-field:has(.field-input:checked) .field-label {
+    font-weight: 600;
+    color: #8B0000;
+}
+
+#ncr-edit-modal-container .radio-field .field-input,
+#ncr-submit-modal-container .radio-field .field-input {
+    width: 15px;
+    height: 15px;
+    margin-right: 0.4rem;
+}
+
+/* NCR summary at the top of the edit / submit modals */
+.ncr-modal-context {
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: #fff;
+    border: 1px solid #d5d9e0;
+    border-top: 3px solid #8B0000;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #1f2937;
+}
+
+.ncr-modal-context-top {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.6rem;
+}
+
+.ncr-modal-context-top .status-badge {
+    min-width: 0;
+    margin: 0;
+}
+
+.ncr-modal-context-job {
+    margin-left: auto;
+    color: #6b7280;
+    font-size: 0.8rem;
+}
+
+.ncr-modal-context-title {
+    margin-top: 0.45rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.ncr-modal-context-desc {
+    margin-top: 0.3rem;
+    max-height: 7.5rem;
+    overflow-y: auto;
+    color: #374151;
+    line-height: 1.5;
+}
+
+.ncr-modal-callout {
+    display: flex;
+    gap: 0.7rem;
+    margin-bottom: 1rem;
+    padding: 0.65rem 1rem;
+    background: #fee2e2;
+    border: 1px solid #fca5a5;
+    border-radius: 6px;
+    color: #991b1b;
+    font-size: 0.85rem;
+}
+
+.ncr-modal-callout > i {
+    margin-top: 0.2rem;
+}
+
+.ncr-modal-callout-text {
+    margin-top: 0.2rem;
+    color: #7f1d1d;
+}
+
+/* ---------- Narrow screens ---------- */
+@media (max-width: 768px) {
+    .ncr-form {
+        --ncr-pad: 1rem;
+    }
+
+    .ncr-form-head {
+        flex-direction: column;
+    }
+
+    .ncr-form-meta {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .ncr-form-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ncr-form-grid .ncr-form-cell {
+        grid-column: auto !important;
+    }
+
+    .ncr-form-signs {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+/* ---------- Print: only the form ---------- */
+@media print {
+    body.ncr-printing {
+        overflow: visible !important;
+        background: #fff !important;
+    }
+
+    body.ncr-printing > *:not(#ncr-details-modal-container) {
+        display: none !important;
+    }
+
+    body.ncr-printing #ncr-details-modal-container .modal {
+        position: static !important;
+        display: block !important;
+        overflow: visible !important;
+    }
+
+    body.ncr-printing #ncr-details-modal-container .modal-dialog {
+        max-width: none !important;
+        width: auto !important;
+        height: auto !important;
+        margin: 0 !important;
+        transform: none !important;
+    }
+
+    body.ncr-printing #ncr-details-modal-container .modal-content {
+        height: auto !important;
+        border: 0 !important;
+        box-shadow: none !important;
+    }
+
+    body.ncr-printing #ncr-details-modal-container .modal-header,
+    body.ncr-printing #ncr-details-modal-container .modal-footer,
+    body.ncr-printing .ncr-form-noprint,
+    body.ncr-printing .ncr-form-next {
+        display: none !important;
+    }
+
+    body.ncr-printing #ncr-details-modal-container .modal-body {
+        overflow: visible !important;
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    body.ncr-printing .ncr-form {
+        max-width: none;
+        box-shadow: none;
+        font-size: 10pt;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    body.ncr-printing .ncr-form-section {
+        break-inside: avoid;
+    }
+}

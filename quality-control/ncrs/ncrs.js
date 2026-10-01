@@ -30,19 +30,32 @@ import {
     NCR_FILE_TYPE_OPTIONS
 } from '../../../apis/qualityControl.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
+import { renderNcrForm, printNcrForm, renderNcrContext, numberedSectionTitle } from './ncrForm.js';
 
 // State management
 const urlParams = new URLSearchParams(window.location.search);
 let currentPage = parseInt(urlParams.get('page')) || 1;
 let currentPageSize = parseInt(urlParams.get('page_size')) || 20;
-// Initialize filters from URL or use defaults
-let currentFilters = {};
-if (urlParams.get('status__in')) {
-    currentFilters.status__in = urlParams.get('status__in');
-} else {
-    // Default status filter: draft, submitted and rejected
-    currentFilters.status__in = 'draft,submitted,rejected';
+// Filter selections live in the URL so a reload keeps them. `all` is an explicit
+// "no restriction" choice — distinct from a missing param, which means "use the default".
+const ALL_VALUE = 'all';
+const DEFAULT_STATUS_FILTER = ['draft', 'submitted', 'rejected', 'approved'];
+const QC_GROUP_SLUG = 'kalite-kontrol';
+const QC_GROUP_ID = 5;
+
+function parseListParam(name) {
+    const raw = urlParams.get(name);
+    if (raw === null) return null;
+    if (raw === ALL_VALUE) return [ALL_VALUE];
+    return raw.split(',').filter(Boolean);
 }
+
+let statusSelection = parseListParam('status__in') || [...DEFAULT_STATUS_FILTER];
+let teamSelection = parseListParam('assigned_team__in'); // null → resolved to the user's groups once the user is known
+let currentFilters = {};
+['severity', 'defect_type', 'job_order'].forEach(key => {
+    if (urlParams.get(key)) currentFilters[key] = urlParams.get(key);
+});
 let currentSearch = urlParams.get('search') || '';
 let currentOrdering = urlParams.get('ordering') || '-created_at';
 let ncrs = [];
@@ -154,6 +167,83 @@ function canCurrentUserDecideNCRs() {
     const hasName = groupNames.some((g) => String(g || '').toLowerCase() === 'kalite-kontrol');
     const hasId = groupIds.some((id) => Number(id) === 5);
     return hasName || hasId;
+}
+
+/** Real Kalite Kontrol membership — unlike canCurrentUserDecideNCRs, superusers don't count. */
+function isQcMember(user) {
+    if (!user) return false;
+    const slugs = Array.isArray(user.user_groups) ? user.user_groups : [];
+    const ids = Array.isArray(user.user_group_ids) ? user.user_group_ids : [];
+    return slugs.some(s => String(s || '').toLowerCase() === QC_GROUP_SLUG)
+        || ids.some(id => Number(id) === QC_GROUP_ID);
+}
+
+/**
+ * Groups the list is narrowed to when the URL doesn't say otherwise. QC members
+ * and superusers oversee every group's NCRs, so they start unfiltered.
+ */
+function getDefaultTeamSelection(user) {
+    if (!user || user.is_superuser || user.is_admin || isQcMember(user)) return [ALL_VALUE];
+    const ids = Array.isArray(user.user_group_ids) ? user.user_group_ids : [];
+    const known = ids.map(String).filter(id => (ncrAssignableGroups || []).some(g => String(g.id) === id));
+    return known.length ? known : [ALL_VALUE];
+}
+
+/** Is the given assigned team one of the user's own groups? (no superuser shortcut) */
+function isOwnTeam(user, row) {
+    if (!user || !rowHasAssignedTeam(row)) return false;
+    const assigned = getAssignedTeamFromRow(row);
+    return getUserTeamMemberships(user).some(m => membershipMatchesAssigned(m, assigned));
+}
+
+/**
+ * Who has to move the NCR forward, and what they have to do.
+ *   draft     → assigned group fills root cause / corrective action and submits
+ *   rejected  → assigned group revises and resubmits
+ *   submitted → Kalite Kontrol approves or rejects
+ *   approved  → Kalite Kontrol verifies the fix and closes
+ *   closed    → nobody
+ */
+function getNextAction(row) {
+    const status = (row?.status || '').toLowerCase();
+    const assigned = getAssignedTeamFromRow(row);
+    const matchedGroup = (ncrAssignableGroups || []).find(g => String(g.id) === String(assigned.id));
+    const teamName = assigned.name || matchedGroup?.display_name || matchedGroup?.name || '';
+
+    switch (status) {
+        case 'draft':
+            return {
+                actor: teamName || 'Grup atanmamış', actorMissing: !teamName,
+                task: 'Kök neden ve düzeltici faaliyeti girip göndermeli',
+                badgeClass: 'status-orange', icon: 'fa-pen',
+                isMine: isOwnTeam(currentUser, row)
+            };
+        case 'rejected':
+            return {
+                actor: teamName || 'Grup atanmamış', actorMissing: !teamName,
+                task: 'KK reddetti — düzeltip yeniden göndermeli',
+                badgeClass: 'status-red', icon: 'fa-rotate-left',
+                isMine: isOwnTeam(currentUser, row)
+            };
+        case 'submitted':
+            return {
+                actor: 'Kalite Kontrol',
+                task: 'İnceleyip onaylamalı veya reddetmeli',
+                badgeClass: 'status-blue', icon: 'fa-gavel',
+                isMine: isQcMember(currentUser)
+            };
+        case 'approved':
+            return {
+                actor: 'Kalite Kontrol',
+                task: 'Onaylandı — doğrulayıp kapatmalı',
+                badgeClass: 'status-purple', icon: 'fa-lock',
+                isMine: isQcMember(currentUser)
+            };
+        case 'closed':
+            return { actor: null, task: 'Kapatıldı', badgeClass: 'status-green', icon: 'fa-check', isMine: false };
+        default:
+            return { actor: null, task: row?.status_display || status || '-', badgeClass: 'status-grey', icon: 'fa-circle', isMine: false };
+    }
 }
 
 function isSubmittedNCR(ncr) {
@@ -285,17 +375,18 @@ function normalizeNcrFile(file) {
 
 // Status badge mapping
 const STATUS_BADGE_MAP = {
-    'draft': { class: 'status-grey', label: 'Taslak' },
-    'submitted': { class: 'status-yellow', label: 'Gönderildi' },
-    'approved': { class: 'status-green', label: 'Onaylandı' },
+    'draft': { class: 'status-orange', label: 'Taslak' },
+    'submitted': { class: 'status-blue', label: 'Gönderildi' },
+    'approved': { class: 'status-purple', label: 'Onaylandı' },
     'rejected': { class: 'status-red', label: 'Reddedildi' },
-    'closed': { class: 'status-blue', label: 'Kapatıldı' }
+    'closed': { class: 'status-green', label: 'Kapatıldı' }
 };
 
 const SEVERITY_BADGE_MAP = {
-    'minor': { class: 'status-blue', label: 'Minör' },
-    'major': { class: 'status-yellow', label: 'Majör' },
-    'critical': { class: 'status-red', label: 'Kritik' }
+    // icon/color: the list shows severity as a symbol only (shape differs, not just color)
+    'minor': { class: 'status-blue', label: 'Minör', icon: 'fa-circle-info', color: '#1e40af' },
+    'major': { class: 'status-orange', label: 'Majör', icon: 'fa-triangle-exclamation', color: '#ea580c' },
+    'critical': { class: 'status-red', label: 'Kritik', icon: 'fa-circle-exclamation', color: '#dc2626' }
 };
 
 function resolveQcReviewId(qcReview) {
@@ -325,8 +416,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await initNavbar();
     currentUser = await getUser();
-    await loadUsers();
-    await loadNcrAssignableGroups();
+    await Promise.all([loadUsers(), loadNcrAssignableGroups(), loadJobOrderFilterOptions()]);
+    if (!teamSelection) teamSelection = getDefaultTeamSelection(currentUser);
     await initializeComponents();
     await loadNCRs();
     
@@ -368,6 +459,22 @@ async function loadUsers() {
     } catch (error) {
         console.error('Error loading users:', error);
         allUsers = [];
+    }
+}
+
+let jobOrderFilterOptions = [];
+
+async function loadJobOrderFilterOptions() {
+    try {
+        // all=true: NCRs outlive their job orders, so completed jobs must stay filterable.
+        const jobOrders = await getJobOrderDropdown(true);
+        jobOrderFilterOptions = (Array.isArray(jobOrders) ? jobOrders : []).map(jo => ({
+            value: jo.job_no,
+            label: `${jo.job_no}${jo.title ? ' - ' + jo.title : ''}`
+        }));
+    } catch (error) {
+        console.error('Error loading job orders:', error);
+        jobOrderFilterOptions = [];
     }
 }
 
@@ -456,75 +563,140 @@ async function initializeComponents() {
     }
 }
 
+/** Selection → query params. ALL (or nothing ticked) means "don't restrict". */
+function buildQueryFilters() {
+    const filters = { ...currentFilters };
+    const statuses = statusSelection.filter(v => v !== ALL_VALUE);
+    if (statuses.length && !statusSelection.includes(ALL_VALUE)) {
+        filters.status__in = statuses.join(',');
+    }
+    const teams = (teamSelection || []).filter(v => v !== ALL_VALUE);
+    if (teams.length && !teamSelection.includes(ALL_VALUE)) {
+        // A single group uses the plain `exact` lookup, so it works even against a
+        // backend that doesn't accept `assigned_team__in` yet.
+        if (teams.length === 1) filters.assigned_team = teams[0];
+        else filters.assigned_team__in = teams.join(',');
+    }
+    return filters;
+}
+
+function selectionToUrlValue(selection) {
+    const values = (selection || []).filter(v => v !== ALL_VALUE);
+    return (!values.length || selection.includes(ALL_VALUE)) ? ALL_VALUE : values.join(',');
+}
+
+/**
+ * Keeps an "all" option mutually exclusive with the concrete options of a
+ * multi-select: ticking "all" clears the rest, ticking anything else clears "all".
+ */
+function createAllOptionGuard(initial) {
+    let last = [...initial];
+    return (dropdown, value) => {
+        const next = Array.isArray(value) ? [...value] : [];
+        let result = next;
+        if (next.includes(ALL_VALUE) && !last.includes(ALL_VALUE)) {
+            result = [ALL_VALUE];
+        } else if (next.includes(ALL_VALUE) && next.length > 1) {
+            result = next.filter(v => v !== ALL_VALUE);
+        }
+        if (result.length !== next.length) dropdown?.setValue(result);
+        last = [...result];
+        return result;
+    };
+}
+
 function initializeFiltersComponent() {
-    // Default status filter values
-    const defaultStatusFilter = ['draft', 'submitted', 'rejected'];
-    const allStatusFilter = NCR_STATUS_CHOICES.map(status => status.value).filter(Boolean);
-    
+    const guards = {
+        'status-filter': createAllOptionGuard(statusSelection),
+        'assigned-team-filter': createAllOptionGuard(teamSelection || [ALL_VALUE])
+    };
+
     ncrsFilters = new FiltersComponent('filters-placeholder', {
         title: 'NCR Filtreleri',
+        onFilterChange: (filterId, value) => {
+            const guard = guards[filterId];
+            if (guard) guard(ncrsFilters.dropdowns.get(filterId), value);
+        },
         onApply: async (values) => {
+            const asList = (v) => (Array.isArray(v) ? v : [v]).filter(Boolean);
+            const statuses = asList(values['status-filter']);
+            const teams = asList(values['assigned-team-filter']);
+            statusSelection = statuses.length ? statuses : [ALL_VALUE];
+            teamSelection = teams.length ? teams : [ALL_VALUE];
+
             currentFilters = {};
-            currentSearch = '';
-            
-            if (values['status-filter']) {
-                const statusValues = Array.isArray(values['status-filter']) ? values['status-filter'] : [values['status-filter']];
-                // Filter out empty strings
-                const validStatusValues = statusValues.filter(v => v && v !== '');
-                if (validStatusValues.length > 0) {
-                    // Use status__in with comma-separated values
-                    currentFilters.status__in = validStatusValues.join(',');
-                }
-            } else {
-                // If no status is selected, include all statuses
-                currentFilters.status__in = allStatusFilter.join(',');
-            }
-            if (values['severity-filter']) {
-                currentFilters.severity = values['severity-filter'];
-            }
-            if (values['defect-type-filter']) {
-                currentFilters.defect_type = values['defect-type-filter'];
-            }
-            if (values['assigned-team-filter']) {
-                currentFilters.assigned_team = values['assigned-team-filter'];
-            }
-            if (values['job-order-filter']) {
-                currentFilters.job_order = values['job-order-filter'];
-            }
-            if (values['search-filter']) {
-                currentSearch = values['search-filter'];
-            }
-            
+            if (values['severity-filter']) currentFilters.severity = values['severity-filter'];
+            if (values['defect-type-filter']) currentFilters.defect_type = values['defect-type-filter'];
+            if (values['job-order-filter']) currentFilters.job_order = values['job-order-filter'];
+            currentSearch = values['search-filter'] || '';
+
             currentPage = 1;
-            updateUrlParams({ page: 1, ...currentFilters, search: currentSearch });
+            updateUrlParams({
+                page: 1,
+                status__in: selectionToUrlValue(statusSelection),
+                assigned_team__in: selectionToUrlValue(teamSelection),
+                severity: currentFilters.severity || '',
+                defect_type: currentFilters.defect_type || '',
+                job_order: currentFilters.job_order || '',
+                search: currentSearch
+            });
             await loadNCRs();
         },
         onClear: async () => {
-            currentFilters = { status__in: defaultStatusFilter.join(',') };
+            // "Temizle" goes back to the defaults, not to an unfiltered list.
+            statusSelection = [...DEFAULT_STATUS_FILTER];
+            teamSelection = getDefaultTeamSelection(currentUser);
+            currentFilters = {};
             currentSearch = '';
             currentPage = 1;
-            updateUrlParams({ page: 1, status__in: defaultStatusFilter.join(',') });
+            ncrsFilters.dropdowns.get('status-filter')?.setValue([...statusSelection]);
+            ncrsFilters.dropdowns.get('assigned-team-filter')?.setValue([...teamSelection]);
+            guards['status-filter'](null, statusSelection);
+            guards['assigned-team-filter'](null, teamSelection);
+            updateUrlParams({
+                page: 1,
+                status__in: null, assigned_team__in: null,
+                severity: null, defect_type: null, job_order: null, search: null
+            });
             await loadNCRs();
         }
     });
 
-    // Status filter - multiselect
-    // Get initial value from URL or use default
-    const initialStatusValue = urlParams.get('status__in') 
-        ? urlParams.get('status__in').split(',').filter(v => v)
-        : defaultStatusFilter;
-    
     ncrsFilters.addDropdownFilter({
         id: 'status-filter',
         label: 'Durum',
         multiple: true,
-        options: NCR_STATUS_CHOICES.map(s => ({ value: s.value, label: s.label })),
-        placeholder: 'Durum seçin',
-        value: initialStatusValue,
+        options: [
+            { value: ALL_VALUE, label: 'Tüm Durumlar' },
+            ...NCR_STATUS_CHOICES.map(s => ({ value: s.value, label: s.label }))
+        ],
+        placeholder: 'Tüm Durumlar',
+        value: [...statusSelection],
         colSize: 2
     });
 
-    // Severity filter
+    ncrsFilters.addDropdownFilter({
+        id: 'assigned-team-filter',
+        label: 'Atanan Grup',
+        multiple: true,
+        options: [
+            { value: ALL_VALUE, label: 'Tüm Gruplar' },
+            ...buildAssignedGroupOptions({ includeEmpty: false })
+        ],
+        placeholder: 'Tüm Gruplar',
+        value: [...(teamSelection || [ALL_VALUE])],
+        colSize: 2
+    });
+
+    ncrsFilters.addDropdownFilter({
+        id: 'job-order-filter',
+        label: 'İş Emri',
+        options: [{ value: '', label: 'Tümü' }, ...jobOrderFilterOptions],
+        placeholder: 'İş emri seçin',
+        value: currentFilters.job_order || '',
+        colSize: 2
+    });
+
     ncrsFilters.addDropdownFilter({
         id: 'severity-filter',
         label: 'Önem Derecesi',
@@ -533,10 +705,10 @@ function initializeFiltersComponent() {
             ...SEVERITY_CHOICES.map(s => ({ value: s.value, label: s.label }))
         ],
         placeholder: 'Önem derecesi seçin',
+        value: currentFilters.severity || '',
         colSize: 2
     });
 
-    // Defect type filter
     ncrsFilters.addDropdownFilter({
         id: 'defect-type-filter',
         label: 'Kusur Tipi',
@@ -545,37 +717,16 @@ function initializeFiltersComponent() {
             ...DEFECT_TYPE_CHOICES.map(d => ({ value: d.value, label: d.label }))
         ],
         placeholder: 'Kusur tipi seçin',
+        value: currentFilters.defect_type || '',
         colSize: 2
     });
 
-    const assignedTeamFilterOptions = [
-        { value: '', label: 'Tümü' },
-        ...buildAssignedGroupOptions({ includeEmpty: false })
-    ];
-
-    // Assigned group filter
-    ncrsFilters.addDropdownFilter({
-        id: 'assigned-team-filter',
-        label: 'Atanan Grup',
-        options: assignedTeamFilterOptions,
-        placeholder: 'Grup seçin',
-        colSize: 2
-    });
-
-    // Job order filter
-    ncrsFilters.addTextFilter({
-        id: 'job-order-filter',
-        label: 'İş Emri',
-        placeholder: 'İş emri numarası',
-        colSize: 2
-    });
-
-    // Search filter
     ncrsFilters.addTextFilter({
         id: 'search-filter',
         label: 'Arama',
         placeholder: 'NCR no, başlık, açıklama...',
-        colSize: 3
+        value: currentSearch,
+        colSize: 2
     });
 }
 
@@ -585,19 +736,30 @@ function initializeTableComponent(canDecideNCRs) {
             field: 'ncr_number',
             label: 'NCR No',
             sortable: true,
-            width: '180px',
+            width: '90px',
             formatter: (value) => {
                 if (!value) return '-';
-                // Badge-style styling for NCR number (similar to job_no in project-tracking)
-                // Format: NCR-2026-0001 - ensure it fits on one row
-                return `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">${value}</span>`;
+                // NCR-2026-0001 → 2026-0001: the column header already says "NCR"
+                const shortNo = String(value).replace(/^NCR-/i, '');
+                return `<span title="${value}" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 0.8rem; background: rgba(13, 110, 253, 0.08); padding: 0.15rem 0.35rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">${shortNo}</span>`;
+            }
+        },
+        {
+            field: 'job_order',
+            label: 'İş Emri',
+            sortable: true,
+            width: '110px',
+            formatter: (value, row) => {
+                if (!value) return '-';
+                const tooltip = row.job_order_title ? ` title="${String(row.job_order_title).replace(/"/g, '&quot;')}"` : '';
+                return `<span${tooltip} style="font-weight: 600; color: #495057; font-family: 'Courier New', monospace; font-size: 0.85rem; background: rgba(108, 117, 125, 0.1); padding: 0.15rem 0.4rem; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2); white-space: nowrap; display: inline-block;">${value}</span>`;
             }
         },
         {
             field: 'title',
             label: 'Başlık',
             sortable: true,
-            width: '300px',
+            width: '180px',
             formatter: (value) => {
                 if (!value) return '-';
                 // Enhanced title display with better typography - compact sizing
@@ -614,72 +776,69 @@ function initializeTableComponent(canDecideNCRs) {
             }
         },
         {
-            field: 'job_order',
-            label: 'İş Emri',
+            field: 'status',
+            label: 'Bekleyen Aksiyon',
             sortable: true,
-            width: '140px',
-            formatter: (value) => {
-                if (!value) return '-';
-                // Badge-style styling for job order
-                return `<span style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace; font-size: 0.9rem; background: rgba(108, 117, 125, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2);">${value}</span>`;
+            width: '210px',
+            formatter: (value, row) => {
+                const next = getNextAction(row);
+                const statusLabel = STATUS_BADGE_MAP[value]?.label || row.status_display || value || '-';
+                const head = next.actor
+                    ? `<span class="status-badge ${next.badgeClass}" title="Durum: ${statusLabel}"><i class="fas ${next.icon} me-1"></i>${next.actor}</span>`
+                    : `<span class="status-badge ${next.badgeClass}"><i class="fas ${next.icon} me-1"></i>${next.task}</span>`;
+                const mine = next.isMine
+                    ? `<span class="status-badge status-red ms-1" title="Sıradaki adım sizin grubunuzda">Sizde</span>`
+                    : '';
+                const task = next.actor
+                    ? `<div class="${next.actorMissing ? 'text-danger' : 'text-muted'}" style="font-size: 0.78rem; line-height: 1.3; margin-top: 0.2rem;">${next.task}</div>`
+                    : '';
+                return `<div style="white-space: nowrap;">${head}${mine}</div>${task}`;
             }
         },
         {
             field: 'qc_review',
             label: 'KK İnceleme',
             sortable: false,
-            width: '120px',
+            width: '90px',
             formatter: (value) => formatQcReviewLink(value)
         },
         {
             field: 'severity',
             label: 'Önem',
             sortable: true,
-            width: '120px',
-            formatter: (value) => {
-                const severity = SEVERITY_BADGE_MAP[value] || { class: 'status-grey', label: value };
-                return `<span class="status-badge ${severity.class}">${severity.label}</span>`;
+            width: '60px',
+            formatter: (value, row) => {
+                const severity = SEVERITY_BADGE_MAP[value];
+                if (!severity) return row.severity_display || value || '-';
+                return `<span title="${severity.label}" aria-label="${severity.label}" style="display: inline-block; width: 100%; text-align: center; color: ${severity.color}; font-size: 1.05rem;"><i class="fas ${severity.icon}"></i></span>`;
             }
         },
         {
             field: 'defect_type_display',
             label: 'Kusur Tipi',
             sortable: false,
-            width: '150px',
+            width: '95px',
             formatter: (value) => {
                 if (!value) return '-';
                 return `<span class="status-badge status-grey">${value}</span>`;
             }
         },
         {
-            field: 'status',
-            label: 'Durum',
-            sortable: true,
-            width: '130px',
-            formatter: (value, row) => {
-                // Use status_display from API if available, otherwise fallback to mapping
-                const displayLabel = row.status_display || STATUS_BADGE_MAP[value]?.label || value;
-                const status = STATUS_BADGE_MAP[value] || { class: 'status-grey', label: value };
-                return `<span class="status-badge ${status.class}">${displayLabel}</span>`;
-            }
-        },
-        {
             field: 'submission_count',
-            label: 'Gönderim Sayısı',
+            label: 'Gönd.',
             sortable: true,
-            width: '140px',
+            width: '65px',
             formatter: (value) => {
-                if (value === null || value === undefined) return '<span class="status-badge status-grey">0</span>';
+                // Plain number: the house badge's 80px min-width would double this column
                 const count = parseInt(value) || 0;
-                // Use badge styling for submission count
-                return `<span class="status-badge status-grey">${count}</span>`;
+                return `<span title="Gönderim sayısı" style="display: inline-block; width: 100%; text-align: center; font-weight: 600; color: ${count > 1 ? '#9a3412' : '#495057'};">${count}</span>`;
             }
         },
         {
             field: 'assigned_team_name',
             label: 'Atanan Grup',
             sortable: false,
-            width: '150px',
+            width: '100px',
             formatter: (value, row) => {
                 const assigned = getAssignedTeamFromRow(row);
                 const matchedGroup = (ncrAssignableGroups || []).find(g => String(g.id) === String(assigned.id));
@@ -690,10 +849,10 @@ function initializeTableComponent(canDecideNCRs) {
         },
         {
             field: 'created_at',
-            label: 'Oluşturulma',
+            label: 'Tarih',
             sortable: true,
             type: 'date',
-            width: '150px',
+            width: '85px',
             formatter: (value) => {
                 if (!value) return '-';
                 const date = new Date(value);
@@ -827,7 +986,8 @@ function initializeModalComponents() {
     ncrSubmitModal = new EditModal('ncr-submit-modal-container', {
         title: 'NCR Gönder',
         icon: 'fas fa-paper-plane',
-        saveButtonText: 'Gönder',
+        saveButtonText: 'Onaya Gönder',
+        saveButtonIcon: 'fas fa-paper-plane',
         size: 'lg'
     });
     ncrFileUploadModal = new EditModal('ncr-file-upload-modal-container', {
@@ -845,14 +1005,8 @@ async function loadNCRs() {
     try {
         ncrsTable?.setLoading(true);
         
-        // Apply default status filter if no status filter is set
-        const filters = { ...currentFilters };
-        if (!filters.status && !filters.status__in) {
-            filters.status__in = 'draft,submitted,rejected';
-        }
-        
         const response = await listNCRs(
-            filters,
+            buildQueryFilters(),
             currentSearch,
             currentOrdering,
             currentPage,
@@ -988,6 +1142,7 @@ async function refreshNcrFilesUI(ncrId) {
             title: 'Dosyalar',
             titleIcon: 'fas fa-paperclip',
             titleIconColor: 'text-muted',
+            showTitle: false, // the form's "Ekler" section heading already names the list
             layout: 'list',
             showDeleteButton: true,
             onFileClick: (file) => {
@@ -1168,130 +1323,39 @@ async function showNCRDetails(ncr) {
         // Clear and prepare the modal
         ncrDetailsModal.clearData();
         ncrDetailsModal.setTitle(fullNCR.ncr_number || `NCR #${fullNCR.id}`);
+        ncrDetailsModal.setIcon('fas fa-file-alt');
 
-        // Top section: merged Başlık + Açıklama + Genel Bilgiler
-        ncrDetailsModal.addSection({
-            title: 'Genel Bilgiler',
-            icon: 'fas fa-info-circle',
-            fields: [
-                {
-                    label: 'Başlık',
-                    value: fullNCR.title || '-',
-                    colSize: 12
-                },
-                {
-                    label: 'NCR Numarası',
-                    value: fullNCR.ncr_number || '-',
-                    colSize: 6
-                },
-                {
-                    label: 'İş Emri',
-                    value: fullNCR.job_order || '-',
-                    colSize: 6
-                },
-                {
-                    label: 'KK İnceleme',
-                    value: resolveQcReviewId(fullNCR.qc_review) || null,
-                    colSize: 6,
-                    format: (value) => (value ? formatQcReviewLink(value) : '-')
-                },
-                {
-                    label: 'Durum',
-                    value: STATUS_BADGE_MAP[fullNCR.status]?.label || fullNCR.status_display || '-',
-                    colSize: 6
-                },
-                {
-                    label: 'Tespit Eden',
-                    value: fullNCR.detected_by_name || '-',
-                    colSize: 6
-                },
-                {
-                    label: 'Açıklama',
-                    value: fullNCR.description || '-',
-                    colSize: 12
-                }
-            ]
-        });
-
-        // Kusur Bilgileri section - important defect information
-        ncrDetailsModal.addSection({
-            title: 'Kusur Bilgileri',
-            icon: 'fas fa-exclamation-triangle',
-            fields: [
-                { 
-                    label: 'Kusur Tipi', 
-                    value: fullNCR.defect_type_display || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'Önem Derecesi', 
-                    value: SEVERITY_BADGE_MAP[fullNCR.severity]?.label || fullNCR.severity_display || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'Etkilenen Miktar', 
-                    value: fullNCR.affected_quantity || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'Atanan Grup', 
-                    value: getAssignedTeamFromRow(fullNCR).name || '-',
-                    colSize: 6
-                }
-            ]
-        });
-
-        // Düzeltici Faaliyet section - root cause and corrective action
-        if (fullNCR.root_cause || fullNCR.corrective_action || fullNCR.disposition) {
-            ncrDetailsModal.addSection({
-                title: 'Düzeltici Faaliyet',
-                icon: 'fas fa-tools',
-                fields: [
-                    { 
-                        label: 'Kök Neden', 
-                        value: fullNCR.root_cause || '-',
-                        colSize: 12
-                    },
-                    { 
-                        label: 'Düzeltici Faaliyet', 
-                        value: fullNCR.corrective_action || '-',
-                        colSize: 12
-                    },
-                    { 
-                        label: 'Karar', 
-                        value: fullNCR.disposition_display || fullNCR.disposition || '-',
-                        colSize: 6
-                    }
-                ]
-            });
-        }
-
-        // Files section (upload + list)
+        const qcReviewId = resolveQcReviewId(fullNCR.qc_review);
         ncrDetailsModal.addCustomSection({
-            title: 'Dosyalar',
-            icon: 'fas fa-paperclip',
-            iconColor: 'text-muted',
-            customContent: `
-                <div class="d-flex align-items-center justify-content-between mb-2">
-                    <div class="text-muted small">NCR ile ilişkili dosyalar</div>
-                    <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-sm btn-outline-success" id="ncr-files-download-all-btn">
-                            <i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" id="ncr-files-upload-btn">
-                            <i class="fas fa-upload me-1"></i>Dosya Yükle
-                        </button>
-                    </div>
-                </div>
-                <div id="ncr-files-list"></div>
-            `
+            title: null,
+            customContent: renderNcrForm(fullNCR, {
+                statusLabel: STATUS_BADGE_MAP[fullNCR.status]?.label || fullNCR.status_display,
+                assignedTeamName: getAssignedTeamFromRow(fullNCR).name,
+                qcReviewHtml: qcReviewId ? formatQcReviewLink(qcReviewId) : '',
+                nextAction: typeof getNextAction === 'function' ? getNextAction(fullNCR) : null
+            })
         });
 
         const canShowDecisionButtons = canCurrentUserDecideNCRs() && isSubmittedNCR(fullNCR);
+        const canShowSubmitButton = canUserSubmitNCR(currentUser, fullNCR);
+        const canShowEditButton = canCurrentUserDecideNCRs();
         ncrDetailsModal.setFooterContent(`
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
                 <i class="fas fa-times me-1"></i>Kapat
             </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="ncr-details-print-btn">
+                <i class="fas fa-print me-1"></i>Yazdır
+            </button>
+            ${canShowEditButton ? `
+                <button type="button" class="btn btn-sm btn-outline-primary" id="ncr-details-edit-btn">
+                    <i class="fas fa-edit me-1"></i>Düzenle
+                </button>
+            ` : ''}
+            ${canShowSubmitButton ? `
+                <button type="button" class="btn btn-sm btn-outline-success" id="ncr-details-submit-btn">
+                    <i class="fas fa-paper-plane me-1"></i>Onaya Gönder
+                </button>
+            ` : ''}
             ${canShowDecisionButtons ? `
                 <button type="button" class="btn btn-sm btn-outline-danger" id="ncr-details-reject-btn">
                     <i class="fas fa-times me-1"></i>Reddet
@@ -1303,18 +1367,32 @@ async function showNCRDetails(ncr) {
         `);
 
         // Render and show the modal
+        const detailsEl = ncrDetailsModal.modal;
+        let detailsShown = false;
+        detailsEl.addEventListener('shown.bs.modal', () => { detailsShown = true; }, { once: true });
         ncrDetailsModal.render();
         ncrDetailsModal.show();
 
+        // Follow-up modals open in place of the form, not stacked on a now-stale copy of it.
+        // Bootstrap ignores hide() while the open animation runs, so a fast click waits for it.
+        const openInstead = (action) => () => {
+            const swap = () => {
+                detailsEl.addEventListener('hidden.bs.modal', () => action(), { once: true });
+                ncrDetailsModal.hide();
+            };
+            if (detailsShown) swap();
+            else detailsEl.addEventListener('shown.bs.modal', swap, { once: true });
+        };
+        document.getElementById('ncr-details-print-btn').onclick = () => printNcrForm();
+        if (canShowEditButton) {
+            document.getElementById('ncr-details-edit-btn').onclick = openInstead(() => showEditNCRModal(fullNCR, { returnToDetails: true }));
+        }
+        if (canShowSubmitButton) {
+            document.getElementById('ncr-details-submit-btn').onclick = openInstead(() => handleSubmitNCR(fullNCR, { returnToDetails: true }));
+        }
         if (canShowDecisionButtons) {
-            const approveBtn = document.getElementById('ncr-details-approve-btn');
-            if (approveBtn) {
-                approveBtn.onclick = () => showNCRDecisionModal(fullNCR, true);
-            }
-            const rejectBtn = document.getElementById('ncr-details-reject-btn');
-            if (rejectBtn) {
-                rejectBtn.onclick = () => showNCRDecisionModal(fullNCR, false);
-            }
+            document.getElementById('ncr-details-approve-btn').onclick = openInstead(() => showNCRDecisionModal(fullNCR, true));
+            document.getElementById('ncr-details-reject-btn').onclick = openInstead(() => showNCRDecisionModal(fullNCR, false));
         }
 
         // Reset files component so it binds to the current modal instance
@@ -1508,7 +1586,47 @@ async function showCreateNCRModal() {
     ncrCreateModal.show();
 }
 
-async function showEditNCRModal(ncr) {
+/**
+ * Show the NCR summary above an EditModal's fields. Inserted into the form itself so
+ * EditModal.clearAll() removes it with the fields on the next open.
+ */
+function insertNcrContext(modal, ncr, options = {}) {
+    const context = document.createElement('div');
+    context.innerHTML = renderNcrContext(ncr, {
+        statusLabel: STATUS_BADGE_MAP[ncr.status]?.label || ncr.status_display,
+        ...options
+    });
+    modal.form.insertBefore(context, modal.form.firstChild);
+}
+
+/** Dropdown options for users, keeping already-selected users who are no longer active. */
+function buildUserOptions(selected = []) {
+    const options = (allUsers || []).map(u => ({
+        value: u.id,
+        label: u.full_name || [u.first_name, u.last_name].filter(Boolean).join(' ') || u.username
+    }));
+    const known = new Set(options.map(o => o.value));
+    selected.forEach(({ id, name }) => {
+        if (id != null && !known.has(id)) {
+            options.push({ value: id, label: name || `#${id}` });
+            known.add(id);
+        }
+    });
+    return options.sort((a, b) => a.label.localeCompare(b.label, 'tr'));
+}
+
+/**
+ * When an edit/submit modal was opened from the details form, closing it (saved or
+ * not) brings the form back, refetched so it shows what was just saved.
+ */
+function returnToDetailsOnClose(modal, ncr, enabled) {
+    modal.onCancel = enabled ? () => {
+        modal.onCancel = null;
+        showNCRDetails(ncr);
+    } : null;
+}
+
+async function showEditNCRModal(ncr, { returnToDetails = false } = {}) {
     try {
         if (!canCurrentUserDecideNCRs()) {
             showNotification('Bu işlem için yetkiniz yok. Sadece "kalite-kontrol" grubu veya superuser düzenleyebilir.', 'warning');
@@ -1524,15 +1642,70 @@ async function showEditNCRModal(ncr) {
             includeEmpty: true,
             includeLegacyValue: fullNCR.assigned_team
         });
+        const detectedByOptions = buildUserOptions([{ id: fullNCR.detected_by, name: fullNCR.detected_by_name }]);
+        const memberOptions = buildUserOptions(fullNCR.assigned_members_data || []);
 
         ncrEditModal.clearAll();
+        ncrEditModal.setTitle(`${fullNCR.ncr_number || `NCR #${fullNCR.id}`} · Düzenle`);
 
         ncrEditModal
             .addSection({
-                title: 'Temel Bilgiler',
-                icon: 'fas fa-info-circle',
+                title: numberedSectionTitle(1, 'Tanımlama'),
+                icon: 'd-none',
                 fields: [
                     {
+                        id: 'edit-detected-by',
+                        name: 'detected_by',
+                        label: 'Tespit Eden',
+                        type: 'dropdown',
+                        searchable: true,
+                        required: true,
+                        value: fullNCR.detected_by ?? '',
+                        options: detectedByOptions,
+                        placeholder: 'Kişi seçin',
+                        colSize: 4
+                    },
+                    {
+                        id: 'edit-affected-quantity',
+                        name: 'affected_quantity',
+                        label: 'Etkilenen Miktar (adet)',
+                        type: 'number',
+                        required: true,
+                        min: 1,
+                        value: fullNCR.affected_quantity ?? 1,
+                        colSize: 3
+                    },
+                    {
+                        id: 'edit-assigned-team',
+                        name: 'assigned_team',
+                        label: 'Sorumlu Grup',
+                        type: 'dropdown',
+                        searchable: true,
+                        value: fullNCR.assigned_team != null ? String(fullNCR.assigned_team) : '',
+                        options: assignedGroupOptions,
+                        placeholder: 'Grup seçin',
+                        colSize: 5
+                    },
+                    {
+                        id: 'edit-assigned-members',
+                        name: 'assigned_members',
+                        label: 'Sorumlu Kişiler',
+                        type: 'dropdown',
+                        multiple: true,
+                        searchable: true,
+                        value: fullNCR.assigned_members || [],
+                        options: memberOptions,
+                        placeholder: 'Kişi seçin (isteğe bağlı)',
+                        colSize: 12
+                    }
+                ]
+            })
+            .addSection({
+                title: numberedSectionTitle(2, 'Uygunsuzluk Tanımı'),
+                icon: 'd-none',
+                fields: [
+                    {
+                        id: 'edit-title',
                         name: 'title',
                         label: 'Başlık',
                         type: 'text',
@@ -1540,79 +1713,100 @@ async function showEditNCRModal(ncr) {
                         value: fullNCR.title || ''
                     },
                     {
+                        id: 'edit-description',
                         name: 'description',
                         label: 'Açıklama',
                         type: 'textarea',
+                        rows: 5,
                         required: true,
                         value: fullNCR.description || ''
+                    },
+                    {
+                        id: 'edit-defect-type',
+                        name: 'defect_type',
+                        label: 'Kusur Tipi',
+                        type: 'radio',
+                        required: true,
+                        value: fullNCR.defect_type || '',
+                        options: DEFECT_TYPE_CHOICES,
+                        colSize: 8
+                    },
+                    {
+                        id: 'edit-severity',
+                        name: 'severity',
+                        label: 'Önem Derecesi',
+                        type: 'radio',
+                        required: true,
+                        value: fullNCR.severity || '',
+                        options: SEVERITY_CHOICES,
+                        colSize: 4
                     }
                 ]
             })
             .addSection({
-                title: 'Kusur Bilgileri',
-                icon: 'fas fa-exclamation-triangle',
+                title: numberedSectionTitle('3–5', 'Kök Neden, Düzeltici Faaliyet ve Karar'),
+                icon: 'd-none',
                 fields: [
                     {
-                        name: 'defect_type',
-                        label: 'Kusur Tipi',
-                        type: 'select',
-                        required: true,
-                        value: fullNCR.defect_type || '',
-                        options: DEFECT_TYPE_CHOICES.map(d => ({ value: d.value, label: d.label }))
+                        id: 'edit-root-cause',
+                        name: 'root_cause',
+                        label: 'Kök Neden Analizi',
+                        type: 'textarea',
+                        rows: 4,
+                        value: fullNCR.root_cause || '',
+                        placeholder: 'Sorumlu grup gönderirken doldurur',
+                        colSize: 6
                     },
                     {
-                        name: 'severity',
-                        label: 'Önem Derecesi',
-                        type: 'select',
-                        required: true,
-                        value: fullNCR.severity || '',
-                        options: SEVERITY_CHOICES.map(s => ({ value: s.value, label: s.label }))
+                        id: 'edit-corrective-action',
+                        name: 'corrective_action',
+                        label: 'Düzeltici Faaliyet',
+                        type: 'textarea',
+                        rows: 4,
+                        value: fullNCR.corrective_action || '',
+                        placeholder: 'Sorumlu grup gönderirken doldurur',
+                        colSize: 6
                     },
-                {
-                    name: 'affected_quantity',
-                    label: 'Etkilenen Miktar',
-                    type: 'number',
-                    required: false,
-                    value: fullNCR.affected_quantity || ''
-                }
-                ]
-            })
-            .addSection({
-                title: 'Atama',
-                icon: 'fas fa-users',
-                fields: [
                     {
-                        name: 'assigned_team',
-                        label: 'Atanan Grup',
-                        type: 'select',
-                        required: false,
-                        value: fullNCR.assigned_team || '',
-                        options: assignedGroupOptions
+                        id: 'edit-disposition',
+                        name: 'disposition',
+                        label: 'Karar (Uygunsuz Ürün)',
+                        type: 'radio',
+                        required: true,
+                        value: fullNCR.disposition || 'pending',
+                        options: DISPOSITION_CHOICES
                     }
                 ]
             });
 
         ncrEditModal.render();
+        insertNcrContext(ncrEditModal, fullNCR, { showDescription: false });
+
         ncrEditModal.onSave = async (formData) => {
             try {
-                // Convert affected_quantity to integer if provided
-                if (formData.affected_quantity) {
-                    formData.affected_quantity = parseInt(formData.affected_quantity);
-                }
+                const toPk = (value) => {
+                    const pk = parseInt(String(value), 10);
+                    return Number.isFinite(pk) ? pk : null;
+                };
+                const payload = {
+                    title: String(formData.title || '').trim(),
+                    description: String(formData.description || '').trim(),
+                    defect_type: formData.defect_type,
+                    severity: formData.severity,
+                    affected_quantity: parseInt(formData.affected_quantity, 10),
+                    root_cause: String(formData.root_cause || '').trim(),
+                    corrective_action: String(formData.corrective_action || '').trim(),
+                    disposition: formData.disposition,
+                    assigned_members: (Array.isArray(formData.assigned_members) ? formData.assigned_members : [])
+                        .map(toPk).filter(pk => pk !== null)
+                };
+                const detectedBy = toPk(formData.detected_by);
+                if (detectedBy !== null) payload.detected_by = detectedBy;
+                // Send the group PK (not a legacy team name/slug); an empty pick leaves the group as it is.
+                const groupPk = toPk(formData.assigned_team);
+                if (groupPk !== null) payload.assigned_team = groupPk;
 
-                // Send assigned group PK (not legacy team name/slug)
-                if (formData.assigned_team === '' || formData.assigned_team === null || formData.assigned_team === undefined) {
-                    delete formData.assigned_team;
-                } else {
-                    const groupPk = parseInt(String(formData.assigned_team), 10);
-                    if (Number.isFinite(groupPk)) {
-                        formData.assigned_team = groupPk;
-                    } else {
-                        delete formData.assigned_team;
-                    }
-                }
-
-                await updateNCR(fullNCR.id, formData);
+                await updateNCR(fullNCR.id, payload);
                 showNotification('NCR başarıyla güncellendi', 'success');
                 ncrEditModal.hide();
                 await loadNCRs();
@@ -1621,6 +1815,7 @@ async function showEditNCRModal(ncr) {
                 showNotification(error.message || 'NCR güncellenirken hata oluştu', 'error');
             }
         };
+        returnToDetailsOnClose(ncrEditModal, fullNCR, returnToDetails);
 
         ncrEditModal.show();
     } catch (error) {
@@ -1629,7 +1824,7 @@ async function showEditNCRModal(ncr) {
     }
 }
 
-async function handleSubmitNCR(ncr) {
+async function handleSubmitNCR(ncr, { returnToDetails = false } = {}) {
     try {
         const fullNCR = await getNCR(ncr.id);
 
@@ -1642,45 +1837,63 @@ async function handleSubmitNCR(ncr) {
             showNotification('Bu NCR\'ı göndermek için atanan takıma üye olmanız gerekir.', 'warning');
             return;
         }
-        
+
         ncrSubmitModal.clearAll();
-        
+        ncrSubmitModal.setTitle(`${fullNCR.ncr_number || `NCR #${fullNCR.id}`} · Onaya Gönder`);
+
         ncrSubmitModal
             .addSection({
-                title: 'Düzeltici Faaliyet Bilgileri',
-                icon: 'fas fa-tools',
+                title: numberedSectionTitle(3, 'Kök Neden Analizi'),
+                icon: 'd-none',
                 fields: [
                     {
                         id: 'submit-root-cause',
                         name: 'root_cause',
-                        label: 'Kök Neden',
+                        label: 'Uygunsuzluk neden oluştu?',
                         type: 'textarea',
+                        rows: 5,
                         required: true,
                         value: fullNCR.root_cause || '',
-                        placeholder: 'Kök neden açıklaması'
-                    },
+                        placeholder: 'Örn. bükme kalıbı ayarı resim değerine göre kontrol edilmeden kullanıldı'
+                    }
+                ]
+            })
+            .addSection({
+                title: numberedSectionTitle(4, 'Düzeltici Faaliyet'),
+                icon: 'd-none',
+                fields: [
                     {
                         id: 'submit-corrective-action',
                         name: 'corrective_action',
-                        label: 'Düzeltici Faaliyet',
+                        label: 'Tekrarlanmaması için ne yapıldı / yapılacak?',
                         type: 'textarea',
+                        rows: 5,
                         required: true,
                         value: fullNCR.corrective_action || '',
-                        placeholder: 'Düzeltici faaliyet açıklaması'
-                    },
+                        placeholder: 'Yapılan / yapılacak işlem, sorumlusu ve tarihi',
+                        help: 'Kalite Kontrol bu bilgiye göre onaylar veya reddeder.'
+                    }
+                ]
+            })
+            .addSection({
+                title: numberedSectionTitle(5, 'Karar (Uygunsuz Ürün)'),
+                icon: 'd-none',
+                fields: [
                     {
                         id: 'submit-disposition',
                         name: 'disposition',
-                        label: 'Karar',
-                        type: 'select',
+                        label: 'Etkilenen ürün için önerilen karar',
+                        type: 'radio',
                         required: true,
                         value: fullNCR.disposition || 'pending',
-                        options: DISPOSITION_CHOICES.map(d => ({ value: d.value, label: d.label }))
+                        options: DISPOSITION_CHOICES
                     }
                 ]
             });
-        
+
         ncrSubmitModal.render();
+        insertNcrContext(ncrSubmitModal, fullNCR);
+
         ncrSubmitModal.onSave = async (formData) => {
             try {
                 const rootCause = String(formData.root_cause || '').trim();
@@ -1706,7 +1919,8 @@ async function handleSubmitNCR(ncr) {
                 showNotification(error.message || 'NCR gönderilirken hata oluştu', 'error');
             }
         };
-        
+        returnToDetailsOnClose(ncrSubmitModal, fullNCR, returnToDetails);
+
         ncrSubmitModal.show();
     } catch (error) {
         console.error('Error loading NCR for submit:', error);
