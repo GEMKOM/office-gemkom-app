@@ -1,9 +1,11 @@
 // Data Manager Module
 export class DataManager {
-    constructor(requestData) {
+    constructor(requestData, { onAutoSave = null } = {}) {
         this.requestData = requestData;
         this.autoSaveTimeout = null;
         this.isLoadingDraft = false;
+        // Called after each debounced change save (drives the server autosave draft)
+        this.onAutoSave = onAutoSave;
         this.setupAutoSave();
     }
 
@@ -40,6 +42,7 @@ export class DataManager {
             if (this.hasMeaningfulData()) {
                 this.saveDraft();
                 this.showAutoSaveIndicator();
+                if (this.onAutoSave) this.onAutoSave();
             }
         }, 2000);
     }
@@ -84,6 +87,9 @@ export class DataManager {
                 recommendations: this.requestData.recommendations,
                 itemRecommendations: this.requestData.itemRecommendations,
                 planning_request_item_ids: this.requestData.planning_request_item_ids || [],
+                // The named server draft this page was loaded from / saved to, so a
+                // reload still knows which draft "Taslak Kaydet" would overwrite
+                savedDraft: this.requestData.savedDraft || null,
                 timestamp: new Date().toISOString()
             };
             
@@ -188,7 +194,8 @@ export class DataManager {
                     this.requestData.recommendations = draftData.recommendations || {};
                     this.requestData.itemRecommendations = draftData.itemRecommendations || {};
                     this.requestData.planning_request_item_ids = draftData.planning_request_item_ids || [];
-                    
+                    this.requestData.savedDraft = draftData.savedDraft || null;
+
                     // Sync planning_request_item_ids with actual items after loading from localStorage
                     // This ensures accuracy even if localStorage data is inconsistent
                     if (window.syncPlanningRequestItemIds) {

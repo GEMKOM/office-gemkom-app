@@ -923,6 +923,25 @@ export async function getJobOrderPlanSheet(jobNo) {
 }
 
 /**
+ * Görev Planlama: this job order and every descendant (depth-first), each
+ * with its existing main department tasks.
+ * Endpoint: GET /projects/job-orders/{jobNo}/task-planner/
+ * @param {string} jobNo - Root job order number
+ * @returns {Promise<Object>} {root, job_orders: [{job_no, title, status,
+ *   status_display, parent, depth, is_phase, can_plan, tasks: [{id,
+ *   department, department_display, title, status, status_display,
+ *   task_type, sequence, subtask_count}]}]}
+ */
+export async function getJobOrderTaskPlanner(jobNo) {
+    const response = await authedFetch(
+        `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/task-planner/`);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+}
+
+/**
  * Meeting brief (Sunum Modu): NCR/revision/procurement/cutting/manufacturing/
  * files/financial context for one ROOT job order's whole subtree.
  * Endpoint: GET /projects/job-orders/{jobNo}/meeting-brief/

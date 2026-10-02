@@ -184,6 +184,56 @@
     text-overflow: ellipsis;
 }
 
+/* Status icon + job number. The number is a button that opens the detail
+   view; it keeps the chip look and only adds a hover cue. */
+.jo-jobno-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.jo-status-icon {
+    flex: 0 0 auto;
+    font-size: 0.95rem;
+}
+
+.jo-tight .jo-status-icon {
+    font-size: 0.8rem;
+}
+
+.jo-st-grey { color: #6b7280; }
+.jo-st-blue { color: #2563eb; }
+.jo-st-orange { color: #ea580c; }
+.jo-st-green { color: #059669; }
+.jo-st-red { color: #dc2626; }
+
+.jo-jobno-link {
+    min-width: 0;
+    line-height: inherit;
+    cursor: pointer;
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.jo-jobno-link:hover,
+.jo-jobno-link:focus-visible {
+    background: rgba(13, 110, 253, 0.18);
+    border-color: rgba(13, 110, 253, 0.45);
+    text-decoration: underline;
+}
+
+.jo-jobno-link.jo-jobno--muted:hover,
+.jo-jobno-link.jo-jobno--muted:focus-visible {
+    background: rgba(108, 117, 125, 0.18);
+    border-color: rgba(108, 117, 125, 0.45);
+}
+
+/* İptal Et in the row menu: Bootstrap's red is ~2.5:1 on the dark menu. */
+#job-orders-table-container .dropdown-menu .dropdown-item.text-danger {
+    color: #f87171 !important;
+}
+
 /* Department-task rows render the same chip in a muted grey. */
 .jo-jobno--muted {
     font-weight: 600;
@@ -433,4 +483,102 @@
     pointer-events: none;
     white-space: nowrap;
     z-index: 2;
+}
+
+/* Job order modal: Fiyat ve Ağırlık tab (read-only; edited in the Ağırlık ve Kademeler modal) */
+.pw-tab .pw-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.pw-tab .pw-stats {
+    display: grid;
+    flex: 1 1 520px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 0.75rem;
+}
+
+.pw-tab .pw-stat {
+    padding: 0.75rem 1rem;
+    border: 1px solid #e9ecef;
+    border-radius: 0.5rem;
+    background: #f8f9fb;
+}
+
+.pw-tab .pw-stat-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #6c757d;
+}
+
+.pw-tab .pw-stat-value {
+    margin-top: 0.15rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #212529;
+}
+
+.pw-tab .pw-stat-note {
+    margin-top: 0.15rem;
+    font-size: 0.78rem;
+    color: #6c757d;
+}
+
+.pw-tab .pw-badge {
+    min-width: 0;
+    padding: 0.15rem 0.5rem;
+    font-size: 0.72rem;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.pw-tab .pw-edit {
+    flex: 0 0 auto;
+}
+
+.pw-tab .pw-table th {
+    background: #f8f9fa;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: #6c757d;
+}
+
+.pw-tab .pw-bar-cell {
+    width: 140px;
+}
+
+.pw-tab .pw-bar {
+    height: 6px;
+    overflow: hidden;
+    border-radius: 3px;
+    background: #e9ecef;
+}
+
+.pw-tab .pw-bar-fill {
+    height: 100%;
+    background: #3b82f6;
+}
+
+.pw-tab .pw-bar-fill.is-over {
+    background: #ef4444;
+}
+
+.pw-tab .pw-empty {
+    padding: 2rem 1rem;
+    border: 1px dashed #ced4da;
+    border-radius: 0.5rem;
+    text-align: center;
+    color: #6c757d;
+}
+
+.pw-tab .pw-foot {
+    margin-top: 1rem;
+    font-size: 0.8rem;
+    color: #6c757d;
 }

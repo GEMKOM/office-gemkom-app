@@ -281,7 +281,7 @@ export async function savePurchaseRequestDraft(draftData) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslak kaydedilirken hata oluştu');
         }
 
@@ -290,6 +290,45 @@ export async function savePurchaseRequestDraft(draftData) {
         console.error('Error saving purchase request draft:', error);
         throw error;
     }
+}
+
+// Overwrites an existing named draft. The thrown error carries `status` so a
+// 404 (draft deleted meanwhile) can fall back to creating a new one.
+export async function updatePurchaseRequestDraft(draftId, draftData) {
+    const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/${draftId}/`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(draftData)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const error = new Error(errorData.error || errorData.detail || 'Taslak güncellenirken hata oluştu');
+        error.status = response.status;
+        throw error;
+    }
+
+    return await response.json();
+}
+
+// Upserts the user's single rolling autosave draft (overwritten on every change).
+export async function autosavePurchaseRequestDraft(draftData) {
+    const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/autosave/`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(draftData)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.detail || 'Otomatik kayıt başarısız');
+    }
+
+    return await response.json();
 }
 
 export async function getPurchaseRequestDrafts(filters = {}) {
@@ -308,7 +347,7 @@ export async function getPurchaseRequestDrafts(filters = {}) {
         const response = await authedFetch(url);
         
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslaklar yüklenirken hata oluştu');
         }
 
@@ -329,7 +368,7 @@ export async function deletePurchaseRequestDraft(draftId) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslak silinirken hata oluştu');
         }
 
@@ -345,7 +384,7 @@ export async function getPurchaseRequestDraft(draftId) {
         const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/${draftId}/`);
         
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslak yüklenirken hata oluştu');
         }
 

@@ -242,6 +242,39 @@ export async function applyDepartmentTasksTemplate(payload) {
 }
 
 /**
+ * Görev Planlama save: a separate task list per job order, all in one
+ * transaction (every job order succeeds or none does).
+ * Endpoint: POST /projects/department-tasks/bulk_plan/
+ *
+ * Payload shape:
+ * {
+ *   plans: [{
+ *     job_order: "100-100-01",
+ *     tasks: [{ temp_id: -1, department, title, sequence, weight, task_type?, parent? }],
+ *     dependencies: [{ task: -2, depends_on: [-1] }]
+ *   }]
+ * }
+ * temp_id / parent / depends_on are negative ids local to their plan.
+ * On failure the thrown Error carries the response body as `error.data`
+ * ({ message, job_order?, temp_id?, errors? }).
+ */
+export async function bulkPlanDepartmentTasks(payload) {
+    const response = await authedFetch(`${backendBase}/projects/department-tasks/bulk_plan/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+        const error = new Error(data.message || data.detail || `HTTP error! status: ${response.status}`);
+        error.data = data;
+        error.status = response.status;
+        throw error;
+    }
+    return data;
+}
+
+/**
  * Update department task (PUT - full update)
  * @param {number} taskId - Task ID
  * @param {Object} taskData - Complete task data

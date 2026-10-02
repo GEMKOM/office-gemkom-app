@@ -15,8 +15,6 @@ import {
     cancelJobOrder as cancelJobOrderAPI,
     recalculateJobOrderProgress,
     getStatusChoices,
-    applyTemplateToJobOrder,
-    getChildJobOrders,
     getJobOrderDepartmentTasks,
     getJobOrderFiles,
     uploadJobOrderFile,
@@ -27,10 +25,8 @@ import {
     JOB_ORDER_FILE_TYPE_OPTIONS,
     STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
-import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, applyDepartmentTasksTemplate, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks, deleteDepartmentTask } from '../../apis/projects/departmentTasks.js';
-import { listTaskTemplates, getTaskTemplateById, TASK_TYPE_OPTIONS } from '../../apis/projects/taskTemplates.js';
+import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks, deleteDepartmentTask } from '../../apis/projects/departmentTasks.js';
 import { listCustomers, getCustomerById } from '../../apis/projects/customers.js';
-import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
 import {
     listTopics,
     getTopic,
@@ -67,15 +63,12 @@ import {
     formatWorkDays,
     CLASSIFICATION_BADGES
 } from './meetingView.js';
-import { 
-    fetchPriceTiers, 
-    createPriceTier, 
-    updatePriceTier, 
-    deletePriceTier 
-} from '../../apis/subcontracting/priceTiers.js';
+import { fetchPriceTiers } from '../../apis/subcontracting/priceTiers.js';
 import { listNCRs } from '../../apis/qualityControl.js';
 import { escapeHtml } from '../../utils/text.js';
 import { mountDiscussionSummary } from '../../components/discussion-summary/discussion-summary.js';
+import { openTaskPlanner } from './taskPlanner.js';
+import { openWeightPlanner } from './weightPlanner.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -125,6 +118,50 @@ function getDepartmentTaskStatusBadgeClass(status) {
         case 'skipped': return 'status-grey';
         default: return 'status-grey';
     }
+}
+
+// Durum used to be a column of its own; it is now an icon in front of the job
+// number, with the full status in its tooltip (Sunum Modu carries the detail).
+// Labels follow the status code, not the server's status_display:
+// normalizeJobOrderStatus shows a "completed" job below 100 % as active.
+const JOB_STATUS_ICONS = {
+    draft: ['fa-pencil-alt', 'jo-st-grey', 'Taslak'],
+    active: ['fa-play-circle', 'jo-st-blue', 'Aktif'],
+    on_hold: ['fa-pause-circle', 'jo-st-orange', 'Beklemede'],
+    completed: ['fa-check-circle', 'jo-st-green', 'Tamamlandı'],
+    cancelled: ['fa-times-circle', 'jo-st-red', 'İptal Edildi'],
+};
+const TASK_STATUS_ICONS = {
+    pending: ['fa-hourglass-half', 'jo-st-grey'],
+    in_progress: ['fa-play-circle', 'jo-st-blue'],
+    blocked: ['fa-ban', 'jo-st-red'],
+    on_hold: ['fa-pause-circle', 'jo-st-orange'],
+    completed: ['fa-check-circle', 'jo-st-green'],
+    cancelled: ['fa-times-circle', 'jo-st-grey'],
+    skipped: ['fa-forward', 'jo-st-grey'],
+};
+
+// Columns dropped from the list but kept in the Excel export.
+const EXPORT_ONLY_COLUMNS = [
+    { field: 'status_display', label: 'Durum', formatter: (value, row) => (row.status === 'on_hold' && row.hold_kind === 'revision'
+        ? 'Revizyonda'
+        : (JOB_STATUS_ICONS[row.status]?.[2] || value || '-')) },
+    { field: 'quantity', label: 'Miktar', formatter: (value) => (value || value === 0 ? String(value) : '-') },
+    { field: 'created_at', label: 'Oluşturulma', formatter: (value) => (value ? new Date(value).toLocaleDateString('tr-TR') : '-') },
+];
+
+function statusIconHtml(row) {
+    const isTask = isDepartmentTaskRow(row);
+    let icon = isTask ? TASK_STATUS_ICONS[row.status] : JOB_STATUS_ICONS[row.status];
+    if (!icon) return '';
+    let [glyph, tone, label] = icon;
+    if (isTask) label = row.status_display || row.status || '';
+    if (!isTask && row.status === 'on_hold' && row.hold_kind === 'revision') {
+        // A revision hold is live work waiting on the drawing, not a job parked by hand.
+        glyph = 'fa-drafting-compass';
+        label = 'Revizyonda';
+    }
+    return `<i class="fas ${glyph} jo-status-icon ${tone}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}" role="img"></i>`;
 }
 
 function buildDepartmentTaskTableRow(task, parentJobNo, hierarchyLevel) {
@@ -240,22 +277,20 @@ function applyAdaptiveCompactColumnConfig() {
 
     const fitProfiles = {
         _expand: { normal: 64, min: 20 },
-        job_no: { normal: 140, min: 82 },
-        title: { normal: 210, min: 108 },
+        job_no: { normal: 160, min: 100 },   // status icon + number chip
+        title: { normal: 260, min: 120 },
         customer_name: { normal: 180, min: 78 },
-        quantity: { normal: 68, min: 42 },
-        status_display: { normal: 90, min: 58 },
-        target_completion_date: { normal: 118, min: 82 },
+        target_completion_date: { normal: 130, min: 96 },
         completion_percentage: { normal: 240, min: 108 },
-        _projected_completion: { normal: 190, min: 104 },
-        created_at: { normal: 100, min: 68 }
+        _projected_completion: { normal: 190, min: 104 }
     };
 
     const fitFields = Object.keys(fitProfiles);
     const actionsVisible = (jobOrdersTable.options.actions || []).length > 0;
+    // At most two controls left in a row: start/hold + the menu.
     const actionProfile = HIDE_ACTION_BUTTONS
         ? { normal: 58, min: 48 }
-        : { normal: 118, min: 76 };
+        : { normal: 88, min: 72 };
     const totalNormal = fitFields.reduce((sum, f) => sum + fitProfiles[f].normal, 0) + (actionsVisible ? actionProfile.normal : 0);
     const totalMin = fitFields.reduce((sum, f) => sum + fitProfiles[f].min, 0) + (actionsVisible ? actionProfile.min : 0);
     const reservedPx = 36; // card paddings + scrollbar + safety margin
@@ -283,12 +318,9 @@ function applyAdaptiveCompactColumnConfig() {
     setCol('job_no', { label: IS_COMPACT_13_INCH ? 'İE No' : 'İş Emri No', width: widthFor('job_no') });
     setCol('title', { width: widthFor('title') });
     setCol('customer_name', { label: IS_COMPACT_13_INCH ? 'Müş.' : 'Müşteri', width: widthFor('customer_name') });
-    setCol('quantity', { label: IS_COMPACT_13_INCH ? 'Mik.' : 'Miktar', width: widthFor('quantity') });
-    setCol('status_display', { width: widthFor('status_display') });
     setCol('target_completion_date', { label: isTightLayout() ? 'Hedef' : 'Hedef Tamamlanma', width: widthFor('target_completion_date') });
     setCol('completion_percentage', { label: IS_COMPACT_13_INCH ? 'Tam.' : 'Tamamlanma', width: widthFor('completion_percentage') });
     setCol('_projected_completion', { label: IS_COMPACT_13_INCH ? 'Öngörü' : 'Öngörülen Bitiş', width: widthFor('_projected_completion') });
-    setCol('created_at', { label: IS_COMPACT_13_INCH ? 'Oluş.' : 'Oluşturulma', width: widthFor('created_at') });
     if (actionsVisible) {
         jobOrdersTable.options.actionColumnWidth = `${Math.max(actionProfile.min, actionWidth)}px`;
     }
@@ -396,7 +428,6 @@ function canViewSubcontracting() {
 let createJobOrderModal = null;
 let editJobOrderModal = null;
 let deleteJobOrderModal = null;
-let addDepartmentTaskModal = null;
 let createDepartmentTaskModal = null;
 let viewJobOrderModal = null;
 let confirmationModal = null;
@@ -713,26 +744,23 @@ function initializeTableComponent() {
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '92px' : '160px',
                 formatter: (value, row) => {
+                    const statusIcon = statusIconHtml(row);
                     if (isDepartmentTaskRow(row)) {
-                        if (row.parent) {
-                            return '<span class="jo-dept-label jo-dept-label--muted"><i class="fas fa-level-down-alt me-1"></i>Alt Görev</span>';
-                        }
-                        return '<span class="jo-dept-label jo-dept-label--done"><i class="fas fa-tasks me-1"></i>Görev</span>';
+                        const label = row.parent
+                            ? '<span class="jo-dept-label jo-dept-label--muted"><i class="fas fa-level-down-alt me-1"></i>Alt Görev</span>'
+                            : '<span class="jo-dept-label jo-dept-label--done"><i class="fas fa-tasks me-1"></i>Görev</span>';
+                        return `<span class="jo-jobno-cell">${statusIcon}${label}</span>`;
                     }
-                    
-                    const isChild = !!row.parent;
-                    const hierarchyLevel = row.hierarchy_level || (isChild ? 1 : 0);
-                    
+
                     if (!value) return '-';
-                    
-                    // Badge-style styling for job number (similar to talep_no in purchase requests)
-                    if (hierarchyLevel > 0) {
-                        // Child jobs - subtle badge styling
-                        return `<span title="${value}" class="jo-jobno jo-jobno--muted">${value}</span>`;
-                    } else {
-                        // Root jobs - prominent badge styling
-                        return `<span title="${value}" class="jo-jobno">${value}</span>`;
-                    }
+
+                    // Root jobs get the prominent chip, children the subtle one.
+                    // The number itself opens the detail view (it replaced the eye button).
+                    const isChild = (row.hierarchy_level || (row.parent ? 1 : 0)) > 0;
+                    const jobNo = escapeHtml(value);
+                    return `<span class="jo-jobno-cell">${statusIcon}<button type="button"
+                        class="jo-jobno jo-jobno-link ${isChild ? 'jo-jobno--muted' : ''}"
+                        data-job-no="${jobNo}" title="${jobNo}: detayları aç">${jobNo}</button></span>`;
                 }
             },
             {
@@ -800,66 +828,30 @@ function initializeTableComponent() {
                 }
             },
             {
-                field: 'quantity',
-                label: IS_COMPACT_13_INCH ? 'Mik.' : 'Miktar',
-                sortable: true,
-                width: IS_COMPACT_13_INCH ? '54px' : undefined,
-                formatter: (value, row) => {
-                    if (isDepartmentTaskRow(row)) {
-                        const weight = row.weight;
-                        if (weight === null || weight === undefined || weight === '') return '-';
-                        return `<span class="jo-qty">${parseFloat(weight).toFixed(2)}</span>`;
-                    }
-                    if (!(value || value === 0)) return '-';
-                    return `<span class="jo-qty">${value}</span>`;
-                }
-            },
-            {
-                field: 'status_display',
-                label: 'Durum',
-                sortable: true,
-                width: IS_COMPACT_13_INCH ? '72px' : undefined,
-                formatter: (value, row) => {
-                    const tight = isTightLayout();
-                    const ultra = isUltraTightLayout();
-                    const compactBadgeStyle = tight
-                        ? 'class="jo-status-badge"'
-                        : 'class="jo-status-badge"';
-                    if (isDepartmentTaskRow(row)) {
-                        const status = row.status;
-                        const badgeClass = getDepartmentTaskStatusBadgeClass(status);
-                        return `<span class="status-badge ${badgeClass}" ${compactBadgeStyle}>${value || '-'}</span>`;
-                    }
-                    const status = row.status;
-                    if (status === 'active') {
-                        return `<span class="status-badge status-blue" ${compactBadgeStyle}>Aktif</span>`;
-                    } else if (status === 'draft') {
-                        return `<span class="status-badge status-grey" ${compactBadgeStyle}>Taslak</span>`;
-                    } else if (status === 'on_hold') {
-                        // A revision hold is live work waiting on the drawing —
-                        // say so instead of lumping it with the orders parked by hand.
-                        if (row.hold_kind === 'revision') {
-                            return `<span class="status-badge status-orange" ${compactBadgeStyle}>${tight ? 'Rev.' : 'Revizyonda'}</span>`;
-                        }
-                        return `<span class="status-badge status-yellow" ${compactBadgeStyle}>${tight ? 'Bekl.' : 'Beklemede'}</span>`;
-                    } else if (status === 'completed') {
-                        return `<span class="status-badge status-green" ${compactBadgeStyle}>${tight ? 'Tam.' : 'Tamamlandı'}</span>`;
-                    } else if (status === 'cancelled') {
-                        return `<span class="status-badge status-red" ${compactBadgeStyle}>${tight ? 'İptal' : 'İptal Edildi'}</span>`;
-                    }
-                    return value || '-';
-                }
-            },
-            {
                 field: 'target_completion_date',
                 label: IS_COMPACT_13_INCH ? 'Hedef' : 'Hedef Tamamlanma',
                 sortable: true,
                 type: 'date',
                 width: IS_COMPACT_13_INCH ? '94px' : undefined,
                 formatter: (value, row) => {
-                    if (!value) return '-';
                     const tight = isTightLayout();
-                    const ultra = isUltraTightLayout();
+                    // The pencil is the only way to revise the target date from
+                    // the list (the action menu no longer has it), so it shows on
+                    // compact layouts and on jobs that have no date yet too.
+                    const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && !isDepartmentTaskRow(row))
+                        ? `<button type="button"
+                                  class="btn btn-xs btn-link p-0 ${tight ? 'ms-1' : 'ms-2'} target-date-revise-row-btn"
+                                  title="Hedef tarihi revize et"
+                                  data-job-no="${row.job_no}"
+                                  data-current-date="${value || ''}">
+                                <i class="fas fa-pen-to-square"></i>
+                           </button>`
+                        : '';
+                    if (!value) {
+                        return reviseBtnHtml
+                            ? `<div class="jo-stack-row"><span class="text-muted">-</span>${reviseBtnHtml}</div>`
+                            : '-';
+                    }
                     const date = new Date(value);
                     if (isDepartmentTaskRow(row)) {
                         const formattedDate = date.toLocaleDateString('tr-TR', {
@@ -917,15 +909,6 @@ function initializeTableComponent() {
                         // Use dark brown/black for yellow background rows for better visibility
                         dateClass = '';
                         fontWeight = '700';
-                        const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && !tight)
-                            ? `<button type="button"
-                                      class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
-                                      title="Hedef tarihi revize et"
-                                      data-job-no="${row.job_no}"
-                                      data-current-date="${value}">
-                                    <i class="fas fa-pen-to-square"></i>
-                               </button>`
-                            : '';
                         return `<div class="jo-stack">
                             <div class="jo-stack-row">
                                 <span class="jo-stack-date jo-proj-late" style="--fw:${fontWeight}">${formattedDate}</span>
@@ -936,16 +919,7 @@ function initializeTableComponent() {
                     } else {
                         dateClass = 'text-dark';
                     }
-                    
-                    const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && !tight)
-                        ? `<button type="button"
-                                  class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
-                                  title="Hedef tarihi revize et"
-                                  data-job-no="${row.job_no}"
-                                  data-current-date="${value}">
-                                <i class="fas fa-pen-to-square"></i>
-                           </button>`
-                        : '';
+
                     return `<div class="jo-stack">
                         <div class="jo-stack-row">
                             <span class="${dateClass} jo-stack-date" style="--fw:${fontWeight}">${formattedDate}</span>
@@ -994,24 +968,6 @@ function initializeTableComponent() {
                 formatter: (value, row) => (isDepartmentTaskRow(row)
                     ? departmentTaskProjectionHtml(row)
                     : jobOrderProjectionHtml(row))
-            },
-            {
-                field: 'created_at',
-                label: IS_COMPACT_13_INCH ? 'Oluş.' : 'Oluşturulma',
-                sortable: true,
-                type: 'date',
-                width: IS_COMPACT_13_INCH ? '82px' : undefined,
-                formatter: (value, row) => {
-                    if (isDepartmentTaskRow(row)) return '-';
-                    if (!value) return '-';
-                    const date = new Date(value);
-                    const formattedDate = date.toLocaleDateString('tr-TR', {
-                        year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
-                        month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
-                        day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
-                    });
-                    return `<span class="text-dark jo-date">${formattedDate}</span>`;
-                }
             }
         ],
         data: [],
@@ -1049,8 +1005,11 @@ function initializeTableComponent() {
             updateUrlParams({ page: page });
             await loadJobOrders();
         },
+        // Kept short on purpose (Sunum Modu carries the detail): start / hold
+        // as buttons, everything else in the menu. The job number opens the
+        // detail view, Düzenle lives on its Genel tab, and the target date is
+        // revised from the pencil in its own cell.
         actions: [
-            // Primary actions: start, pause, cancel, detail
             {
                 key: 'start',
                 label: 'Başlat',
@@ -1072,27 +1031,6 @@ function initializeTableComponent() {
                 visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status === 'active'
             },
             {
-                key: 'cancel',
-                label: 'İptal Et',
-                icon: 'fas fa-times',
-                class: 'btn-outline-danger',
-                onClick: (row) => {
-                    cancelJobOrder(row.job_no);
-                },
-                visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
-            },
-            {
-                key: 'view',
-                label: 'Detay',
-                icon: 'fas fa-eye',
-                class: 'btn-outline-info',
-                onClick: (row) => {
-                    viewJobOrder(row.job_no);
-                },
-                visible: (row) => !isDepartmentTaskRow(row)
-            },
-            // Dropdown for secondary actions
-            {
                 type: 'dropdown',
                 key: 'more-actions',
                 label: 'Diğer İşlemler',
@@ -1100,22 +1038,24 @@ function initializeTableComponent() {
                 class: 'btn-outline-secondary',
                 subActions: [
                     {
-                        key: 'edit',
-                        label: 'Düzenle',
-                        icon: 'fas fa-edit',
+                        key: 'add-department-task',
+                        label: 'Görev Ekle',
+                        icon: 'fas fa-tasks',
                         onClick: (row) => {
-                            editJobOrder(row.job_no);
+                            // Plans tasks for the whole subtree, so it lives on the root only.
+                            openTaskPlanner(row.job_no, { onSaved: () => loadJobOrders() });
                         },
-                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && !row.parent && row.status !== 'completed' && row.status !== 'cancelled'
                     },
                     {
-                        key: 'revise-target-date',
-                        label: 'Hedef Tarihi Revize Et',
-                        icon: 'fas fa-calendar-check',
+                        key: 'weights-and-tiers',
+                        label: 'Ağırlık ve Kademeler',
+                        icon: 'fas fa-weight-hanging',
                         onClick: (row) => {
-                            showTargetDateRevisionModal(row.job_no, row.target_completion_date);
+                            // Weights + price tiers for the whole subtree, so root only (like Görev Ekle).
+                            openWeightPlanner(row.job_no, { onSaved: () => loadJobOrders() });
                         },
-                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders()
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && !row.parent && row.status !== 'completed' && row.status !== 'cancelled'
                     },
                     {
                         key: 'create-child',
@@ -1123,15 +1063,6 @@ function initializeTableComponent() {
                         icon: 'fas fa-plus-circle',
                         onClick: (row) => {
                             showCreateChildJobOrderModal(row.job_no);
-                        },
-                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
-                    },
-                    {
-                        key: 'add-department-task',
-                        label: 'Görev Ekle',
-                        icon: 'fas fa-tasks',
-                        onClick: (row) => {
-                            showAddDepartmentTaskModal(row.job_no);
                         },
                         visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
                     },
@@ -1152,6 +1083,17 @@ function initializeTableComponent() {
                             recalculateProgress(row.job_no);
                         },
                         visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'cancelled'
+                    },
+                    {
+                        key: 'cancel',
+                        label: 'İptal Et',
+                        icon: 'fas fa-times-circle',
+                        class: 'text-danger',
+                        dividerBefore: true,
+                        onClick: (row) => {
+                            cancelJobOrder(row.job_no);
+                        },
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
                     }
                 ],
                 visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS
@@ -1322,14 +1264,6 @@ function initializeModalComponents() {
         title: 'İş Emri Silme Onayı',
         icon: 'fas fa-exclamation-triangle',
         size: 'md',
-        showEditButton: false
-    });
-
-    // Add Department Task Modal (selection modal)
-    addDepartmentTaskModal = new EditModal('add-department-task-modal-container', {
-        title: 'Departman Görevi Ekle',
-        icon: 'fas fa-tasks',
-        size: 'xl',
         showEditButton: false
     });
 
@@ -1823,6 +1757,7 @@ function updateTableDataOnly() {
 // Use a persistent container that doesn't get recreated
 let expandButtonHandler = null;
 let targetDateReviseRowClickHandler = null;
+let jobNoLinkClickHandler = null;
 let departmentLinkClickHandler = null;
 
 // ---------------------------------------------------------------------------
@@ -2120,6 +2055,20 @@ function setupExpandButtonListeners() {
         showTargetDateRevisionModal(jobNo, currentDate);
     };
     jobOrdersTable.container.addEventListener('click', targetDateReviseRowClickHandler);
+
+    // The job number opens the detail view (it replaced the eye button).
+    if (jobNoLinkClickHandler) {
+        jobOrdersTable.container.removeEventListener('click', jobNoLinkClickHandler);
+    }
+    jobNoLinkClickHandler = (e) => {
+        const link = e.target.closest?.('.jo-jobno-link');
+        if (!link || !jobOrdersTable.container.contains(link)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const jobNo = link.getAttribute('data-job-no');
+        if (jobNo) viewJobOrder(jobNo);
+    };
+    jobOrdersTable.container.addEventListener('click', jobNoLinkClickHandler);
 
     // Department task links in inline child rows.
     // Named + removed first, like the handlers above: the table container is no
@@ -2604,6 +2553,12 @@ window.viewJobOrder = async function(jobNo) {
                     <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
                         <i class="fas fa-info-circle me-2"></i>
                         Genel Bilgiler
+                        ${!HIDE_ACTION_BUTTONS && canEditJobOrders() && jobOrder.status !== 'completed' && jobOrder.status !== 'cancelled' ? `
+                            <button type="button" class="btn btn-sm btn-outline-primary ms-auto job-order-edit-btn"
+                                    data-job-no="${escapeHtml(jobOrder.job_no)}">
+                                <i class="fas fa-edit me-1"></i>Düzenle
+                            </button>
+                        ` : ''}
                     </h6>
                     <div class="field-list">
                         <div class="field-row d-flex align-items-center py-2 border-bottom">
@@ -2845,13 +2800,14 @@ window.viewJobOrder = async function(jobNo) {
 
         // Cost is deliberately NOT shown in this modal (user, 2026-08-19) —
         // job costing has its own reporting and Sunum Modu's Finans medallion
-        // carries the verdict. Taşeron is pricing configuration, not costing,
-        // so it keeps its tab.
+        // carries the verdict. Fiyat ve Ağırlık is pricing configuration, not
+        // costing, so it keeps its tab (read-only: edited in the Ağırlık ve
+        // Kademeler modal).
         if (canViewSubcontracting()) {
             viewJobOrderModal.addTab({
                 id: 'taseron',
-                label: 'Taşeron',
-                icon: 'fas fa-handshake',
+                label: 'Fiyat ve Ağırlık',
+                icon: 'fas fa-weight-hanging',
                 iconColor: 'text-primary',
                 customContent: '<div id="price-tiers-container" style="padding: 20px;"></div>'
             });
@@ -2872,6 +2828,17 @@ window.viewJobOrder = async function(jobNo) {
                     showTargetDateRevisionModal(jn, currentDate);
                 });
             } catch (e) {}
+
+            // Düzenle (moved here from the list's action menu). One modal at a
+            // time: the detail view closes and the edit form takes its place.
+            const editBtn = viewJobOrderModal?.content?.querySelector?.('.job-order-edit-btn');
+            if (editBtn) {
+                editBtn.addEventListener('click', (e) => {
+                    const jn = e.currentTarget.getAttribute('data-job-no');
+                    viewJobOrderModal.hide();
+                    editJobOrder(jn);
+                });
+            }
 
             // Wire up the "source engineering job" link in the phase banner
             try {
@@ -4498,26 +4465,22 @@ function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = nu
     });
 }
 
-// Load Price Tiers Tab
+// Fiyat ve Ağırlık tab: the job's weight and subcontracting price tiers, read
+// only. They are entered and edited in the Ağırlık ve Kademeler modal (root
+// rows of this page, or the button below), which saves a whole tree at once.
 async function loadPriceTiersTab(jobNo) {
     const container = document.getElementById('price-tiers-container');
     if (!container) return;
-    
-    // Show loading state
+
     container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
-    
+
     try {
-        // Get job order to check total_weight_kg
         const jobOrder = jobOrderTabCache.jobOrder || await getJobOrderByJobNo(jobNo);
         if (!jobOrderTabCache.jobOrder) {
             jobOrderTabCache.jobOrder = jobOrder;
         }
-        
-        // Fetch price tiers
         const response = await fetchPriceTiers({ job_order: jobNo });
         const tiers = response.results || response || [];
-        
-        // Render price tiers UI
         renderPriceTiersUI(container, tiers, jobOrder, jobNo);
     } catch (error) {
         console.error('Error loading price tiers:', error);
@@ -4525,183 +4488,99 @@ async function loadPriceTiersTab(jobNo) {
     }
 }
 
-// Render Price Tiers UI
 function renderPriceTiersUI(container, tiers, jobOrder, jobNo) {
-    const formatCurrency = (amount, currency) => {
-        if (!amount) return '-';
-        return new Intl.NumberFormat('tr-TR', {
-            style: 'decimal',
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 4
-        }).format(amount) + ' ' + (currency || 'TRY');
+    const num = (value) => (value === null || value === undefined || value === '' ? null : Number(value));
+    const kg = (value) => (value === null ? '–' : `${value.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} kg`);
+    const price = (value, currency) => `${Number(value).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })} ${escapeHtml(currency || 'TRY')}/kg`;
+
+    const weight = num(jobOrder.total_weight_kg);
+    const welding = tiers.filter((t) => t.tier_type !== 'paint');
+    const paint = tiers.filter((t) => t.tier_type === 'paint');
+    const sum = (list, field) => list.reduce((total, t) => total + (num(t[field]) || 0), 0);
+    const weldingKg = sum(welding, 'allocated_weight_kg');
+    const usedKg = sum(welding, 'used_weight_kg');
+    const coverage = weight ? Math.min(100, (weldingKg / weight) * 100) : 0;
+    const over = weight !== null && weldingKg > weight + 0.001;
+
+    const stat = (label, value, note = '') => `
+        <div class="pw-stat">
+            <div class="pw-stat-label">${label}</div>
+            <div class="pw-stat-value">${value}</div>
+            ${note ? `<div class="pw-stat-note">${note}</div>` : ''}
+        </div>`;
+
+    const usageBar = (tier) => {
+        const allocated = num(tier.allocated_weight_kg) || 0;
+        const used = num(tier.used_weight_kg) || 0;
+        const pct = allocated ? Math.min(100, (used / allocated) * 100) : 0;
+        return `
+            <div class="pw-bar" title="%${pct.toLocaleString('tr-TR', { maximumFractionDigits: 0 })} atandı">
+                <div class="pw-bar-fill ${used > allocated + 0.001 ? 'is-over' : ''}" style="width:${pct}%"></div>
+            </div>`;
     };
-    
-    const formatWeight = (weight) => {
-        if (!weight) return '-';
-        return new Intl.NumberFormat('tr-TR', {
-            style: 'decimal',
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2
-        }).format(weight) + ' kg';
-    };
-    
-    let html = '<div class="price-tiers-section">';
-    
-    // Total Weight Section
-    html += `
-        <div class="card mb-4">
-            <div class="card-header">
-                <h6 class="mb-0"><i class="fas fa-weight me-2"></i>Toplam Ağırlık</h6>
-            </div>
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <label class="form-label">Toplam Ağırlık (kg)</label>
-                        <div class="input-group">
-                            <input type="number" class="form-control" id="total-weight-input" 
-                                   value="${jobOrder.total_weight_kg || ''}" 
-                                   step="0.01" min="0"
-                                   ${!canEditJobOrders() ? 'readonly' : ''}>
-                            <button class="btn btn-primary" id="save-total-weight-btn" 
-                                    ${!canEditJobOrders() ? 'disabled' : ''}>
-                                <i class="fas fa-save me-1"></i>Kaydet
-                            </button>
-                        </div>
-                        ${!jobOrder.total_weight_kg ? '<small class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Toplam ağırlık belirlenmeden fiyat kademesi eklenemez.</small>' : ''}
-                    </div>
+
+    const rows = tiers.map((tier) => {
+        const remaining = num(tier.remaining_weight_kg) || 0;
+        const isPaint = tier.tier_type === 'paint';
+        return `
+            <tr>
+                <td class="fw-semibold">${escapeHtml(tier.name || '–')}</td>
+                <td><span class="status-badge ${isPaint ? 'status-purple' : 'status-blue'} pw-badge">${isPaint ? 'Boya' : 'Kaynak'}</span></td>
+                <td class="text-end text-nowrap">${price(tier.price_per_kg, tier.currency)}</td>
+                <td class="text-end text-nowrap">${kg(num(tier.allocated_weight_kg))}</td>
+                <td class="text-end text-nowrap">${kg(num(tier.used_weight_kg) || 0)}</td>
+                <td class="text-end text-nowrap ${remaining < 0 ? 'text-danger fw-semibold' : ''}">${kg(remaining)}</td>
+                <td class="pw-bar-cell">${usageBar(tier)}</td>
+            </tr>`;
+    }).join('');
+
+    const editable = canEditJobOrders() && jobOrder.status !== 'completed' && jobOrder.status !== 'cancelled';
+    container.innerHTML = `
+        <div class="pw-tab">
+            <div class="pw-head">
+                <div class="pw-stats">
+                    ${stat('Toplam ağırlık',
+                        weight === null ? '<span class="status-badge status-orange pw-badge">Girilmemiş</span>' : kg(weight))}
+                    ${stat('Kaynak kademeleri', kg(weldingKg),
+                        weight === null
+                            ? ''
+                            : `<div class="pw-bar mt-1"><div class="pw-bar-fill ${over ? 'is-over' : ''}" style="width:${coverage}%"></div></div>
+                               <span class="${over ? 'text-danger fw-semibold' : ''}">${over ? 'Ağırlığı aşıyor' : `Ağırlığa oranı %${coverage.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}`}</span>`)}
+                    ${stat('Taşerona atanan', kg(usedKg), weldingKg ? `Kaynak kademelerine oranı %${Math.round((usedKg / weldingKg) * 100)}` : '')}
+                    ${stat('Boya kademeleri', paint.length ? kg(sum(paint, 'allocated_weight_kg')) : '–', paint.length ? `${paint.length} kademe` : '')}
                 </div>
+                ${editable ? `
+                    <button type="button" class="btn btn-sm btn-outline-primary pw-edit" id="price-tiers-edit-btn">
+                        <i class="fas fa-weight-hanging me-1"></i>Ağırlık ve Kademeler'de düzenle
+                    </button>` : ''}
+            </div>
+            ${tiers.length === 0 ? `
+                <div class="pw-empty">
+                    <i class="fas fa-layer-group fa-2x mb-2"></i>
+                    <div>Bu iş emrinde fiyat kademesi yok.</div>
+                </div>` : `
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle pw-table mb-0">
+                        <thead>
+                            <tr>
+                                <th>Kademe</th><th>Tip</th><th class="text-end">Fiyat</th><th class="text-end">Ayrılan</th>
+                                <th class="text-end">Atanan</th><th class="text-end">Kalan</th><th>Kullanım</th>
+                            </tr>
+                        </thead>
+                        <tbody>${rows}</tbody>
+                    </table>
+                </div>`}
+            <div class="pw-foot">
+                Ağırlık ve fiyat kademeleri, ana iş emrinin <strong>Ağırlık ve Kademeler</strong> ekranından tüm alt işlerle birlikte girilir ve düzenlenir.
             </div>
         </div>
     `;
-    
-    // Price Tiers Table
-    html += `
-        <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center">
-                <h6 class="mb-0"><i class="fas fa-list me-2"></i>Fiyat Kademeleri</h6>
-                <button class="btn btn-sm btn-primary" id="add-tier-btn" 
-                        ${!jobOrder.total_weight_kg ? 'disabled' : ''}>
-                    <i class="fas fa-plus me-1"></i>Kademe Ekle
-                </button>
-            </div>
-            <div class="card-body">
-                ${tiers.length === 0 ? `
-                    <div class="text-center py-4 text-muted">
-                        <i class="fas fa-list fa-2x mb-2"></i>
-                        <p>Henüz fiyat kademesi eklenmemiş.</p>
-                    </div>
-                ` : `
-                    <div class="table-responsive">
-                        <table class="table table-sm table-bordered">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Ad</th>
-                                    <th>Fiyat/kg</th>
-                                    <th>Para Birimi</th>
-                                    <th>Ayrılan Ağırlık</th>
-                                    <th>Kullanılan</th>
-                                    <th>Kalan</th>
-                                    <th>İşlemler</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${tiers.map(tier => `
-                                    <tr>
-                                        <td><strong>${tier.name || '-'}</strong></td>
-                                        <td>${formatCurrency(tier.price_per_kg, tier.currency)}</td>
-                                        <td>${tier.currency || '-'}</td>
-                                        <td>${formatWeight(tier.allocated_weight_kg)}</td>
-                                        <td>${formatWeight(tier.used_weight_kg || 0)}</td>
-                                        <td>${formatWeight(tier.remaining_weight_kg || 0)}</td>
-                                        <td>
-                                            ${canEditJobOrders() ? `
-                                                <button class="btn btn-sm btn-outline-primary edit-tier-btn" data-tier-id="${tier.id}">
-                                                    <i class="fas fa-edit"></i>
-                                                </button>
-                                                <button class="btn btn-sm btn-outline-danger delete-tier-btn" data-tier-id="${tier.id}">
-                                                    <i class="fas fa-trash"></i>
-                                                </button>
-                                            ` : '-'}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                        </table>
-                    </div>
-                `}
-            </div>
-        </div>
-    `;
-    
-    html += '</div>';
-    
-    container.innerHTML = html;
-    
-    // Set up event listeners
-    if (canEditJobOrders()) {
-        // Save total weight
-        const saveWeightBtn = container.querySelector('#save-total-weight-btn');
-        if (saveWeightBtn) {
-            saveWeightBtn.addEventListener('click', async () => {
-                const totalWeight = parseFloat(container.querySelector('#total-weight-input').value);
-                if (isNaN(totalWeight) || totalWeight < 0) {
-                    showNotification('Geçerli bir ağırlık değeri giriniz', 'error');
-                    return;
-                }
-                
-                try {
-                    await updateJobOrderAPI(jobNo, { total_weight_kg: totalWeight });
-                    showNotification('Toplam ağırlık güncellendi', 'success');
-                    // Reload the tab
-                    await loadPriceTiersTab(jobNo);
-                } catch (error) {
-                    console.error('Error updating total weight:', error);
-                    showNotification(error.message || 'Toplam ağırlık güncellenirken hata oluştu', 'error');
-                }
-            });
-        }
-        
-        // Add tier button
-        const addTierBtn = container.querySelector('#add-tier-btn');
-        if (addTierBtn) {
-            addTierBtn.addEventListener('click', () => {
-                showAddTierModal(jobNo, jobOrder);
-            });
-        }
-        
-        // Edit tier buttons
-        container.querySelectorAll('.edit-tier-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tierId = parseInt(btn.dataset.tierId);
-                const tier = tiers.find(t => t.id === tierId);
-                if (tier) {
-                    showEditTierModal(jobNo, tier, jobOrder);
-                }
-            });
-        });
-        
-        // Delete tier buttons
-        container.querySelectorAll('.delete-tier-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const tierId = parseInt(btn.dataset.tierId);
-                const tier = tiers.find(t => t.id === tierId);
-                if (!tier) return;
-                confirmationModal.show({
-                    message: `"${tier.name}" kademesini silmek istediğinizden emin misiniz?`,
-                    onConfirm: async () => {
-                        try {
-                            await deletePriceTier(tierId);
-                            showNotification('Fiyat kademesi silindi', 'success');
-                            await loadPriceTiersTab(jobNo);
-                        } catch (error) {
-                            console.error('Error deleting tier:', error);
-                            showNotification(error.message || 'Fiyat kademesi silinirken hata oluştu', 'error');
-                        }
-                    }
-                });
-            });
-        });
-    }
+
+    container.querySelector('#price-tiers-edit-btn')?.addEventListener('click', () => {
+        // One modal at a time: close the detail view, open the tree planner on this job.
+        viewJobOrderModal.hide();
+        openWeightPlanner(jobNo, { onSaved: () => loadJobOrders() });
+    });
 }
 
 // Load NCRs Tab
@@ -4904,189 +4783,6 @@ function renderNCRsTab(ncrs) {
                 }
             }
         ]
-    });
-}
-
-// Show Add Tier Modal
-function showAddTierModal(jobNo, jobOrder) {
-    if (!jobOrder.total_weight_kg) {
-        showNotification('Önce toplam ağırlık belirlenmelidir', 'error');
-        return;
-    }
-    
-    const modal = new EditModal('price-tier-modal-container', {
-        title: 'Yeni Fiyat Kademesi Ekle',
-        icon: 'fas fa-plus-circle',
-        size: 'md',
-        showEditButton: false
-    });
-    
-    modal.clearAll();
-    modal.addSection({
-        title: 'Kademe Bilgileri',
-        icon: 'fas fa-info-circle',
-        iconColor: 'text-primary'
-    });
-    
-    modal.addField({
-        id: 'tier-name',
-        name: 'name',
-        label: 'Ad',
-        type: 'text',
-        value: '',
-        required: true,
-        icon: 'fas fa-tag',
-        colSize: 12
-    });
-    
-    modal.addField({
-        id: 'tier-price',
-        name: 'price_per_kg',
-        label: 'Fiyat/kg',
-        type: 'number',
-        value: '',
-        required: true,
-        step: '0.01',
-        min: '0',
-        icon: 'fas fa-money-bill-wave',
-        colSize: 6
-    });
-    
-    modal.addField({
-        id: 'tier-currency',
-        name: 'currency',
-        label: 'Para Birimi',
-        type: 'dropdown',
-        value: 'TRY',
-        options: CURRENCY_OPTIONS.map(c => ({ value: c.value, label: c.label })),
-        icon: 'fas fa-coins',
-        colSize: 6
-    });
-    
-    modal.addField({
-        id: 'tier-weight',
-        name: 'allocated_weight_kg',
-        label: 'Ayrılan Ağırlık (kg)',
-        type: 'number',
-        value: '',
-        required: true,
-        step: '0.01',
-        min: '0',
-        max: jobOrder.total_weight_kg.toString(),
-        icon: 'fas fa-weight',
-        colSize: 12,
-        helpText: `Maksimum: ${jobOrder.total_weight_kg} kg`
-    });
-    
-    modal.render();
-    modal.show();
-    
-    modal.onSaveCallback(async (formData) => {
-        try {
-            await createPriceTier({
-                job_order: jobNo,
-                name: formData.name,
-                price_per_kg: parseFloat(formData.price_per_kg),
-                currency: formData.currency || 'TRY',
-                allocated_weight_kg: parseFloat(formData.allocated_weight_kg)
-            });
-            showNotification('Fiyat kademesi eklendi', 'success');
-            modal.hide();
-            await loadPriceTiersTab(jobNo);
-        } catch (error) {
-            console.error('Error creating tier:', error);
-            showNotification(error.message || 'Fiyat kademesi eklenirken hata oluştu', 'error');
-        }
-    });
-}
-
-// Show Edit Tier Modal
-function showEditTierModal(jobNo, tier, jobOrder) {
-    const modal = new EditModal('price-tier-modal-container', {
-        title: 'Fiyat Kademesi Düzenle',
-        icon: 'fas fa-edit',
-        size: 'md',
-        showEditButton: false
-    });
-    
-    modal.clearAll();
-    modal.addSection({
-        title: 'Kademe Bilgileri',
-        icon: 'fas fa-info-circle',
-        iconColor: 'text-primary'
-    });
-    
-    modal.addField({
-        id: 'tier-name',
-        name: 'name',
-        label: 'Ad',
-        type: 'text',
-        value: tier.name || '',
-        required: true,
-        icon: 'fas fa-tag',
-        colSize: 12
-    });
-    
-    modal.addField({
-        id: 'tier-price',
-        name: 'price_per_kg',
-        label: 'Fiyat/kg',
-        type: 'number',
-        value: tier.price_per_kg || '',
-        required: true,
-        step: '0.01',
-        min: '0',
-        icon: 'fas fa-money-bill-wave',
-        colSize: 6
-    });
-    
-    modal.addField({
-        id: 'tier-currency',
-        name: 'currency',
-        label: 'Para Birimi',
-        type: 'dropdown',
-        value: tier.currency || 'TRY',
-        options: CURRENCY_OPTIONS.map(c => ({ value: c.value, label: c.label })),
-        icon: 'fas fa-coins',
-        colSize: 6
-    });
-    
-    modal.addField({
-        id: 'tier-weight',
-        name: 'allocated_weight_kg',
-        label: 'Ayrılan Ağırlık (kg)',
-        type: 'number',
-        value: tier.allocated_weight_kg || '',
-        required: true,
-        step: '0.01',
-        min: '0',
-        max: jobOrder.total_weight_kg.toString(),
-        icon: 'fas fa-weight',
-        colSize: 12,
-        helpText: `Maksimum: ${jobOrder.total_weight_kg} kg`
-    });
-    
-    modal.render();
-    modal.show();
-    
-    window.editingTierId = tier.id;
-    
-    modal.onSaveCallback(async (formData) => {
-        try {
-            await updatePriceTier(window.editingTierId, {
-                name: formData.name,
-                price_per_kg: parseFloat(formData.price_per_kg),
-                currency: formData.currency || 'TRY',
-                allocated_weight_kg: parseFloat(formData.allocated_weight_kg)
-            });
-            showNotification('Fiyat kademesi güncellendi', 'success');
-            modal.hide();
-            window.editingTierId = null;
-            await loadPriceTiersTab(jobNo);
-        } catch (error) {
-            console.error('Error updating tier:', error);
-            showNotification(error.message || 'Fiyat kademesi güncellenirken hata oluştu', 'error');
-        }
     });
 }
 
@@ -7112,14 +6808,20 @@ async function exportJobOrders(format) {
         
         const originalData = jobOrdersTable.options.data;
         const originalTotal = jobOrdersTable.options.totalItems;
-        
+        const originalColumns = jobOrdersTable.options.columns;
+
         jobOrdersTable.options.data = allJobOrders;
         jobOrdersTable.options.totalItems = allJobOrders.length;
-        
-        jobOrdersTable.exportData('excel');
-        
-        jobOrdersTable.options.data = originalData;
-        jobOrdersTable.options.totalItems = originalTotal;
+        // The list no longer shows these columns, but the spreadsheet keeps them.
+        jobOrdersTable.options.columns = [...originalColumns, ...EXPORT_ONLY_COLUMNS];
+
+        try {
+            jobOrdersTable.exportData('excel');
+        } finally {
+            jobOrdersTable.options.data = originalData;
+            jobOrdersTable.options.totalItems = originalTotal;
+            jobOrdersTable.options.columns = originalColumns;
+        }
         
     } catch (error) {
         alert('Dışa aktarma sırasında hata oluştu');
@@ -7131,841 +6833,6 @@ async function exportJobOrders(format) {
     }
 }
 
-function getSelectedDepartmentTaskJobOrders() {
-    const container = document.getElementById('dept-task-job-targets-container');
-    if (!container) {
-        return window.currentJobNoForTask ? [window.currentJobNoForTask] : [];
-    }
-    return Array.from(
-        container.querySelectorAll('.dept-task-job-target-checkbox:checked')
-    ).map((cb) => cb.value);
-}
-
-function renderDepartmentTaskJobTargets(parentJob, childJobOrders) {
-    const section = addDepartmentTaskModal.form?.querySelector('[data-section-id="job-targets-section"]');
-    if (!section || !parentJob) return;
-
-    const fieldsContainer = section.querySelector('.row');
-    if (!fieldsContainer) return;
-
-    const parentJobNo = parentJob.job_no;
-    const parentTitle = escapeHtml(parentJob.title || '–');
-    const childRows = (childJobOrders || []).map((child) => {
-        const childNo = escapeHtml(child.job_no || '');
-        const childTitle = escapeHtml(child.title || '–');
-        const statusLabel = escapeHtml(child.status_display || child.status || '');
-        return `
-            <label class="list-group-item list-group-item-action d-flex align-items-start gap-2 py-2">
-                <input
-                    type="checkbox"
-                    class="form-check-input mt-1 flex-shrink-0 dept-task-job-target-checkbox"
-                    value="${childNo}"
-                >
-                <span>
-                    <strong>${childNo}</strong>
-                    <span class="text-muted"> — ${childTitle}</span>
-                    ${statusLabel ? `<span class="badge bg-light text-dark border ms-1">${statusLabel}</span>` : ''}
-                </span>
-            </label>
-        `;
-    }).join('');
-
-    fieldsContainer.innerHTML = `
-        <div class="col-12" id="dept-task-job-targets-container">
-            <p class="small text-muted mb-2">
-                Şablonu hangi iş emirlerine uygulayacağınızı seçin. Ana iş seçilmezse yalnızca seçili alt işlere uygulanır.
-            </p>
-            <div class="d-flex flex-wrap gap-2 mb-2">
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="dept-task-select-all-jobs">
-                    Tümünü Seç
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="dept-task-select-children-only">
-                    Yalnızca Alt İşler
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" id="dept-task-select-parent-only">
-                    Yalnızca Ana İş
-                </button>
-            </div>
-            <div class="list-group">
-                <label class="list-group-item list-group-item-action d-flex align-items-start gap-2 py-2">
-                    <input
-                        type="checkbox"
-                        class="form-check-input mt-1 flex-shrink-0 dept-task-job-target-checkbox"
-                        value="${escapeHtml(parentJobNo)}"
-                        checked
-                    >
-                    <span>
-                        <strong>${escapeHtml(parentJobNo)}</strong>
-                        <span class="text-muted"> — ${parentTitle}</span>
-                        <span class="badge bg-primary ms-1">Ana İş</span>
-                    </span>
-                </label>
-                ${childRows}
-            </div>
-        </div>
-    `;
-
-    const container = document.getElementById('dept-task-job-targets-container');
-    if (!container) return;
-
-    const setChecked = (predicate) => {
-        container.querySelectorAll('.dept-task-job-target-checkbox').forEach((cb) => {
-            cb.checked = predicate(cb);
-        });
-    };
-
-    container.querySelector('#dept-task-select-all-jobs')?.addEventListener('click', () => {
-        setChecked(() => true);
-    });
-    container.querySelector('#dept-task-select-children-only')?.addEventListener('click', () => {
-        setChecked((cb) => cb.value !== parentJobNo);
-    });
-    container.querySelector('#dept-task-select-parent-only')?.addEventListener('click', () => {
-        setChecked((cb) => cb.value === parentJobNo);
-    });
-}
-
-function resolveDepartmentTaskTitleForPayload(task, targetJobOrders) {
-    const fallback = (task.title || (task.isChildTask ? 'Alt görev' : 'Yeni Görev')).toString();
-    if (targetJobOrders.length > 1 && task.isMainTask && task.fromTemplate) {
-        return task.originalTemplateTitle || '';
-    }
-    return fallback;
-}
-
-
-// Show modal to add department tasks with optional template
-window.showAddDepartmentTaskModal = async function(jobNo) {
-    try {
-        // Load department choices and templates
-        let departmentChoices = [];
-        let templates = [];
-        let existingTasks = [];
-        let parentJobOrder = null;
-        let childJobOrders = [];
-        
-        try {
-            departmentChoices = await getDepartmentTaskChoices();
-        } catch (error) {
-            console.error('Error loading department choices:', error);
-            showNotification('Departman seçenekleri yüklenirken hata oluştu', 'error');
-            return;
-        }
-        
-        try {
-            const templatesResponse = await listTaskTemplates({ is_active: true });
-            templates = templatesResponse.results || [];
-        } catch (error) {
-            console.error('Error loading templates:', error);
-        }
-        
-        // Fetch existing department tasks for this job order to populate depends_on dropdown
-        try {
-            const tasksResponse = await listDepartmentTasks({ 
-                job_order: jobNo,
-                page: 1
-            });
-            existingTasks = tasksResponse.results || [];
-        } catch (error) {
-            console.error('Error loading existing tasks:', error);
-        }
-
-        try {
-            parentJobOrder = await getJobOrderByJobNo(jobNo);
-        } catch (error) {
-            console.error('Error loading job order:', error);
-        }
-
-        try {
-            const childResponse = await getChildJobOrders(jobNo, { page_size: 500 });
-            childJobOrders = childResponse.results || [];
-        } catch (error) {
-            console.error('Error loading child job orders:', error);
-        }
-        
-        // Clear and configure the modal
-        addDepartmentTaskModal.clearAll();
-        
-        // Store existing tasks for use in dropdowns
-        window.existingTasksForJobOrder = existingTasks;
-        window.deptTaskParentJobTitle = parentJobOrder?.title || '';
-
-        if (childJobOrders.length > 0) {
-            addDepartmentTaskModal.addSection({
-                id: 'job-targets-section',
-                title: 'Hedef İş Emirleri',
-                icon: 'fas fa-sitemap',
-                iconColor: 'text-warning'
-            });
-        }
-        
-        // Add template selection section
-        addDepartmentTaskModal.addSection({
-            id: 'template-section',
-            title: 'Şablon Seçimi (İsteğe Bağlı)',
-            icon: 'fas fa-file-alt',
-            iconColor: 'text-info'
-        });
-        
-        addDepartmentTaskModal.addField({
-            id: 'template_id',
-            name: 'template_id',
-            label: 'Şablon',
-            type: 'dropdown',
-            placeholder: 'Şablon seçin (isteğe bağlı)...',
-            required: false,
-            icon: 'fas fa-file-alt',
-            colSize: 12,
-            helpText: 'Şablon seçin ve "Şablon Görevlerini Ekle" butonuna tıklayın',
-            options: [
-                { value: '', label: 'Şablon Seçilmedi' },
-                ...templates.map(t => ({
-                    value: t.id.toString(),
-                    label: `${t.name}${t.is_default ? ' (Varsayılan)' : ''}`
-                }))
-            ]
-        });
-        
-        // Add tasks section (will add custom content after render)
-        addDepartmentTaskModal.addSection({
-            id: 'tasks-section',
-            title: 'Görevler',
-            icon: 'fas fa-tasks',
-            iconColor: 'text-primary'
-        });
-        
-        // Store data for later use
-        window.currentJobNoForTask = jobNo;
-        window.departmentChoicesForTasks = departmentChoices;
-        window.tasksList = []; // Array to store tasks: { department, sequence, description, depends_on, ... }
-        
-        // Set up save callback
-        addDepartmentTaskModal.onSave = null;
-        addDepartmentTaskModal.onSaveCallback(async (formData) => {
-            if (window.tasksList.length === 0) {
-                showNotification('En az bir görev eklemelisiniz', 'error');
-                return;
-            }
-
-            const targetJobOrders = getSelectedDepartmentTaskJobOrders();
-            if (targetJobOrders.length === 0) {
-                showNotification('En az bir iş emri seçmelisiniz', 'error');
-                return;
-            }
-            
-            // Sync current table input values into tasksList (in case user saved without blurring)
-            const container = document.getElementById('tasks-table-container');
-            if (container) {
-                container.querySelectorAll('.task-title').forEach(input => {
-                    const index = parseInt(input.dataset.index);
-                    if (!isNaN(index) && window.tasksList[index]) window.tasksList[index].title = input.value || '';
-                });
-                container.querySelectorAll('.task-sequence').forEach(input => {
-                    const index = parseInt(input.dataset.index);
-                    if (!isNaN(index) && window.tasksList[index]) window.tasksList[index].sequence = input.value ? parseInt(input.value) : null;
-                });
-                container.querySelectorAll('.task-department').forEach(select => {
-                    const index = parseInt(select.dataset.index);
-                    if (!isNaN(index) && window.tasksList[index]) window.tasksList[index].department = select.value || '';
-                });
-            }
-            
-            try {
-                // New backend flow: single call with negative temp IDs for parent/deps references
-                const tasks = [];
-                const dependencies = [];
-                const indexToTempId = new Map();
-                let nextTempId = -1;
-
-                // Assign stable negative temp_ids per taskList index (preserves parentTaskIndex usage)
-                window.tasksList.forEach((t, idx) => {
-                    indexToTempId.set(idx, nextTempId);
-                    nextTempId -= 1;
-                });
-
-                // Build tasks payload (include only non-empty required fields; backend expects negatives)
-                window.tasksList.forEach((task, idx) => {
-                    const temp_id = indexToTempId.get(idx);
-                    const payloadTask = {
-                        temp_id,
-                        department: task.department,
-                        title: resolveDepartmentTaskTitleForPayload(task, targetJobOrders),
-                        sequence: task.sequence ? parseInt(task.sequence) : null,
-                        weight: task.weight ? parseFloat(task.weight) : 10,
-                        task_type: task.task_type || null,
-                    };
-
-                    // Parent references must exist in the same request and refer to temp_id
-                    if (task.isChildTask && task.parentTaskIndex !== undefined && task.parentTaskIndex !== null) {
-                        const parentTemp = indexToTempId.get(task.parentTaskIndex);
-                        if (parentTemp) payloadTask.parent = parentTemp;
-                    }
-
-                    // Remove null/empty values
-                    Object.keys(payloadTask).forEach(k => {
-                        if (payloadTask[k] === null || payloadTask[k] === '' || payloadTask[k] === undefined) delete payloadTask[k];
-                    });
-
-                    tasks.push(payloadTask);
-                });
-
-                // Build dependencies payload (only references within this request are allowed)
-                window.tasksList.forEach((task, idx) => {
-                    if (!task.depends_on || !Array.isArray(task.depends_on) || task.depends_on.length === 0) return;
-                    const temp_id = indexToTempId.get(idx);
-                    const deps = [];
-                    const skippedExisting = [];
-
-                    task.depends_on.forEach(dep => {
-                        if (typeof dep === 'number' && indexToTempId.has(dep)) {
-                            const depTemp = indexToTempId.get(dep);
-                            if (depTemp && depTemp !== temp_id) deps.push(depTemp);
-                        } else if (typeof dep === 'number') {
-                            // Old flow allowed existing task IDs; new backend requires refs in same request.
-                            skippedExisting.push(dep);
-                        }
-                    });
-
-                    if (skippedExisting.length > 0) {
-                        console.warn('Skipped depends_on references to existing tasks (new endpoint requires in-request refs):', skippedExisting);
-                    }
-                    if (deps.length > 0) dependencies.push({ task: temp_id, depends_on: deps });
-                });
-
-                const payload = {
-                    job_orders: targetJobOrders,
-                    tasks,
-                    dependencies
-                };
-
-                const response = await applyDepartmentTasksTemplate(payload);
-
-                addDepartmentTaskModal.hide();
-                const defaultMessage = targetJobOrders.length > 1
-                    ? `${targetJobOrders.length} iş emrine görevler başarıyla oluşturuldu`
-                    : 'Görevler başarıyla oluşturuldu';
-                showNotification(response?.message || defaultMessage, 'success');
-            } catch (error) {
-                console.error('Error bulk creating tasks:', error);
-                let errorMessage = 'Görevler oluşturulurken hata oluştu';
-                try {
-                    const errorData = JSON.parse(error.message);
-                    if (typeof errorData === 'object') {
-                        if (errorData.errors) {
-                            errorMessage = `Hatalar: ${JSON.stringify(errorData.errors)}`;
-                        } else {
-                            const errors = Object.values(errorData).flat();
-                            errorMessage = errors.join(', ') || errorMessage;
-                        }
-                    }
-                } catch (e) {}
-                showNotification(errorMessage, 'error');
-            }
-        });
-        
-        // Render modal
-        addDepartmentTaskModal.render();
-
-        if (childJobOrders.length > 0) {
-            renderDepartmentTaskJobTargets(parentJobOrder || { job_no: jobNo, title: '' }, childJobOrders);
-        }
-        
-        // Add button to template section - similar to Görev Ekle button
-        const templateSection = addDepartmentTaskModal.form.querySelector('[data-section-id="template-section"]');
-        if (templateSection) {
-            const fieldsContainer = templateSection.querySelector('.row');
-            if (fieldsContainer) {
-                // Add button container similar to Görev Ekle button structure
-                const buttonCol = document.createElement('div');
-                buttonCol.className = 'col-12';
-                buttonCol.innerHTML = `
-                    <div class="d-flex justify-content-end mb-3">
-                        <button type="button" class="btn btn-sm btn-success" id="add-template-items-btn">
-                            <i class="fas fa-plus me-1"></i>Şablon Görevlerini Ekle
-                        </button>
-                    </div>
-                `;
-                fieldsContainer.appendChild(buttonCol);
-            }
-        }
-        
-        // Add custom tasks table HTML after rendering
-        const tasksSection = addDepartmentTaskModal.form.querySelector('[data-section-id="tasks-section"]');
-        if (tasksSection) {
-            const fieldsContainer = tasksSection.querySelector('.row');
-            if (fieldsContainer) {
-                fieldsContainer.innerHTML = `
-                    <div class="col-12">
-                        <div id="tasks-container" class="mt-3">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <h6 class="mb-0">Görev Listesi</h6>
-                                <button type="button" class="btn btn-sm btn-primary" id="add-task-btn">
-                                    <i class="fas fa-plus me-1"></i>Görev Ekle
-                                </button>
-                            </div>
-                            <div id="tasks-table-container">
-                                <p class="text-muted text-center py-3">Henüz görev eklenmedi. Şablon seçin veya manuel görev ekleyin.</p>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }
-        }
-        
-        // Button is always visible, no need for show/hide logic
-        
-        // Setup add template items button
-        const addTemplateItemsBtn = addDepartmentTaskModal.container.querySelector('#add-template-items-btn');
-        if (addTemplateItemsBtn) {
-            addTemplateItemsBtn.addEventListener('click', async () => {
-                // Use getFormData to properly get dropdown value
-                const formData = addDepartmentTaskModal.getFormData();
-                const templateId = formData.template_id;
-                
-                if (!templateId || templateId === '' || templateId === null) {
-                    showNotification('Lütfen önce bir şablon seçin', 'warning');
-                    return;
-                }
-                
-                try {
-                    // Fetch template with items and job order (for main task titles)
-                    const jobNo = window.currentJobNoForTask;
-                    let jobOrderTitle = '';
-                    if (jobNo) {
-                        try {
-                            const jobOrder = await getJobOrderByJobNo(jobNo);
-                            if (jobOrder && jobOrder.title) jobOrderTitle = jobOrder.title;
-                        } catch (e) { /* use template title fallback */ }
-                    }
-                    
-                    const template = await getTaskTemplateById(parseInt(templateId));
-                    
-                    if (template.items && template.items.length > 0) {
-                        // Filter only main items (parent === null)
-                        const mainItems = template.items.filter(item => item.parent === null);
-                        
-                        if (mainItems.length === 0) {
-                            showNotification('Seçilen şablonda ana görev bulunamadı', 'warning');
-                            return;
-                        }
-                        
-                        // Create a map from template item ID to tasksList index (for main items only)
-                        const templateItemIdToIndex = new Map();
-                        
-                        // First pass: add only main tasks and create mapping (main tasks use job order title)
-                        const newMainTasks = mainItems.map((item, itemIndex) => {
-                            const actualIndex = window.tasksList.length + itemIndex;
-                            templateItemIdToIndex.set(item.id, actualIndex);
-                            
-                            return {
-                                department: item.department,
-                                department_display: item.department_display,
-                                title: jobOrderTitle || item.title || '',
-                                originalTemplateTitle: item.title || '',
-                                sequence: item.sequence || (window.tasksList.length + itemIndex + 1),
-                                description: item.description || '',
-                                depends_on: item.depends_on || [],
-                                weight: item.weight || 10, // Include weight from template, default to 10
-                                task_type: item.task_type || null, // Propagate special task type from template
-                                fromTemplate: true,
-                                templateItemId: item.id, // Store original template item ID for mapping
-                                children: item.children || [], // Store children for later processing
-                                isMainTask: true // Mark as main task
-                            };
-                        });
-                        
-                        // Second pass: map depends_on template item IDs to tasksList indices (only main items)
-                        newMainTasks.forEach((task, taskIndex) => {
-                            if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
-                                // Map template item IDs to tasksList indices (only for main items)
-                                task.depends_on = task.depends_on.map(templateItemId => {
-                                    if (templateItemIdToIndex.has(templateItemId)) {
-                                        return templateItemIdToIndex.get(templateItemId);
-                                    }
-                                    // If not found in template, it might be an existing task ID
-                                    return templateItemId;
-                                });
-                            }
-                        });
-                        
-                        // Third pass: add child tasks as separate entries with parent reference
-                        const newChildTasks = [];
-                        newMainTasks.forEach((mainTask, mainIndex) => {
-                            if (mainTask.children && mainTask.children.length > 0) {
-                                mainTask.children.forEach((child, childIndex) => {
-                                    const childTaskIndex = window.tasksList.length + newMainTasks.length + newChildTasks.length;
-                                    newChildTasks.push({
-                                        department: child.department || mainTask.department,
-                                        department_display: child.department_display || mainTask.department_display,
-                                        title: child.title || '',
-                                        sequence: child.sequence || (childIndex + 1),
-                                        description: child.description || '',
-                                        depends_on: [],
-                                        weight: child.weight || 10, // Include weight from template, default to 10
-                                        task_type: child.task_type || null, // Propagate special task type from template
-                                        fromTemplate: true,
-                                        templateItemId: child.id,
-                                        parentTemplateItemId: mainTask.templateItemId, // Reference to parent template item
-                                        parentTaskIndex: window.tasksList.length + mainIndex, // Reference to parent in tasksList
-                                        isChildTask: true // Mark as child task
-                                    });
-                                });
-                            }
-                        });
-                        
-                        // Append main tasks first, then child tasks
-                        window.tasksList = [...window.tasksList, ...newMainTasks, ...newChildTasks];
-                        
-                        // Update sequences to be sequential for main tasks
-                        let mainSequence = 1;
-                        window.tasksList.forEach((task, index) => {
-                            if (task.isMainTask && !task.sequence) {
-                                task.sequence = mainSequence++;
-                            }
-                        });
-                        
-                        // Clean up old dropdowns before re-rendering
-                        if (window.taskDependsOnDropdowns) {
-                            window.taskDependsOnDropdowns.forEach(dropdown => dropdown.destroy());
-                            window.taskDependsOnDropdowns.clear();
-                        }
-                        
-                        renderTasksTable();
-                        const totalTasks = newMainTasks.length + newChildTasks.length;
-                        showNotification(`${newMainTasks.length} ana görev ve ${newChildTasks.length} alt görev şablondan eklendi`, 'success');
-                    } else {
-                        showNotification('Seçilen şablonda görev bulunamadı', 'warning');
-                    }
-                } catch (error) {
-                    console.error('Error loading template:', error);
-                    showNotification('Şablon yüklenirken hata oluştu', 'error');
-                }
-            });
-        }
-        
-        // Setup add task button
-        const addTaskBtn = addDepartmentTaskModal.container.querySelector('#add-task-btn');
-        if (addTaskBtn) {
-            addTaskBtn.addEventListener('click', () => {
-                addNewTask();
-            });
-        }
-        
-        // Initial render
-        renderTasksTable();
-        
-        addDepartmentTaskModal.show();
-    } catch (error) {
-        console.error('Error showing add department task modal:', error);
-        showNotification('Görev ekleme modalı açılırken hata oluştu', 'error');
-    }
-};
-
-// Build display order: main tasks with their children interleaved (hierarchy order)
-function getTasksDisplayOrder() {
-    const mainTasks = window.tasksList.filter(t => !t.isChildTask);
-    const childTasks = window.tasksList.filter(t => t.isChildTask);
-    const displayIndices = [];
-    mainTasks.forEach(mainTask => {
-        const mainIdx = window.tasksList.indexOf(mainTask);
-        displayIndices.push(mainIdx);
-        childTasks.forEach(child => {
-            if (child.parentTaskIndex === mainIdx) {
-                displayIndices.push(window.tasksList.indexOf(child));
-            }
-        });
-    });
-    return displayIndices;
-}
-
-// Render tasks table
-function renderTasksTable() {
-    const container = document.getElementById('tasks-table-container');
-    if (!container) return;
-    
-    if (window.tasksList.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center py-3">Henüz görev eklenmedi. Şablon seçin veya manuel görev ekleyin.</p>';
-        return;
-    }
-    
-    const displayIndices = getTasksDisplayOrder();
-    
-    const tableHtml = `
-        <div class="table-responsive">
-            <table class="table table-sm table-bordered">
-                <thead>
-                    <tr>
-                        <th style="width: 60px;">Sıra</th>
-                        <th>Başlık</th>
-                        <th>Departman</th>
-                        <th style="width: 100px;">Ağırlık</th>
-                        <th style="width: 200px;">Bağımlılıklar</th>
-                        <th style="width: 100px;">İşlemler</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${displayIndices.map((actualIndex) => {
-                        const task = window.tasksList[actualIndex];
-                        const isChildTask = task.isChildTask || false;
-                        const indentClass = isChildTask ? 'ps-4' : '';
-                        const childIndicator = isChildTask ? '<span class="text-muted me-1">↳</span>' : '';
-                        const titleValue = (task.title || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        const taskTypeLabel = task.task_type
-                            ? (TASK_TYPE_OPTIONS.find(t => t.value === task.task_type)?.label || task.task_type)
-                            : null;
-                        const taskTypeBadge = taskTypeLabel
-                            ? `<div class="mt-1"><span class="badge bg-warning text-dark" title="Görev Tipi">${taskTypeLabel}</span></div>`
-                            : '';
-                        return `
-                        <tr data-task-index="${actualIndex}" ${isChildTask ? 'class="table-light"' : ''}>
-                            <td class="${indentClass}">
-                                ${childIndicator}
-                                <input type="number" class="form-control form-control-sm task-sequence"
-                                       value="${task.sequence || actualIndex + 1}"
-                                       data-index="${actualIndex}"
-                                       style="width: 60px;"
-                                       ${isChildTask ? 'readonly' : ''}>
-                            </td>
-                            <td class="${indentClass}">
-                                ${childIndicator}
-                                <input type="text" class="form-control form-control-sm task-title"
-                                       value="${titleValue}"
-                                       data-index="${actualIndex}"
-                                       placeholder="${isChildTask ? 'Alt görev başlığı' : 'Görev başlığı'}">
-                                ${taskTypeBadge}
-                            </td>
-                            <td>
-                                <select class="form-select form-select-sm task-department" 
-                                        data-index="${actualIndex}"
-                                        ${isChildTask ? 'disabled' : ''}>
-                                    ${window.departmentChoicesForTasks.map(dept => 
-                                        `<option value="${dept.value}" ${task.department === dept.value ? 'selected' : ''}>${dept.label}</option>`
-                                    ).join('')}
-                                </select>
-                            </td>
-                            <td>
-                                <input type="number" class="form-control form-control-sm task-weight" 
-                                       value="${task.weight || ''}" 
-                                       data-index="${actualIndex}" 
-                                       min="1" 
-                                       max="100"
-                                       style="width: 80px;"
-                                       placeholder="1-100">
-                            </td>
-                            <td>
-                                ${isChildTask ? '<span class="text-muted">Alt görev - bağımlılık yok</span>' : `<div id="depends-on-dropdown-${actualIndex}" class="depends-on-dropdown-container" data-index="${actualIndex}"></div>`}
-                            </td>
-                            <td>
-                                <button type="button" class="btn btn-sm btn-outline-danger remove-task-btn" 
-                                        data-index="${actualIndex}">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                    `;
-                    }).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-    
-    container.innerHTML = tableHtml;
-    
-    // Attach event listeners
-    container.querySelectorAll('.task-sequence').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const index = parseInt(e.target.dataset.index);
-            window.tasksList[index].sequence = e.target.value ? parseInt(e.target.value) : null;
-        });
-    });
-    
-    container.querySelectorAll('.task-title').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const index = parseInt(e.target.dataset.index);
-            window.tasksList[index].title = e.target.value || '';
-        });
-        input.addEventListener('blur', (e) => {
-            const index = parseInt(e.target.dataset.index);
-            window.tasksList[index].title = e.target.value || '';
-        });
-    });
-    
-    container.querySelectorAll('.task-department').forEach(select => {
-        select.addEventListener('change', (e) => {
-            const index = parseInt(e.target.dataset.index);
-            window.tasksList[index].department = e.target.value;
-        });
-    });
-    
-    container.querySelectorAll('.task-weight').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const index = parseInt(e.target.dataset.index);
-            const weightValue = e.target.value ? parseInt(e.target.value) : null;
-            if (weightValue !== null && (weightValue < 1 || weightValue > 100)) {
-                showNotification('Ağırlık 1-100 arasında olmalıdır', 'warning');
-                e.target.value = window.tasksList[index].weight || '';
-                return;
-            }
-            window.tasksList[index].weight = weightValue;
-        });
-        input.addEventListener('blur', (e) => {
-            const index = parseInt(e.target.dataset.index);
-            const weightValue = e.target.value ? parseInt(e.target.value) : null;
-            if (weightValue !== null && (weightValue < 1 || weightValue > 100)) {
-                showNotification('Ağırlık 1-100 arasında olmalıdır', 'warning');
-                e.target.value = window.tasksList[index].weight || '';
-                return;
-            }
-            window.tasksList[index].weight = weightValue;
-        });
-    });
-    
-    // Initialize multiselect dropdowns for depends_on (only for main tasks)
-    container.querySelectorAll('.depends-on-dropdown-container').forEach(container => {
-        const index = parseInt(container.dataset.index);
-        const task = window.tasksList[index];
-        
-        // Only show items from tasksList (items being added), not existing tasks
-        // The depends_on in template items reference other template items, so we only need to show those
-        const dropdownOptions = [];
-        const seenValues = new Set(); // Track to avoid duplicates
-        
-        // Add tasks being added (excluding current task and child tasks - only main tasks can be dependencies)
-        window.tasksList.forEach((t, idx) => {
-            if (idx !== index && !t.isChildTask) {
-                const value = `new_${idx}`;
-                if (!seenValues.has(value)) {
-                    const deptLabel = window.departmentChoicesForTasks.find(d => d.value === t.department)?.label || t.department_display || t.department;
-                    const displayText = (t.title ? `${t.title} — ` : '') + `${deptLabel} (Sıra: ${t.sequence || idx + 1})`;
-                    dropdownOptions.push({
-                        value: value,
-                        text: displayText
-                    });
-                    seenValues.add(value);
-                }
-            }
-        });
-        
-        // Initialize ModernDropdown
-        const dropdown = new ModernDropdown(container, {
-            placeholder: 'Bağımlılık seçin...',
-            multiple: true,
-            searchable: true
-        });
-        
-        dropdown.setItems(dropdownOptions);
-        
-        // Map depends_on IDs to dropdown values
-        // Since we only show items from tasksList, we only need to map indices
-        let selectedValues = [];
-        if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
-            selectedValues = task.depends_on.map(depId => {
-                // Check if it's a tasksList index (for template items that were mapped)
-                if (typeof depId === 'number' && depId < window.tasksList.length && depId !== index) {
-                    return `new_${depId}`;
-                }
-                return null;
-            }).filter(v => v !== null);
-        }
-        
-        if (selectedValues.length > 0) {
-            dropdown.setValue(selectedValues);
-        }
-        
-        // Store dropdown reference
-        if (!window.taskDependsOnDropdowns) {
-            window.taskDependsOnDropdowns = new Map();
-        }
-        window.taskDependsOnDropdowns.set(index, dropdown);
-        
-        // Listen for changes
-        container.addEventListener('dropdown:select', (e) => {
-            const selectedValues = dropdown.getValue();
-            // Convert dropdown values back to indices (only new tasks are shown)
-            task.depends_on = selectedValues.map(val => {
-                if (val.startsWith('new_')) {
-                    const idx = parseInt(val.replace('new_', ''));
-                    // Store the index - these reference other items in tasksList
-                    return idx;
-                }
-                return null;
-            }).filter(id => id !== null);
-        });
-    });
-    
-    container.querySelectorAll('.remove-task-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const index = parseInt(e.target.closest('.remove-task-btn').dataset.index);
-            const task = window.tasksList[index];
-            
-            // Collect indices to remove: this task and, if main task, all its children
-            const indicesToRemove = [index];
-            if (task && !task.isChildTask) {
-                window.tasksList.forEach((t, idx) => {
-                    if (t.isChildTask && t.parentTaskIndex === index) indicesToRemove.push(idx);
-                });
-            }
-            // Store parent task object references for children (before splice) so we can re-bind indices after
-            const childToParentObject = new Map();
-            window.tasksList.forEach((t, idx) => {
-                if (t.isChildTask && typeof t.parentTaskIndex === 'number' && !indicesToRemove.includes(idx)) {
-                    const parentTask = window.tasksList[t.parentTaskIndex];
-                    if (parentTask && !indicesToRemove.includes(t.parentTaskIndex)) {
-                        childToParentObject.set(t, parentTask);
-                    }
-                }
-            });
-            // Sort descending so splicing doesn't shift indices
-            indicesToRemove.sort((a, b) => b - a);
-            
-            indicesToRemove.forEach(idx => {
-                if (window.taskDependsOnDropdowns && window.taskDependsOnDropdowns.has(idx)) {
-                    const dropdown = window.taskDependsOnDropdowns.get(idx);
-                    dropdown.destroy();
-                    window.taskDependsOnDropdowns.delete(idx);
-                }
-                window.tasksList.splice(idx, 1);
-            });
-            // Re-bind parentTaskIndex for remaining child tasks
-            childToParentObject.forEach((parentTask, childTask) => {
-                const newParentIdx = window.tasksList.indexOf(parentTask);
-                if (newParentIdx >= 0) childTask.parentTaskIndex = newParentIdx;
-            });
-            renderTasksTable();
-        });
-    });
-}
-
-// Add new task (main task only)
-function addNewTask() {
-    if (!window.tasksList) {
-        window.tasksList = [];
-    }
-    
-    const newTask = {
-        department: window.departmentChoicesForTasks[0]?.value || '',
-        title: 'Yeni Görev',
-        sequence: window.tasksList.filter(t => !t.isChildTask).length + 1,
-        description: '',
-        depends_on: [],
-        weight: 10, // Default weight
-        task_type: null,
-        fromTemplate: false,
-        isMainTask: true
-    };
-    
-    window.tasksList.push(newTask);
-    
-    // Clean up old dropdowns before re-rendering
-    if (window.taskDependsOnDropdowns) {
-        window.taskDependsOnDropdowns.forEach(dropdown => dropdown.destroy());
-        window.taskDependsOnDropdowns.clear();
-    }
-    
-    renderTasksTable();
-}
-
-// Helper function to escape HTML
 // Show manual department task creation modal
 window.showCreateDepartmentTaskModal = async function(jobNo) {
     try {
@@ -8162,29 +7029,3 @@ window.showCreateDepartmentTaskModal = async function(jobNo) {
         showNotification('Görev oluşturma modalı açılırken hata oluştu', 'error');
     }
 };
-
-// Apply template to job order
-async function applyTemplateToJobOrderHandler(jobNo, templateId) {
-    try {
-        // Show loading
-        addDepartmentTaskModal.hide();
-        
-        // Apply template
-        const response = await applyTemplateToJobOrder(jobNo, { template_id: templateId });
-        
-        // Show success message
-        const message = response.message || `Şablon başarıyla uygulandı. ${response.created_tasks?.length || 0} görev oluşturuldu.`;
-        showNotification(message, 'success');
-    } catch (error) {
-        console.error('Error applying template:', error);
-        let errorMessage = 'Şablon uygulanırken hata oluştu';
-        try {
-            const errorData = JSON.parse(error.message);
-            if (typeof errorData === 'object') {
-                const errors = Object.values(errorData).flat();
-                errorMessage = errors.join(', ') || errorMessage;
-            }
-        } catch (e) {}
-        showNotification(errorMessage, 'error');
-    }
-}

@@ -7,7 +7,8 @@ import { ComparisonTable } from '../../../components/comparison-table/comparison
 import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
-import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft, attachPlanningItemsToPurchaseRequest, getPurchaseRequests } from '../../../apis/procurement.js';
+import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, updatePurchaseRequestDraft, autosavePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft, attachPlanningItemsToPurchaseRequest, getPurchaseRequests } from '../../../apis/procurement.js';
+import { escapeHtml } from '../../../utils/text.js';
 import { getPlanningRequest } from '../../../apis/planning/planningRequests.js';
 import { getPlanningRequestItems, getNumberOfAvailablePlanningRequestItems, getPlanningRequestItem, getPlanningRequestItemsFiles } from '../../../apis/planning/planningRequestItems.js';
 import { TableComponent } from '../../../components/table/table.js';
@@ -207,7 +208,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeUnitDropdown();
     
     // Initialize data manager first and load draft data
-    dataManager = new DataManager(requestData);
+    dataManager = new DataManager(requestData, { onAutoSave: () => pushAutosave() });
     const draftLoaded = dataManager.loadDraftData();
     
     initializeManagers();
@@ -226,7 +227,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize modal cleanup
     initializeModalCleanup();
-    
+
+    // Initialize the overwrite-or-save-as-new draft modal
+    initializeSaveDraftModal();
+
     // Initialize planning request items modal
     initializePlanningRequestItemsModal();
     
@@ -337,135 +341,310 @@ function initializeManagers() {
 
 
 
-async function saveDraftAsJSON() {
-    try {
-        // Convert itemRecommendations to recommendations format
-        const recommendations = {};
-        if (requestData.itemRecommendations) {
-            Object.keys(requestData.itemRecommendations).forEach(itemIndex => {
-                const recommendedSupplierId = requestData.itemRecommendations[itemIndex];
-                if (recommendedSupplierId) {
-                    recommendations[itemIndex] = recommendedSupplierId;
-                }
-            });
-        }
-        
-        // Calculate total amount in EUR from recommended suppliers
-        const totalAmountEUR = calculateTotalAmountEUR();
-        
-        // Get formatted items and mapping
-        const formattedData = itemsManager.getFormattedItemsForSubmission();
-        
-        // Check for problematic items that would cause backend issues
-        if (formattedData.error) {
-            console.log('Problematic items detected in draft:', formattedData.error);
-            
-            // Show detailed error message to user
-            let errorMessage = formattedData.error.message + '\n\n';
-            formattedData.error.items.forEach((problematicItem, index) => {
-                errorMessage += `${index + 1}. Kod: ${problematicItem.code}\n`;
-                errorMessage += `   Ad: ${problematicItem.name}\n`;
-                errorMessage += `   İş No: ${problematicItem.job_no}\n`;
-                errorMessage += `   Teknik Özellikler: ${problematicItem.specs}\n`;
-                errorMessage += `   Malzeme Açıklaması: ${problematicItem.item_description}\n`;
-                errorMessage += `   Tekrarlanan satırlar: ${problematicItem.items.map(item => `Satır ${item.index} (${item.quantity} ${item.unit})`).join(', ')}\n\n`;
-            });
-            
-            errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası, teknik özellikler ve malzeme açıklamasına sahip olduğu için backend sorunlarına neden olur.\n';
-            errorMessage += 'Lütfen bu malzemeleri düzenleyin veya silin.';
-            
-            showNotification(errorMessage, 'error');
-            return;
-        }
-        
-        // Transform offers and recommendations using the mapping
-        const transformedOffers = {};
-        const transformedRecommendations = {};
-        
-        Object.keys(requestData.offers).forEach(supplierId => {
-            transformedOffers[supplierId] = {};
-            Object.keys(requestData.offers[supplierId]).forEach(originalIndex => {
-                const groupedIndex = formattedData.mapping[originalIndex];
-                if (groupedIndex !== undefined) {
-                    transformedOffers[supplierId][groupedIndex] = requestData.offers[supplierId][originalIndex];
-                }
-            });
-        });
-        
-        Object.keys(recommendations).forEach(originalIndex => {
-            const groupedIndex = formattedData.mapping[originalIndex];
-            if (groupedIndex !== undefined) {
-                transformedRecommendations[groupedIndex] = recommendations[originalIndex];
+/**
+ * Build the draft body (model fields + `data` JSON) from the current page.
+ * strict: refuse problematic duplicate items, as a manual save always has.
+ * The autosave passes strict=false so it never blocks — the ungrouped
+ * original_* fields still carry everything needed to restore the page.
+ */
+function buildDraftPayload({ strict = true } = {}) {
+    // Convert itemRecommendations to recommendations format
+    const recommendations = {};
+    if (requestData.itemRecommendations) {
+        Object.keys(requestData.itemRecommendations).forEach(itemIndex => {
+            const recommendedSupplierId = requestData.itemRecommendations[itemIndex];
+            if (recommendedSupplierId) {
+                recommendations[itemIndex] = recommendedSupplierId;
             }
         });
-        
-        // Transform suppliers for backend submission
-        const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
-        
-        // Check if any item has job_no starting with "RM" in allocations
-        const isRollingMill = formattedData.items.some(item => 
-            item.allocations && item.allocations.some(allocation => 
-                allocation.job_no && allocation.job_no.toString().toUpperCase().startsWith('RM')
-            )
-        );
+    }
 
-        // Sync planning_request_item_ids before saving draft
-        syncPlanningRequestItemIds();
-        
-        // Prepare data for backend (same format as submission)
-        // For drafts, save the original ungrouped items to preserve source_planning_request_item_id
-        const submissionData = {
-            title: requestData.title || 'Malzeme Satın Alma Talebi',
-            description: requestData.description,
-            priority: requestData.priority || 'normal',
-            needed_date: requestData.needed_date || '',
-            items: formattedData.items, // Grouped items for submission format
-            suppliers: transformedSuppliers,
-            offers: transformedOffers,
-            recommendations: transformedRecommendations,
-            total_amount_eur: totalAmountEUR,
-            is_rolling_mill: isRollingMill,
-            planning_request_item_ids: requestData.planning_request_item_ids || [],
-            // Store original ungrouped items to preserve source_planning_request_item_id
-            original_items: requestData.items.map(item => ({
-                ...item,
-                // Ensure all necessary fields are preserved
-                id: item.id,
-                code: item.code,
-                name: item.name,
-                job_no: item.job_no,
-                quantity: item.quantity,
-                unit: item.unit,
-                specs: item.specs,
-                specifications: item.specifications,
-                item_description: item.item_description,
-                source_planning_request_item_id: item.source_planning_request_item_id,
-                source_planning_request_item_ids: item.source_planning_request_item_ids, // Preserve array for merged items
-                file_asset_ids: item.file_asset_ids
-            }))
-        };
-        
-        // Prepare draft data according to the model structure
-        const draftData = {
-            title: requestData.title || 'Malzeme Satın Alma Talebi',
-            description: requestData.description || 'Proje için gerekli malzemeler',
-            needed_date: requestData.needed_date || new Date().toISOString().split('T')[0],
-            priority: requestData.priority || 'normal',
-            data: submissionData  // Store the full submission data in the JSON field
-        };
-        
-        // Send to backend
-        const result = await savePurchaseRequestDraft(draftData);
-        
-        showNotification('Taslak başarıyla kaydedildi!', 'success');
-        
+    // Calculate total amount in EUR from recommended suppliers
+    const totalAmountEUR = calculateTotalAmountEUR();
+
+    // Get formatted items and mapping
+    const formattedData = itemsManager.getFormattedItemsForSubmission();
+    if (formattedData.error && strict) {
+        return { error: formattedData.error };
+    }
+
+    // Transform offers and recommendations using the mapping
+    const transformedOffers = {};
+    const transformedRecommendations = {};
+
+    Object.keys(requestData.offers).forEach(supplierId => {
+        transformedOffers[supplierId] = {};
+        Object.keys(requestData.offers[supplierId]).forEach(originalIndex => {
+            const groupedIndex = formattedData.mapping[originalIndex];
+            if (groupedIndex !== undefined) {
+                transformedOffers[supplierId][groupedIndex] = requestData.offers[supplierId][originalIndex];
+            }
+        });
+    });
+
+    Object.keys(recommendations).forEach(originalIndex => {
+        const groupedIndex = formattedData.mapping[originalIndex];
+        if (groupedIndex !== undefined) {
+            transformedRecommendations[groupedIndex] = recommendations[originalIndex];
+        }
+    });
+
+    // Transform suppliers for backend submission
+    const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
+
+    // Check if any item has job_no starting with "RM" in allocations
+    const isRollingMill = formattedData.items.some(item =>
+        item.allocations && item.allocations.some(allocation =>
+            allocation.job_no && allocation.job_no.toString().toUpperCase().startsWith('RM')
+        )
+    );
+
+    // Sync planning_request_item_ids before saving draft
+    syncPlanningRequestItemIds();
+
+    // Prepare data for backend (same format as submission)
+    // For drafts, save the original ungrouped items to preserve source_planning_request_item_id
+    const submissionData = {
+        title: requestData.title || 'Malzeme Satın Alma Talebi',
+        description: requestData.description,
+        priority: requestData.priority || 'normal',
+        needed_date: requestData.needed_date || '',
+        items: formattedData.items, // Grouped items for submission format
+        suppliers: transformedSuppliers,
+        offers: transformedOffers,
+        recommendations: transformedRecommendations,
+        total_amount_eur: totalAmountEUR,
+        is_rolling_mill: isRollingMill,
+        planning_request_item_ids: requestData.planning_request_item_ids || [],
+        // Store original ungrouped items to preserve source_planning_request_item_id
+        original_items: requestData.items.map(item => ({
+            ...item,
+            // Ensure all necessary fields are preserved
+            id: item.id,
+            code: item.code,
+            name: item.name,
+            job_no: item.job_no,
+            quantity: item.quantity,
+            unit: item.unit,
+            specs: item.specs,
+            specifications: item.specifications,
+            item_description: item.item_description,
+            source_planning_request_item_id: item.source_planning_request_item_id,
+            source_planning_request_item_ids: item.source_planning_request_item_ids, // Preserve array for merged items
+            file_asset_ids: item.file_asset_ids
+        })),
+        // Offers/recommendations keyed by original_items index. The grouped ones
+        // above are keyed by grouped index and drift once items merge.
+        original_offers: requestData.offers,
+        original_recommendations: recommendations
+    };
+
+    // Prepare draft data according to the model structure
+    return {
+        title: requestData.title || 'Malzeme Satın Alma Talebi',
+        description: requestData.description || 'Proje için gerekli malzemeler',
+        needed_date: requestData.needed_date || new Date().toISOString().split('T')[0],
+        priority: requestData.priority || 'normal',
+        data: submissionData  // Store the full submission data in the JSON field
+    };
+}
+
+function showProblematicItemsError(error) {
+    // Show detailed error message to user
+    let errorMessage = error.message + '\n\n';
+    error.items.forEach((problematicItem, index) => {
+        errorMessage += `${index + 1}. Kod: ${problematicItem.code}\n`;
+        errorMessage += `   Ad: ${problematicItem.name}\n`;
+        errorMessage += `   İş No: ${problematicItem.job_no}\n`;
+        errorMessage += `   Teknik Özellikler: ${problematicItem.specs}\n`;
+        errorMessage += `   Malzeme Açıklaması: ${problematicItem.item_description}\n`;
+        errorMessage += `   Tekrarlanan satırlar: ${problematicItem.items.map(item => `Satır ${item.index} (${item.quantity} ${item.unit})`).join(', ')}\n\n`;
+    });
+
+    errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası, teknik özellikler ve malzeme açıklamasına sahip olduğu için backend sorunlarına neden olur.\n';
+    errorMessage += 'Lütfen bu malzemeleri düzenleyin veya silin.';
+
+    showNotification(errorMessage, 'error');
+}
+
+async function saveDraftAsJSON() {
+    const payload = buildDraftPayload({ strict: true });
+    if (payload.error) {
+        console.log('Problematic items detected in draft:', payload.error);
+        showProblematicItemsError(payload.error);
+        return;
+    }
+
+    // This request was loaded from / saved as a draft before: ask before overwriting it
+    if (requestData.savedDraft?.id) {
+        showSaveDraftModal(payload);
+        return;
+    }
+
+    await persistDraft(payload, { title: payload.title });
+}
+
+/**
+ * Write the draft to the server, then clear the page.
+ * overwriteId: PUT over that draft; otherwise POST a new one.
+ */
+async function persistDraft(payload, { title, overwriteId = null }) {
+    const body = { ...payload, title, data: { ...payload.data, title } };
+    try {
+        let saved;
+        let message = 'Taslak başarıyla kaydedildi!';
+        if (overwriteId) {
+            try {
+                saved = await updatePurchaseRequestDraft(overwriteId, body);
+                message = 'Taslağın üzerine yazıldı!';
+            } catch (error) {
+                if (error.status !== 404) throw error;
+                // Deleted meanwhile (e.g. in another tab): keep the work as a new draft
+                saved = await savePurchaseRequestDraft(body);
+                message = 'Önceki taslak bulunamadı, yeni taslak olarak kaydedildi.';
+            }
+        } else {
+            saved = await savePurchaseRequestDraft(body);
+        }
+
+        showNotification(message, 'success');
+
+        // Point the autosave copy at this draft too, so loading it later
+        // overwrites this draft instead of creating yet another row.
+        requestData.title = title;
+        requestData.savedDraft = { id: saved.id, title: saved.title };
+        await flushAutosave();
+
         // Clear the page after successful draft save
         await clearPage();
-        
+        return true;
     } catch (error) {
         console.error('Draft save error:', error);
         showNotification('Taslak kaydedilirken hata oluştu: ' + error.message, 'error');
+        return false;
     }
+}
+
+let pendingDraftPayload = null;
+
+function showSaveDraftModal(payload) {
+    pendingDraftPayload = payload;
+    const existing = requestData.savedDraft;
+    const modalElement = document.getElementById('saveDraftModal');
+    const nameInput = document.getElementById('save-draft-name');
+
+    document.getElementById('save-draft-existing-name').textContent = existing.title || 'Başlıksız';
+    document.getElementById('save-draft-existing-id').textContent = `#${existing.id}`;
+    nameInput.value = payload.title;
+    updateSaveDraftModalState();
+
+    bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+function isSaveDraftNameChanged() {
+    const name = document.getElementById('save-draft-name').value.trim();
+    return name !== (requestData.savedDraft?.title || '').trim();
+}
+
+function updateSaveDraftModalState() {
+    const name = document.getElementById('save-draft-name').value.trim();
+    const changed = isSaveDraftNameChanged();
+    const hint = document.getElementById('save-draft-hint');
+    const asNewBtn = document.getElementById('save-draft-as-new-btn');
+    const overwriteBtn = document.getElementById('save-draft-overwrite-btn');
+    const draftLabel = `#${requestData.savedDraft?.id}`;
+
+    if (!name) {
+        hint.textContent = 'Taslak adı boş olamaz.';
+    } else if (changed) {
+        hint.textContent = `"Yeni Taslak Olarak Kaydet" ayrı bir satır oluşturur, ${draftLabel} olduğu gibi kalır. "Üzerine Yaz" ise ${draftLabel} taslağını bu adla günceller.`;
+    } else {
+        hint.textContent = `Ayrı bir taslak olarak saklamak için adını değiştirin.`;
+    }
+    asNewBtn.disabled = !name || !changed;
+    overwriteBtn.disabled = !name;
+}
+
+async function confirmSaveDraft(mode) {
+    const name = document.getElementById('save-draft-name').value.trim();
+    if (!name || !pendingDraftPayload) return;
+    if (mode === 'new' && !isSaveDraftNameChanged()) return;
+
+    const asNewBtn = document.getElementById('save-draft-as-new-btn');
+    const overwriteBtn = document.getElementById('save-draft-overwrite-btn');
+    asNewBtn.disabled = true;
+    overwriteBtn.disabled = true;
+
+    const overwriteId = mode === 'overwrite' ? requestData.savedDraft.id : null;
+    const ok = await persistDraft(pendingDraftPayload, { title: name, overwriteId });
+    if (ok) {
+        pendingDraftPayload = null;
+        bootstrap.Modal.getInstance(document.getElementById('saveDraftModal'))?.hide();
+    } else {
+        updateSaveDraftModalState();
+    }
+}
+
+function initializeSaveDraftModal() {
+    const nameInput = document.getElementById('save-draft-name');
+    nameInput.addEventListener('input', updateSaveDraftModalState);
+    nameInput.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        confirmSaveDraft(isSaveDraftNameChanged() ? 'new' : 'overwrite');
+    });
+    document.getElementById('save-draft-as-new-btn').addEventListener('click', () => confirmSaveDraft('new'));
+    document.getElementById('save-draft-overwrite-btn').addEventListener('click', () => confirmSaveDraft('overwrite'));
+    document.getElementById('saveDraftModal').addEventListener('shown.bs.modal', () => nameInput.select());
+}
+
+// ===== Server autosave: one rolling "Oto" draft per user, overwritten on every change =====
+let autosavePromise = null; // the in-flight request, if any
+let autosaveQueued = false;
+let lastAutosaveSnapshot = null;
+
+// Stricter than dataManager.hasMeaningfulData() (which counts the default
+// needed_date), so touching a blank page never wipes the previous autosave
+function hasAutosaveContent() {
+    return Boolean(
+        requestData.title?.trim() ||
+        requestData.description?.trim() ||
+        requestData.items?.length ||
+        requestData.suppliers?.length
+    );
+}
+
+async function pushAutosave() {
+    if (!hasAutosaveContent()) return;
+    if (autosavePromise) {
+        autosaveQueued = true;
+        return;
+    }
+
+    const payload = buildDraftPayload({ strict: false });
+    // Remember which named draft this autosave belongs to, so loading it
+    // restores the overwrite target
+    payload.data.source_draft = requestData.savedDraft || null;
+    const snapshot = JSON.stringify(payload);
+    if (snapshot === lastAutosaveSnapshot) return;
+
+    autosavePromise = autosavePurchaseRequestDraft(payload)
+        .then(() => { lastAutosaveSnapshot = snapshot; })
+        // The localStorage copy still holds the work; retried on the next change
+        .catch(error => console.warn('Server autosave failed:', error));
+    await autosavePromise;
+    autosavePromise = null;
+    if (autosaveQueued) {
+        autosaveQueued = false;
+        await pushAutosave();
+    }
+}
+
+// Wait out any in-flight autosave (it holds older content), then write the page as it is now
+async function flushAutosave() {
+    while (autosavePromise) await autosavePromise;
+    autosaveQueued = false;
+    await pushAutosave();
 }
 
 async function showDraftRequestsModal() {
@@ -492,16 +671,24 @@ async function showDraftRequestsModal() {
         } else {
             table.style.display = 'table';
             emptyDiv.style.display = 'none';
-            
+
+            // The rolling autosave row always sits on top
+            drafts = [...drafts].sort((a, b) => (b.is_autosave ? 1 : 0) - (a.is_autosave ? 1 : 0));
+            const openDraftId = requestData.savedDraft?.id;
+
             tbody.innerHTML = drafts.map(draft => `
                 <tr>
                     <td>
                         <span class="fw-bold text-primary">${draft.id}</span>
                     </td>
-                    <td>${draft.title || 'Başlıksız'}</td>
-                    <td>${formatDate(draft.created_at)}</td>
-                    <td>${draft.data?.items?.length || 0}</td>
-                    <td>${draft.data?.suppliers?.length || 0}</td>
+                    <td>
+                        ${escapeHtml(draft.title || 'Başlıksız')}
+                        ${draft.is_autosave ? '<span class="status-badge status-purple ms-2" style="min-width:auto;" title="Her değişiklikte otomatik olarak güncellenir">Oto</span>' : ''}
+                        ${draft.id === openDraftId ? '<span class="status-badge status-blue ms-2" style="min-width:auto;" title="Taslak Kaydet bu taslağın üzerine yazar">Açık</span>' : ''}
+                    </td>
+                    <td>${formatDateTime(draft.updated_at || draft.created_at)}</td>
+                    <td>${draft.item_count ?? 0}</td>
+                    <td>${draft.supplier_count ?? 0}</td>
                     <td>
                         <div class="btn-group" role="group">
                             <button class="btn btn-primary btn-sm" onclick="loadDraftRequest(${draft.id})">
@@ -572,8 +759,10 @@ async function loadDraftData(draft) {
         // Set flag to prevent auto-save during draft loading
         if (dataManager) {
             dataManager.isLoadingDraft = true;
+            // Drop a pending debounced save of the page being replaced
+            clearTimeout(dataManager.autoSaveTimeout);
         }
-        
+
         // Clear all localStorage data to ensure clean state
         if (dataManager) {
             dataManager.clearDraft();
@@ -600,10 +789,18 @@ async function loadDraftData(draft) {
             offers: {},
             recommendations: {},
             itemRecommendations: {},
-            planning_request_item_ids: [] // Track selected planning request item IDs
+            planning_request_item_ids: [], // Track selected planning request item IDs
+            // Saving overwrites this draft (after confirmation). The autosave row
+            // carries the named draft it was tracking, if any.
+            savedDraft: draft.is_autosave
+                ? (draft.data?.source_draft || null)
+                : { id: draft.id, title: draft.title }
         };
-        
+
         // Update managers with the cleared data
+        if (dataManager) {
+            dataManager.requestData = requestData;
+        }
         if (itemsManager) {
             itemsManager.requestData = requestData;
         }
@@ -618,12 +815,12 @@ async function loadDraftData(draft) {
                 itemRecommendations: requestData.itemRecommendations
             });
         }
-        
+
         // Clear validation states
         if (validationManager) {
             validationManager.clearAllFieldValidations();
         }
-        
+
         // Load basic form data
         requestData.title = draft.title || '';
         requestData.description = draft.description || '';
@@ -773,8 +970,11 @@ async function loadDraftData(draft) {
                      return item;
                  });
                  requestData.suppliers = draft.data.suppliers || [];
-                 requestData.offers = draft.data.offers || {};
-                 requestData.recommendations = draft.data.recommendations || {};
+                 // original_items need offers keyed the same way; older drafts
+                 // only have the grouped-index ones
+                 const useOriginalKeys = usingOriginalItems && draft.data.original_offers;
+                 requestData.offers = (useOriginalKeys ? draft.data.original_offers : draft.data.offers) || {};
+                 requestData.recommendations = (useOriginalKeys ? draft.data.original_recommendations : draft.data.recommendations) || {};
              }
          } else {
              // No draft.data, keep empty arrays/objects
@@ -871,6 +1071,13 @@ function deleteDraftRequest(draftId) {
             try {
                 await deletePurchaseRequestDraft(draftId);
                 showNotification('Taslak başarıyla silindi!', 'success');
+                // The page no longer has a draft to overwrite
+                if (requestData.savedDraft?.id === draftId) {
+                    requestData.savedDraft = null;
+                    dataManager.saveDraft();
+                }
+                // If it was the autosave row, let the next change recreate it
+                lastAutosaveSnapshot = null;
                 const modalElement = document.getElementById('draftRequestsModal');
                 const existingModal = bootstrap.Modal.getInstance(modalElement);
                 if (existingModal) {
@@ -982,6 +1189,8 @@ function initializeFormFieldListeners() {
             // Save immediately when needed_date changes
             dataManager.saveDraft();
             dataManager.showAutoSaveIndicator();
+            // ...and through the debounced path, which also updates the server autosave
+            dataManager.autoSave();
             // Show validation feedback on change
             const validation = validationManager.validateField('needed-date', e.target.value);
             if (validation.isValid && e.target.value !== '') {
@@ -2693,8 +2902,9 @@ window.purchaseRequestApp = {
             itemRecommendations: {},
             planning_request_item_ids: []
         };
-        
+
         // Update managers with the cleared data
+        dataManager.requestData = requestData;
         if (itemsManager) {
             itemsManager.requestData = requestData;
         }
@@ -2737,8 +2947,11 @@ async function clearPage() {
         itemRecommendations: {},
         planning_request_item_ids: []
     };
-    
-    // Update managers with the cleared data
+
+    // Update managers with the cleared data. dataManager too: its 30s timer
+    // otherwise keeps writing the old request back into localStorage.
+    clearTimeout(dataManager.autoSaveTimeout);
+    dataManager.requestData = requestData;
     if (itemsManager) {
         itemsManager.requestData = requestData;
     }

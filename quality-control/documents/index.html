@@ -15,6 +15,24 @@
     <link rel="stylesheet" href="../../components/filters/filters.css">
     <link rel="stylesheet" href="../../components/edit-modal/edit-modal.css">
     <link rel="stylesheet" href="../../components/dropdown/dropdown.css">
+    <link rel="stylesheet" href="../../components/badges/badges.css">
+    <style>
+        .expiry-banner {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem 1.5rem;
+            padding: 0.75rem 1rem;
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-left: 4px solid #f97316;
+            border-radius: 0.5rem;
+        }
+        .expiry-banner-icon { color: #f97316; }
+        .expiry-banner-link { color: #374151; text-decoration: none; font-size: 0.9rem; }
+        .expiry-banner-link:hover { color: #111827; text-decoration: underline; }
+        .expiry-banner-link .status-badge { min-width: 0; margin-right: 0.35rem; }
+    </style>
 </head>
 <body>
     <div id="navbar-container"></div>
@@ -25,6 +43,11 @@
             <div class="row mb-3">
                 <div class="col-12">
                     <div id="filters-placeholder"></div>
+                </div>
+            </div>
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div id="expiry-banner" class="expiry-banner d-none" role="status"></div>
                 </div>
             </div>
             <div class="row">

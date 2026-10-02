@@ -598,8 +598,9 @@ export class TableComponent {
                                 const subOnClick = subAction.onClick ? 
                                     `onclick="event.preventDefault(); event.stopPropagation(); document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${subAction.key}', index: ${rowIndex}}})); const dropdownInstance = bootstrap.Dropdown.getInstance(document.getElementById('${dropdownId}-btn')); if (dropdownInstance) dropdownInstance.hide();"` : '';
                                 return `
+                                    ${subAction.dividerBefore ? '<li><hr class="dropdown-divider"></li>' : ''}
                                     <li>
-                                        <a class="dropdown-item" href="#" ${subOnClick}>
+                                        <a class="dropdown-item ${subAction.class || ''}" href="#" ${subOnClick}>
                                             <i class="${subAction.icon} me-2"></i>${subAction.label}
                                         </a>
                                     </li>

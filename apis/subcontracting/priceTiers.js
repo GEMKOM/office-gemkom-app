@@ -154,3 +154,46 @@ export async function deletePriceTier(tierId) {
     
     return await resp.json();
 }
+
+/**
+ * Ağırlık ve Fiyat Kademeleri modal data: the root job order and every
+ * descendant (depth-first) with weight, offer weight and existing tiers.
+ * Endpoint: GET /subcontracting/price-tiers/planner/?job_order={jobNo}
+ * @param {string} jobNo - Root job order number
+ * @returns {Promise<Object>} {root, job_orders: [{job_no, title, status,
+ *   status_display, parent, depth, is_phase, can_plan, quantity,
+ *   total_weight_kg, offer_weight_kg, offer_quantity, tiers: [...]}]}
+ */
+export async function getPriceTierPlanner(jobNo) {
+    const params = new URLSearchParams({ job_order: jobNo });
+    const resp = await authedFetch(`${backendBase}/subcontracting/price-tiers/planner/?${params.toString()}`);
+    if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+    }
+    return await resp.json();
+}
+
+/**
+ * Save weights and new tiers for many job orders in one transaction.
+ * Endpoint: POST /subcontracting/price-tiers/bulk_plan/
+ *
+ * Payload: { plans: [{ job_order, total_weight_kg?: "4510.20" | null,
+ *   tiers?: [{ tier_type, name, price_per_kg, currency, allocated_weight_kg }] }] }
+ * On failure the thrown Error carries the response body as `error.data`
+ * ({ message, job_order?, index?, errors? }).
+ */
+export async function bulkPlanPriceTiers(payload) {
+    const resp = await authedFetch(`${backendBase}/subcontracting/price-tiers/bulk_plan/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) {
+        const error = new Error(data.message || data.detail || `HTTP error! status: ${resp.status}`);
+        error.data = data;
+        error.status = resp.status;
+        throw error;
+    }
+    return data;
+}

@@ -2,8 +2,16 @@ import { backendBase } from './base.js';
 
 const API_URL = backendBase;
 
-let accessToken = localStorage.getItem('accessToken');
-let refreshToken = localStorage.getItem('refreshToken');
+// localStorage is the only copy of the tokens. Every tab shares it; a tab that
+// kept its own copy from page load would keep sending -- and, once rejected,
+// wipe -- tokens another tab has since refreshed or replaced with a new login.
+function currentAccessToken() {
+    return localStorage.getItem('accessToken');
+}
+
+function currentRefreshToken() {
+    return localStorage.getItem('refreshToken');
+}
 
 // Cached permissions dictionary for the current user
 let cachedPermissions = null;
@@ -226,8 +234,6 @@ export async function getUserTeam() {
 }
 
 function setTokens(newAccessToken, newRefreshToken) {
-    accessToken = newAccessToken;
-    refreshToken = newRefreshToken;
     localStorage.setItem('accessToken', newAccessToken);
     if (newRefreshToken) {
         localStorage.setItem('refreshToken', newRefreshToken);
@@ -235,8 +241,6 @@ function setTokens(newAccessToken, newRefreshToken) {
 }
 
 function clearTokens() {
-    accessToken = null;
-    refreshToken = null;
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
 }
@@ -603,46 +607,80 @@ export function enforceAuth() {
     return guardRoute();
 }
 
-async function refreshAccessToken() {
-    if (!refreshToken) {
+// One refresh per tab at a time: when the access token lapses, every request in
+// flight gets a 401, and they should all wait on the same refresh.
+let refreshInFlight = null;
+
+function refreshAccessToken() {
+    if (!refreshInFlight) {
+        refreshInFlight = requestNewAccessToken().finally(() => {
+            refreshInFlight = null;
+        });
+    }
+    return refreshInFlight;
+}
+
+// Only a refresh token the server actually rejects (401/400) ends the session.
+// A network blip or a 5xx used to log the user out as well; now just this
+// request fails and the next one tries again.
+async function requestNewAccessToken() {
+    const sentRefresh = currentRefreshToken();
+    if (!sentRefresh) {
         logout({ rememberReturn: true });
         throw new Error('No refresh token available');
     }
 
-    try {
-        const response = await fetch(`${API_URL}/token/refresh/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' ,
-                'X-Subdomain': "ofis.gemcore.com.tr"
-            },
-            body: JSON.stringify({ refresh: refreshToken }),
-        });
+    const response = await fetch(`${API_URL}/token/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' ,
+            'X-Subdomain': "ofis.gemcore.com.tr"
+        },
+        body: JSON.stringify({ refresh: sentRefresh }),
+    });
 
-        if (!response.ok) {
-           throw new Error('Failed to refresh token');
+    if (response.status === 401 || response.status === 400) {
+        // Another tab may have logged in again while this was out -- typically
+        // right after the same expiry sent it to the login screen. Carry on
+        // with its tokens instead of wiping them.
+        const latestRefresh = currentRefreshToken();
+        if (latestRefresh && latestRefresh !== sentRefresh) {
+            return requestNewAccessToken();
         }
-
-        const data = await response.json();
-        setTokens(data.access, refreshToken); // Keep the same refresh token
-        return accessToken;
-    } catch(e) {
         logout({ rememberReturn: true });
-        throw e;
+        throw new Error('Session expired');
     }
+    if (!response.ok) {
+        throw new Error(`Token refresh failed (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (!currentRefreshToken()) {
+        // Signed out in another tab while this was out: don't revive the session.
+        logout();
+        throw new Error('Not authenticated');
+    }
+    // The backend hands back a new refresh token on every refresh; keeping it is
+    // what lets an active session outlive the refresh token's 7-day lifetime.
+    setTokens(data.access, data.refresh || sentRefresh);
+    return data.access;
 }
 
 export async function authedFetch(url, options = {}) {
-    if (!accessToken) {
+    if (!currentRefreshToken()) {
        logout({ rememberReturn: true });
        throw new Error('Not authenticated');
     }
 
+    // No access token (stopImpersonation can store an empty one) just means
+    // the request has to wait for a refresh first.
+    const sentAccess = currentAccessToken() || await refreshAccessToken();
+
     options.headers = {
         ...options.headers,
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${sentAccess}`,
         'X-Subdomain': "ofis.gemcore.com.tr"
     };
-    
+
     // Only set Content-Type if not already provided and not using FormData
     if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
         options.headers['Content-Type'] = 'application/json';
@@ -651,8 +689,13 @@ export async function authedFetch(url, options = {}) {
     let response = await fetch(url, options);
 
     if (response.status === 401) {
-        await refreshAccessToken();
-        options.headers['Authorization'] = `Bearer ${accessToken}`;
+        // A parallel request or another tab may already have replaced the token
+        // this one went out with; use that rather than refreshing again.
+        const latestAccess = currentAccessToken();
+        const freshAccess = latestAccess && latestAccess !== sentAccess
+            ? latestAccess
+            : await refreshAccessToken();
+        options.headers['Authorization'] = `Bearer ${freshAccess}`;
         response = await fetch(url, options); // Retry the request with the new token
     }
 
