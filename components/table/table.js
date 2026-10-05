@@ -886,7 +886,6 @@ export class TableComponent {
                     e.stopPropagation();
                     const page = parseInt(link.dataset.page);
                     const totalPages = Math.ceil(this.options.totalItems / this.options.itemsPerPage);
-                    console.log('Pagination clicked:', page, 'Current page:', this.options.currentPage, 'Total pages:', totalPages);
                     
                     // Check if page is valid
                     if (page >= 1 && page <= totalPages && page !== this.options.currentPage) {
@@ -1365,24 +1364,19 @@ export class TableComponent {
     }
     
     changePage(page) {
-        console.log('Changing page from', this.options.currentPage, 'to', page);
         
         // Add loading state to pagination
         this.addPaginationLoading();
         
         this.options.currentPage = page;
         if (this.options.onPageChange) {
-            console.log('Calling onPageChange callback with page:', page);
             this.options.onPageChange(page);
-        } else {
-            console.log('No onPageChange callback defined');
         }
         // Re-render the table to update pagination state
         this.render();
     }
     
     changePageSize(newPageSize) {
-        console.log('Changing page size from', this.options.itemsPerPage, 'to', newPageSize);
         
         // Add loading state to pagination
         this.addPaginationLoading();

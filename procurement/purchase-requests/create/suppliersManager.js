@@ -156,10 +156,8 @@ export class SuppliersManager {
 
     async loadAvailablePaymentTerms() {
         try {
-            console.log('Loading available payment terms...');
             const response = await getPaymentTerms({ status: 'active' });
             this.availablePaymentTerms = Array.isArray(response) ? response : (response.results || []);
-            console.log('Loaded payment terms:', this.availablePaymentTerms);
             
             const paymentTermsSelect = document.getElementById('supplier-payment-terms');
             if (paymentTermsSelect) {
@@ -176,7 +174,6 @@ export class SuppliersManager {
             // Re-render suppliers container after payment terms are loaded
             // This ensures payment terms are displayed correctly after page refresh
             if (this.requestData.suppliers.length > 0) {
-                console.log('Re-rendering suppliers container after payment terms loaded');
                 this.renderSuppliersContainer();
             }
         } catch (error) {
@@ -379,11 +376,8 @@ export class SuppliersManager {
     }
 
     getPaymentTermsDisplayNameById(paymentTermId) {
-        console.log('getPaymentTermsDisplayNameById called with:', paymentTermId);
-        console.log('availablePaymentTerms:', this.availablePaymentTerms);
         if (paymentTermId && this.availablePaymentTerms.length > 0) {
             const foundPaymentTerm = this.availablePaymentTerms.find(pt => pt.id == paymentTermId);
-            console.log('foundPaymentTerm:', foundPaymentTerm);
             if (foundPaymentTerm) {
                 return foundPaymentTerm.name;
             }
@@ -563,8 +557,6 @@ export class SuppliersManager {
         this.saveImmediately();
         
         // Debug: Log the saved supplier data
-        console.log('Saved supplier data:', supplier);
-        console.log('All suppliers after save:', this.requestData.suppliers);
 
         // Close modal
         bootstrap.Modal.getInstance(document.getElementById('supplierModal')).hide();
@@ -623,7 +615,6 @@ export class SuppliersManager {
         const container = document.getElementById('suppliers-container');
         container.innerHTML = '';
 
-        console.log('Rendering suppliers container with data:', this.requestData.suppliers);
 
         if (this.requestData.suppliers.length === 0) {
             container.innerHTML = `
@@ -751,7 +742,6 @@ export class SuppliersManager {
             };
             
             localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
-            console.log('Data saved immediately to localStorage');
             
             // Update comparison table when supplier data changes
             if (window.comparisonTable) {

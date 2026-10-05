@@ -470,7 +470,6 @@ function showProblematicItemsError(error) {
 async function saveDraftAsJSON() {
     const payload = buildDraftPayload({ strict: true });
     if (payload.error) {
-        console.log('Problematic items detected in draft:', payload.error);
         showProblematicItemsError(payload.error);
         return;
     }

@@ -56,7 +56,7 @@ const CURRENCY_SYMBOL = { TRY: '₺', EUR: '€', USD: '$', GBP: '£' };
 
 const CHILD_NOUN = { sub: 'taşeron', kalem: 'kalem', month: 'ay' };
 
-const COLUMN_COUNT = 11;
+const COLUMN_COUNT = 12;
 
 // Component instances
 let headerComponent = null;
@@ -249,6 +249,7 @@ function renderReportShell() {
                                 <th class="num" title="Henüz onaylı hakedişe girmemiş ilerlemenin tutarı">Bekleyen</th>
                                 <th class="num" title="Onaylanmış / ödenmiş hakedişlerdeki ek ödeme ve kesintiler">Ek Ödeme / Kesinti</th>
                                 <th class="num">Dönem Toplamı</th>
+                                <th class="num" title="Kişi başına aylık ödenen. Ay satırında o ayın toplamı ÷ o ayın çalışanı; taşeron satırında seçili ayların aylık ortalaması (Σ tutar ÷ Σ çalışan), çalışan sayısı girilmemiş aylar hariç">Kişi Başı</th>
                                 <th class="num ov-col-backlog" title="Bugün itibarıyla, dönemden bağımsız">Kalan İş</th>
                                 <th class="num ov-col-backlog" title="Bugün itibarıyla, dönemden bağımsız">Kalan Tutar</th>
                             </tr>
@@ -262,6 +263,7 @@ function renderReportShell() {
                 <span><strong>Faturalanan:</strong> onaylanmış/ödenmiş hakediş satırları, hakedişin ayında.</span>
                 <span><strong>Bekleyen:</strong> henüz faturalanmamış ilerleme; açık hakedişin ayına, yoksa bu aya yazılır.</span>
                 <span><strong>Kalan İş:</strong> sözleşmede kalan iş, bugün itibarıyla (dönem filtresinden bağımsız).</span>
+                <span><strong>Kişi Başı:</strong> kişi başına aylık ödenen; taşeron satırında seçili ayların aylık ortalaması, çalışan sayısı girilmemiş aylar hariç.</span>
             </div>
         </div>
     `;
@@ -357,10 +359,18 @@ async function loadReport() {
 }
 
 function buildLookup(data) {
+    // Dönem toplamı per subcontractor-month, whatever the grouping — the
+    // per-person figure divides it by that month's headcount.
+    const monthTotals = new Map();
+    data.facts.forEach(f => {
+        const key = `${f.subcontractor_id}|${f.period}`;
+        monthTotals.set(key, (monthTotals.get(key) || 0) + num(f.amount));
+    });
     return {
         subs: new Map(data.subcontractors.map(s => [String(s.id), s])),
         kalems: new Map(data.kalems.map(k => [k.key, k.label])),
-        statements: new Map(data.statements.map(s => [`${s.subcontractor_id}|${s.period}`, s]))
+        statements: new Map(data.statements.map(s => [`${s.subcontractor_id}|${s.period}`, s])),
+        monthTotals
     };
 }
 
@@ -586,6 +596,7 @@ function renderGroupRow(node) {
             <td class="num">${moneyCell(node.agg.pending, currency, 'ov-pending')}</td>
             <td class="num">${moneyCell(node.agg.adjustment, currency, null, true)}</td>
             <td class="num fw-semibold">${moneyCell(nodeTotal(node), currency)}</td>
+            <td class="num">${perPersonCell(node, currency)}</td>
             <td class="num ov-col-backlog">${isMonth ? '' : kgCell(node.backlog?.remainingKg, true)}</td>
             <td class="num ov-col-backlog">${isMonth ? '' : moneyCell(node.backlog?.remainingAmount, singleCurrency(node.backlog?.currencies))}</td>
         </tr>
@@ -639,23 +650,107 @@ function childCountChip(node) {
     return '';
 }
 
+/**
+ * Where a headcount applies: 'sub' for a top-level subcontractor row, 'month'
+ * for its months, else null. Headcount is per subcontractor per month; under
+ * a kalem it would read as "people on ÇELİK", which nobody records.
+ */
+function headcountScope(node) {
+    if (node.level === 'sub' && node.depth === 0) return 'sub';
+    if (node.level === 'month' && node.parent.level === 'sub' && node.parent.depth === 0) return 'month';
+    return null;
+}
+
 function employeeCell(node) {
-    // Headcount is per subcontractor per month; under a kalem it would be
-    // read as "people on ÇELİK", which nobody records. So only the
-    // subcontractor row at the top and its months show it.
-    if (node.level === 'sub' && node.depth === 0) {
+    const scope = headcountScope(node);
+    if (scope === 'sub') {
         const sub = lookup.subs.get(node.value) || {};
         if (sub.avg_employee_count === null || sub.avg_employee_count === undefined) {
             return '<span class="ov-muted" title="Dönemdeki hakedişlerde çalışan sayısı girilmemiş">—</span>';
         }
         return `<span title="${sub.employee_count_months} hakediş ortalaması">${formatNumber(sub.avg_employee_count, 1)}</span>`;
     }
-    if (node.level === 'month' && node.parent.level === 'sub' && node.parent.depth === 0) {
+    if (scope === 'month') {
         const statement = lookup.statements.get(`${node.parent.value}|${node.value}`);
         const count = statement?.employee_count;
         return count === null || count === undefined ? '<span class="ov-muted">—</span>' : formatNumber(count, 0);
     }
     return '';
+}
+
+/**
+ * A subcontractor's average headcount over the selected months: the backend's
+ * avg_employee_count rule (rejected statements never happened) but unrounded,
+ * so the per-person division is not skewed by the 1-decimal display.
+ */
+function subHeadcount(subId) {
+    const counts = report.statements
+        .filter(st => String(st.subcontractor_id) === subId && st.status !== 'rejected'
+            && st.employee_count !== null && st.employee_count !== undefined)
+        .map(st => num(st.employee_count));
+    return counts.length ? counts.reduce((a, b) => a + b, 0) / counts.length : null;
+}
+
+/** Sum of the shown subcontractors' average headcounts — "Ort. Toplam Çalışan". */
+function totalHeadcount() {
+    return report.subcontractors.reduce((sum, s) => sum + (subHeadcount(String(s.id)) || 0), 0);
+}
+
+/**
+ * Monthly average paid per person over the selected months, for a set of
+ * subcontractor ids: Σ month total ÷ Σ month headcount. With a headcount on
+ * every month that is exactly dönem toplamı ÷ ort. çalışan ÷ ay. A month paid
+ * without a headcount (the February 2026 catch-up hakedişleri) has no one to
+ * divide by, so it is left out of both sides and counted in `skipped`.
+ */
+function monthlyPerPerson(subIds) {
+    const pp = { total: 0, personMonths: 0, months: 0, skipped: 0 };
+    lookup.monthTotals.forEach((amount, key) => {
+        if (!amount || !subIds.has(key.split('|')[0])) return;
+        const statement = lookup.statements.get(key);
+        const count = statement && statement.status !== 'rejected' ? num(statement.employee_count) : 0;
+        if (count > 0) {
+            pp.total += amount;
+            pp.personMonths += count;
+            pp.months += 1;
+        } else {
+            pp.skipped += 1;
+        }
+    });
+    pp.value = pp.personMonths ? pp.total / pp.personMonths : null;
+    return pp;
+}
+
+function perPersonCell(node, currency) {
+    const scope = headcountScope(node);
+    if (scope === 'sub') {
+        return monthlyPerPersonHtml(monthlyPerPerson(new Set([node.value])), currency, true);
+    }
+    if (scope === 'month') {
+        const count = num(lookup.statements.get(`${node.parent.value}|${node.value}`)?.employee_count);
+        const total = nodeTotal(node);
+        if (!(count > 0) || !total) return '<span class="ov-muted" title="Çalışan sayısı girilmemiş">—</span>';
+        const symbol = currencySymbol(currency);
+        const title = `${formatNumber(total, 2)} ${symbol} ÷ ${formatNumber(count, 0)} çalışan`;
+        return `<span title="${escapeHtml(title)}">${formatNumber(total / count, 2)} ${symbol}</span>`;
+    }
+    return '';
+}
+
+/** `showMonths` is off for Genel Toplam, where months would count subcontractor-months. */
+function monthlyPerPersonHtml(pp, currency, showMonths) {
+    const skippedText = pp.skipped ? `${pp.skipped} ay çalışan sayısı girilmediği için hariç` : '';
+    if (pp.value === null) {
+        return `<span class="ov-muted" title="${escapeHtml(skippedText || 'Çalışan sayısı girilmemiş')}">—</span>`;
+    }
+    const symbol = currencySymbol(currency);
+    let title = `Aylık ortalama: ${formatNumber(pp.total, 2)} ${symbol} ÷ ${formatNumber(pp.personMonths, 0)} kişi-ay`;
+    if (skippedText) title += ` — ${skippedText}`;
+    const parts = ['aylık ort.'];
+    if (showMonths) parts.push(`${pp.months} ay`);
+    if (pp.skipped) parts.push(`<span class="ov-pending">${pp.skipped} ay hariç</span>`);
+    return `<span title="${escapeHtml(title)}">${formatNumber(pp.value, 2)} ${symbol}</span>`
+        + `<div class="ov-sub">${parts.join(' · ')}</div>`;
 }
 
 function backlogProgressCell(backlog) {
@@ -710,6 +805,7 @@ function renderLeafRow(fact, parent) {
             <td class="num">${fact.kind === 'pending' ? moneyCell(amount, currency, 'ov-pending') : ''}</td>
             <td class="num">${isAdj ? moneyCell(amount, currency, null, true) : ''}</td>
             <td class="num">${moneyCell(amount, currency)}</td>
+            <td></td>
             <td class="ov-col-backlog"></td>
             <td class="ov-col-backlog"></td>
         </tr>
@@ -728,7 +824,7 @@ function renderTotalRow(root) {
     return `
         <tr class="ov-total-row">
             <td class="ov-col-label">Genel Toplam</td>
-            <td class="num"></td>
+            <td class="num">${totalHeadcount() ? formatNumber(totalHeadcount(), 1) : ''}</td>
             <td>${backlogProgressCell(root.backlog)}</td>
             <td class="num">${workKgCell(root.agg)}</td>
             <td class="num">${workUnitPriceCell(root.agg, currency)}</td>
@@ -736,6 +832,8 @@ function renderTotalRow(root) {
             <td class="num">${moneyCell(root.agg.pending, currency)}</td>
             <td class="num">${moneyCell(root.agg.adjustment, currency, null, true)}</td>
             <td class="num">${moneyCell(nodeTotal(root), currency)}</td>
+            <td class="num">${monthlyPerPersonHtml(
+                monthlyPerPerson(new Set(report.subcontractors.map(s => String(s.id)))), currency, false)}</td>
             <td class="num ov-col-backlog">${kgCell(root.backlog?.remainingKg, true)}</td>
             <td class="num ov-col-backlog">${moneyCell(root.backlog?.remainingAmount, singleCurrency(root.backlog?.currencies))}</td>
         </tr>
@@ -798,7 +896,7 @@ function updateStatisticsCards() {
         ...report.facts.map(f => String(f.subcontractor_id)),
         ...report.backlog.filter(b => num(b.remaining_weight_kg) > 0).map(b => String(b.subcontractor_id))
     ]);
-    const avgEmployees = [...shown].reduce((sum, id) => sum + num(lookup.subs.get(id)?.avg_employee_count), 0);
+    const avgEmployees = [...shown].reduce((sum, id) => sum + (subHeadcount(id) || 0), 0);
 
     const weldKg = tree.agg.kg - tree.agg.paintKg;
     const mixed = weldKg > 0 && tree.agg.paintKg > 0;
@@ -886,6 +984,42 @@ async function exportToExcel() {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(workRows), 'Aylık İş');
         XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(backlogRows), 'Kalan İş');
+
+        const perPersonRows = [['Taşeron', 'Ay', 'Hakediş Durumu', 'Dönem Toplamı', 'Çalışan', 'Kişi Başı', 'Para Birimi']];
+        [...report.statements]
+            .sort((a, b) =>
+                trCompare(subName(String(a.subcontractor_id)), subName(String(b.subcontractor_id)))
+                || a.period.localeCompare(b.period))
+            .forEach(st => {
+                const total = lookup.monthTotals.get(`${st.subcontractor_id}|${st.period}`) || 0;
+                const count = num(st.employee_count);
+                perPersonRows.push([
+                    subName(String(st.subcontractor_id)),
+                    st.period,
+                    STATEMENT_STATUS[st.status]?.label || st.status,
+                    total,
+                    st.employee_count ?? '',
+                    count > 0 && total ? Number((total / count).toFixed(2)) : '',
+                    st.currency || 'TRY'
+                ]);
+            });
+        // One monthly-average row per subcontractor: Dönem Toplamı ÷ Çalışan ÷ ay
+        // over the months with a headcount (= Kişi Başı on the table).
+        report.subcontractors.forEach(sub => {
+            const id = String(sub.id);
+            const pp = monthlyPerPerson(new Set([id]));
+            if (pp.value === null) return;
+            perPersonRows.push([
+                subName(id),
+                `Aylık ortalama (${pp.months} ay)`,
+                pp.skipped ? `${pp.skipped} ay çalışansız, hariç` : '',
+                Number(pp.total.toFixed(2)),
+                Number((pp.personMonths / pp.months).toFixed(2)),
+                Number(pp.value.toFixed(2)),
+                sub.default_currency || 'TRY'
+            ]);
+        });
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(perPersonRows), 'Kişi Başı');
 
         const { start, end } = report.period;
         const suffix = start || end ? `${start || 'baslangic'}_${end || 'bugun'}` : 'tum-donemler';

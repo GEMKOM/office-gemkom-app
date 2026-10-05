@@ -73,8 +73,6 @@ export class DataManager {
 
     saveDraft() {
         try {
-            console.log('dataManager.saveDraft - this.requestData.items:', this.requestData.items);
-            console.log('dataManager.saveDraft - this.requestData.suppliers:', this.requestData.suppliers);
             
             const draftData = {
                 title: this.requestData.title,
@@ -93,7 +91,6 @@ export class DataManager {
                 timestamp: new Date().toISOString()
             };
             
-            console.log('Saving draft with needed_date:', this.requestData.needed_date);
             localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
         } catch (error) {
             console.error('Error saving draft:', error);
@@ -102,7 +99,6 @@ export class DataManager {
 
     saveDraftDirectly(draftData) {
         try {
-            console.log('Saving draft directly with data:', draftData);
             localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
         } catch (error) {
             console.error('Error saving draft directly:', error);
@@ -114,7 +110,6 @@ export class DataManager {
             const savedDraft = localStorage.getItem('purchaseRequestDraft');
             if (savedDraft) {
                 const draftData = JSON.parse(savedDraft);
-                console.log('Loading draft from localStorage:', draftData);
                 
                 // Check if draft is not too old (e.g., 24 hours)
                 const draftTime = new Date(draftData.timestamp);
@@ -136,7 +131,6 @@ export class DataManager {
                     // Check if items have allocations (indicating they were grouped during save)
                     // If so, ungroup them back to separate items
                     if (items.length > 0 && items[0].allocations && Array.isArray(items[0].allocations)) {
-                        console.log('Detected grouped items in localStorage draft, ungrouping...');
                         const ungroupedItems = [];
                         
                         items.forEach((groupedItem, groupIndex) => {
@@ -173,7 +167,6 @@ export class DataManager {
                         });
                         
                         items = ungroupedItems;
-                        console.log('Ungrouped items from localStorage:', items);
                     }
                     
                     // Normalize planning request item link field names (in case of older/local drafts)
@@ -202,7 +195,6 @@ export class DataManager {
                         window.syncPlanningRequestItemIds();
                     }
                     
-                    console.log('Loaded needed_date from localStorage:', this.requestData.needed_date);
                     
                     return true;
                 } else {
@@ -219,37 +211,31 @@ export class DataManager {
     migrateSupplierData(draftData) {
         // Migrate suppliers from draft format to frontend format
         if (draftData.suppliers && Array.isArray(draftData.suppliers)) {
-            console.log('Migrating supplier data from draft format:', draftData.suppliers);
             draftData.suppliers.forEach(supplier => {
                 // Map currency to default_currency (draft format -> frontend format)
                 if (supplier.currency !== undefined && supplier.default_currency === undefined) {
-                    console.log('Migrating currency to default_currency for supplier:', supplier.name);
                     supplier.default_currency = supplier.currency;
                     delete supplier.currency;
                 }
                 
                 // Map payment_terms_id to default_payment_terms (draft format -> frontend format)
                 if (supplier.payment_terms_id !== undefined && supplier.default_payment_terms === undefined) {
-                    console.log('Migrating payment_terms_id to default_payment_terms for supplier:', supplier.name, 'value:', supplier.payment_terms_id);
                     supplier.default_payment_terms = supplier.payment_terms_id;
                     delete supplier.payment_terms_id;
                 }
                 
                 // Map tax_rate to default_tax_rate (draft format -> frontend format)
                 if (supplier.tax_rate !== undefined && supplier.default_tax_rate === undefined) {
-                    console.log('Migrating tax_rate to default_tax_rate for supplier:', supplier.name, 'value:', supplier.tax_rate);
                     supplier.default_tax_rate = supplier.tax_rate;
                     delete supplier.tax_rate;
                 }
                 
                 // Also handle legacy migration from old field names
                 if (supplier.payment_terms !== undefined && supplier.default_payment_terms === undefined) {
-                    console.log('Migrating payment_terms to default_payment_terms for supplier:', supplier.name);
                     supplier.default_payment_terms = supplier.payment_terms;
                     delete supplier.payment_terms;
                 }
             });
-            console.log('Migration completed:', draftData.suppliers);
         }
     }
 
@@ -262,7 +248,6 @@ export class DataManager {
             localStorage.removeItem('purchaseRequestSuppliers');
             localStorage.removeItem('purchaseRequestOffers');
             localStorage.removeItem('purchaseRequestRecommendations');
-            console.log('Cleared all localStorage data');
         } catch (error) {
             console.error('Error clearing draft:', error);
         }

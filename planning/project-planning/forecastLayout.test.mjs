@@ -48,6 +48,16 @@ test('only a tempo-driven row may be re-derived on the board', () => {
     }
 });
 
+test('a head start is not divided into the tempo', () => {
+    // 20 % by 02.10 (the planned start), 40 % six working days later: the
+    // tempo is 20 % in 6 wd, so the remaining 60 % costs 18 wd — not the
+    // 9 wd that dividing all 40 % by the window would claim.
+    assert.equal(forecastRemainingWd(40, 6, 20, 20), 18);
+    assert.equal(forecastRemainingWd(40, 6, 20), 9);
+    // Typed back to the head start or below: no tempo since, duration share.
+    assert.equal(forecastRemainingWd(20, 6, 20, 20), 16);
+});
+
 test('a window is never zero-length', () => {
     assert.equal(forecastRemainingWd(99.9, 0.01, 0), 0.1);
     assert.equal(forecastRemainingWd(100, 10, 10), 0.1);

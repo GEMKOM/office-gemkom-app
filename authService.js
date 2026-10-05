@@ -215,7 +215,6 @@ export function clearCachedUser() {
     cachedGrantedPageRoutes = null;
     inFlightUserPromise = null;
     localStorage.removeItem('purchaseRequestDraft');
-    console.log('Cached user data cleared');
 }
 
 // Helper function to get user team specifically

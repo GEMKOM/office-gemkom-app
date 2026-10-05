@@ -1181,13 +1181,10 @@ export class ComparisonTable {
 
     exportToExcel(filename = null) {
         const exportFilename = filename || `${this.options.exportFilename}.xlsx`;
-        console.log('Excel export başlatılıyor:', exportFilename);
         
         // Check if SheetJS is available
         if (typeof XLSX === 'undefined') {
-            console.log('SheetJS kütüphanesi bulunamadı, yükleniyor...');
             this.loadSheetJS().then(() => {
-                console.log('SheetJS kütüphanesi yüklendi, export tekrar deneniyor...');
                 this.exportToExcel(filename);
             }).catch((error) => {
                 console.error('SheetJS kütüphanesi yüklenemedi:', error);
@@ -1196,16 +1193,11 @@ export class ComparisonTable {
             return;
         }
 
-        console.log('SheetJS kütüphanesi bulundu');
-        console.log('Mevcut veri:', this.data);
-        console.log('Malzeme sayısı:', this.data.items.length);
-        console.log('Tedarikçi sayısı:', this.data.suppliers.length);
         
         const workbook = XLSX.utils.book_new();
         
         // Main comparison data with enhanced formatting
         const comparisonData = this.generateEnhancedExcelData();
-        console.log('Gelişmiş karşılaştırma verisi oluşturuldu:', comparisonData.length, 'satır');
         const comparisonSheet = XLSX.utils.aoa_to_sheet(comparisonData);
         
         // Apply formatting to the comparison sheet
@@ -1215,15 +1207,12 @@ export class ComparisonTable {
         // Summary data
         if (this.options.showSummary) {
             const summaryData = this.generateEnhancedSummaryExcelData();
-            console.log('Gelişmiş özet verisi oluşturuldu:', summaryData.length, 'satır');
             const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
             this.applySummaryExcelFormatting(summarySheet, summaryData);
             XLSX.utils.book_append_sheet(workbook, summarySheet, 'Özet');
         }
 
-        console.log('Excel dosyası yazılıyor...');
         XLSX.writeFile(workbook, exportFilename);
-        console.log('Excel dosyası başarıyla oluşturuldu:', exportFilename);
         
         if (this.options.onExport) {
             this.options.onExport('excel', exportFilename);
@@ -1457,7 +1446,6 @@ export class ComparisonTable {
                 
                 // Debug logging
                 if (itemIndex === 0) { // Only log for first item to avoid spam
-                    console.log(`Supplier ${supplier.name} (${supplier.id}) for item ${itemIndex}:`, offer);
                 }
                 
                 if (this.options.showUnitPrice) {
@@ -1854,7 +1842,6 @@ export class ComparisonTable {
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
             script.onload = () => {
-                console.log('SheetJS kütüphanesi başarıyla yüklendi');
                 resolve();
             };
             script.onerror = () => {

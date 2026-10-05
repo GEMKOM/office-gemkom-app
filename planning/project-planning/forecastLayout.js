@@ -50,16 +50,22 @@ export function canRederiveForecast(forecastKind) {
  *
  * With no window to measure — the row starts today or later — there is no
  * tempo yet, so the entered duration's remaining share stands in for one.
+ *
+ * `headStartPct` is the engine's `forecast_head_start_pct`: when the window
+ * opened at full speed (the planned start, or the material's arrival), the %
+ * already done by then is a head start and the tempo divides only what was
+ * gained since — 094-177-01's 20 % from September is not October's pace.
  */
-export function forecastRemainingWd(progressPct, elapsedWd, durationWd) {
+export function forecastRemainingWd(progressPct, elapsedWd, durationWd, headStartPct = 0) {
     const p = Number(progressPct || 0);
     const elapsed = Number(elapsedWd || 0);
     const duration = Number(durationWd || 0);
+    const gained = p - Number(headStartPct || 0);
     const left = Math.max(100 - p, 0);
     // A row with no progress is not measurable; callers handle that branch
     // (it spans its whole duration from its anchor).
-    const remaining = p > 0 && elapsed > 0
-        ? elapsed * left / p
+    const remaining = gained > 0 && elapsed > 0
+        ? elapsed * left / gained
         : duration * left / 100;
     // A window is never zero-length, mirroring the engine's MIN_SPAN_WD.
     return Math.max(remaining, 0.1);
