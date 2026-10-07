@@ -9,7 +9,7 @@ import { TableComponent } from '../../components/table/table.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 import { escapeHtml } from '../../utils/text.js';
-import { getPaymentPool } from '../../apis/finance/paymentLists.js';
+import { getPaymentPool, getPaymentPoolFacets } from '../../apis/finance/paymentLists.js';
 import {
     BASIS_OPTIONS, CURRENCY_OPTIONS, LIST_STATUS_CLASS, badge, currencyBreakdown, customersOf,
     fmtDate, fmtEur, fmtMoney, fmtPct, isOverdue, jobNosOf, rowEur, sumEur,
@@ -30,6 +30,10 @@ export function excelColumns({ withListed = true } = {}) {
         {
             field: 'job_nos', label: 'İş No', width: '110px', sortable: false,
             formatter: (_v, row) => jobNosOf(row).map((j) => badge('status-grey', j)).join(' ') || '<span class="text-muted">-</span>',
+        },
+        {
+            field: 'gs_numbers', label: 'GS No', width: '100px', sortable: false,
+            formatter: (v) => (v || []).map((gs) => badge('status-blue', gs)).join(' ') || '<span class="text-muted">-</span>',
         },
         {
             field: 'items_summary', label: 'Malzeme', sortable: false,
@@ -96,19 +100,51 @@ export function excelColumns({ withListed = true } = {}) {
 // filters
 // ---------------------------------------------------------------------------
 
+// job no / GS / supplier options: values that actually occur in the pool,
+// fetched once per page load and shared by the pool and the picker
+let facetsPromise = null;
+function loadFacets() {
+    if (!facetsPromise) {
+        facetsPromise = getPaymentPoolFacets().catch((error) => {
+            facetsPromise = null;
+            throw error;
+        });
+    }
+    return facetsPromise;
+}
+
+const toOptions = (rows) => (rows || []).map((r) => ({ value: String(r.value), label: r.label }));
+
+/** Multi-select values travel as one comma-separated param. */
+const csv = (value) => {
+    const list = (Array.isArray(value) ? value : [value]).filter((x) => x !== '' && x !== null && x !== undefined);
+    return list.length ? list.join(',') : undefined;
+};
+
 export function buildPoolFilters(containerId, prefix, { onApply, onClear, onFilterChange, forceHideListed = false } = {}) {
-    const filters = new FiltersComponent(containerId, { title: 'Filtreler', onApply, onClear, onFilterChange });
+    const filters = new FiltersComponent(containerId, { title: 'Filtreler', onApply, onClear, onFilterChange, wrap: true });
     filters
         .addSelectFilter({
             id: `${prefix}_basis`, label: 'Ödeme Şekli', options: BASIS_OPTIONS,
             value: 'immediate', placeholder: 'Peşin / Avans (varsayılan)', colSize: 2,
         })
         .addSelectFilter({ id: `${prefix}_currency`, label: 'Para Birimi', options: CURRENCY_OPTIONS, placeholder: 'Tümü', colSize: 1 })
-        .addTextFilter({ id: `${prefix}_q`, label: 'Ara', placeholder: 'Tedarikçi, iş no, malzeme, PR no…', colSize: 3 })
+        .addTextFilter({ id: `${prefix}_q`, label: 'Ara', placeholder: 'Tedarikçi, iş no, malzeme, PR / GS no…', colSize: forceHideListed ? 6 : 4 })
         .addDateRangeFilter({ id: `${prefix}_po_date`, label: 'Sipariş Tarihi', colSize: 3 });
     if (!forceHideListed) {
         filters.addCheckboxFilter({ id: `${prefix}_hide_listed`, label: 'Listede olanları gizle', checked: true, colSize: 2 });
     }
+    filters
+        .addDropdownFilter({ id: `${prefix}_job_no`, label: 'İş No', options: [], multiple: true, placeholder: 'Tümü', colSize: 3 })
+        .addDropdownFilter({ id: `${prefix}_gs`, label: 'GS No', options: [], multiple: true, placeholder: 'Tümü', colSize: 3 })
+        .addDropdownFilter({ id: `${prefix}_supplier`, label: 'Tedarikçi', options: [], multiple: true, placeholder: 'Tümü', colSize: 4 });
+    loadFacets()
+        .then((facets) => {
+            filters.updateFilterOptions(`${prefix}_job_no`, toOptions(facets.job_nos));
+            filters.updateFilterOptions(`${prefix}_gs`, toOptions(facets.gs_numbers));
+            filters.updateFilterOptions(`${prefix}_supplier`, toOptions(facets.suppliers));
+        })
+        .catch((error) => showNotification(error.message || 'Filtre seçenekleri yüklenemedi', 'error'));
     return filters;
 }
 
@@ -120,6 +156,9 @@ export function poolParams(filters, prefix, { page, pageSize, forceHideListed = 
         basis: v[`${prefix}_basis`] || undefined,
         currency: v[`${prefix}_currency`] || undefined,
         q: (v[`${prefix}_q`] || '').trim() || undefined,
+        job_no: csv(v[`${prefix}_job_no`]),
+        gs: csv(v[`${prefix}_gs`]),
+        supplier: csv(v[`${prefix}_supplier`]),
         created_after: range.start || undefined,
         created_before: range.end || undefined,
         listed: hideListed ? 'false' : undefined,

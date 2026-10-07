@@ -54,6 +54,11 @@ export function getPaymentPool(params = {}) {
     return call(`${PROC}/payment-pool/${qs(params)}`, { fallback: 'Ödeme havuzu yüklenemedi' });
 }
 
+/** {job_nos, suppliers, gs_numbers}: [{value, label}] options for the pool filters. */
+export function getPaymentPoolFacets() {
+    return call(`${PROC}/payment-pool/facets/`, { fallback: 'Filtre seçenekleri yüklenemedi' });
+}
+
 export function splitSchedule(poId, payload) {
     return call(`${PROC}/purchase-orders/${poId}/split_schedule/`, { method: 'POST', body: payload, fallback: 'Taksit bölünemedi' });
 }

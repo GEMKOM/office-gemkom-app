@@ -35,6 +35,40 @@ const COST_TABLE_DATE_PARAMS = [
 ];
 
 export async function getCostTable(options = {}) {
+    const queryParams = costTableQueryParams(options);
+
+    const url = `${backendBase}/projects/job-orders/cost_table/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+
+    if (!response.ok) {
+        throw new Error(`Cost table request failed: ${response.status}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * Catalog items used by the job orders the cost table shows for these
+ * filters — every page, ignoring `template_node`. Ancestors are included so
+ * the result can be drawn as a tree.
+ * GET /projects/job-orders/cost_table_catalog_nodes/
+ * @param {Object} options - Same filters as getCostTable (paging/ordering ignored)
+ * @returns {Promise<Array<{ id: number, parent_id: number|null, title: string, code: string|null,
+ *   template_id: number, template_name: string, own_job_count: number, job_count: number }>>}
+ */
+export async function getCostTableCatalogNodes(options = {}) {
+    const { page, page_size, ordering, template_node, ...filters } = options;
+    const queryParams = costTableQueryParams(filters);
+    const url = `${backendBase}/projects/job-orders/cost_table_catalog_nodes/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Cost table catalog nodes request failed: ${response.status}`);
+    }
+    const data = await response.json();
+    return data.nodes || [];
+}
+
+function costTableQueryParams(options) {
     const queryParams = new URLSearchParams();
 
     for (const param of COST_TABLE_DATE_PARAMS) {
@@ -74,14 +108,7 @@ export async function getCostTable(options = {}) {
         queryParams.append('page_size', String(options.page_size));
     }
 
-    const url = `${backendBase}/projects/job-orders/cost_table/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-    const response = await authedFetch(url);
-
-    if (!response.ok) {
-        throw new Error(`Cost table request failed: ${response.status}`);
-    }
-
-    return response.json();
+    return queryParams;
 }
 
 /**

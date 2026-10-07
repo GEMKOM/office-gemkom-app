@@ -254,8 +254,9 @@ export class FiltersComponent {
         // Calculate total column size of filters
         const totalFilterSize = this.filters.reduce((sum, filter) => sum + filter.colSize, 0);
         
-        // Calculate available space for filters (12 - 2 for buttons = 10 columns)
-        const availableSpace = 10;
+        // Calculate available space for filters (12 - 2 for buttons = 10 columns).
+        // `wrap: true` keeps every colSize and lets the fields flow onto more rows.
+        const availableSpace = this.options.wrap ? Infinity : 10;
         
         // Render filter fields with adjusted sizes
         this.filters.forEach(filter => {

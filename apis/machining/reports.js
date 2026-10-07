@@ -58,6 +58,7 @@ export async function fetchPerformanceReport(startDate, endDate, userIds = null)
  * Get machining job entries by job number
  * @param {Object} params - Query parameters
  * @param {string} params.job_no - Required. Job number
+ * @param {boolean} params.include_descendants - Optional. Also include every job order below job_no
  * @returns {Promise<Object>} Report data with job_no, summary, and entries
  */
 export async function getMachiningJobEntries(params) {
@@ -67,6 +68,9 @@ export async function getMachiningJobEntries(params) {
 
     const queryParams = new URLSearchParams();
     queryParams.append('job_no', params.job_no);
+    if (params.include_descendants) {
+        queryParams.append('include_descendants', 'true');
+    }
 
     const url = `${backendBase}/machining/reports/job-entries/?${queryParams.toString()}`;
     const resp = await authedFetch(url);

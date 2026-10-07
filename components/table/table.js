@@ -4,6 +4,72 @@
  */
 import { showNotification } from '../notification/notification.js';
 
+/*
+ * Excel export cells. Numbers leave as real numbers carrying an Excel number
+ * format, so the sheet looks like the table yet can be summed; text such as
+ * "1.234,56" or "€1.234,56" cannot.
+ *
+ * Per column (all optional):
+ *   exportType     'number' | 'integer' | 'money' | 'percent' | 'date' | 'text'
+ *                  ('percent' takes percent units: 41.4 → 41,40%)
+ *   exportValue    (value, row) => raw value to export instead of row[field]
+ *   exportFormat   Excel format string, or (value, row) => string
+ *   exportCurrency 'EUR' | 'USD' | ..., or (row) => code — for 'money' (default EUR)
+ *   exportLabel    header text in the sheet instead of `label`
+ * Columns with `type: 'number'` and no exportType export as 'number'.
+ */
+const EXPORT_NUMBER_FORMATS = {
+    number: '#,##0.00',
+    integer: '#,##0',
+    percent: '0.00%',
+    date: 'dd.mm.yyyy',
+};
+
+const EXPORT_CURRENCY_FORMATS = {
+    EUR: '"€"#,##0.00',
+    USD: '"$"#,##0.00',
+    GBP: '"£"#,##0.00',
+    TRY: '#,##0.00 "₺"',
+};
+
+function exportCurrencyFormat(code) {
+    const c = String(code || 'EUR').toUpperCase();
+    return EXPORT_CURRENCY_FORMATS[c] || `#,##0.00 "${c.replace(/"/g, '')}"`;
+}
+
+/** A number, or an API decimal string such as "1234.50"; anything else → null. */
+function toExportNumber(v) {
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    if (typeof v === 'string' && /^\s*[-+]?\d+(\.\d+)?\s*$/.test(v)) return parseFloat(v);
+    return null;
+}
+
+/** Number shown as tr-TR text: "€1.234,56", "12,5 saat", "1.234" → number. */
+function parseDisplayedNumber(text) {
+    const s = String(text ?? '').replace(/[^\d,.\-]/g, '');
+    if (!/\d/.test(s)) return null;
+    let n;
+    if (s.includes(',')) n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+    else if (/^-?\d{1,3}(\.\d{3})+$/.test(s)) n = parseFloat(s.replace(/\./g, ''));
+    else n = parseFloat(s);
+    return Number.isFinite(n) ? n : null;
+}
+
+/** Excel date serial for "YYYY-MM-DD", an ISO datetime or a Date (local day). */
+function toExcelDateSerial(v) {
+    if (v == null || v === '') return null;
+    let y, m, d;
+    const ymd = typeof v === 'string' && /^(\d{4})-(\d{2})-(\d{2})$/.exec(v.trim());
+    if (ymd) {
+        [y, m, d] = [Number(ymd[1]), Number(ymd[2]), Number(ymd[3])];
+    } else {
+        const dt = v instanceof Date ? v : new Date(v);
+        if (Number.isNaN(dt.getTime())) return null;
+        [y, m, d] = [dt.getFullYear(), dt.getMonth() + 1, dt.getDate()];
+    }
+    return (Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000;
+}
+
 export class TableComponent {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
@@ -1471,8 +1537,10 @@ export class TableComponent {
             
             // Show loading state
             this.setExportLoading(true);
-            
-            // Prepare data for export
+
+            // Prepare data for export (an override of prepareExportData may
+            // not fill the per-cell formats; exportToExcel copes with none)
+            this._exportCellFormats = null;
             const exportData = this.prepareExportData();
             
             if (exportData.length === 0) {
@@ -1494,52 +1562,70 @@ export class TableComponent {
     }
     
     prepareExportData() {
-        const headers = this.options.columns
-            .filter(col => col.field !== 'actions' && !col.hidden)
-            .map(col => col.label || col.field);
-        
+        const columns = this.options.columns.filter(col => col.field !== 'actions' && !col.hidden);
+        const headers = columns.map(col => col.exportLabel || col.label || col.field);
+
+        // Excel number format per cell, parallel to the data rows (see exportToExcel)
+        const formats = [];
         const rows = this.options.data.map(row => {
-            return this.options.columns
-                .filter(col => col.field !== 'actions' && !col.hidden)
-                .map(col => {
-                    const value = row[col.field];
-                    
-                    // Handle different data types
-                    if (col.type === 'boolean') {
-                        return value ? 'Evet' : 'Hayır';
-                    } else if (col.type === 'number' || (typeof value === 'number' && !isNaN(value))) {
-                        // Check if value is null or undefined before formatting
-                        if (value === null || value === undefined || isNaN(value)) {
-                            return '-';
-                        }
-                        // Format numbers with comma as decimal separator (Turkish locale)
-                        return value.toLocaleString('tr-TR', { 
-                            minimumFractionDigits: 2, 
-                            maximumFractionDigits: 2 
-                        });
-                    } else if (col.formatter && typeof col.formatter === 'function') {
-                        // Use formatter but strip HTML tags
-                        const formatted = col.formatter(value, row);
-                        const stripped = this.stripHtmlTags(formatted);
-                        // Only try to parse as number if column is explicitly marked as type 'number'
-                        // This prevents parsing strings like "1160x6000" or "ST37" as numbers
-                        if (col.type === 'number') {
-                            const numValue = parseFloat(stripped.replace(/[^\d,.-]/g, '').replace(',', '.'));
-                            if (!isNaN(numValue) && stripped.match(/[\d,.-]/)) {
-                                return numValue.toLocaleString('tr-TR', { 
-                                    minimumFractionDigits: 2, 
-                                    maximumFractionDigits: 2 
-                                });
-                            }
-                        }
-                        return stripped;
-                    } else {
-                        return value ?? '';
-                    }
-                });
+            const rowFormats = [];
+            const cells = columns.map(col => {
+                const { value, format } = this.exportCell(col, row);
+                rowFormats.push(format || null);
+                return value;
+            });
+            formats.push(rowFormats);
+            return cells;
         });
-        
+        this._exportCellFormats = formats;
+
         return [headers, ...rows];
+    }
+
+    /** One export cell: `{ value, format }`; numbers stay numbers (see EXPORT_NUMBER_FORMATS). */
+    exportCell(col, row) {
+        const value = typeof col.exportValue === 'function'
+            ? col.exportValue(row[col.field], row)
+            : row[col.field];
+        const displayed = () => (typeof col.formatter === 'function'
+            ? this.stripHtmlTags(col.formatter(row[col.field], row))
+            : (value ?? ''));
+
+        const kind = col.exportType || (col.type === 'number' ? 'number' : null);
+        if (kind && kind !== 'text') {
+            const override = typeof col.exportFormat === 'function' ? col.exportFormat(value, row) : col.exportFormat;
+            if (kind === 'date') {
+                const serial = toExcelDateSerial(value);
+                return serial == null ? { value: null } : { value: serial, format: override || EXPORT_NUMBER_FORMATS.date };
+            }
+            // An explicit exportType trusts the raw value. A legacy
+            // `type: 'number'` column keeps exporting what its formatter shows
+            // (it may convert units), now parsed into a real number.
+            let n = toExportNumber(value);
+            if (!col.exportType && typeof value !== 'number' && typeof col.formatter === 'function') {
+                n = parseDisplayedNumber(displayed()) ?? n;
+            } else if (n == null && !col.exportValue && typeof col.formatter === 'function') {
+                n = parseDisplayedNumber(displayed());
+            }
+            if (n == null) return { value: null };
+            if (kind === 'percent') n /= 100;
+            let format = override;
+            if (!format) {
+                if (kind === 'money') {
+                    format = exportCurrencyFormat(typeof col.exportCurrency === 'function' ? col.exportCurrency(row) : col.exportCurrency);
+                } else {
+                    format = EXPORT_NUMBER_FORMATS[kind] || EXPORT_NUMBER_FORMATS.number;
+                }
+            }
+            return { value: n, format };
+        }
+
+        if (col.type === 'boolean') return { value: value ? 'Evet' : 'Hayır' };
+        if (!col.exportType && typeof value === 'number' && Number.isFinite(value)) {
+            return { value, format: Number.isInteger(value) ? EXPORT_NUMBER_FORMATS.integer : EXPORT_NUMBER_FORMATS.number };
+        }
+        if (typeof col.formatter === 'function' && !col.exportValue) return { value: displayed() };
+        return { value: value ?? '' };
     }
     
     stripHtmlTags(html) {
@@ -1564,7 +1650,8 @@ export class TableComponent {
             
             // Convert data to worksheet
             const ws = XLSX.utils.aoa_to_sheet(data);
-            
+            this.applyExportSheetLayout(ws, data);
+
             // Add worksheet to workbook
             XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
             
@@ -1594,6 +1681,29 @@ export class TableComponent {
         }
     }
     
+    /** Number formats on numeric cells, column widths and a header filter. */
+    applyExportSheetLayout(ws, data) {
+        if (!data.length) return;
+        const formats = this._exportCellFormats || [];
+        const widths = data[0].map(h => String(h ?? '').length);
+        data.forEach((cells, r) => {
+            cells.forEach((v, c) => {
+                const format = r > 0 ? formats[r - 1]?.[c] : null;
+                const cell = ws[XLSX.utils.encode_cell({ r, c })];
+                if (cell && cell.t === 'n' && format) cell.z = format;
+                // Rough display width: numbers as their formatted length
+                const len = typeof v === 'number'
+                    ? (format === EXPORT_NUMBER_FORMATS.date ? 10 : Math.abs(v).toFixed(2).length + 4)
+                    : String(v ?? '').length;
+                widths[c] = Math.max(widths[c] || 0, len);
+            });
+        });
+        ws['!cols'] = widths.map(w => ({ wch: Math.min(Math.max(w + 2, 8), 60) }));
+        ws['!autofilter'] = {
+            ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: data.length - 1, c: data[0].length - 1 } }),
+        };
+    }
+
     loadXLSXLibrary() {
         return new Promise((resolve, reject) => {
             // Check if already loaded

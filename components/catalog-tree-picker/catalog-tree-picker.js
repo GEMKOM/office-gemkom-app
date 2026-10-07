@@ -22,14 +22,29 @@ function nodeTitle(node) {
  * Template selector, search and a lazily-expandable multi-select tree all live
  * in one panel. Selections apply live (debounced) via the onChange callback.
  *
+ * With `scopeLoader` the panel offers only the nodes that loader returns
+ * (re-fetched on every open), e.g. the items of the job orders a filtered
+ * table currently holds, instead of browsing whole templates.
+ *
  * @param {Object} options
  * @param {string} [options.label]    - panel/field title
  * @param {Function} [options.onChange] - called with array of selected id strings
+ * @param {Function} [options.scopeLoader] - async () => [{ id, parent_id, title, code,
+ *   template_id, template_name, job_count }], ancestors included
+ * @param {string} [options.scopeHint] - one line shown above the scoped tree
  */
 export class CatalogTreePicker {
     constructor(options = {}) {
         this.options = options;
         this.label = options.label || 'Katalog Kalemi';
+
+        // Scoped mode: a fixed node list instead of lazily browsed templates.
+        this.scopeLoader = typeof options.scopeLoader === 'function' ? options.scopeLoader : null;
+        this.scopeNodes = null;
+        this.scopeById = new Map();
+        this.scopeLoading = false;
+        this.collapsed = new Set();
+        this.searchQuery = '';
 
         // id -> label
         this.selected = new Map();
@@ -75,6 +90,13 @@ export class CatalogTreePicker {
 
     async open() {
         this._ensurePanel();
+        if (this.scopeLoader) {
+            this._renderSelectedBar();
+            this.offcanvas.show();
+            setTimeout(() => this.searchEl && this.searchEl.focus(), 250);
+            await this._loadScope();
+            return;
+        }
         if (!this.templatesLoaded) {
             try {
                 const data = await listOfferTemplates();
@@ -118,6 +140,7 @@ export class CatalogTreePicker {
                 <div class="ctp-selected-bar"></div>
             </div>
             <div class="offcanvas-body">
+                ${this.scopeLoader && this.options.scopeHint ? `<div class="ctp-scope-hint"><i class="fas fa-filter me-1"></i>${escapeHtml(this.options.scopeHint)}</div>` : ''}
                 <div class="ctp-tree"></div>
             </div>
         `;
@@ -138,15 +161,59 @@ export class CatalogTreePicker {
         this._renderSelectedBar();
     }
 
+    async _loadScope() {
+        this.scopeLoading = true;
+        this._renderTree();
+        try {
+            this.scopeNodes = (await this.scopeLoader()) || [];
+        } catch (err) {
+            console.error('Error loading catalog scope:', err);
+            this.scopeNodes = [];
+        }
+        this.scopeLoading = false;
+        this.scopeById = new Map(this.scopeNodes.map(n => [n.id, n]));
+
+        const templates = new Map();
+        this.scopeNodes.forEach(n => {
+            if (!templates.has(String(n.template_id))) {
+                templates.set(String(n.template_id), { id: n.template_id, name: n.template_name });
+            }
+        });
+        this.templates = Array.from(templates.values());
+        if (this.activeTemplateId && !templates.has(String(this.activeTemplateId))) {
+            this.activeTemplateId = '';
+        }
+        this._renderTemplateSelect();
+        this._renderTree();
+    }
+
+    /** "Template › Parent › Title" for a scoped node (ancestors are in scope). */
+    _scopePath(node) {
+        const titles = [];
+        const seen = new Set();
+        let cur = node;
+        while (cur && !seen.has(cur.id)) {
+            seen.add(cur.id);
+            titles.unshift(nodeTitle(cur));
+            cur = cur.parent_id != null ? this.scopeById.get(cur.parent_id) : null;
+        }
+        return [node.template_name, ...titles].filter(Boolean).join(' › ');
+    }
+
     _renderTemplateSelect() {
         if (!this.templateSelectEl) return;
-        const opts = ['<option value="">Tüm şablonlarda ara / şablon seçin…</option>']
+        const placeholder = this.scopeLoader ? 'Tüm şablonlar' : 'Tüm şablonlarda ara / şablon seçin…';
+        const opts = [`<option value="">${placeholder}</option>`]
             .concat(this.templates.map(t => `<option value="${t.id}" ${String(t.id) === String(this.activeTemplateId) ? 'selected' : ''}>${escapeHtml(t.name || t.title || `Şablon #${t.id}`)}</option>`));
         this.templateSelectEl.innerHTML = opts.join('');
     }
 
     async _onTemplateChange(templateId) {
         this.activeTemplateId = templateId || '';
+        if (this.scopeLoader) {
+            this._renderTree();
+            return;
+        }
         this.rootNodes = [];
         this.childrenCache.clear();
         this.expanded.clear();
@@ -177,6 +244,14 @@ export class CatalogTreePicker {
         const q = (value || '').trim();
         if (this.searchDebounce) clearTimeout(this.searchDebounce);
 
+        if (this.scopeLoader) {
+            // The scope is already in memory: filter it locally.
+            this.searchQuery = q;
+            this.searchMode = q.length >= 2;
+            this._renderTree();
+            return;
+        }
+
         if (q.length < 2) {
             this.searchMode = false;
             this.searchResults = [];
@@ -203,6 +278,12 @@ export class CatalogTreePicker {
 
     async _toggleExpand(nodeId) {
         const id = parseInt(nodeId, 10);
+        if (this.scopeLoader) {
+            // Scoped trees open fully expanded; track what was folded.
+            if (this.collapsed.has(id)) this.collapsed.delete(id); else this.collapsed.add(id);
+            this._renderTree();
+            return;
+        }
         if (this.expanded.has(id)) {
             this.expanded.delete(id);
             this._renderTree();
@@ -307,6 +388,11 @@ export class CatalogTreePicker {
     _renderTree() {
         if (!this.treeEl) return;
 
+        if (this.scopeLoader) {
+            this._renderScopedTree();
+            return;
+        }
+
         if (this.searchMode) {
             if (this.searchLoading) {
                 this.treeEl.innerHTML = this._loadingMarkup('Aranıyor...');
@@ -389,11 +475,95 @@ export class CatalogTreePicker {
                     <span class="ctp-chevron-spacer"></span>
                     <label class="ctp-check">
                         <input type="checkbox" data-select-id="${node.id}" data-select-label="${escapeHtml(label)}" ${isChecked ? 'checked' : ''}>
-                        <span class="ctp-node-title">${escapeHtml(label)}</span>
+                        <span class="ctp-node-title" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
                     </label>
+                    ${this._jobCountBadge(node)}
                 </div>
             </div>
         `;
+    }
+
+    /* ── scoped tree ────────────────────────────────────────────── */
+
+    _jobCountBadge(node) {
+        if (node.job_count == null) return '';
+        return `<span class="ctp-count-badge" title="Bu kalemdeki iş emri sayısı">${node.job_count} iş</span>`;
+    }
+
+    _renderScopedTree() {
+        if (this.scopeLoading || this.scopeNodes == null) {
+            this.treeEl.innerHTML = this._loadingMarkup('Tablodaki kalemler yükleniyor...');
+            return;
+        }
+        const nodes = this.activeTemplateId
+            ? this.scopeNodes.filter(n => String(n.template_id) === String(this.activeTemplateId))
+            : this.scopeNodes;
+        if (!nodes.length) {
+            this.treeEl.innerHTML = '<div class="ctp-empty">Tablodaki iş emirlerinde katalog kalemi yok.</div>';
+            return;
+        }
+
+        if (this.searchMode) {
+            const q = this.searchQuery.toLocaleLowerCase('tr-TR');
+            const hits = nodes.filter(n => `${this._scopePath(n)} ${n.code || ''}`.toLocaleLowerCase('tr-TR').includes(q));
+            this.treeEl.innerHTML = hits.length
+                ? `<div class="ctp-node-list">${hits.map(n => this._renderLeafRow(n, this._scopePath(n))).join('')}</div>`
+                : '<div class="ctp-empty">Sonuç bulunamadı.</div>';
+            this._bindRowEvents();
+            return;
+        }
+
+        // Nodes arrive in catalog order; children keep that order under their parent.
+        const inList = new Set(nodes.map(n => n.id));
+        const kids = new Map();
+        const roots = [];
+        nodes.forEach(n => {
+            if (n.parent_id != null && inList.has(n.parent_id)) {
+                if (!kids.has(n.parent_id)) kids.set(n.parent_id, []);
+                kids.get(n.parent_id).push(n);
+            } else {
+                roots.push(n);
+            }
+        });
+
+        const renderNodes = (list, parentPath) => list.map(node => {
+            const title = nodeTitle(node);
+            const path = parentPath ? `${parentPath} › ${title}` : `${node.template_name} › ${title}`;
+            const children = kids.get(node.id) || [];
+            const isOpen = !this.collapsed.has(node.id);
+            const isChecked = this.selected.has(String(node.id));
+            const chevron = children.length
+                ? `<button type="button" class="ctp-chevron" data-node-id="${node.id}"><i class="fas fa-chevron-${isOpen ? 'down' : 'right'}"></i></button>`
+                : '<span class="ctp-chevron-spacer"></span>';
+            return `
+                <div class="ctp-node">
+                    <div class="ctp-row ${isChecked ? 'selected' : ''}">
+                        ${chevron}
+                        <label class="ctp-check">
+                            <input type="checkbox" data-select-id="${node.id}" data-select-label="${escapeHtml(path)}" ${isChecked ? 'checked' : ''}>
+                            <span class="ctp-node-title" title="${escapeHtml(path)}">${escapeHtml(title)}</span>
+                            ${node.code ? `<span class="ctp-node-desc">${escapeHtml(node.code)}</span>` : ''}
+                        </label>
+                        ${this._jobCountBadge(node)}
+                    </div>
+                    ${children.length && isOpen ? `<div class="ctp-children">${renderNodes(children, path)}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        // One heading per template unless a single template is picked.
+        const groups = new Map();
+        roots.forEach(n => {
+            const key = String(n.template_id);
+            if (!groups.has(key)) groups.set(key, { name: n.template_name, roots: [] });
+            groups.get(key).roots.push(n);
+        });
+        const showHeads = !this.activeTemplateId && groups.size > 1;
+        this.treeEl.innerHTML = `<div class="ctp-node-list">${Array.from(groups.values()).map(g => `
+            ${showHeads ? `<div class="ctp-template-head">${escapeHtml(g.name || '')}</div>` : ''}
+            ${renderNodes(g.roots, '')}
+        `).join('')}</div>`;
+        this._bindRowEvents();
     }
 
     _bindRowEvents() {

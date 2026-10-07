@@ -6,7 +6,7 @@ import { StatisticsCards } from '../../components/statistics-cards/statistics-ca
 import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { showNotification } from '../../components/notification/notification.js';
-import { getCostTable, getCostChildren, getProcurementLines, getEstimatedCostBreakdown } from '../../apis/projects/cost.js';
+import { getCostTable, getCostTableCatalogNodes, getCostChildren, getProcurementLines, getEstimatedCostBreakdown } from '../../apis/projects/cost.js';
 import { getCombinedJobCosts } from '../../apis/planning/reports.js';
 import { getMachiningJobEntries } from '../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
@@ -22,6 +22,8 @@ let costTable = null;
 let summaryCards = null;
 let filtersComponent = null;
 let catalogPicker = null;
+// Filters behind the rows on screen; the catalog picker is scoped to them.
+let lastTableFilters = {};
 let currentPage = 1;
 let pageSize = 20;
 let currentOrdering = '-date';
@@ -115,11 +117,55 @@ function pctStr(v, d = 1) {
 
 /* ── badges & chips ────────────────────────────────────────────────── */
 
-function statusBadge(status) {
-    const labels = { draft: 'Taslak', active: 'Aktif', on_hold: 'Beklemede', completed: 'Tamamlandı', cancelled: 'İptal Edildi' };
-    const label = labels[status] || status || '–';
-    const cls = status === 'active' ? 'status-green' : status === 'completed' ? 'status-blue' : status === 'on_hold' ? 'status-yellow' : status === 'cancelled' ? 'status-red' : 'status-grey';
-    return `<span class="status-badge ${cls}">${label}</span>`;
+/**
+ * Round icon chip in the house badge colours. The label shows as a tooltip on
+ * hover and stays in the markup (visually hidden) for screen readers and the
+ * Excel export, which strips tags.
+ */
+function iconChip(icon, cls, tooltip, label) {
+    return `<span class="status-badge ${cls} icon-chip" data-bs-toggle="tooltip" data-bs-title="${escapeHtml(tooltip)}" aria-label="${escapeHtml(tooltip)}"><i class="fas ${icon}" aria-hidden="true"></i><span class="visually-hidden">${escapeHtml(label)}</span></span>`;
+}
+
+const STATUS_ICONS = {
+    draft: { icon: 'fa-pencil-alt', cls: 'status-grey', label: 'Taslak' },
+    active: { icon: 'fa-play', cls: 'status-green', label: 'Aktif' },
+    on_hold: { icon: 'fa-pause', cls: 'status-orange', label: 'Beklemede' },
+    completed: { icon: 'fa-check', cls: 'status-blue', label: 'Tamamlandı' },
+    cancelled: { icon: 'fa-times', cls: 'status-red', label: 'İptal Edildi' }
+};
+
+function statusIcon(status) {
+    const s = STATUS_ICONS[status];
+    if (!s) return status ? iconChip('fa-question', 'status-grey', `Durum: ${status}`, status) : '<span class="text-muted">-</span>';
+    return iconChip(s.icon, s.cls, `Durum: ${s.label}`, s.label);
+}
+
+function manufacturedIcon(v) {
+    if (v === true) return iconChip('fa-industry', 'status-green', 'İmalat: Bizde (atölyede imal ediliyor)', 'Bizde');
+    if (v === false) return iconChip('fa-external-link-alt', 'status-purple', 'İmalat: Harici (atölyede imalat yok)', 'Harici');
+    return '<span class="text-muted">-</span>';
+}
+
+/** Catalog item(s) of the job — its own, or its children's (from_children). */
+function catalogCellFormatter(nodes, row) {
+    const list = Array.isArray(nodes) ? nodes : [];
+    if (!list.length) return '<span class="text-muted">-</span>';
+    const fromChildren = row.catalog_nodes_from_children === true;
+    if (window.isExporting) return list.map(n => n.title).join(', ');
+    const tip = (fromChildren ? 'Alt iş emirlerinin kalemleri:\n' : '') + list.map(n => n.path || n.title).join('\n');
+    const more = list.length > 1 ? `<span class="catalog-more">+${list.length - 1}</span>` : '';
+    const icon = fromChildren ? '<i class="fas fa-sitemap me-1" aria-hidden="true"></i>' : '';
+    return `<span class="catalog-cell${fromChildren ? ' from-children' : ''}" data-bs-toggle="tooltip" data-bs-title="${escapeHtml(tip)}"><span class="catalog-title">${icon}${escapeHtml(list[0].title)}</span>${more}</span>`;
+}
+
+/** Bootstrap tooltips for the icon / catalog cells; rows re-render often. */
+function initCellTooltips() {
+    if (!window.bootstrap?.Tooltip || !costTable?.container) return;
+    // A tooltip open while its row was re-rendered would otherwise stay on screen.
+    document.querySelectorAll('body > .tooltip.analytics-tip').forEach(t => t.remove());
+    costTable.container.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(el => {
+        window.bootstrap.Tooltip.getOrCreateInstance(el, { container: 'body', trigger: 'hover', customClass: 'analytics-tip' });
+    });
 }
 
 function marginChip(marginPct, sellingPrice) {
@@ -573,6 +619,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     catalogPicker = new CatalogTreePicker({
         label: 'Katalog Kalemi Filtresi',
+        // Only the items of the job orders the table holds under the filters
+        // last applied (every page, not just the visible one).
+        scopeLoader: () => getCostTableCatalogNodes(lastTableFilters),
+        scopeHint: 'Tablodaki iş emirlerinin kalemleri (mevcut filtrelere göre, tüm sayfalar).',
         onChange: () => { currentPage = 1; loadData(); }
     });
 
@@ -591,7 +641,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'fas fa-calculator',
         iconColor: 'text-primary',
         columns: [
-            { field: '_expand', label: '', sortable: false, width: '80px', formatter: expandColumnFormatter },
+            // Export: 0 = row of the table, 1+ = an expanded child (already inside its
+            // parent's totals), so a sum over the sheet should filter Seviye = 0.
+            { field: '_expand', label: '', exportLabel: 'Seviye', exportType: 'integer', exportValue: (v, row) => row.hierarchy_level ?? 0, sortable: false, width: '80px', formatter: expandColumnFormatter },
             { field: 'job_no', label: 'İş No', sortable: true, width: '160px', formatter: jobNoFormatter },
             { field: 'title', label: 'Başlık', sortable: true },
             {
@@ -601,29 +653,30 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return name ? `<span class="status-badge status-grey">${name}</span>` : '-';
                 }
             },
-            { field: 'status', label: 'Durum', sortable: false, formatter: v => statusBadge(v) },
-            {
-                field: 'is_manufactured', label: 'İmalat', sortable: false, width: '90px',
-                formatter: v => v === true
-                    ? '<span class="status-badge status-green">Bizde</span>'
-                    : (v === false ? '<span class="status-badge status-yellow">Harici</span>' : '-')
-            },
-            { field: 'total_weight_kg', label: 'Ağırlık (kg)', sortable: true, formatter: v => (v != null && v !== '' ? parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span class="text-muted">-</span>') },
+            { field: 'status', label: 'Durum', sortable: false, width: '64px', headerClass: 'text-center', cellClass: 'text-center', formatter: v => statusIcon(v) },
+            { field: 'is_manufactured', label: 'İmalat', sortable: false, width: '64px', headerClass: 'text-center', cellClass: 'text-center', formatter: v => manufacturedIcon(v) },
+            { field: 'catalog_nodes', label: 'Katalog Kalemi', sortable: false, width: '190px', formatter: catalogCellFormatter },
+            { field: 'total_weight_kg', label: 'Ağırlık (kg)', exportType: 'number', sortable: true, formatter: v => (v != null && v !== '' ? parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span class="text-muted">-</span>') },
             /* detail columns — hidden by default, revealed via toggle */
-            { field: 'labor_cost', label: 'İşçilik + Vergi', sortable: false, formatter: laborCellFormatter },
-            { field: 'material_cost', label: 'Malzeme', sortable: false, formatter: materialCellFormatter },
-            { field: 'subcontractor_cost', label: 'Taşeron', sortable: false, formatter: subcontractorCellFormatter },
-            { field: 'paint_cost', label: 'Boya + Malzeme', sortable: false, formatter: paintCellFormatter },
-            { field: 'qc_cost', label: 'KK', sortable: false, formatter: formatMoney },
-            { field: 'shipping_cost', label: 'Sevkiyat', sortable: false, formatter: formatMoney },
-            { field: 'machine_rental_cost', label: 'Makine Kirası', sortable: false, formatter: formatMoney },
-            { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: false, formatter: generalExpensesCellFormatter },
+            { field: 'labor_cost', label: 'İşçilik + Vergi', exportType: 'money', exportValue: (v, row) => toNumber(v) + toNumber(row.employee_overhead_cost), sortable: false, formatter: laborCellFormatter },
+            { field: 'material_cost', label: 'Malzeme', exportType: 'money', sortable: false, formatter: materialCellFormatter },
+            { field: 'subcontractor_cost', label: 'Taşeron', exportType: 'money', sortable: false, formatter: subcontractorCellFormatter },
+            { field: 'paint_cost', label: 'Boya + Malzeme', exportType: 'money', exportValue: (v, row) => toNumber(v) + toNumber(row.paint_material_cost), sortable: false, formatter: paintCellFormatter },
+            { field: 'qc_cost', label: 'KK', exportType: 'money', sortable: false, formatter: formatMoney },
+            { field: 'shipping_cost', label: 'Sevkiyat', exportType: 'money', sortable: false, formatter: formatMoney },
+            { field: 'machine_rental_cost', label: 'Makine Kirası', exportType: 'money', sortable: false, formatter: formatMoney },
+            { field: 'general_expenses_cost', label: 'Genel Giderler', exportType: 'money', sortable: false, formatter: generalExpensesCellFormatter },
             /* end detail columns */
-            { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
-            { field: 'estimated_total_cost', label: 'Tahmini Maliyet', sortable: false, formatter: estimatedCostCellFormatter },
-            { field: 'price_per_kg', label: 'Kg Maliyeti', sortable: true, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
+            { field: 'actual_total_cost', label: 'Toplam Maliyet', exportType: 'money', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
+            { field: 'estimated_total_cost', label: 'Tahmini Maliyet', exportType: 'money', sortable: false, formatter: estimatedCostCellFormatter },
+            { field: 'price_per_kg', label: 'Kg Maliyeti', exportType: 'money', sortable: true, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
             {
                 field: 'selling_price', label: 'Satış Fiyatı', sortable: true,
+                // The figure the cell shows: a derived (EUR) price for rows with
+                // none of their own, else the entered price in its own currency.
+                exportType: 'money',
+                exportValue: (v, row) => (row.selling_price_is_derived ? row.selling_price_display : v),
+                exportCurrency: row => (row.selling_price_is_derived ? 'EUR' : (row.selling_price_currency || 'EUR')),
                 formatter: (v, row) => {
                     if (row.selling_price_is_derived) {
                         return formatDerivedPrice(
@@ -637,15 +690,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                         : '<span class="text-muted">-</span>';
                 }
             },
-            { field: 'selling_price_per_kg', label: 'Kg Fiyatı', sortable: false, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-success">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
-            { field: 'margin_eur', label: 'Marj (€)', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
+            { field: 'selling_price_per_kg', label: 'Kg Fiyatı', exportType: 'money', sortable: false, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-success">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
+            { field: 'margin_eur', label: 'Marj (€)', exportType: 'money', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
             // Colour the chip against whichever price the margin was computed
             // from, otherwise derived rows (own price 0) always read as amber.
-            { field: 'margin_pct', label: 'Marj %', sortable: true,
+            { field: 'margin_pct', label: 'Marj %', exportType: 'percent', sortable: true,
               formatter: (v, row) => marginChip(v, row?.selling_price_is_derived
                   ? row?.selling_price_display : row?.selling_price) },
-            { field: 'completion_pct', label: 'Tamamlanma', sortable: true, width: '160px', formatter: v => completionBar(v) },
-            { field: 'target_completion_date', label: 'Hedef tarih', sortable: true, width: '120px', formatter: formatDate }
+            { field: 'completion_pct', label: 'Tamamlanma', exportType: 'percent', sortable: true, width: '160px', formatter: v => completionBar(v) },
+            { field: 'target_completion_date', label: 'Hedef tarih', exportType: 'date', sortable: true, width: '120px', formatter: formatDate }
         ],
         data: [],
         footer: buildFooter,
@@ -671,7 +724,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshable: true,
         onRefresh: () => loadData(),
         exportable: true,
-        exportFileName: 'analitik-maliyet',
+        exportFilename: () => `analitik-maliyet_${new Date().toISOString().slice(0, 10)}.xlsx`,
         stickyHeader: true
     });
 
@@ -754,6 +807,7 @@ function afterTableRender() {
     injectCostToggleIcon();
     injectCatalogFilterButton();
     applyCostBreakdownVisibility();
+    initCellTooltips();
 }
 
 async function loadData() {
@@ -778,19 +832,24 @@ async function loadData() {
     costTable.setLoading(true);
     destroyChart();
 
+    const tableFilters = {
+        status__in: statusIn || undefined,
+        search: search || undefined,
+        customer: customer ? parseInt(customer, 10) : undefined,
+        template_node,
+        manufactured,
+        ...dateParams,
+        facility
+    };
+
     try {
         const res = await getCostTable({
-            status__in: statusIn || undefined,
-            search: search || undefined,
-            customer: customer ? parseInt(customer, 10) : undefined,
-            template_node,
-            manufactured,
-            ...dateParams,
+            ...tableFilters,
             ordering,
-            facility,
             page: currentPage,
             page_size: pageSize
         });
+        lastTableFilters = tableFilters;
 
         const results = res.results || [];
         const count = res.count ?? 0;
@@ -856,53 +915,92 @@ function splitEmployeeOverheadByLaborCost(overhead, machBase, weldBase) {
 
 /* ── Job details (combined) ────────────────────────────────────────── */
 
+/*
+ * Every labor view below covers the job order AND its whole subtree — the
+ * same set the table's İşçilik column rolls up — so a top-level job order's
+ * Talaşlı / Kaynaklı figures include its children's (include_descendants).
+ */
+
+/** Combined machining + welding row for the job order's subtree. */
+async function fetchSubtreeLabor(jobNo) {
+    const data = await getCombinedJobCosts({ job_no: jobNo, include_descendants: true });
+    const results = data.results || [];
+    return results.find((r) => r.job_no === jobNo) || results[0] || null;
+}
+
+function subtreeNote(jobNo, byJob) {
+    if (!Array.isArray(byJob) || byJob.length < 2) return '';
+    return `<div class="alert alert-light border py-2 mb-3 small text-muted">
+        <i class="fas fa-sitemap me-1"></i>
+        <strong>${escapeHtml(jobNo)}</strong> ve alt iş emirleri birlikte gösteriliyor
+        (işçilik kaydı olan ${byJob.length} iş emri).
+    </div>`;
+}
+
+function laborByJobTable(byJob) {
+    const rows = (byJob || []).map(j => {
+        const total = toNumber(j.machining_cost) + toNumber(j.welding_cost);
+        const hours = toNumber(j.machining_hours) + toNumber(j.welding_hours);
+        return `<tr>
+            <td><span class="status-badge status-grey">${escapeHtml(j.job_no)}</span></td>
+            <td class="text-end">${formatMoney(j.machining_cost)}</td>
+            <td class="text-end">${formatMoney(j.welding_cost)}</td>
+            <td class="text-end fw-bold">${formatMoney(total)}</td>
+            <td class="text-end">${hours.toFixed(1)}</td>
+        </tr>`;
+    }).join('');
+    const sum = (k) => (byJob || []).reduce((s, j) => s + toNumber(j[k]), 0);
+    const totalCost = sum('machining_cost') + sum('welding_cost');
+    const totalHours = sum('machining_hours') + sum('welding_hours');
+    return `<div class="table-responsive"><table class="table table-sm table-hover align-middle mb-0 labor-by-job">
+        <thead><tr>
+            <th>İş Emri</th><th class="text-end">Talaşlı</th><th class="text-end">Kaynaklı</th>
+            <th class="text-end">Toplam (vergi hariç)</th><th class="text-end">Saat</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr class="fw-bold">
+            <td>Toplam</td><td class="text-end">${formatMoney(sum('machining_cost'))}</td>
+            <td class="text-end">${formatMoney(sum('welding_cost'))}</td>
+            <td class="text-end">${formatMoney(totalCost)}</td><td class="text-end">${totalHours.toFixed(1)}</td>
+        </tr></tfoot>
+    </table></div>`;
+}
+
 async function showJobDetails(jobNo) {
     if (!jobNo) { showError('İş numarası bulunamadı.'); return; }
     try {
         ensureModalContainer('job-details-modal-container');
-        const [data, costRow] = await Promise.all([
-            getCombinedJobCosts({ job_no: jobNo }),
+        const [jobData, costRow] = await Promise.all([
+            fetchSubtreeLabor(jobNo),
             fetchCostTableRowForJob(jobNo)
         ]);
-        const results = data.results || [];
-        if (results.length === 0) { showError('Maliyet verisi bulunamadı.'); return; }
-        const jobData = results.find((r) => r.job_no === jobNo) || results[0];
+        if (!jobData) { showError('Maliyet verisi bulunamadı.'); return; }
         const machining = jobData.machining || null;
         const welding = jobData.welding || null;
+        const byJob = jobData.by_job || [];
         const machBase = toNumber(machining?.total_cost);
         const weldBase = toNumber(welding?.total_cost);
-        const ownLabor = machBase + weldBase;
-        const treeLabor = costRow ? toNumber(costRow.labor_cost) : ownLabor;
-        const treeOverhead = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
-        const childLabor = Math.max(0, treeLabor - ownLabor);
-        const laborNet = treeLabor > 0 ? treeLabor : ownLabor;
-        const overheadTotal = treeOverhead;
+        // Özet matches the table row (cached summary); the sections below
+        // come from the same aggregates and add up to it.
+        const laborNet = costRow ? toNumber(costRow.labor_cost) : machBase + weldBase;
+        const overheadTotal = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
         const laborWithTax = laborNet + overheadTotal;
-        const ownOverhead = treeLabor > 0 ? treeOverhead * (ownLabor / treeLabor) : treeOverhead;
-        const { mach: machTax, weld: weldTax } = splitEmployeeOverheadByLaborCost(ownOverhead, machBase, weldBase);
+        const { mach: machTax, weld: weldTax } = splitEmployeeOverheadByLaborCost(overheadTotal, machBase, weldBase);
         const machWithTax = machBase + machTax;
         const weldWithTax = weldBase + weldTax;
 
         const combinedTotalHours = jobData.combined_total_hours || 0;
         const costPerHourWithTax = combinedTotalHours > 0 ? laborWithTax / combinedTotalHours : 0;
-
-        const childLaborNote = childLabor > 0.005
-            ? `<div class="alert alert-light border py-2 mb-3 small text-muted">
-                <i class="fas fa-sitemap me-1"></i>
-                Bu iş emrinin kendi kayıtları: <strong>€${ownLabor.toFixed(2)}</strong> işçilik
-                + alt iş emirleri: <strong>€${childLabor.toFixed(2)}</strong> işçilik
-                = tablodaki toplam <strong>€${laborNet.toFixed(2)}</strong>.
-               </div>`
-            : '';
+        const multiJob = byJob.length > 1;
 
         const modal = new DisplayModal('job-details-modal-container', { title: `${jobNo} - İş Maliyeti Detayları`, icon: 'fas fa-calculator', size: 'xl', showEditButton: false });
 
-        modal.addCustomSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', customContent: childLaborNote + summaryRow([
-            { icon: 'money-bill-wave', cls: 'text-primary', value: `€${laborNet.toFixed(2)}`, label: 'İşçilik (vergi hariç, ağaç toplamı)', colSize: 4 },
+        modal.addCustomSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', customContent: subtreeNote(jobNo, byJob) + summaryRow([
+            { icon: 'money-bill-wave', cls: 'text-primary', value: `€${laborNet.toFixed(2)}`, label: 'İşçilik (vergi hariç)', colSize: 4 },
             { icon: 'percent', cls: 'text-primary', value: `€${overheadTotal.toFixed(2)}`, label: 'Vergi / genel gider', colSize: 4 },
             { icon: 'euro-sign', cls: 'text-primary', value: `€${laborWithTax.toFixed(2)}`, label: 'İşçilik + Vergi', colSize: 4 }
         ]) + summaryRow([
-            { icon: 'clock', cls: 'text-primary', value: combinedTotalHours.toFixed(1), label: 'Toplam Saat (bu iş emri)', colSize: 6 },
+            { icon: 'clock', cls: 'text-primary', value: combinedTotalHours.toFixed(1), label: multiJob ? 'Toplam Saat (alt iş emirleri dahil)' : 'Toplam Saat', colSize: 6 },
             { icon: 'calculator', cls: 'text-primary', value: `€${costPerHourWithTax.toFixed(2)}`, label: 'Saat Başı (işçilik + vergi)', colSize: 6 }
         ]) });
 
@@ -932,6 +1030,10 @@ async function showJobDetails(jobNo) {
             { icon: 'calculator', cls: 'text-danger', value: `€${weldCphWithTax.toFixed(2)}`, label: 'Saat/Maliyet (+ vergi)', colSize: 4 }
         ]) + `<div class="text-center mt-2"><button class="btn btn-danger btn-sm" onclick="window.showWeldingDetails('${jobNo}')"><i class="fas fa-table me-1"></i>Detay</button></div>` : '<div class="text-center py-3 text-muted">Kaynaklı imalat verisi yok.</div>' });
 
+        if (multiJob) {
+            modal.addCustomSection({ title: 'İş Emri Bazında İşçilik', icon: 'fas fa-sitemap', iconColor: 'text-secondary', customContent: laborByJobTable(byJob) });
+        }
+
         modal.render().show();
     } catch (err) { console.error(err); showError('İş detayları yüklenirken hata oluştu.'); }
 }
@@ -949,21 +1051,21 @@ function summaryRow(items) {
 async function showMachiningDetails(jobNo) {
     try {
         ensureModalContainer('machining-details-modal-container');
-        const [data, costRow, combinedData] = await Promise.all([
-            getMachiningJobEntries({ job_no: jobNo }),
+        const [data, costRow, job] = await Promise.all([
+            getMachiningJobEntries({ job_no: jobNo, include_descendants: true }),
             fetchCostTableRowForJob(jobNo),
-            getCombinedJobCosts({ job_no: jobNo })
+            fetchSubtreeLabor(jobNo)
         ]);
         const groups = data.entries || [];
         const summary = data.summary || {};
-        const job = combinedData.results?.[0];
         const machBase = toNumber(job?.machining?.total_cost);
         const weldBase = toNumber(job?.welding?.total_cost);
         const overhead = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
         const machTax = splitEmployeeOverheadByLaborCost(overhead, machBase, weldBase).mach;
         const netMach = toNumber(summary.total_cost);
         const machWithTax = netMach + machTax;
-        const modal = new DisplayModal('machining-details-modal-container', { title: `${jobNo} - Talaşlı İmalat Detayları`, icon: 'fas fa-cog', size: 'xl', showEditButton: false });
+        const multiJob = new Set(groups.map(op => op.job_no)).size > 1;
+        const modal = new DisplayModal('machining-details-modal-container', { title: `${jobNo} - Talaşlı İmalat Detayları${multiJob ? ' (alt iş emirleri dahil)' : ''}`, icon: 'fas fa-cog', size: 'xl', showEditButton: false });
 
         modal.addSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', fields: [
             { id: 'te', label: 'Toplam Kayıt', value: summary.total_entries || 0, type: 'number', icon: 'fas fa-list', colSize: 2 },
@@ -977,21 +1079,29 @@ async function showMachiningDetails(jobNo) {
         ]});
 
         if (groups.length > 0) {
+            // Groups sort by key, so a subtree's operations line up per job order.
+            const groupKeyOf = (op) => multiJob ? `${op.job_no || ''} | ${op.operation_key || '-'}` : (op.operation_key || '-');
             const opMap = new Map();
-            groups.forEach(op => opMap.set(op.operation_key || '-', op));
+            groups.forEach(op => opMap.set(groupKeyOf(op), op));
             const tableData = [];
             groups.forEach(op => {
-                tableData.push({ id: `summary-${op.operation_key}`, operation_key: op.operation_key || '-', date: '', employee_full_name: '', hours: op.total_hours || 0, cost: op.total_cost || '0', work_type: '', is_operation_summary: true, operation_name: op.operation_name || '-' });
+                const groupKey = groupKeyOf(op);
+                tableData.push({ id: `summary-${groupKey}`, group_key: groupKey, date: '', employee_full_name: '', hours: op.total_hours || 0, cost: op.total_cost || '0', work_type: '', is_operation_summary: true, operation_name: op.operation_name || '-' });
                 [...(op.entries || [])].sort((a, b) => (a.start_time || 0) - (b.start_time || 0)).forEach(e => {
-                    tableData.push({ id: e.id, operation_key: op.operation_key || '-', date: e.start_time ? new Date(e.start_time).toISOString().split('T')[0] : '-', employee_full_name: e.employee_full_name, employee_username: e.employee_username, hours: e.hours || 0, cost: e.cost || '0', work_type: e.work_type, is_operation_summary: false });
+                    tableData.push({ id: e.id, group_key: groupKey, date: e.start_time ? new Date(e.start_time).toISOString().split('T')[0] : '-', employee_full_name: e.employee_full_name, employee_username: e.employee_username, hours: e.hours || 0, cost: e.cost || '0', work_type: e.work_type, is_operation_summary: false });
                 });
             });
             modal.addCustomSection({ title: null, customContent: '<div id="machining-entries-table-container"></div>' });
             modal.render().show();
             setTimeout(() => {
                 const t = new TableComponent('machining-entries-table-container', {
-                    title: 'Kayıtlar', groupBy: 'operation_key', groupCollapsible: true, defaultGroupExpanded: true,
-                    groupHeaderFormatter: (gv) => { const op = opMap.get(gv); return op ? `<span class="status-badge status-blue">${op.operation_name || '-'}</span> <span class="text-muted">${gv}</span>` : `<span class="status-badge status-grey">${gv || '-'}</span>`; },
+                    title: 'Kayıtlar', groupBy: 'group_key', groupCollapsible: true, defaultGroupExpanded: true,
+                    groupHeaderFormatter: (gv) => {
+                        const op = opMap.get(gv);
+                        if (!op) return `<span class="status-badge status-grey">${escapeHtml(gv || '-')}</span>`;
+                        const jobBadge = multiJob ? `<span class="status-badge status-grey me-1">${escapeHtml(op.job_no || '-')}</span> ` : '';
+                        return `${jobBadge}<span class="status-badge status-blue">${escapeHtml(op.operation_name || '-')}</span> <span class="text-muted">${escapeHtml(op.operation_key || '-')}</span>`;
+                    },
                     columns: [
                         { field: 'date', label: 'Tarih', sortable: true, width: '120px', formatter: (v, r) => r.is_operation_summary ? '<span class="text-muted fw-bold">Toplam</span>' : (v || '-') },
                         { field: 'employee_full_name', label: 'Çalışan', sortable: true, formatter: (v, r) => r.is_operation_summary ? '<span class="text-muted">-</span>' : (v || r.employee_username || '-') },
@@ -1013,21 +1123,21 @@ async function showMachiningDetails(jobNo) {
 async function showWeldingDetails(jobNo) {
     try {
         ensureModalContainer('welding-details-modal-container');
-        const [data, costRow, combinedData] = await Promise.all([
-            getWeldingJobCostDetail({ job_no: jobNo }),
+        const [data, costRow, job] = await Promise.all([
+            getWeldingJobCostDetail({ job_no: jobNo, include_descendants: true }),
             fetchCostTableRowForJob(jobNo),
-            getCombinedJobCosts({ job_no: jobNo })
+            fetchSubtreeLabor(jobNo)
         ]);
         const entries = data.entries || [];
         const summary = data.summary || {};
-        const job = combinedData.results?.[0];
         const machBase = toNumber(job?.machining?.total_cost);
         const weldBase = toNumber(job?.welding?.total_cost);
         const overhead = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
         const weldTax = splitEmployeeOverheadByLaborCost(overhead, machBase, weldBase).weld;
         const netWeld = toNumber(summary.total_cost);
         const weldWithTax = netWeld + weldTax;
-        const modal = new DisplayModal('welding-details-modal-container', { title: `${jobNo} - Kaynaklı İmalat Detayları`, icon: 'fas fa-fire', size: 'xl', showEditButton: false });
+        const multiJob = new Set(entries.map(e => e.job_no)).size > 1;
+        const modal = new DisplayModal('welding-details-modal-container', { title: `${jobNo} - Kaynaklı İmalat Detayları${multiJob ? ' (alt iş emirleri dahil)' : ''}`, icon: 'fas fa-fire', size: 'xl', showEditButton: false });
 
         modal.addSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-danger', fields: [
             { id: 'te', label: 'Toplam Kayıt', value: summary.total_entries || entries.length, type: 'number', icon: 'fas fa-list', colSize: 2 },
@@ -1047,6 +1157,16 @@ async function showWeldingDetails(jobNo) {
             setTimeout(() => {
                 const t = new TableComponent('welding-entries-table-container', {
                     title: 'Kayıtlar',
+                    // A subtree's entries come grouped per job order, folded
+                    // so the totals read first (hundreds of rows otherwise).
+                    ...(multiJob ? {
+                        groupBy: 'job_no', groupCollapsible: true, defaultGroupExpanded: false,
+                        groupHeaderFormatter: (gv, rows) => {
+                            const hours = rows.reduce((s, r) => s + toNumber(r.hours), 0);
+                            const cost = rows.reduce((s, r) => s + toNumber(r.cost), 0);
+                            return `<span class="status-badge status-grey">${escapeHtml(gv || '-')}</span> <span class="text-muted ms-2">${rows.length} kayıt · ${hours.toFixed(1)} saat · </span><span class="fw-bold">${formatMoney(cost)}</span>`;
+                        }
+                    } : {}),
                     columns: [
                         { field: 'date', label: 'Tarih', sortable: true, width: '120px', formatter: v => v || '-' },
                         { field: 'employee_full_name', label: 'Çalışan', sortable: true, formatter: (v, r) => v || r.employee_username || '-' },
