@@ -250,6 +250,12 @@ async function handleLandingPage() {
                             icon: 'fas fa-coins',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/finance/purchase-orders'
+                        },
+                        {
+                            label: 'Ödeme Listeleri',
+                            icon: 'fas fa-money-check-dollar',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/finance/payment-lists'
                         }
                     ]
                 },

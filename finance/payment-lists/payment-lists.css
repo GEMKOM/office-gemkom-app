@@ -1,0 +1,198 @@
+/* Ödeme Listeleri (payment lists) page */
+
+#pl-view-switcher .btn.active {
+    background: #0d6efd;
+    color: #fff;
+}
+
+.pl-sub {
+    font-size: 0.75rem;
+    color: #6b7280;
+    line-height: 1.2;
+}
+
+.pl-money {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pl-fx,
+.pl-tabular {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Info strip (budget / FX / approval) */
+.pl-info-strip {
+    display: grid;
+    grid-template-columns: 2fr 1.4fr 1.8fr;
+    gap: 1rem;
+}
+
+@media (max-width: 991.98px) {
+    .pl-info-strip {
+        grid-template-columns: 1fr;
+    }
+}
+
+.pl-info-block h6 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #6b7280;
+    margin-bottom: 0.35rem;
+}
+
+.pl-info-block .pl-big {
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.pl-budget-bar {
+    height: 8px;
+    background: #e5e7eb;
+    border-radius: 4px;
+    overflow: hidden;
+    margin: 0.4rem 0;
+}
+
+.pl-budget-bar > div {
+    height: 100%;
+    background: #3b82f6;
+    transition: width 0.3s ease;
+}
+
+.pl-budget-bar.over > div {
+    background: #ef4444;
+}
+
+.pl-budget-over {
+    color: #b91c1c;
+    font-weight: 600;
+}
+
+/* Toolbar */
+.pl-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.pl-toolbar .pl-toolbar-spacer {
+    flex: 1 1 auto;
+}
+
+/* Items table row states */
+tr.pl-row-excluded td {
+    text-decoration: line-through;
+    color: #6b7280;
+    background: #f3f4f6;
+}
+
+tr.pl-row-excluded td.action-column,
+tr.pl-row-excluded td.selection-column {
+    text-decoration: none;
+}
+
+tr.pl-row-paid td {
+    background: #ecfdf5;
+}
+
+tr.pl-row-cancelled td {
+    background: #fef2f2;
+}
+
+.pl-urgent-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #ef4444;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+/* Bulk action bar (pool) */
+.pl-bulk-bar {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    background: #fff;
+    border-top: 1px solid #e5e7eb;
+    box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+    padding: 0.6rem 1rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    border-radius: 8px 8px 0 0;
+}
+
+/* Approval panel */
+.pl-stage {
+    display: flex;
+    gap: 0.5rem;
+    align-items: flex-start;
+    margin-bottom: 0.35rem;
+    font-size: 0.85rem;
+}
+
+.pl-stage .pl-stage-name {
+    font-weight: 600;
+}
+
+.pl-decision {
+    font-size: 0.8rem;
+    color: #374151;
+    padding-left: 0.25rem;
+}
+
+.pl-decision .pl-decision-comment {
+    color: #6b7280;
+    font-style: italic;
+}
+
+/* Split preview / proforma list inside modals */
+.pl-split-preview,
+.pl-modal-note {
+    background: #f8fafc;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+.pl-proforma-empty {
+    color: #6b7280;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+/* Footer totals */
+.pl-footer-row td {
+    font-weight: 600;
+    background: #f8fafc;
+}
+
+@media print {
+    #navbar-container,
+    #header-placeholder .dashboard-controls,
+    #pl-view-switcher,
+    #pl-detail-toolbar-card,
+    .action-column,
+    .selection-column,
+    .footer-section,
+    .pl-bulk-bar,
+    .card-actions {
+        display: none !important;
+    }
+
+    .pl-info-strip {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .modules-section {
+        padding: 0 !important;
+    }
+}

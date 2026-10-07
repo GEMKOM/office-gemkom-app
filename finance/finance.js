@@ -26,6 +26,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                 link: '/finance/purchase-orders'
             },
             {
+                title: 'Ödeme Listeleri',
+                description: 'Haftalık tedarikçi ödeme planı: havuzdan seç, genel müdür onayı, proformalarla finansa gönder.',
+                icon: 'fas fa-money-check-dollar',
+                iconColor: 'success',
+                link: '/finance/payment-lists'
+            },
+            {
                 title: 'Raporlar',
                 description: 'Finansal analizler, maliyet raporları ve performans metrikleri.',
                 icon: 'fas fa-chart-bar',

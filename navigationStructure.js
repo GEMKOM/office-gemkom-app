@@ -617,6 +617,11 @@ export const NAVIGATION_STRUCTURE = {
                 icon: 'fas fa-coins',
                 children: {}
             },
+            '/finance/payment-lists': {
+                label: 'Ödeme Listeleri',
+                icon: 'fas fa-money-check-dollar',
+                children: {}
+            },
             '/finance/reports': {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-bar',
