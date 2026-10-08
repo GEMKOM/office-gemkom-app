@@ -9,6 +9,7 @@ import { DisplayModal } from '../../../components/display-modal/display-modal.js
 import { showNotification } from '../../../components/notification/notification.js';
 import { getOvertimeCostReport } from '../../../apis/overtime.js';
 import { fetchUsersDropdown } from '../../../apis/users.js';
+import { loadJobOrderOptions, addJobFilter, jobFilterValue } from '../jobFilter.js';
 import { formatJobNumber } from '../../../apis/formatters.js';
 
 // Mirrors the canonical department list in human_resources/org/org.js. Keep in
@@ -65,6 +66,26 @@ const num = (v) => Number(v || 0);
 
 const fmtEur = (v) =>
     '€' + num(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Every cost the backend returns includes the employer overhead (SGK işveren
+// payı, taxes — overtime/services/cost_report.py EMPLOYER_OVERHEAD_RATE) and
+// carries its two parts as wage_cost_eur + employer_cost_eur.
+const COST_FIELDS = ['cost_eur', 'wage_cost_eur', 'employer_cost_eur'];
+const costNums = (r) => Object.fromEntries(COST_FIELDS.map(f => [f, num(r[f])]));
+const addCosts = (target, r) => COST_FIELDS.forEach(f => { target[f] = (target[f] || 0) + num(r[f]); });
+
+// Ücret | SGK / İşveren | Toplam Maliyet — the total is the bold one.
+function costColumns({ sortable = true, bold = () => true } = {}) {
+    const plain = (v) => window.isExporting ? num(v) : fmtEur(v);
+    return [
+        { field: 'wage_cost_eur', label: 'Ücret', sortable, type: 'number', formatter: plain },
+        { field: 'employer_cost_eur', label: 'SGK / İşveren Payı', sortable, type: 'number',
+          formatter: (v) => window.isExporting ? num(v) : `<span class="text-muted">${fmtEur(v)}</span>` },
+        { field: 'cost_eur', label: 'Toplam Maliyet', sortable, type: 'number',
+          formatter: (v, row) => window.isExporting ? num(v)
+              : (bold(row) ? `<strong>${fmtEur(v)}</strong>` : fmtEur(v)) },
+    ];
+}
 
 const fmtHours = (v) =>
     num(v).toLocaleString('tr-TR', { maximumFractionDigits: 2 }) + ' saat';
@@ -155,11 +176,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Started before the other filters are added so the request overlaps them.
+    const jobOptionsPromise = loadJobOrderOptions();
+
     filters.addDateFilter({ id: 'start_date', label: 'Başlangıç Tarihi', value: currentFilters.start_date, colSize: 2 });
     filters.addDateFilter({ id: 'end_date', label: 'Bitiş Tarihi', value: currentFilters.end_date, colSize: 2 });
     filters.addSelectFilter({ id: 'status', label: 'Durum', options: STATUS_OPTIONS, value: 'approved', colSize: 2 });
     filters.addSelectFilter({ id: 'team', label: 'Ekip', options: TEAM_OPTIONS, colSize: 2 });
-    filters.addTextFilter({ id: 'job_no', label: 'İş No', placeholder: 'İş emri no...', colSize: 2 });
+
+    // İş No — searchable multi-select; each pick includes its sub-jobs.
+    await addJobFilter(filters, jobOptionsPromise);
+
     filters.addSelectFilter({ id: 'group_by', label: 'Dağılım', options: GROUP_OPTIONS, value: 'by_team', colSize: 2 });
 
     // Personnel filter — populated from the light users dropdown endpoint.
@@ -173,7 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.warn('Personel listesi yüklenemedi:', e);
     }
 
-    const stats = new StatisticsCards('stats-placeholder', { cards: [], itemsPerRow: 5, compact: true });
+    const stats = new StatisticsCards('stats-placeholder', { cards: [], itemsPerRow: 4, compact: true });
 
     const bucketTable = new TableComponent('bucket-placeholder', {
         title: 'Ücret Katsayısına Göre Dağılım',
@@ -183,7 +210,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'label', label: 'Kategori', sortable: false,
               formatter: (v, row) => window.isExporting ? v : `<i class="${row.icon} ${row.color} me-2"></i>${v}` },
             { field: 'hours', label: 'Saat', sortable: true, type: 'number', formatter: (v) => fmtHours(v) },
-            { field: 'cost_eur', label: 'Maliyet', sortable: true, type: 'number', formatter: (v) => fmtEur(v) },
+            ...costColumns({ bold: () => false }),
             { field: 'share', label: 'Maliyet Payı', sortable: true, type: 'number',
               formatter: (v) => {
                   const pct = num(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + '%';
@@ -217,9 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'request_count', label: 'Talep', sortable: false, type: 'number', formatter: (v) => v ?? 0 },
             { field: 'entry_count', label: 'Kayıt', sortable: false, type: 'number', formatter: (v) => v ?? 0 },
             { field: 'hours', label: 'Saat', sortable: false, type: 'number', formatter: (v) => fmtHours(v) },
-            { field: 'cost_eur', label: 'Maliyet', sortable: false, type: 'number',
-              formatter: (v, row) => window.isExporting ? num(v)
-                  : (row.level === 0 ? `<strong>${fmtEur(v)}</strong>` : fmtEur(v)) },
+            ...costColumns({ sortable: false, bold: (row) => row.level === 0 }),
             { field: 'share', label: 'Pay', sortable: false, type: 'number',
               formatter: (v) => {
                   const pct = num(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + '%';
@@ -294,8 +319,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'entry_count', label: 'Kişi', sortable: true, type: 'number',
               formatter: (v) => window.isExporting ? v : `<span class="badge bg-light text-dark">${v}</span>` },
             { field: 'hours', label: 'Toplam Saat', sortable: true, type: 'number', formatter: (v) => fmtHours(v) },
-            { field: 'cost_eur', label: 'Maliyet', sortable: true, type: 'number',
-              formatter: (v) => window.isExporting ? num(v) : `<strong>${fmtEur(v)}</strong>` },
+            ...costColumns(),
             { field: 'status', label: 'Durum', sortable: true,
               formatter: (v, row) => {
                   const label = v === 'approved' ? 'Onaylandı' : v === 'submitted' ? 'Onay Bekliyor' : v;
@@ -351,8 +375,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'request_count', label: 'Talep', sortable: true, type: 'number', formatter: (v) => v ?? 0 },
             { field: 'entry_count', label: 'Kayıt', sortable: true, type: 'number', formatter: (v) => v ?? 0 },
             { field: 'hours', label: 'Saat', sortable: true, type: 'number', formatter: (v) => fmtHours(v) },
-            { field: 'cost_eur', label: 'Maliyet', sortable: true, type: 'number',
-              formatter: (v) => window.isExporting ? num(v) : `<strong>${fmtEur(v)}</strong>` },
+            ...costColumns(),
             { field: 'share', label: 'Pay', sortable: true, type: 'number',
               formatter: (v) => num(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 }) + '%' },
         ];
@@ -364,7 +387,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (f.end_date) out.end_date = f.end_date;
         if (f.status) out.status = f.status;
         if (f.team) out.team = f.team;
-        if (f.job_no) out.job_no = f.job_no;
+        const jobNo = jobFilterValue(f.job_no);
+        if (jobNo) out.job_no = jobNo;
         if (f.user) out.user = f.user;
         return out;
     }
@@ -373,14 +397,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('notice-placeholder').innerHTML = html || '';
     }
 
+    // "0.65" → "65"
+    const pctOfWage = (rate) => (num(rate) * 100).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+
     function renderStats(data) {
         const s = data.summary;
         stats.setCards([
-            { title: 'Toplam Mesai Maliyeti', value: fmtEur(s.total_cost_eur), icon: 'fas fa-coins', color: 'primary' },
+            { title: 'Toplam Mesai Maliyeti (SGK dahil)', value: fmtEur(s.total_cost_eur), icon: 'fas fa-coins', color: 'primary' },
+            { title: 'Ücret', value: fmtEur(s.total_wage_cost_eur), icon: 'fas fa-money-bill-wave', color: 'success' },
+            { title: `SGK / İşveren Payı (%${pctOfWage(s.employer_overhead_rate)})`, value: fmtEur(s.total_employer_cost_eur),
+              icon: 'fas fa-building-columns', color: 'secondary' },
             { title: 'Toplam Mesai Saati', value: fmtHours(s.total_hours), icon: 'fas fa-hourglass-half', color: 'info' },
-            { title: 'Ortalama Saat Maliyeti', value: fmtEur(s.avg_cost_per_hour_eur), icon: 'fas fa-tachometer-alt', color: 'secondary' },
+            { title: 'Ortalama Saat Maliyeti (SGK dahil)', value: fmtEur(s.avg_cost_per_hour_eur), icon: 'fas fa-tachometer-alt', color: 'secondary' },
             { title: 'Mesai Yapan Kişi', value: s.user_count, icon: 'fas fa-users', color: 'success' },
-            { title: 'Talep Sayısı', value: s.request_count, icon: 'fas fa-file-alt', color: 'warning' },
+            { title: 'Talep Sayısı', value: s.request_count, icon: 'fas fa-file-alt', color: 'primary' },
         ]);
     }
 
@@ -393,7 +423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: b.icon,
                 color: b.color,
                 hours: num(cell.hours),
-                cost_eur: num(cell.cost_eur),
+                ...costNums(cell),
                 share: total > 0 ? (num(cell.cost_eur) / total) * 100 : 0,
             };
         }).filter(r => r.hours > 0 || r.cost_eur > 0);
@@ -404,7 +434,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const rows = (data[groupBy] || []).map(r => ({
             ...r,
             hours: num(r.hours),
-            cost_eur: num(r.cost_eur),
+            ...costNums(r),
             share: num(data.summary.total_cost_eur) > 0
                 ? (num(r.cost_eur) / num(data.summary.total_cost_eur)) * 100
                 : 0,
@@ -435,18 +465,18 @@ document.addEventListener('DOMContentLoaded', async () => {
             const key = job ? jobParentKey(job) : '';
             let p = parents.get(key);
             if (!p) {
-                p = { key, job_no: key, level: 0, hours: 0, cost_eur: 0,
+                p = { key, job_no: key, level: 0, hours: 0, cost_eur: 0, wage_cost_eur: 0, employer_cost_eur: 0,
                       entry_count: 0, requestIds: new Set(), children: [] };
                 parents.set(key, p);
             }
             p.children.push({
                 key: job, job_no: job, level: 1,
-                hours: num(r.hours), cost_eur: num(r.cost_eur),
+                hours: num(r.hours), ...costNums(r),
                 entry_count: r.entry_count ?? 0,
                 request_count: r.request_count ?? 0,
             });
             p.hours += num(r.hours);
-            p.cost_eur += num(r.cost_eur);
+            addCosts(p, r);
             p.entry_count += r.entry_count ?? 0;
             (requestIdsByJob.get(job) || new Set()).forEach(id => p.requestIds.add(id));
         });
@@ -505,7 +535,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const rows = (data.requests || []).map(r => ({
             ...r,
             hours: num(r.hours),
-            cost_eur: num(r.cost_eur),
+            ...costNums(r),
         }));
         table.updateData(rows, rows.length, 1);
     }
@@ -532,7 +562,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     full_name: e.full_name || e.username,
                     description: e.description,
                     hours: num(e.hours),
-                    cost_eur: num(e.cost_eur),
+                    ...costNums(e),
                 });
             });
         });
@@ -540,6 +570,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const totalHours = rows.reduce((s2, r) => s2 + r.hours, 0);
         const totalCost = rows.reduce((s2, r) => s2 + r.cost_eur, 0);
+        const totalWage = rows.reduce((s2, r) => s2 + r.wage_cost_eur, 0);
+        const totalEmployer = rows.reduce((s2, r) => s2 + r.employer_cost_eur, 0);
 
         const modal = new DisplayModal('job-detail-modal-container', {
             title: `İş Emri ${jobKey || NO_JOB_LABEL} — Mesai Detayı`,
@@ -549,10 +581,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
 
         modal.addSection({ title: 'Özet', icon: 'fas fa-info-circle' });
-        modal.addField({ label: 'İş No', value: jobKey || NO_JOB_LABEL, icon: 'fas fa-hashtag', colSize: 3 });
-        modal.addField({ label: 'Toplam Saat', value: fmtHours(totalHours), icon: 'fas fa-hourglass-half', colSize: 3 });
-        modal.addField({ label: 'Toplam Maliyet', value: fmtEur(totalCost), icon: 'fas fa-coins', colSize: 3 });
-        modal.addField({ label: 'Mesai Kaydı', value: String(rows.length), icon: 'fas fa-list', colSize: 3 });
+        modal.addField({ label: 'İş No', value: jobKey || NO_JOB_LABEL, icon: 'fas fa-hashtag', colSize: 4 });
+        modal.addField({ label: 'Toplam Saat', value: fmtHours(totalHours), icon: 'fas fa-hourglass-half', colSize: 4 });
+        modal.addField({ label: 'Mesai Kaydı', value: String(rows.length), icon: 'fas fa-list', colSize: 4 });
+        modal.addField({ label: 'Ücret', value: fmtEur(totalWage), icon: 'fas fa-money-bill-wave', colSize: 4 });
+        modal.addField({ label: 'SGK / İşveren Payı', value: fmtEur(totalEmployer), icon: 'fas fa-building-columns', colSize: 4 });
+        modal.addField({ label: 'Toplam Maliyet (SGK dahil)', value: fmtEur(totalCost), icon: 'fas fa-coins', colSize: 4 });
 
         if (isParent && parent.expandable) {
             modal.addCustomSection({
@@ -560,20 +594,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-code-branch',
                 iconColor: 'text-success',
                 customContent: buildSimpleTableHtml(
-                    ['İş No', 'Kayıt', 'Saat', 'Maliyet'],
+                    ['İş No', 'Kayıt', 'Saat', ...COST_HEADERS],
                     parent.children.map(c => [
                         formatJobNumber(c.job_no), String(c.entry_count),
-                        fmtHours(c.hours), `<strong>${fmtEur(c.cost_eur)}</strong>`,
+                        fmtHours(c.hours), ...costCells(c),
                     ]),
-                    [false, true, true, true],
+                    [false, true, true, true, true, true],
                 ),
             });
         }
 
         const byPerson = new Map();
         rows.forEach(r => {
-            const cur = byPerson.get(r.full_name) || { hours: 0, cost_eur: 0, count: 0 };
-            cur.hours += r.hours; cur.cost_eur += r.cost_eur; cur.count += 1;
+            const cur = byPerson.get(r.full_name) || { hours: 0, count: 0 };
+            cur.hours += r.hours; addCosts(cur, r); cur.count += 1;
             byPerson.set(r.full_name, cur);
         });
         modal.addCustomSection({
@@ -581,11 +615,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             icon: 'fas fa-user-tag',
             iconColor: 'text-primary',
             customContent: buildSimpleTableHtml(
-                ['Personel', 'Kayıt', 'Saat', 'Maliyet'],
+                ['Personel', 'Kayıt', 'Saat', ...COST_HEADERS],
                 [...byPerson.entries()]
                     .sort((a, b) => b[1].cost_eur - a[1].cost_eur)
-                    .map(([name, v]) => [esc(name), String(v.count), fmtHours(v.hours), `<strong>${fmtEur(v.cost_eur)}</strong>`]),
-                [false, true, true, true],
+                    .map(([name, v]) => [esc(name), String(v.count), fmtHours(v.hours), ...costCells(v)]),
+                [false, true, true, true, true, true],
             ),
         });
 
@@ -594,7 +628,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             icon: 'fas fa-clock',
             iconColor: 'text-warning',
             customContent: buildSimpleTableHtml(
-                ['Tarih', 'Talep', 'Personel', 'İş No', 'Açıklama', 'Saat', 'Maliyet'],
+                ['Tarih', 'Talep', 'Personel', 'İş No', 'Açıklama', 'Saat', ...COST_HEADERS],
                 rows.map(r => [
                     fmtDate(r.date),
                     `<span class="badge bg-primary">#${r.request_id}</span>`,
@@ -602,14 +636,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                     formatJobNumber(r.job_no),
                     `<span class="text-muted small">${esc(r.description || '-')}</span>`,
                     fmtHours(r.hours),
-                    `<strong>${fmtEur(r.cost_eur)}</strong>`,
+                    ...costCells(r),
                 ]),
-                [false, false, false, false, false, true, true],
+                [false, false, false, false, false, true, true, true, true],
             ),
         });
 
         modal.render().show();
     }
+
+    const COST_HEADERS = ['Ücret', 'SGK / İşveren', 'Toplam Maliyet'];
+    const costCells = (r) => [
+        fmtEur(r.wage_cost_eur),
+        `<span class="text-muted">${fmtEur(r.employer_cost_eur)}</span>`,
+        `<strong>${fmtEur(r.cost_eur)}</strong>`,
+    ];
 
     // Small read-only table used by the job detail modal. `alignEnd` marks the
     // numeric columns.
@@ -703,7 +744,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <td class="text-muted small">${esc(e.description || '-')}</td>
                     <td><span class="badge ${statusCls}">${statusLabel}</span></td>
                     <td class="text-end">${fmtHours(e.hours)}</td>
-                    <td class="text-end"><strong>${fmtEur(e.cost_eur)}</strong></td>
+                    ${costCells(e).map(c => `<td class="text-end">${c}</td>`).join('')}
                 </tr>`;
         }).join('');
 
@@ -713,14 +754,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <thead class="table-light">
                         <tr>
                             <th>Personel</th><th>İş No</th><th>Açıklama</th><th>Durum</th>
-                            <th class="text-end">Saat</th><th class="text-end">Maliyet</th>
+                            <th class="text-end">Saat</th>${COST_HEADERS.map(h => `<th class="text-end">${h}</th>`).join('')}
                         </tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="6" class="text-center text-muted py-3">Kayıt yok</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr><td colspan="8" class="text-center text-muted py-3">Kayıt yok</td></tr>'}</tbody>
                     <tfoot class="table-light">
                         <tr>
                             <th colspan="4" class="text-end">Toplam</th>
                             <th class="text-end">${fmtHours(req.hours)}</th>
+                            <th class="text-end">${fmtEur(req.wage_cost_eur)}</th>
+                            <th class="text-end">${fmtEur(req.employer_cost_eur)}</th>
                             <th class="text-end">${fmtEur(req.cost_eur)}</th>
                         </tr>
                     </tfoot>
@@ -738,7 +781,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 <tr>
                     <td><i class="${b.icon} ${b.color} me-2"></i>${b.label}</td>
                     <td class="text-end">${fmtHours(cell.hours)}</td>
-                    <td class="text-end">${fmtEur(cell.cost_eur)}</td>
+                    ${costCells(cell).map(c => `<td class="text-end">${c}</td>`).join('')}
                     <td class="text-end text-muted small">${share.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}%</td>
                 </tr>`;
         }).join('');
@@ -747,9 +790,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             <div class="table-responsive">
                 <table class="table table-sm align-middle mb-0">
                     <thead class="table-light">
-                        <tr><th>Kategori</th><th class="text-end">Saat</th><th class="text-end">Maliyet</th><th class="text-end">Pay</th></tr>
+                        <tr><th>Kategori</th><th class="text-end">Saat</th>${COST_HEADERS.map(h => `<th class="text-end">${h}</th>`).join('')}<th class="text-end">Pay</th></tr>
                     </thead>
-                    <tbody>${rows || '<tr><td colspan="4" class="text-center text-muted py-3">Veri yok</td></tr>'}</tbody>
+                    <tbody>${rows || '<tr><td colspan="6" class="text-center text-muted py-3">Veri yok</td></tr>'}</tbody>
                 </table>
             </div>`;
     }

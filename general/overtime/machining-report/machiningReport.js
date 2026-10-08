@@ -5,15 +5,15 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
-import { getOvertimeMachiningReport, getMachiningOperators } from '../../../apis/overtime.js';
+import { getOvertimeMachiningReport, getOvertimeMachiningSummary, getMachiningOperators } from '../../../apis/overtime.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { formatJobNumber } from '../../../apis/formatters.js';
-
-// Differences at or under this are noise — operators start a few minutes late
-// or run a couple of minutes past the window — so the summary ignores them.
-const SUMMARY_THRESHOLD_HOURS = 0.5;
+import { loadJobOrderOptions, addJobFilter, jobFilterValue } from '../jobFilter.js';
 
 const num = (v) => Number(v || 0);
+
+const fmtNum = (n, digits = 1) =>
+    num(n).toLocaleString('tr-TR', { maximumFractionDigits: digits });
 
 const formatHours = (n) =>
     `${num(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} saat`;
@@ -69,9 +69,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    // Started before the other filters are added so the request overlaps them.
+    const jobOptionsPromise = loadJobOrderOptions();
+
     filters.addDateFilter({ id: 'start_date', label: 'Başlangıç Tarihi', colSize: 3 });
     filters.addDateFilter({ id: 'end_date', label: 'Bitiş Tarihi', colSize: 3 });
-    filters.addTextFilter({ id: 'job_no', label: 'İş No', placeholder: 'İş emri no...', colSize: 3 });
+    // İş No — searchable multi-select; each pick includes its sub-jobs.
+    await addJobFilter(filters, jobOptionsPromise);
 
     // Populate the operator filter from machining operators (access_machining_tasks).
     try {
@@ -91,11 +95,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         iconColor: 'text-primary',
         columns: [
             { field: 'label', label: 'Kalem', sortable: false,
+              formatter: (v, row) => {
+                  if (window.isExporting) return row.sub ? `  ↳ ${v}` : v;
+                  const icon = `<i class="${row.icon} ${row.color} me-2"></i>`;
+                  return row.sub
+                      ? `<span class="ps-4 text-nowrap"><i class="fas fa-level-up-alt fa-rotate-90 text-muted me-2"></i>${icon}${v}</span>`
+                      : `<span class="fw-semibold text-nowrap">${icon}${v}</span>`;
+              } },
+            { field: 'value', label: 'Değer', sortable: false,
               formatter: (v, row) => window.isExporting ? v
-                  : `<i class="${row.icon} ${row.color} me-2"></i>${v}` },
-            { field: 'value', label: 'Değer', sortable: false },
-            { field: 'note', label: 'Açıklama', sortable: false,
-              formatter: (v) => window.isExporting ? (v || '') : `<span class="text-muted small">${v || ''}</span>` },
+                  : `<span class="${row.sub ? '' : 'fw-semibold'} text-nowrap">${v}</span>` },
+            { field: 'share', label: 'Talebe Oranı', sortable: false,
+              formatter: (v) => v || '' },
+            { field: 'note', label: 'Ne gösterir?', sortable: false,
+              formatter: (v) => window.isExporting ? (v || '') : `<span class="small">${v || ''}</span>` },
         ],
         data: [],
         pagination: false,
@@ -205,47 +218,64 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function computeTotals(rows) {
         const groups = groupByEntryDay(rows);
-        const material = groups.filter(g =>
-            Math.abs(g.worked_hours - g.window_hours) > SUMMARY_THRESHOLD_HOURS);
-
         return {
             rowCount: rows.length,
             workedCount: rows.filter(r => r.worked).length,
             workedHours: rows.reduce((sum, r) => sum + num(r.worked_hours), 0),
-            outsideHours: rows.reduce((sum, r) => sum + num(r.outside_window_hours), 0),
             // Each (talep, operatör, gün) window counted once, not once per operation.
             windowHours: groups.reduce((sum, g) => sum + g.window_hours, 0),
-            groupCount: groups.length,
-            requestCount: new Set(rows.map(r => r.request_id)).size,
             operatorCount: new Set(rows.map(r => r.user_id)).size,
             dayCount: new Set(rows.map(r => r.date)).size,
-            materialCount: material.length,
-            materialDiff: material.reduce((sum, g) => sum + (g.worked_hours - g.window_hours), 0),
         };
     }
 
-    function renderSummary(rows) {
+    // Period totals come from the summary endpoint, which counts every timer
+    // inside the overtime windows — not only the operations picked on the
+    // request — so "requested vs. actually worked" is the real comparison.
+    function renderSummary(summary, rows) {
+        if (!summary || !num(summary.requested_hours)) {
+            summaryTable.updateData([]);
+            return;
+        }
         const t = computeTotals(rows);
-        const coverage = t.windowHours > 0 ? (t.workedHours / t.windowHours) * 100 : 0;
+        const requested = num(summary.requested_hours);
+        const pct = (h) => `%${fmtNum((num(h) / requested) * 100)}`;
 
-        summaryTable.updateData(rows.length ? [
-            { label: 'Talep edilen mesai süresi', value: formatHours(t.windowHours),
+        summaryTable.updateData([
+            { label: 'Talep edilen toplam mesai', value: formatHours(requested), share: '%100',
               icon: 'fas fa-clipboard-check', color: 'text-primary',
-              note: `${t.groupCount} mesai kaydı, ${t.requestCount} talep — öğle molası düşülmüş` },
-            { label: 'Mesai içinde çalışılan', value: formatHours(t.workedHours),
+              note: 'Filtrelere uyan onaylı mesai taleplerinde talaşlı imalat operatörlerine yazılan mesai süresinin toplamı '
+                  + '(talep başlangıç–bitiş saatleri, 12:00–12:30 öğle molası düşülmüş). Operasyon seçilmeden yazılan mesailer de dahildir. '
+                  + 'Aynı kişinin çakışan talepleri bir kez sayılır. '
+                  + `${summary.operator_count} operatör · ${summary.request_count} talep · ${summary.entry_count} mesai kaydı · ${summary.day_count} gün.` },
+            { label: 'Mesai içinde toplam çalışılan', value: formatHours(summary.worked_hours), share: pct(summary.worked_hours),
               icon: 'fas fa-stopwatch', color: 'text-success',
-              note: `Çalışma oranı %${coverage.toLocaleString('tr-TR', { maximumFractionDigits: 1 })}` },
-            { label: 'Mesai dışına taşan süre', value: formatHours(t.outsideHours),
-              icon: 'fas fa-right-left', color: 'text-secondary',
-              note: 'Aynı gün aynı operasyonda çalışılan, mesai penceresi dışındaki süre' },
-            { label: 'Sapma (30 dk üzeri)',
-              value: (t.materialDiff > 0 ? '+' : '') + formatHours(t.materialDiff),
-              icon: 'fas fa-scale-unbalanced', color: t.materialDiff < 0 ? 'text-danger' : 'text-primary',
-              note: `${t.materialCount} / ${t.groupCount} mesai kaydında 30 dakikadan fazla fark var; daha küçük farklar sayılmadı` },
-            { label: 'Çalışılan operasyon', value: `${t.workedCount} / ${t.rowCount}`,
-              icon: 'fas fa-cogs', color: 'text-info',
-              note: `${t.operatorCount} operatör, ${t.dayCount} gün` },
-        ] : []);
+              note: 'Mesai saatleri içinde operatörün açık olan tüm üretim zamanlayıcıları — hangi iş veya operasyon olursa olsun. '
+                  + 'Mesai penceresi dışındaki kısımlar (ör. normal vardiya) sayılmaz; aynı anda açık iki zamanlayıcı bir kez sayılır. '
+                  + 'Altındaki iki satır bu toplamın dökümüdür.' },
+            { sub: true, label: 'Talepte seçilen operasyonlarda', value: formatHours(summary.selected_operation_hours),
+              share: pct(summary.selected_operation_hours),
+              icon: 'fas fa-cogs', color: 'text-success',
+              note: 'Toplam çalışmanın, mesai talebinde o operatör için seçilen operasyonlarda geçen kısmı. '
+                  + 'Aşağıdaki tablonun "Çalışılan Saat" toplamıyla aynıdır.' },
+            { sub: true, label: 'Başka işlerde', value: formatHours(summary.other_work_hours),
+              share: pct(summary.other_work_hours),
+              icon: 'fas fa-shuffle', color: 'text-info',
+              note: 'Toplam çalışmanın, talepte seçilmemiş başka operasyon veya işlerde geçen kısmı. '
+                  + 'Operasyon seçilmeden yazılan mesailerdeki tüm çalışma da buraya düşer.' },
+            { label: 'Duruş / mola kaydı', value: formatHours(summary.downtime_hours), share: pct(summary.downtime_hours),
+              icon: 'fas fa-circle-pause', color: 'text-secondary',
+              note: 'Mesai içinde üretim yerine duruş veya mola zamanlayıcısının açık olduğu süre. '
+                  + 'Aynı anda üretim zamanlayıcısı da açıksa çalışılan sayılır, burada tekrar sayılmaz.' },
+            { label: 'Zamanlayıcı kaydı olmayan süre', value: formatHours(summary.no_timer_hours), share: pct(summary.no_timer_hours),
+              icon: 'fas fa-circle-question', color: 'text-danger',
+              note: 'Mesai saatleri içinde operatörün hiçbir zamanlayıcısının açık olmadığı süre. '
+                  + 'Talep edilen = toplam çalışılan + duruş/mola + kayıtsız süre.' },
+            { label: 'Seçilen operasyonlardan çalışılanlar', value: rows.length ? `${t.workedCount} / ${t.rowCount}` : '-', share: '',
+              icon: 'fas fa-list-check', color: 'text-primary',
+              note: 'Aşağıdaki tablodaki operasyon satırlarından (talep × operatör × gün × operasyon), mesai içinde en az bir kez '
+                  + `zamanlayıcı açılanların sayısı / toplam satır. ${t.operatorCount} operatör, ${t.dayCount} gün.` },
+        ]);
     }
 
     function buildTotalsRow(rows, columns, hasActions) {
@@ -345,7 +375,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const out = {};
         if (f.start_date) out.start_date = f.start_date;
         if (f.end_date) out.end_date = f.end_date;
-        if (f.job_no) out.job_no = f.job_no;
+        const jobNo = jobFilterValue(f.job_no);
+        if (jobNo) out.job_no = jobNo;
         if (f.user) out.user = f.user;
         return out;
     }
@@ -354,13 +385,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             table.setLoading(true);
             summaryTable.setLoading(true);
-            const rows = await getOvertimeMachiningReport(currentFilters);
+            const [rows, summary] = await Promise.all([
+                getOvertimeMachiningReport(currentFilters),
+                getOvertimeMachiningSummary(currentFilters),
+            ]);
             reportRows = sortRows(Array.isArray(rows) ? rows : [], 'date', 'desc');
-            renderSummary(reportRows);
+            renderSummary(summary, reportRows);
             table.updateData(reportRows);
         } catch (error) {
             reportRows = [];
-            renderSummary([]);
+            renderSummary(null, []);
             table.updateData([]);
             showNotification('Rapor yüklenirken hata oluştu: ' + (error.message || 'Bilinmeyen hata'), 'error');
         } finally {
