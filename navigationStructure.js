@@ -246,6 +246,11 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-clock',
                         children: {}
                     },
+                    '/manufacturing/welding/timesheets': {
+                        label: 'Puantaj Formları',
+                        icon: 'fas fa-print',
+                        children: {}
+                    },
                     '/manufacturing/welding/teams': {
                         label: 'Ekipler',
                         icon: 'fas fa-users',

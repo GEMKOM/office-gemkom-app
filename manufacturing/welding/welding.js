@@ -29,6 +29,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 features: []
             },
             {
+                title: 'Puantaj Formları',
+                description: 'Her kaynakçı için günlük kağıt puantaj formu oluşturun ve yazdırın.',
+                icon: 'fas fa-print',
+                iconColor: 'info',
+                link: '/manufacturing/welding/timesheets',
+                features: []
+            },
+            {
                 title: 'Ekipler',
                 description: 'Kaynak ekiplerini oluşturun, ustabaşı ve üyeleri yönetin.',
                 icon: 'fas fa-users',

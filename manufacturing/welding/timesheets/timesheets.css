@@ -1,0 +1,61 @@
+.ts-card .card-header {
+    font-weight: 600;
+}
+
+.ts-summary {
+    font-size: 0.95rem;
+    padding: 0.6rem 0.8rem;
+    border-radius: 6px;
+    background: var(--bs-light, #f8f9fa);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+}
+
+.ts-team {
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+}
+
+.ts-team-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.45rem 0.75rem;
+    background: var(--bs-light, #f8f9fa);
+    border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+    font-weight: 600;
+}
+
+.ts-team-header .ts-team-count {
+    font-weight: 400;
+    color: #6c757d;
+}
+
+.ts-team-body {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.25rem 1rem;
+    padding: 0.5rem 0.75rem;
+}
+
+.ts-employee {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.92rem;
+}
+
+.ts-employee .ts-kod {
+    color: #6c757d;
+    font-size: 0.8rem;
+}
+
+.ts-printed-table td,
+.ts-printed-table th {
+    white-space: nowrap;
+}
+
+.ts-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+}
