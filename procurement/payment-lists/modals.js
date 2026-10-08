@@ -13,7 +13,7 @@ import {
     addPaymentListItems, bulkMarkSchedulesPaid, cancelPaymentList, createPaymentList, deleteAttachment,
     getPaymentLists, listPoAttachments, markPaymentListItemPaid, splitSchedule, updatePaymentList,
     uploadPoAttachment,
-} from '../../apis/finance/paymentLists.js';
+} from '../../apis/procurement/paymentLists.js';
 import { currencyBreakdown, fmtDate, fmtEur, fmtMoney, num, sumEur, todayIso } from './format.js';
 
 export function initModals(ctx) {

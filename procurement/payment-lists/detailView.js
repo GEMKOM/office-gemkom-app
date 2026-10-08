@@ -12,7 +12,7 @@ import {
     includePaymentListItem, refreshPaymentListAmounts, refreshPaymentListFx, removePaymentListItem,
     resendFinanceEmail, sendPaymentListToFinance, submitPaymentList, unmarkPaymentListItemPaid,
     updatePaymentListItem,
-} from '../../apis/finance/paymentLists.js';
+} from '../../apis/procurement/paymentLists.js';
 import {
     badge, currencyBreakdown, customersOf, fmtDate, fmtDateTime, fmtEur, fmtMoney, fmtRate, jobNosOf,
     listStatusBadge, num, rowEur, userLabel,
@@ -549,12 +549,13 @@ export function createDetailView(ctx) {
         try {
             await (table || new TableComponent('pl-items-table', { columns: [] })).loadXLSXLibrary();
             const fx = data.fx || {};
-            const header = ['#', 'MÜŞTERİ', 'İŞ NO', 'MALZEME', 'TEDARİKÇİ', 'TOPLAM TUTAR (KDV DAHİL)', 'PARA BİRİMİ',
+            const header = ['#', 'MÜŞTERİ', 'İŞ NO', 'GS NO', 'MALZEME', 'TEDARİKÇİ', 'TOPLAM TUTAR (KDV DAHİL)', 'PARA BİRİMİ',
                 'BU ÖDEME', 'EUR', 'ÖDEME ŞEKLİ', 'SİPARİŞ TARİHİ', 'VADE', 'PROFORMA', 'AÇIKLAMA', 'DURUM'];
             const rows = (data.items || []).map((it) => [
                 it.sequence,
                 customersOf(it).join(', '),
                 jobNosOf(it).join(', '),
+                (it.gs_numbers || []).join(', '),
                 it.items_summary || '',
                 it.supplier?.name || '',
                 num(it.po?.gross_total),
@@ -576,19 +577,19 @@ export function createDetailView(ctx) {
                 header,
                 ...rows,
                 [],
-                ['TOPLAM (EUR)', '', '', '', '', '', '', '', num(t.total_eur)],
-                ['ÖDENEN (EUR)', '', '', '', '', '', '', '', num(t.paid_eur)],
-                ['KALAN (EUR)', '', '', '', '', '', '', '', num(t.remaining_eur)],
+                ['TOPLAM (EUR)', '', '', '', '', '', '', '', '', num(t.total_eur)],
+                ['ÖDENEN (EUR)', '', '', '', '', '', '', '', '', num(t.paid_eur)],
+                ['KALAN (EUR)', '', '', '', '', '', '', '', '', num(t.remaining_eur)],
             ];
             const ws = XLSX.utils.aoa_to_sheet(aoa);
-            const numericCols = [5, 7, 8];
+            const numericCols = [6, 8, 9];
             for (let r = 4; r < 4 + rows.length; r++) {
                 numericCols.forEach((c) => {
                     const addr = XLSX.utils.encode_cell({ r, c });
                     if (ws[addr] && typeof ws[addr].v === 'number') { ws[addr].t = 'n'; ws[addr].z = '#,##0.00'; }
                 });
             }
-            ws['!cols'] = header.map((h, i) => ({ wch: i === 3 ? 40 : Math.max(12, h.length + 2) }));
+            ws['!cols'] = header.map((h, i) => ({ wch: i === 4 ? 40 : Math.max(12, h.length + 2) }));
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, (fmtDate(data.list_date) || 'Liste').replace(/[\\/?*[\]:]/g, '-').slice(0, 30));
             XLSX.writeFile(wb, `odeme_listesi_${data.list_date || data.id}.xlsx`);

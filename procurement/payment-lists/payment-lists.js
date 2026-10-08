@@ -1,16 +1,16 @@
 /**
  * Ödeme Listeleri — weekly supplier payment planning on top of procurement.
  *
- *   /finance/payment-lists/              lists overview
- *   /finance/payment-lists/?view=pool    Ödeme Havuzu (unpaid instalments, cleanup tools)
- *   /finance/payment-lists/?list=<id>    one list (items, approval, finance handoff)
+ *   /procurement/payment-lists/              lists overview
+ *   /procurement/payment-lists/?view=pool    Ödeme Havuzu (unpaid instalments, cleanup tools)
+ *   /procurement/payment-lists/?list=<id>    one list (items, approval, finance handoff)
  */
 import { guardRoute, getUser } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
-import { decidePaymentList } from '../../apis/finance/paymentLists.js';
+import { decidePaymentList } from '../../apis/procurement/paymentLists.js';
 import { initModals } from './modals.js';
 import { createPoolView } from './poolView.js';
 import { createListsView } from './listsView.js';
@@ -65,7 +65,7 @@ const HEADERS = {
         subtitle: 'Haftalık tedarikçi ödeme planı: havuzdan seç, genel müdür onayı, finansa gönder',
         icon: 'money-check-dollar',
         showBackButton: 'block',
-        backUrl: '/finance/',
+        backUrl: '/procurement/',
         onBackClick: null,
         showCreateButton: 'block',
         createButtonText: 'Yeni Liste',

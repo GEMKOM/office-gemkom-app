@@ -7,7 +7,7 @@ import { StatisticsCards } from '../../components/statistics-cards/statistics-ca
 import { showNotification } from '../../components/notification/notification.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 import { escapeHtml } from '../../utils/text.js';
-import { getPaymentLists } from '../../apis/finance/paymentLists.js';
+import { getPaymentLists } from '../../apis/procurement/paymentLists.js';
 import { LIST_STATUS_OPTIONS, badge, fmtDate, fmtEur, listStatusBadge, num } from './format.js';
 
 export function createListsView(ctx) {
@@ -30,7 +30,8 @@ export function createListsView(ctx) {
         });
         filters
             .addSelectFilter({ id: 'pl_list_status', label: 'Durum', options: LIST_STATUS_OPTIONS, value: 'open', placeholder: 'Tümü', colSize: 4 })
-            .addTextFilter({ id: 'pl_list_q', label: 'Başlık', placeholder: 'Liste başlığı…', colSize: 3 });
+            .addTextFilter({ id: 'pl_list_q', label: 'Ara', placeholder: 'Liste başlığı veya GS no…', colSize: 3 })
+            .addTextFilter({ id: 'pl_list_gs', label: 'GS No', placeholder: 'GS-10162, GS-9794', colSize: 3 });
 
         table = new TableComponent('pl-lists-table', {
             title: 'Ödeme Listeleri',
@@ -139,6 +140,7 @@ export function createListsView(ctx) {
             const response = await getPaymentLists({
                 status: v.pl_list_status || undefined,
                 q: (v.pl_list_q || '').trim() || undefined,
+                gs: (v.pl_list_gs || '').split(',').map((s) => s.trim()).filter(Boolean).join(',') || undefined,
                 page,
                 page_size: pageSize,
             });

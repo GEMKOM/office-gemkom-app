@@ -56,6 +56,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/procurement/critical-items'
             },
             {
+                title: 'Ödeme Listeleri',
+                description: 'Haftalık tedarikçi ödeme planı: havuzdan seç, genel müdür onayı, proformalarla finansa gönder.',
+                icon: 'fas fa-money-check-dollar',
+                iconColor: 'success',
+                link: '/procurement/payment-lists'
+            },
+            {
                 title: 'Satın Alma Talepleri',
                 description: 'Satın alma taleplerinin oluşturulması, onay süreçleri ve takip yönetimi.',
                 icon: 'fas fa-shopping-cart',

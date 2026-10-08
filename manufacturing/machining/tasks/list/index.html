@@ -342,6 +342,15 @@
                     <form id="manual-time-form">
                         <input type="hidden" id="manual-time-operation-key">
                         <div class="mb-3">
+                            <label for="manual-time-operator" class="form-label">
+                                Operatör <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-control" id="manual-time-operator" required>
+                                <option value="">Operatör seçin...</option>
+                            </select>
+                            <div class="form-text">Süre bu operatörün çalışması olarak kaydedilir.</div>
+                        </div>
+                        <div class="mb-3">
                             <label for="manual-time-machine" class="form-label">
                                 Makine <span class="text-danger">*</span>
                             </label>

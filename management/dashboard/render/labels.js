@@ -74,7 +74,7 @@ export const SUBJECT_META = {
     ncr: { label: 'NCR', url: '/quality-control/ncrs?status__in=submitted', icon: 'triangle-exclamation' },
     sales_offer: { label: 'Teklif', url: '/sales/offers', icon: 'file-signature' },
     crane_request: { label: 'Vinç', url: '/general/crane-requests/pending', icon: 'truck-pickup' },
-    payment_list: { label: 'Ödeme Listesi', url: '/finance/payment-lists/?status=submitted', icon: 'money-check-dollar' },
+    payment_list: { label: 'Ödeme Listesi', url: '/procurement/payment-lists/?status=submitted', icon: 'money-check-dollar' },
 };
 
 /** Subjects whose row stays visible at count 0 (the rest are hidden when empty). */

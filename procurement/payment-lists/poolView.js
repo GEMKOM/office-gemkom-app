@@ -9,7 +9,7 @@ import { TableComponent } from '../../components/table/table.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 import { escapeHtml } from '../../utils/text.js';
-import { getPaymentPool, getPaymentPoolFacets } from '../../apis/finance/paymentLists.js';
+import { getPaymentPool, getPaymentPoolFacets } from '../../apis/procurement/paymentLists.js';
 import {
     BASIS_OPTIONS, CURRENCY_OPTIONS, LIST_STATUS_CLASS, badge, currencyBreakdown, customersOf,
     fmtDate, fmtEur, fmtMoney, fmtPct, isOverdue, jobNosOf, rowEur, sumEur,

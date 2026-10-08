@@ -585,6 +585,11 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
+            '/procurement/payment-lists': {
+                label: 'Ödeme Listeleri',
+                icon: 'fas fa-money-check-dollar',
+                children: {}
+            },
             '/procurement/reports': {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-bar',
@@ -615,11 +620,6 @@ export const NAVIGATION_STRUCTURE = {
             '/finance/purchase-orders': {
                 label: 'Finans İşlemleri',
                 icon: 'fas fa-coins',
-                children: {}
-            },
-            '/finance/payment-lists': {
-                label: 'Ödeme Listeleri',
-                icon: 'fas fa-money-check-dollar',
                 children: {}
             },
             '/finance/reports': {

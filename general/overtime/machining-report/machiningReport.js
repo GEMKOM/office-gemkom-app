@@ -119,6 +119,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         emptyIcon: 'fas fa-inbox',
     });
 
+    // Who makes up "Talep edilen toplam mesai" — one row per operator.
+    const operatorTable = new TableComponent('operators-placeholder', {
+        title: 'Operatör Bazında',
+        icon: 'fas fa-user-clock',
+        iconColor: 'text-primary',
+        columns: [
+            { field: 'full_name', label: 'Operatör', sortable: true, formatter: (v) => v || '-' },
+            { field: 'requested_hours', label: 'Talep Edilen', sortable: true, type: 'number', formatter: (v) => formatHours(v) },
+            { field: 'worked_hours', label: 'Mesaide Çalışılan (tüm işler)', sortable: true, type: 'number', formatter: (v) => formatHours(v) },
+            { field: 'no_timer_hours', label: 'Zamanlayıcı Kaydı Olmayan', sortable: true, type: 'number',
+              formatter: (v) => window.isExporting ? num(v)
+                  : (num(v) > 0 ? `<span class="text-danger">${formatHours(v)}</span>` : formatHours(v)) },
+            { field: 'ratio', label: 'Çalışma Oranı', sortable: true, type: 'number',
+              formatter: (v) => `%${fmtNum(v)}` },
+        ],
+        data: [],
+        pagination: false,
+        sortable: true,
+        small: true,
+        exportable: true,
+        emptyMessage: 'Veri yok',
+        emptyIcon: 'fas fa-inbox',
+    });
+
     const table = new TableComponent('table-placeholder', {
         title: 'Mesai / Operasyon Çalışma Raporu',
         icon: 'fas fa-cogs',
@@ -244,10 +268,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         summaryTable.updateData([
             { label: 'Talep edilen toplam mesai', value: formatHours(requested), share: '%100',
               icon: 'fas fa-clipboard-check', color: 'text-primary',
-              note: 'Filtrelere uyan onaylı mesai taleplerinde talaşlı imalat operatörlerine yazılan mesai süresinin toplamı '
-                  + '(talep başlangıç–bitiş saatleri, 12:00–12:30 öğle molası düşülmüş). Operasyon seçilmeden yazılan mesailer de dahildir. '
+              note: 'Filtrelere uyan onaylı mesai taleplerinde talaşlı imalat operatörlerine (talepte operasyon seçilmiş kişiler) yazılan '
+                  + 'mesai süresinin toplamı (talep başlangıç–bitiş saatleri, 12:00–12:30 öğle molası düşülmüş). '
                   + 'Aynı kişinin çakışan talepleri bir kez sayılır. '
-                  + `${summary.operator_count} operatör · ${summary.request_count} talep · ${summary.entry_count} mesai kaydı · ${summary.day_count} gün.` },
+                  + `${summary.operator_count} operatör · ${summary.request_count} talep · ${summary.entry_count} mesai kaydı · ${summary.day_count} gün. `
+                  + 'Kişi bazında dökümü "Operatör Bazında" tablosundadır.' },
             { label: 'Mesai içinde toplam çalışılan', value: formatHours(summary.worked_hours), share: pct(summary.worked_hours),
               icon: 'fas fa-stopwatch', color: 'text-success',
               note: 'Mesai saatleri içinde operatörün açık olan tüm üretim zamanlayıcıları — hangi iş veya operasyon olursa olsun. '
@@ -261,8 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { sub: true, label: 'Başka işlerde', value: formatHours(summary.other_work_hours),
               share: pct(summary.other_work_hours),
               icon: 'fas fa-shuffle', color: 'text-info',
-              note: 'Toplam çalışmanın, talepte seçilmemiş başka operasyon veya işlerde geçen kısmı. '
-                  + 'Operasyon seçilmeden yazılan mesailerdeki tüm çalışma da buraya düşer.' },
+              note: 'Toplam çalışmanın, talepte seçilmemiş başka operasyon veya işlerde geçen kısmı.' },
             { label: 'Duruş / mola kaydı', value: formatHours(summary.downtime_hours), share: pct(summary.downtime_hours),
               icon: 'fas fa-circle-pause', color: 'text-secondary',
               note: 'Mesai içinde üretim yerine duruş veya mola zamanlayıcısının açık olduğu süre. '
@@ -273,9 +297,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                   + 'Talep edilen = toplam çalışılan + duruş/mola + kayıtsız süre.' },
             { label: 'Seçilen operasyonlardan çalışılanlar', value: rows.length ? `${t.workedCount} / ${t.rowCount}` : '-', share: '',
               icon: 'fas fa-list-check', color: 'text-primary',
-              note: 'Aşağıdaki tablodaki operasyon satırlarından (talep × operatör × gün × operasyon), mesai içinde en az bir kez '
-                  + `zamanlayıcı açılanların sayısı / toplam satır. ${t.operatorCount} operatör, ${t.dayCount} gün.` },
+              note: 'En alttaki tablonun operasyon satırlarından (talep × operatör × gün × operasyon) '
+                  + `mesai içinde en az bir kez zamanlayıcı açılanların sayısı / toplam satır. ${t.operatorCount} operatör, ${t.dayCount} gün.` },
         ]);
+    }
+
+    function renderOperators(summary) {
+        const rows = (summary?.operators || []).map(o => ({
+            ...o,
+            requested_hours: num(o.requested_hours),
+            worked_hours: num(o.worked_hours),
+            no_timer_hours: num(o.no_timer_hours),
+            ratio: num(o.requested_hours) > 0 ? (num(o.worked_hours) / num(o.requested_hours)) * 100 : 0,
+        }));
+        operatorTable.updateData(rows, rows.length, 1);
     }
 
     function buildTotalsRow(rows, columns, hasActions) {
@@ -385,21 +420,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             table.setLoading(true);
             summaryTable.setLoading(true);
+            operatorTable.setLoading(true);
             const [rows, summary] = await Promise.all([
                 getOvertimeMachiningReport(currentFilters),
                 getOvertimeMachiningSummary(currentFilters),
             ]);
             reportRows = sortRows(Array.isArray(rows) ? rows : [], 'date', 'desc');
             renderSummary(summary, reportRows);
+            renderOperators(summary);
             table.updateData(reportRows);
         } catch (error) {
             reportRows = [];
             renderSummary(null, []);
+            renderOperators(null);
             table.updateData([]);
             showNotification('Rapor yüklenirken hata oluştu: ' + (error.message || 'Bilinmeyen hata'), 'error');
         } finally {
             table.setLoading(false);
             summaryTable.setLoading(false);
+            operatorTable.setLoading(false);
         }
     }
 
