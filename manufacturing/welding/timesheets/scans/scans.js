@@ -8,6 +8,7 @@ import {
     uploadTimesheetScans, fetchScans, fetchScan, updateScan, approveScan, discardScan, reparseScan,
     approveCleanScans, fetchScanBatches, fetchMissingTimesheets, fetchTimesheets,
 } from '../../../../../apis/welding/timesheets.js';
+import { dateInputValue } from './scanForm.js';
 
 // Mirrors welding/timesheet_layout.py — change both together.
 const CELLS = [
@@ -408,7 +409,8 @@ async function openReview(id) {
         if (!state.review.draft.rows) state.review.draft.rows = [];
         renderReview();
         state.modal.show();
-        if (!detail.sheet) await loadSheetOptions(state.review.draft.date || '');
+        const dateValue = dateInputValue(state.review.draft.date);
+        if (dateValue) await loadSheetOptions(dateValue);
     } catch (error) {
         showNotification(error.message, 'error');
     }
@@ -524,21 +526,22 @@ function renderReview() {
         ? d.flags.map((f) => `<div class="sc-flag level-${esc(f.level)}">${esc(f.text)}</div>`).join('')
         : '<div class="sc-flag level-ok text-success"><i class="fas fa-check me-1"></i>Uyarı yok.</div>';
 
+    const bound = !!r.sheetId;
     const sheetBlock = `
-        <div class="border rounded p-2 mb-2 ${d.sheet_id ? '' : 'border-danger'}">
+        <div class="border rounded p-2 mb-2 ${bound ? '' : 'border-danger'}">
             <div class="d-flex flex-wrap gap-2 align-items-end">
                 <div>
                     <label class="form-label mb-0 small">Form tarihi</label>
-                    <input type="date" class="form-control form-control-sm" id="sc-sheet-date" value="${esc(d.date && /^\\d{4}-\\d{2}-\\d{2}$/.test(d.date) ? d.date : '')}" ${locked ? 'disabled' : ''}>
+                    <input type="date" class="form-control form-control-sm" id="sc-sheet-date" value="${esc(dateInputValue(d.date))}" ${locked ? 'disabled' : ''}>
                 </div>
                 <div class="flex-grow-1">
                     <label class="form-label mb-0 small">Form / çalışan</label>
                     <select class="form-select form-select-sm" id="sc-sheet-select" ${locked ? 'disabled' : ''}>
-                        <option value="">${d.sheet_id ? esc(`${d.code} · ${d.employee_name}`) : 'Seçin...'}</option>
+                        <option value="">${bound ? esc(`${d.code} · ${d.employee_name}`) : 'Seçin...'}</option>
                     </select>
                 </div>
             </div>
-            ${d.sheet_id ? '' : '<div class="small text-danger mt-1">Sayfa bir forma bağlanmadı. Tarihi seçip listeden formu seçin.</div>'}
+            ${bound ? '' : '<div class="small text-danger mt-1">Sayfa bir forma bağlanmadı. Tarihi seçip listeden formu seçin.</div>'}
         </div>`;
 
     $('sc-review-body').innerHTML = `
