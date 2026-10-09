@@ -6,7 +6,7 @@ import { showNotification } from '../../../../../components/notification/notific
 import { getJobOrderDropdown } from '../../../../../apis/projects/jobOrders.js';
 import {
     uploadTimesheetScans, fetchScans, fetchScan, updateScan, approveScan, discardScan, reparseScan,
-    approveCleanScans, fetchScanBatches, fetchMissingTimesheets, fetchTimesheets,
+    approveCleanScans, fetchScanBatches, fetchDailyStatus, fetchTimesheets,
 } from '../../../../../apis/welding/timesheets.js';
 
 // Mirrors welding/timesheet_layout.py — change both together.
@@ -116,8 +116,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await initNavbar();
     new HeaderComponent({
-        title: 'Puantaj Taramaları',
-        subtitle: 'Taranan kağıt puantaj formlarını kontrol edin ve zaman kayıtlarına aktarın',
+        title: 'Puantaj Kontrol',
+        subtitle: 'Kaynakçıların telefondan gönderdiği (veya taranan) günlük puantajları kontrol edin, düzeltin ve zaman kayıtlarına aktarın',
         icon: 'file-import',
         showBackButton: 'block',
         showRefreshButton: 'block',
@@ -128,11 +128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     state.modal = new bootstrap.Modal($('sc-review-modal'));
 
-    const today = new Date();
-    const weekAgo = new Date(today); weekAgo.setDate(today.getDate() - 7);
-    const yesterday = new Date(today); yesterday.setDate(today.getDate() - 1);
-    $('sc-missing-from').value = toIso(weekAgo);
-    $('sc-missing-to').value = toIso(yesterday);
+    $('sc-status-date').value = toIso(new Date());
 
     $('sc-upload').addEventListener('click', onUpload);
     $('sc-refresh').addEventListener('click', () => loadScans());
@@ -140,7 +136,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     ['sc-filter-status', 'sc-filter-from', 'sc-filter-to', 'sc-filter-batch'].forEach((id) => {
         $(id).addEventListener('change', () => loadScans());
     });
-    ['sc-missing-from', 'sc-missing-to'].forEach((id) => $(id).addEventListener('change', loadMissing));
+    $('sc-status-date').addEventListener('change', loadDailyStatus);
+    $('sc-daily').addEventListener('click', (ev) => {
+        const btn = ev.target.closest('[data-review]');
+        if (btn) openReview(Number(btn.dataset.review));
+    });
 
     $('sc-list').addEventListener('click', onListClick);
     $('sc-review-body').addEventListener('click', onReviewClick);
@@ -154,10 +154,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('sc-next').addEventListener('click', () => stepReview(1));
     document.querySelectorAll('.sc-image-tools [data-zoom]').forEach((btn) => btn.addEventListener('click', () => zoomImage(btn.dataset.zoom)));
     document.querySelectorAll('.sc-image-tools [data-rotate]').forEach((btn) => btn.addEventListener('click', () => rotateImage(Number(btn.dataset.rotate))));
-    $('sc-review-modal').addEventListener('hidden.bs.modal', () => { state.review = null; loadScans(); });
+    $('sc-review-modal').addEventListener('hidden.bs.modal', () => { state.review = null; loadScans(); loadDailyStatus(); });
 
     loadJobOptions();
-    await Promise.all([loadBatches(), loadScans(), loadMissing()]);
+    await Promise.all([loadBatches(), loadScans(), loadDailyStatus()]);
 });
 
 async function loadJobOptions() {
@@ -254,8 +254,10 @@ function renderList() {
                 <tbody>
                     ${state.scans.map((s) => `
                         <tr data-id="${s.id}">
-                            <td>${s.image_url ? `<img class="sc-thumb" src="${esc(s.image_url)}" alt="">` : ''}</td>
-                            <td><span class="text-muted">#${s.batch}</span> s.${s.page_index}</td>
+                            <td>${s.image_url ? `<img class="sc-thumb" src="${esc(s.image_url)}" alt="">` : '<i class="fas fa-mobile-screen-button text-muted" title="Mobil giriş"></i>'}</td>
+                            <td>${s.source === 'mobile'
+                                ? `<span class="status-badge status-purple">Mobil</span> <span class="text-muted small">${esc(formatDateTime(s.submitted_at))}</span>`
+                                : `<span class="text-muted">#${s.batch}</span> s.${s.page_index}`}</td>
                             <td>${esc(s.employee_name || '?')}<br><span class="ts-code text-muted">${esc(s.sheet_code || '')}</span></td>
                             <td>${esc(formatTr(s.date))}</td>
                             <td>${esc(s.team_name || '-')}</td>
@@ -357,29 +359,40 @@ async function onApproveClean() {
     }
 }
 
-async function loadMissing() {
-    const from = $('sc-missing-from').value;
-    const to = $('sc-missing-to').value || from;
-    const box = $('sc-missing');
-    if (!from) { box.textContent = 'Tarih seçin.'; return; }
+const STATE_BADGE = {
+    none: ['status-grey', 'girilmedi'],
+    pending: ['status-orange', 'kontrol bekliyor'],
+    approved: ['status-green', 'onaylandı'],
+    blank: ['status-grey', 'çalışmadı'],
+};
+
+async function loadDailyStatus() {
+    const date = $('sc-status-date').value;
+    const box = $('sc-daily');
+    if (!date) { box.textContent = 'Tarih seçin.'; return; }
     try {
-        const data = await fetchMissingTimesheets(from, to);
-        if (!data.count) {
-            box.innerHTML = '<span class="text-success"><i class="fas fa-check me-1"></i>Seçilen tarihlerde eksik form yok.</span>';
-            return;
-        }
+        const data = await fetchDailyStatus(date);
+        const c = data.counts || {};
         box.innerHTML = `
-            <div class="mb-1"><strong>${data.count}</strong> form henüz onaylanmadı.</div>
-            <div class="table-responsive" style="max-height: 180px; overflow: auto;">
+            <div class="mb-2">
+                <span class="status-badge status-grey">${c.none || 0} girilmedi</span>
+                <span class="status-badge status-orange">${c.pending || 0} kontrol bekliyor</span>
+                <span class="status-badge status-green">${c.approved || 0} onaylandı</span>
+                ${c.blank ? `<span class="status-badge status-grey">${c.blank} çalışmadı</span>` : ''}
+            </div>
+            <div class="table-responsive" style="max-height: 200px; overflow: auto;">
                 <table class="table table-sm mb-0">
                     <tbody>
-                        ${data.results.map((r) => `
+                        ${(data.results || []).map((r) => {
+                            const [cls, label] = STATE_BADGE[r.state] || ['status-grey', r.state];
+                            return `
                             <tr>
-                                <td>${esc(formatTr(r.date))}</td>
-                                <td>${esc(r.employee_full_name)}</td>
-                                <td class="ts-code">${esc(r.code)}</td>
-                                <td><span class="status-badge ${SHEET_STATUS_BADGE[r.status] || 'status-grey'}">${esc(r.status_display)}</span></td>
-                            </tr>`).join('')}
+                                <td>${esc(r.full_name)}<br><span class="text-muted">${esc((r.team_names || [])[0] || '')}</span></td>
+                                <td class="text-end">${r.total_hours ? esc(r.total_hours) + ' sa' : ''}</td>
+                                <td><span class="status-badge ${cls}">${esc(label)}</span></td>
+                                <td>${r.scan_id && r.state === 'pending' ? `<button type="button" class="btn btn-outline-primary btn-sm py-0" data-review="${r.scan_id}">İncele</button>` : ''}</td>
+                            </tr>`;
+                        }).join('')}
                     </tbody>
                 </table>
             </div>`;
@@ -461,10 +474,16 @@ function renderReview() {
     const detail = r.detail;
     const ids = state.scans.map((s) => s.id);
     const idx = ids.indexOf(r.id);
-    $('sc-review-title').textContent = `Tarama #${r.id} · yükleme #${detail.batch} sayfa ${detail.page_index}`;
+    const isMobile = detail.source === 'mobile' || !detail.image_url;
+    $('sc-review-title').textContent = isMobile
+        ? `Mobil giriş #${r.id} · ${formatDateTime(detail.submitted_at)}`
+        : `Tarama #${r.id} · yükleme #${detail.batch} sayfa ${detail.page_index}`;
     $('sc-position').textContent = idx >= 0 ? `${idx + 1} / ${ids.length}` : '';
     $('sc-image').src = detail.image_url || '';
     $('sc-image-link').href = detail.image_url || '#';
+    $('sc-image-col').hidden = isMobile;
+    $('sc-review-col').className = isMobile ? 'col-12' : 'col-lg-6';
+    $('sc-reparse').hidden = isMobile;
     applyImageTransform();
 
     const locked = detail.status === 'approved' || detail.status === 'discarded';
@@ -529,7 +548,7 @@ function renderReview() {
             <div class="d-flex flex-wrap gap-2 align-items-end">
                 <div>
                     <label class="form-label mb-0 small">Form tarihi</label>
-                    <input type="date" class="form-control form-control-sm" id="sc-sheet-date" value="${esc(d.date && /^\\d{4}-\\d{2}-\\d{2}$/.test(d.date) ? d.date : '')}" ${locked ? 'disabled' : ''}>
+                    <input type="date" class="form-control form-control-sm" id="sc-sheet-date" value="${esc(d.date && /^\d{4}-\d{2}-\d{2}$/.test(d.date) ? d.date : '')}" ${locked ? 'disabled' : ''}>
                 </div>
                 <div class="flex-grow-1">
                     <label class="form-label mb-0 small">Form / çalışan</label>

@@ -135,3 +135,8 @@ export async function fetchScanBatches(filters = {}) {
 export async function fetchMissingTimesheets(dateFrom, dateTo) {
     return getJson(`${BASE}/missing/${toQuery({ date_from: dateFrom, date_to: dateTo })}`, 'Eksik formlar alınamadı');
 }
+
+/** Every rostered welder's state for one day: none / pending / approved / blank. */
+export async function fetchDailyStatus(date) {
+    return getJson(`${BASE}/daily-status/${toQuery({ date })}`, 'Günlük durum alınamadı');
+}
