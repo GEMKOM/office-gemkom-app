@@ -1193,31 +1193,42 @@ async function showMaterialDetails(jobNo) {
         const totalAmt = procLines.reduce((s, l) => s + toNumber(l.amount_eur), 0);
         const modal = new DisplayModal('material-details-modal-container', { title: `${jobNo} - Malzeme Detayları`, icon: 'fas fa-box', size: 'xl', showEditButton: false });
 
-        modal.addSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-success', fields: [
-            { id: 'tl', label: 'Toplam Satır', value: procLines.length, type: 'number', icon: 'fas fa-list', colSize: 6 },
-            { id: 'ta', label: 'Toplam Tutar', value: totalAmt, type: 'currency', icon: 'fas fa-euro-sign', format: v => `€${(Number(v) || 0).toFixed(2)}`, colSize: 6 }
-        ]});
-
-        if (procLines.length > 0) {
-            modal.addCustomSection({ title: null, customContent: '<div id="material-lines-table-container"></div>' });
-            modal.render().show();
-            setTimeout(() => {
-                const t = new TableComponent('material-lines-table-container', {
-                    title: 'Malzeme Satırları', icon: 'fas fa-table', iconColor: 'text-success',
-                    columns: [
-                        { field: 'item_code', label: 'Kod', sortable: true, formatter: v => `<span class="text-info fw-bold">${v || '-'}</span>` },
-                        { field: 'item_name', label: 'Ad', sortable: true },
-                        { field: 'item_unit', label: 'Birim', sortable: true, formatter: v => `<span class="text-muted">${v || '-'}</span>` },
-                        { field: 'item_description', label: 'Açıklama', sortable: false },
-                        { field: 'quantity', label: 'Miktar', sortable: true, formatter: v => `<span class="fw-bold">${formatNumber(v, 2)}</span>` },
-                        { field: 'unit_price', label: 'Birim Fiyat (€)', sortable: true, formatter: v => formatMoney(v) },
-                        { field: 'amount_eur', label: 'Tutar (€)', sortable: true, formatter: v => `<span class="fw-bold text-success">${formatMoney(v)}</span>` }
-                    ],
-                    showPagination: false, showSearch: false, showExport: false
-                });
-                t.updateData(procLines.map((l, i) => ({ ...l, id: l.id || i })), { totalItems: procLines.length, currentPage: 1, pageSize: procLines.length });
-            }, 100);
-        } else { modal.addCustomSection({ title: 'Malzeme Satırları', customContent: '<div class="text-center text-muted py-4">Satır bulunamadı.</div>' }); modal.render().show(); }
+        const tableHtml = procLines.length ? `
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-hover mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="text-nowrap">Kod</th>
+                            <th>Ad</th>
+                            <th>Açıklama</th>
+                            <th>Birim</th>
+                            <th class="text-end">Miktar</th>
+                            <th class="text-end text-nowrap">Birim Fiyat (€)</th>
+                            <th class="text-end text-nowrap">Tutar (€)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${procLines.map((l) => `
+                            <tr>
+                                <td class="text-nowrap font-monospace text-info fw-semibold">${escapeHtml(l.item_code || '–')}</td>
+                                <td>${escapeHtml(l.item_name || '–')}</td>
+                                <td class="text-muted">${escapeHtml(l.item_description || '')}</td>
+                                <td class="text-muted">${escapeHtml(l.item_unit || '–')}</td>
+                                <td class="text-end">${formatNumber(l.quantity, 2)}</td>
+                                <td class="text-end">${formatMoney(l.unit_price)}</td>
+                                <td class="text-end fw-semibold">${formatMoney(l.amount_eur)}</td>
+                            </tr>
+                        `).join('')}
+                        <tr class="table-light">
+                            <td colspan="6"><strong>Toplam (${procLines.length} satır)</strong></td>
+                            <td class="text-end"><strong>${formatMoney(totalAmt)}</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>`
+            : '<div class="text-center text-muted py-4">Satır bulunamadı.</div>';
+        modal.addCustomSection({ title: 'Malzeme Satırları', icon: 'fas fa-table', iconColor: 'text-success', customContent: tableHtml });
+        modal.render().show();
     } catch (err) { console.error(err); showError('Malzeme detayları yüklenirken hata.'); }
 }
 
