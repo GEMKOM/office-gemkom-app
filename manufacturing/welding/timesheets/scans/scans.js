@@ -534,9 +534,10 @@ function renderReview() {
             </tr>`;
     }).join('');
 
+    const short = (t) => (t.endsWith(':00') ? t.slice(0, 2) : t);
     const headerCells = CELLS.map((cell, i) => {
         const tdClass = [i === REGULAR_CELLS ? 'sc-ot-start' : '', i === LUNCH_AFTER ? 'sc-lunch-after' : ''].filter(Boolean).join(' ');
-        return `<th class="sc-hour ${tdClass}">${cell.start.replace(':00', '').replace(':30', '½')}</th>`;
+        return `<th class="sc-hour ${tdClass}" title="${cell.start}–${cell.end}">${short(cell.start)}–${short(cell.end)}</th>`;
     }).join('');
 
     const flagsHtml = (d.flags || []).length
