@@ -49,15 +49,89 @@ export async function downloadTimesheetsPdf(payload) {
     return { blob: await resp.blob(), sheetCount };
 }
 
-export async function fetchTimesheets(filters = {}) {
+function toQuery(filters = {}) {
     const params = new URLSearchParams();
     Object.entries(filters).forEach(([key, value]) => {
         if (value !== null && value !== undefined && value !== '') params.append(key, value);
     });
     const query = params.toString();
-    const resp = await authedFetch(`${BASE}/${query ? `?${query}` : ''}`);
+    return query ? `?${query}` : '';
+}
+
+async function getJson(url, fallback) {
+    const resp = await authedFetch(url);
     if (!resp.ok) {
-        throw new Error(await readError(resp, 'Formlar yüklenemedi'));
+        throw new Error(await readError(resp, fallback));
     }
     return await resp.json();
+}
+
+async function postJson(url, payload, fallback, method = 'POST') {
+    const resp = await authedFetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {}),
+    });
+    if (!resp.ok) {
+        throw new Error(await readError(resp, fallback));
+    }
+    return await resp.json();
+}
+
+export async function fetchTimesheets(filters = {}) {
+    return getJson(`${BASE}/${toQuery(filters)}`, 'Formlar yüklenemedi');
+}
+
+// ---- scans -------------------------------------------------------------
+
+/**
+ * Upload scanner output. One batch per file; every page becomes a scan that
+ * is read out-of-band (poll fetchScans until no page is queued/parsing).
+ * @param {File[]} files
+ */
+export async function uploadTimesheetScans(files) {
+    const form = new FormData();
+    files.forEach((f) => form.append('files', f, f.name));
+    const resp = await authedFetch(`${BASE}/scans/upload/`, { method: 'POST', body: form });
+    if (!resp.ok) {
+        throw new Error(await readError(resp, 'Taramalar yüklenemedi'));
+    }
+    return await resp.json();
+}
+
+export async function fetchScans(filters = {}) {
+    return getJson(`${BASE}/scans/${toQuery(filters)}`, 'Taramalar yüklenemedi');
+}
+
+export async function fetchScan(id) {
+    return getJson(`${BASE}/scans/${id}/`, 'Tarama yüklenemedi');
+}
+
+/** @param {{sheet_id?: number|null, blank_day?: boolean, rows?: Array<{key: string, job_no?: string, cells?: boolean[]}>, note?: string}} edits */
+export async function updateScan(id, edits) {
+    return postJson(`${BASE}/scans/${id}/`, edits, 'Düzenleme kaydedilemedi', 'PATCH');
+}
+
+export async function approveScan(id) {
+    return postJson(`${BASE}/scans/${id}/approve/`, {}, 'Onaylanamadı');
+}
+
+export async function discardScan(id, reason = '') {
+    return postJson(`${BASE}/scans/${id}/discard/`, { reason }, 'Silinemedi');
+}
+
+export async function reparseScan(id) {
+    return postJson(`${BASE}/scans/${id}/reparse/`, {}, 'Yeniden okunamadı');
+}
+
+export async function approveCleanScans(payload = {}) {
+    return postJson(`${BASE}/scans/approve-clean/`, payload, 'Toplu onay başarısız');
+}
+
+export async function fetchScanBatches(filters = {}) {
+    return getJson(`${BASE}/batches/${toQuery(filters)}`, 'Yüklemeler alınamadı');
+}
+
+export async function fetchMissingTimesheets(dateFrom, dateTo) {
+    return getJson(`${BASE}/missing/${toQuery({ date_from: dateFrom, date_to: dateTo })}`, 'Eksik formlar alınamadı');
 }

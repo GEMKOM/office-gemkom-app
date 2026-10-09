@@ -1,0 +1,176 @@
+.sc-table td,
+.sc-table th {
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.sc-table .sc-flags {
+    white-space: normal;
+    max-width: 360px;
+    font-size: 0.82rem;
+    color: #6c757d;
+}
+
+.sc-review-dialog {
+    max-width: 1500px;
+}
+
+.sc-image-wrap {
+    height: calc(100vh - 260px);
+    min-height: 480px;
+    overflow: auto;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 6px;
+    background: #e9ecef;
+    text-align: center;
+}
+
+.sc-image-wrap img {
+    max-width: 100%;
+    transform-origin: top left;
+    transition: transform 0.1s ease-out;
+}
+
+.sc-image-tools {
+    display: flex;
+    gap: 0.35rem;
+    flex-wrap: wrap;
+}
+
+.sc-meta {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 0.2rem 0.75rem;
+    font-size: 0.9rem;
+    margin-bottom: 0.75rem;
+}
+
+.sc-meta dt {
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.sc-meta dd {
+    margin: 0;
+}
+
+.sc-flag {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 5px;
+    margin-bottom: 0.3rem;
+    border-left: 4px solid #adb5bd;
+    background: #f8f9fa;
+}
+
+.sc-flag.level-error {
+    border-left-color: #dc3545;
+    background: #fdecee;
+}
+
+.sc-flag.level-warn {
+    border-left-color: #fd7e14;
+    background: #fff3e8;
+}
+
+.sc-flag.level-info {
+    border-left-color: #0d6efd;
+    background: #eef4ff;
+}
+
+.sc-rows {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.sc-rows th,
+.sc-rows td {
+    padding: 0.25rem 0.3rem;
+    border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+    vertical-align: middle;
+}
+
+.sc-rows th.sc-hour {
+    font-size: 0.68rem;
+    text-align: center;
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.sc-rows .sc-job {
+    min-width: 150px;
+}
+
+.sc-rows .sc-job input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.sc-rows .sc-job small {
+    display: block;
+    color: #6c757d;
+    font-size: 0.72rem;
+}
+
+.sc-cell {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #adb5bd;
+    background: #fff;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.sc-cell.half {
+    width: 16px;
+}
+
+.sc-cell.on {
+    background: #212529;
+    color: #fff;
+    border-color: #212529;
+}
+
+.sc-cell.ot {
+    border-color: #6c757d;
+}
+
+td.sc-ot-start {
+    border-left: 3px solid #212529;
+}
+
+td.sc-lunch-after {
+    border-right: 3px solid #adb5bd;
+}
+
+.sc-rows .sc-hours {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    min-width: 92px;
+}
+
+.sc-general td.sc-job {
+    background: #f1f3f5;
+}
+
+.sc-candidates .btn {
+    padding: 0 0.35rem;
+    font-size: 0.75rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.sc-missing table {
+    font-size: 0.82rem;
+}
+
+.sc-thumb {
+    width: 36px;
+    height: 48px;
+    object-fit: cover;
+    border: 1px solid #dee2e6;
+    border-radius: 3px;
+    background: #fff;
+}

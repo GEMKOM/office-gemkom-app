@@ -249,7 +249,13 @@ export const NAVIGATION_STRUCTURE = {
                     '/manufacturing/welding/timesheets': {
                         label: 'Puantaj Formları',
                         icon: 'fas fa-print',
-                        children: {}
+                        children: {
+                            '/manufacturing/welding/timesheets/scans': {
+                                label: 'Puantaj Taramaları',
+                                icon: 'fas fa-file-import',
+                                children: {}
+                            }
+                        }
                     },
                     '/manufacturing/welding/teams': {
                         label: 'Ekipler',

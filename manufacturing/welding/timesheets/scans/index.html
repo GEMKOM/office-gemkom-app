@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Puantaj Taramaları</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../../../style.css">
+    <link rel="stylesheet" href="../../../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../../../components/notification/notification.css">
+    <link rel="stylesheet" href="../../../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../timesheets.css">
+    <link rel="stylesheet" href="scans.css">
+    <link rel="icon" type="image/png" href="../../../../../images/gemkom.png">
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <div id="header-placeholder"></div>
+
+            <div class="row g-3">
+                <div class="col-lg-4">
+                    <div class="card ts-card h-100">
+                        <div class="card-header"><i class="fas fa-upload me-2"></i>Tarama yükle</div>
+                        <div class="card-body">
+                            <input type="file" id="sc-files" class="form-control mb-2" multiple accept=".pdf,.jpg,.jpeg,.png,.tif,.tiff">
+                            <button type="button" id="sc-upload" class="btn btn-primary w-100">
+                                <i class="fas fa-file-import me-2"></i>Yükle ve Oku
+                            </button>
+                            <div id="sc-upload-status" class="small text-muted mt-2"></div>
+                            <p class="text-muted small mt-3 mb-0">
+                                Tarayıcıdan çıkan çok sayfalı PDF'i olduğu gibi yükleyin. Her sayfa ayrı okunur; form kodu sayfayı
+                                çalışana ve güne bağlar. Uyarısız sayfalar "Temiz", diğerleri "Kontrol gerekli" olarak listelenir.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card ts-card h-100">
+                        <div class="card-header"><i class="fas fa-filter me-2"></i>Filtre</div>
+                        <div class="card-body">
+                            <div class="mb-2">
+                                <label class="form-label mb-1" for="sc-filter-status">Durum</label>
+                                <select id="sc-filter-status" class="form-select form-select-sm">
+                                    <option value="queued,parsing,needs_review,clean,failed" selected>Bekleyenler (okunuyor, kontrol, temiz, hatalı)</option>
+                                    <option value="needs_review">Kontrol gerekli</option>
+                                    <option value="clean">Temiz</option>
+                                    <option value="approved">Onaylananlar</option>
+                                    <option value="failed">Okunamayanlar</option>
+                                    <option value="discarded">Silinenler</option>
+                                    <option value="">Tümü</option>
+                                </select>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6">
+                                    <label class="form-label mb-1" for="sc-filter-from">Form tarihi</label>
+                                    <input type="date" id="sc-filter-from" class="form-control form-control-sm">
+                                </div>
+                                <div class="col-6">
+                                    <label class="form-label mb-1" for="sc-filter-to">&nbsp;</label>
+                                    <input type="date" id="sc-filter-to" class="form-control form-control-sm">
+                                </div>
+                            </div>
+                            <div class="mb-2">
+                                <label class="form-label mb-1" for="sc-filter-batch">Yükleme</label>
+                                <select id="sc-filter-batch" class="form-select form-select-sm">
+                                    <option value="">Tüm yüklemeler</option>
+                                </select>
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button type="button" id="sc-refresh" class="btn btn-outline-secondary btn-sm"><i class="fas fa-sync me-1"></i>Yenile</button>
+                                <button type="button" id="sc-approve-clean" class="btn btn-success btn-sm"><i class="fas fa-check-double me-1"></i>Temizleri onayla</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card ts-card h-100">
+                        <div class="card-header"><i class="fas fa-file-circle-question me-2"></i>Eksik formlar</div>
+                        <div class="card-body">
+                            <div class="row g-2 mb-2">
+                                <div class="col-6"><input type="date" id="sc-missing-from" class="form-control form-control-sm"></div>
+                                <div class="col-6"><input type="date" id="sc-missing-to" class="form-control form-control-sm"></div>
+                            </div>
+                            <div id="sc-missing" class="sc-missing small text-muted">Tarih seçin.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card ts-card mt-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="fas fa-list me-2"></i>Taranan sayfalar <span id="sc-count" class="text-muted"></span></span>
+                    <span id="sc-polling" class="small text-muted"></span>
+                </div>
+                <div class="card-body p-0" id="sc-list">
+                    <div class="p-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Review modal -->
+    <div class="modal fade" id="sc-review-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-fullscreen-xl-down modal-xl sc-review-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-file-signature me-2"></i><span id="sc-review-title">Tarama</span></h5>
+                    <div class="ms-auto d-flex gap-2 align-items-center">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="sc-prev"><i class="fas fa-chevron-left"></i></button>
+                        <span id="sc-position" class="small text-muted"></span>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="sc-next"><i class="fas fa-chevron-right"></i></button>
+                        <button type="button" class="btn-close ms-2" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                    </div>
+                </div>
+                <div class="modal-body">
+                    <div class="row g-3">
+                        <div class="col-lg-6">
+                            <div class="sc-image-tools mb-2">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-zoom="-"><i class="fas fa-search-minus"></i></button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-zoom="+"><i class="fas fa-search-plus"></i></button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-zoom="0">Sığdır</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" data-rotate="90"><i class="fas fa-rotate-right"></i></button>
+                                <a id="sc-image-link" class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener"><i class="fas fa-external-link-alt"></i></a>
+                            </div>
+                            <div class="sc-image-wrap" id="sc-image-wrap">
+                                <img id="sc-image" alt="Taranan sayfa">
+                            </div>
+                        </div>
+                        <div class="col-lg-6">
+                            <div id="sc-review-body"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-danger btn-sm" id="sc-discard"><i class="fas fa-trash me-1"></i>Sil</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="sc-reparse"><i class="fas fa-redo me-1"></i>Yeniden oku</button>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-primary" id="sc-save"><i class="fas fa-save me-1"></i>Kaydet</button>
+                        <button type="button" class="btn btn-success" id="sc-approve"><i class="fas fa-check me-1"></i>Onayla</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>GEMKOM</h5>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-light mb-0">&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="scans.js"></script>
+</body>
+</html>

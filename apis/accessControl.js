@@ -44,6 +44,7 @@ const ROUTE_ACCESS_INHERITS = {
     // Puantaj Formları are printed by whoever keys the welding time entries;
     // the backend page grant (users 0062) mirrors the same rule.
     '/manufacturing/welding/timesheets': ['/manufacturing/welding/time-entries'],
+    '/manufacturing/welding/timesheets/scans': ['/manufacturing/welding/time-entries', '/manufacturing/welding/timesheets'],
     // Kritik Malzemeler is a companion view of Malzeme Takibi and the PR
     // create flow — whoever marks or buys critical items can monitor them.
     '/procurement/critical-items': [
