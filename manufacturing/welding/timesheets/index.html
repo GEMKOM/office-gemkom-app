@@ -3,16 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Kaynak Puantaj Formları</title>
+    <title>GEMKOM - Puantaj Onayı</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="../../../../style.css">
-    <link rel="stylesheet" href="../../../../components/navbar.css">
-    <link rel="stylesheet" href="../../../../components/header/header.css">
-    <link rel="stylesheet" href="../../../../components/notification/notification.css">
-    <link rel="stylesheet" href="../../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/notification/notification.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
     <link rel="stylesheet" href="timesheets.css">
-    <link rel="icon" type="image/png" href="../../../../images/gemkom.png">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
 </head>
 <body>
     <div id="navbar-container"></div>
@@ -21,61 +21,45 @@
         <div class="container-fluid">
             <div id="header-placeholder"></div>
 
-            <div class="row g-3">
-                <div class="col-lg-4">
-                    <div class="card ts-card h-100">
-                        <div class="card-header"><i class="fas fa-calendar-day me-2"></i>Tarih</div>
-                        <div class="card-body">
-                            <div class="mb-3">
-                                <label for="ts-date-from" class="form-label">Başlangıç</label>
-                                <input type="date" id="ts-date-from" class="form-control">
-                            </div>
-                            <div class="mb-3">
-                                <label for="ts-date-to" class="form-label">Bitiş <span class="text-muted">(isteğe bağlı, en fazla 14 gün)</span></label>
-                                <input type="date" id="ts-date-to" class="form-control">
-                            </div>
-                            <div class="form-check mb-3">
-                                <input type="checkbox" id="ts-include-holidays" class="form-check-input">
-                                <label for="ts-include-holidays" class="form-check-label">Pazar ve resmi tatil günlerini de yazdır</label>
-                            </div>
-                            <div id="ts-summary" class="ts-summary mb-3"></div>
-                            <button type="button" id="ts-generate" class="btn btn-primary w-100">
-                                <i class="fas fa-print me-2"></i>PDF Oluştur ve İndir
-                            </button>
-                            <p class="text-muted small mt-3 mb-0">
-                                Her çalışan ve gün için bir sayfa üretilir. Sayfada çalışanın ekibine atanmış iş emirleri hazır satır olarak basılır,
-                                GENEL (1000) satırı ve üç boş satır eklenir. Aynı gün yeniden yazdırmak form kodunu değiştirmez.
-                            </p>
-                        </div>
+            <div class="card ts-card mb-3">
+                <div class="card-body d-flex flex-wrap align-items-center gap-3">
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-secondary" id="ts-prev" title="Önceki gün"><i class="fas fa-chevron-left"></i></button>
+                        <button type="button" class="btn btn-outline-secondary" id="ts-today">Bugün</button>
+                        <button type="button" class="btn btn-outline-secondary" id="ts-next" title="Sonraki gün"><i class="fas fa-chevron-right"></i></button>
                     </div>
-                </div>
-                <div class="col-lg-8">
-                    <div class="card ts-card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <span><i class="fas fa-users me-2"></i>Çalışanlar <span id="ts-selected-count" class="text-muted"></span></span>
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" id="ts-select-all" class="btn btn-outline-primary">Tümünü seç</button>
-                                <button type="button" id="ts-select-none" class="btn btn-outline-secondary">Temizle</button>
-                            </div>
-                        </div>
-                        <div class="card-body" id="ts-roster">
-                            <div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>
-                        </div>
+                    <input type="date" id="ts-date" class="form-control" style="max-width: 190px;">
+                    <span id="ts-day-label" class="fw-semibold"></span>
+                    <div id="ts-counts" class="d-flex flex-wrap gap-2"></div>
+                    <div class="ms-auto d-flex gap-2">
+                        <button type="button" class="btn btn-success" id="ts-approve-clean"><i class="fas fa-check-double me-1"></i>Uyarısız girişleri onayla</button>
+                        <a href="/manufacturing/welding/time-entries" class="btn btn-outline-secondary"><i class="fas fa-clock me-1"></i>Zaman Kayıtları</a>
                     </div>
                 </div>
             </div>
 
-            <div class="card ts-card mt-3">
+            <div class="card ts-card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <span><i class="fas fa-file-alt me-2"></i>Seçili tarihler için yazdırılmış formlar</span>
-                    <a href="/manufacturing/welding/timesheets/scans" class="btn btn-outline-primary btn-sm"><i class="fas fa-file-import me-1"></i>Taramalar</a>
+                    <span><i class="fas fa-users me-2"></i>Kaynakçılar <span id="ts-count" class="text-muted"></span></span>
+                    <div class="d-flex gap-2 align-items-center">
+                        <input type="search" id="ts-filter" class="form-control form-control-sm" placeholder="İsim / ekip ara" style="max-width: 220px;">
+                        <select id="ts-state-filter" class="form-select form-select-sm" style="max-width: 200px;">
+                            <option value="">Tüm durumlar</option>
+                            <option value="pending">Kontrol bekliyor</option>
+                            <option value="none">Girilmedi</option>
+                            <option value="approved">Onaylandı</option>
+                            <option value="blank">Çalışmadı</option>
+                        </select>
+                    </div>
                 </div>
-                <div class="card-body" id="ts-printed">
-                    <div class="text-muted">Tarih seçin.</div>
+                <div class="card-body p-0" id="ts-list">
+                    <div class="p-3 text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>
                 </div>
             </div>
         </div>
     </section>
+
+    <datalist id="ts-job-datalist"></datalist>
 
     <footer class="footer-section">
         <div class="container">

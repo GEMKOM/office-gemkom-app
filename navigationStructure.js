@@ -247,15 +247,9 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     },
                     '/manufacturing/welding/timesheets': {
-                        label: 'Puantaj Formları',
-                        icon: 'fas fa-print',
-                        children: {
-                            '/manufacturing/welding/timesheets/scans': {
-                                label: 'Puantaj Taramaları',
-                                icon: 'fas fa-file-import',
-                                children: {}
-                            }
-                        }
+                        label: 'Puantaj Onayı',
+                        icon: 'fas fa-clipboard-check',
+                        children: {}
                     },
                     '/manufacturing/welding/teams': {
                         label: 'Ekipler',

@@ -2,60 +2,152 @@
     font-weight: 600;
 }
 
-.ts-summary {
-    font-size: 0.95rem;
-    padding: 0.6rem 0.8rem;
-    border-radius: 6px;
-    background: var(--bs-light, #f8f9fa);
-    border: 1px solid var(--bs-border-color, #dee2e6);
-}
-
-.ts-team {
-    border: 1px solid var(--bs-border-color, #dee2e6);
-    border-radius: 6px;
-    margin-bottom: 0.75rem;
-}
-
-.ts-team-header {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.45rem 0.75rem;
-    background: var(--bs-light, #f8f9fa);
-    border-bottom: 1px solid var(--bs-border-color, #dee2e6);
-    font-weight: 600;
-}
-
-.ts-team-header .ts-team-count {
-    font-weight: 400;
-    color: #6c757d;
-}
-
-.ts-team-body {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 0.25rem 1rem;
-    padding: 0.5rem 0.75rem;
-}
-
-.ts-employee {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.92rem;
-}
-
-.ts-employee .ts-kod {
-    color: #6c757d;
-    font-size: 0.8rem;
-}
-
-.ts-printed-table td,
-.ts-printed-table th {
-    white-space: nowrap;
-}
-
 .ts-code {
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.85rem;
+}
+
+.ts-table td,
+.ts-table th {
+    vertical-align: middle;
+}
+
+.ts-table tr.ts-row-none td {
+    color: #6c757d;
+}
+
+.ts-jobs {
+    font-size: 0.85rem;
+    white-space: normal;
+}
+
+.ts-jobs .ts-job {
+    display: inline-block;
+    margin: 1px 8px 1px 0;
+}
+
+.ts-jobs .ts-job strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.ts-flags {
+    white-space: normal;
+    max-width: 320px;
+    font-size: 0.82rem;
+}
+
+.ts-flag {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 5px;
+    margin-bottom: 0.3rem;
+    border-left: 4px solid #adb5bd;
+    background: #f8f9fa;
+}
+
+.ts-flag.level-error {
+    border-left-color: #dc3545;
+    background: #fdecee;
+}
+
+.ts-flag.level-warn {
+    border-left-color: #fd7e14;
+    background: #fff3e8;
+}
+
+.ts-flag.level-info {
+    border-left-color: #0d6efd;
+    background: #eef4ff;
+}
+
+/* inline editor */
+.ts-editor {
+    background: #f8f9fa;
+    border-top: 1px solid var(--bs-border-color, #dee2e6);
+    padding: 0.75rem 1rem 1rem;
+}
+
+.ts-rows {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+    background: #fff;
+}
+
+.ts-rows th,
+.ts-rows td {
+    padding: 0.25rem 0.3rem;
+    border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+    vertical-align: middle;
+}
+
+.ts-rows th.ts-hour {
+    font-size: 0.66rem;
+    text-align: center;
+    color: #6c757d;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.ts-rows .ts-job-cell {
+    min-width: 170px;
+}
+
+.ts-rows .ts-job-cell input {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.ts-rows .ts-job-cell small {
+    display: block;
+    color: #6c757d;
+    font-size: 0.72rem;
+}
+
+.ts-cell {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid #adb5bd;
+    background: #fff;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.ts-cell.half {
+    width: 18px;
+}
+
+.ts-cell.on {
+    background: #212529;
+    color: #fff;
+    border-color: #212529;
+}
+
+.ts-cell.ot {
+    border-style: dashed;
+}
+
+td.ts-ot-start {
+    border-left: 3px solid #212529;
+}
+
+td.ts-lunch-after {
+    border-right: 3px solid #adb5bd;
+}
+
+.ts-rows .ts-hours {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    min-width: 92px;
+    white-space: nowrap;
+}
+
+.ts-rows tr.ts-general td.ts-job-cell {
+    background: #f1f3f5;
+}
+
+.ts-rows tr.ts-empty-row td {
+    opacity: 0.75;
 }
