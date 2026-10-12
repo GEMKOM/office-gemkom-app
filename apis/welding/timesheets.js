@@ -7,7 +7,7 @@ import { authedFetch } from "../../authService.js";
  * - GET   /welding/timesheets/daily-status/?date=            every rostered welder's state for a day, with rows
  * - GET   /welding/timesheets/submissions/                    filters: status, date, date_from, date_to, employee
  * - GET   /welding/timesheets/submissions/{id}/               reviewable rows, flags, note
- * - PATCH /welding/timesheets/submissions/{id}/               {blank_day?, rows:[{key, job_no?, cells?}], note?}
+ * - PATCH /welding/timesheets/submissions/{id}/               {blank_day?, rows:[{key?, job_no?, cells?}], note?}
  * - POST  /welding/timesheets/submissions/{id}/approve/       -> welding time entries
  * - POST  /welding/timesheets/submissions/{id}/send-back/     {reason}
  * - POST  /welding/timesheets/submissions/approve-clean/      {date?, submission_ids?}
@@ -65,7 +65,7 @@ export async function fetchSubmission(id) {
     return getJson(`${BASE}/submissions/${id}/`, 'Giriş alınamadı');
 }
 
-/** @param {{blank_day?: boolean, rows?: Array<{key: string, job_no?: string, cells?: boolean[]}>, note?: string}} edits */
+/** @param {{blank_day?: boolean, rows?: Array<{key?: string, job_no?: string, cells?: boolean[]}>, note?: string}} edits */
 export async function updateSubmission(id, edits) {
     return sendJson(`${BASE}/submissions/${id}/`, edits, 'Düzenleme kaydedilemedi', 'PATCH');
 }
