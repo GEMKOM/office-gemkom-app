@@ -663,6 +663,19 @@ export async function getSupplierEvaluations(supplierId) {
     return await response.json();
 }
 
+/**
+ * GET /procurement/suppliers/{id}/purchase-history/
+ * Approved purchase requests the supplier won (one row per non-cancelled PO),
+ * each with its lines and its evaluation (or null).
+ */
+export async function getSupplierPurchaseHistory(supplierId) {
+    const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/purchase-history/`);
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Satın alma geçmişi yüklenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
 /** GET /procurement/suppliers/{id}/status-history/ */
 export async function getSupplierStatusHistory(supplierId) {
     const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/status-history/`);

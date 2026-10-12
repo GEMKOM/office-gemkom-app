@@ -37,7 +37,8 @@ export function renderSupplierStatusBadge(supplier, { onlyWarn = false } = {}) {
  * @returns {string} HTML (safe — app-generated markup only).
  */
 export function renderStarRating(score, { compact = false } = {}) {
-    const n = Number(score);
+    // Unrated suppliers carry null — Number(null) is 0, which would draw "0.0".
+    const n = (score === null || score === undefined || score === '') ? NaN : Number(score);
     if (!Number.isFinite(n)) return '<span class="text-muted small">—</span>';
     const full = Math.floor(n);
     const half = (n - full) >= 0.5;
@@ -55,7 +56,7 @@ export function renderStarRating(score, { compact = false } = {}) {
  * @returns {string} HTML (safe).
  */
 export function renderOnTimePct(pct) {
-    const n = Number(pct);
+    const n = (pct === null || pct === undefined || pct === '') ? NaN : Number(pct);
     if (!Number.isFinite(n)) return '<span class="text-muted small">—</span>';
     let cls = 'status-green';
     if (n < 60) cls = 'status-red';
