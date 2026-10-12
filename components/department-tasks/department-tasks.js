@@ -41,6 +41,7 @@ import {
     getDrawingRelease
 } from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
+import { fmtQty as fmtDeliveryQty } from '../../utils/deliveryState.js';
 import { getCncParts } from '../../apis/cnc_cutting/parts.js';
 import { getParts as getMachiningParts } from '../../apis/machining/parts.js';
 import { 
@@ -931,8 +932,14 @@ function initializeTableComponent() {
                 sortable: true,
                 formatter: (value, row) => {
                     const status = statusOptions.find(s => s.value === value) || { label: value, color: 'grey' };
-                    const colorClass = `status-${status.color}`;
-                    const statusBadge = `<span class="status-badge ${colorClass}">${status.label}</span>`;
+                    // Procurement item rows carry their own receipt state
+                    // ("Kısmi Teslim (600 / 1200 kg)", "Teslim Edildi", "Ödendi"...)
+                    const isProcurementItem = row.task_type === 'procurement_item';
+                    const colorClass = isProcurementItem && row.is_partially_delivered
+                        ? 'status-orange'
+                        : `status-${status.color}`;
+                    const label = isProcurementItem && row.status_display ? row.status_display : status.label;
+                    const statusBadge = `<span class="status-badge ${colorClass}">${label}</span>`;
                     const revisionBadge = row.is_under_revision
                         ? `<span class="status-badge status-red ms-1"><i class="fas fa-rotate me-1"></i>Revizyonda</span>`
                         : '';
@@ -7535,24 +7542,60 @@ async function handleStartTask(taskId) {
 async function handleCompleteTask(taskId, taskRow = null) {
     // For procurement_item tasks with planning_request_item_id, use special completion flow
     if (taskRow && taskRow.task_type === 'procurement_item' && taskRow.planning_request_item_id) {
+        // Receipt amount: defaults to what is still outstanding; the office
+        // lowers it when only part of the material arrived (partial delivery).
+        const unit = taskRow.item_unit || '';
+        const planned = Number(taskRow.quantity || 0);
+        const onHand = Number(taskRow.delivered_quantity || 0);
+        const remaining = Math.max(Math.round((planned - onHand) * 100) / 100, 0);
+        const qtyInputId = `dt-delivery-qty-${taskRow.planning_request_item_id}`;
+        const details = planned > 0 ? `
+            <div class="text-start">
+                <div class="small mb-2">
+                    Planlanan <strong>${fmtDeliveryQty(planned)} ${unit}</strong>
+                    · Daha önce alınan <strong>${fmtDeliveryQty(onHand)} ${unit}</strong>
+                    · Kalan <strong>${fmtDeliveryQty(remaining)} ${unit}</strong>
+                </div>
+                <label class="form-label small mb-1" for="${qtyInputId}">Teslim alınan miktar${unit ? ` (${unit})` : ''}</label>
+                <input type="number" class="form-control form-control-sm" id="${qtyInputId}"
+                       value="${remaining}" min="0.01" max="${remaining}" step="0.01" inputmode="decimal">
+                <div class="form-text">Tamamı gelmediyse miktarı düşürün; kalan kısım beklemede kalır.</div>
+            </div>` : '';
         confirmationModal.show({
-            message: 'Bu planlama talebi kalemini teslim edildi olarak işaretlemek istediğinize emin misiniz?',
-            confirmText: 'Evet, Teslim Edildi',
+            message: 'Bu planlama talebi kalemini teslim alındı olarak işaretlemek istediğinize emin misiniz?',
+            details,
+            confirmText: 'Evet, Teslim Alındı',
             onConfirm: async () => {
                 try {
                     // Get the task to ensure we have the latest data
                     const task = taskRow || await getDepartmentTaskById(taskId);
-                    
+
                     if (!task.planning_request_item_id) {
                         showNotification('Planlama talebi kalemi bulunamadı', 'error');
                         return;
                     }
-                    
+
+                    const receipt = {};
+                    const input = document.getElementById(qtyInputId);
+                    if (input) {
+                        const value = Number(input.value);
+                        if (!(value > 0) || value > remaining + 1e-9) {
+                            showNotification(`Miktar 0'dan büyük ve en fazla ${fmtDeliveryQty(remaining)} ${unit} olmalıdır`, 'error');
+                            throw new Error('invalid quantity');
+                        }
+                        receipt.quantity = value;
+                    }
+
                     // Use planning_request_item_id from the task response
-                    await markPlanningRequestItemDelivered(task.planning_request_item_id);
-                    showNotification('Planlama talebi kalemi teslim edildi olarak işaretlendi', 'success');
+                    const result = await markPlanningRequestItemDelivered(task.planning_request_item_id, receipt);
+                    showNotification(result && result.is_delivered === false
+                        ? `Kısmi teslimat kaydedildi (${fmtDeliveryQty(result.delivered_quantity)} / ${fmtDeliveryQty(result.quantity)} ${unit})`
+                        : 'Planlama talebi kalemi teslim alındı olarak işaretlendi', 'success');
                     confirmationModal.hide();
+                    // The parent task's percentage and the item rows changed
+                    await loadTasks();
                 } catch (error) {
+                    if (error && error.message === 'invalid quantity') throw error;
                     console.error('Error marking planning request item as delivered:', error);
                     let errorMessage = 'Planlama talebi kalemi işaretlenirken hata oluştu';
                     try {

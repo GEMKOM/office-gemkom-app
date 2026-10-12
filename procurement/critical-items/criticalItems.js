@@ -1,4 +1,5 @@
 import { guardRoute } from '../../../authService.js';
+import { renderDeliveryState } from '../../utils/deliveryState.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
@@ -129,7 +130,7 @@ function initTable() {
             { field: 'job_no', label: 'İş No', sortable: true, formatter: (v) => renderJobNoBadge(v) },
             { field: 'quantity_to_purchase', label: 'Satın Alınacak', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'item_unit', label: 'Birim', sortable: false, formatter: (v) => v || '-' },
-            { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v) => renderBoolIcon(v) },
+            { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v, row) => renderDeliveryState(row) },
             { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) },
             { field: 'critical_marked_by_username', label: 'İşaretleyen', sortable: false, formatter: (v) => v || '-' },
             { field: 'critical_marked_at', label: 'İşaretlenme', sortable: false, formatter: (v) => renderDate(v) }

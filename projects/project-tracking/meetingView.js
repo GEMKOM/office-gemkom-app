@@ -769,8 +769,10 @@ function qualityModalHtml(brief, detail) {
 const PROCUREMENT_STAGE_BADGES = {
     not_requested: '<span class="status-badge status-orange">Talebe dönüşmedi</span>',
     requested: '<span class="status-badge status-blue">Talepte · bekliyor</span>',
+    partial: '<span class="status-badge status-purple">Kısmi teslim</span>',
     delivered: '<span class="status-badge status-green">Teslim edildi</span>',
 };
+const fmtQty2 = (v) => Number(v || 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
 
 function procurementModalHtml(brief, detail) {
     const procurement = brief.procurement || {};
@@ -784,12 +786,16 @@ function procurementModalHtml(brief, detail) {
                 ? `<span class="pp-num-green">${fmtShortDate(w.delivered_at)}</span>`
                 : '<span class="pp-num-green">teslim edildi</span>';
         }
+        // Partial: what landed so far, then the promise for the rest (if any)
+        const partialPrefix = w.stage === 'partial'
+            ? `<span class="pp-num-orange" title="Kısmi teslim">${fmtQty2(w.delivered_quantity)} / ${fmtQty2(w.quantity)} ${escapeHtml(w.item_unit || '')} alındı</span><br>`
+            : '';
         if (w.projected_delivery) {
-            return w.delivery_overdue
+            return partialPrefix + (w.delivery_overdue
                 ? `<span class="pp-num-red" title="Söz verilen teslim tarihi geçti">${fmtShortDate(w.projected_delivery)} · gecikti</span>`
-                : `<span title="Öngörülen teslim (sipariş + teslim süresi)">~${fmtShortDate(w.projected_delivery)}</span>`;
+                : `<span title="Öngörülen teslim (sipariş + teslim süresi)">~${fmtShortDate(w.projected_delivery)}</span>`);
         }
-        return '<span class="text-muted" title="Açık sipariş yok — teslim tarihi öngörülemiyor">sipariş yok</span>';
+        return partialPrefix + '<span class="text-muted" title="Açık sipariş yok — teslim tarihi öngörülemiyor">sipariş yok</span>';
     };
     const rows = items.map((w) => `
         <tr>
@@ -843,6 +849,7 @@ function procurementModalHtml(brief, detail) {
             <span>Talebe dönüşmedi <strong>${fmtInt(procurement.not_yet_requested)}</strong></span>
             <span>Talepte <strong>${fmtInt(procurement.requested_waiting)}</strong></span>
             <span>Teslim edildi <strong class="pp-num-green">${fmtInt(procurement.items_delivered)} / ${fmtInt(procurement.items_total)}</strong></span>
+            ${procurement.partially_delivered ? `<span>Kısmi teslim <strong class="pp-num-orange">${fmtInt(procurement.partially_delivered)}</strong></span>` : ''}
             ${criticalStat}
         </div>
         ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Teslim Tarihi', 'Kritik'], rows)}

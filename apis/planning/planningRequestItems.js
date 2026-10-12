@@ -420,28 +420,82 @@ export async function unmarkPlanningRequestItemConsumed(itemId) {
 }
 
 /**
- * Mark a planning request item as delivered
+ * Record a warehouse receipt on a planning request item.
  * @param {string|number} itemId - Planning request item ID
- * @returns {Promise<Object>} Updated planning request item
+ * @param {Object} [receipt]
+ * @param {number|string} [receipt.quantity] - Amount received now (default: everything outstanding)
+ * @param {string} [receipt.note]
+ * @returns {Promise<Object>} Updated planning request item (delivered_quantity, is_delivered, deliveries)
  */
-export async function markPlanningRequestItemDelivered(itemId) {
+export async function markPlanningRequestItemDelivered(itemId, receipt = {}) {
     try {
+        const body = {};
+        if (receipt.quantity !== undefined && receipt.quantity !== null && receipt.quantity !== '') {
+            body.quantity = String(receipt.quantity);
+        }
+        if (receipt.note) body.note = receipt.note;
         const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/mark_delivered/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            }
+            },
+            body: JSON.stringify(body)
         });
-        
+
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.detail || errorData.error || 'Planlama talebi kalemi teslim edildi olarak işaretlenirken hata oluştu');
         }
-        
+
         const data = await response.json();
         return data;
     } catch (error) {
         console.error(`Error marking planning request item ${itemId} as delivered:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Undo the latest receipt on a planning request item (all=true wipes every receipt).
+ * @param {string|number} itemId
+ * @param {{all?: boolean}} [options]
+ * @returns {Promise<Object>} Updated planning request item
+ */
+export async function unmarkPlanningRequestItemDelivered(itemId, options = {}) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/unmark_delivered/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(options.all ? { all: true } : {})
+        });
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Teslimat geri alınırken hata oluştu');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error undoing delivery on planning request item ${itemId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Receipt history of a planning request item, oldest first.
+ * @param {string|number} itemId
+ * @returns {Promise<Object[]>} [{id, quantity, delivered_at, delivered_by_name, note}]
+ */
+export async function getPlanningRequestItemDeliveries(itemId) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/deliveries/`);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Teslimat geçmişi yüklenirken hata oluştu');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error(`Error loading deliveries of planning request item ${itemId}:`, error);
         throw error;
     }
 }

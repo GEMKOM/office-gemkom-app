@@ -1,4 +1,5 @@
 import { guardRoute, getUser, isAdmin } from '../../../authService.js';
+import { renderDeliveryState, isPartiallyDelivered, fmtQty, DELIVERY_FILTER_OPTIONS, deliveryFilterParams } from '../../utils/deliveryState.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
@@ -211,11 +212,7 @@ function initFilters() {
         .addDropdownFilter({
             id: 'is_delivered',
             label: 'Teslim',
-            options: [
-                { value: '', label: 'Tümü' },
-                { value: 'true', label: 'Teslim Edildi' },
-                { value: 'false', label: 'Teslim Edilmedi' }
-            ],
+            options: DELIVERY_FILTER_OPTIONS,
             placeholder: 'Tümü',
             colSize: 2
         })
@@ -287,14 +284,15 @@ function initTable() {
             { field: 'quantity_from_inventory', label: 'Stoktan', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'quantity_to_purchase', label: 'Satın Alınacak', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'item_unit', label: 'Birim', sortable: false, formatter: (v) => v || '-' },
-            { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v) => renderBoolIcon(v) },
+            { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v, row) => renderDeliveryState(row) },
             { field: 'pull_requests', label: 'Depo Çekme', sortable: false, formatter: (v) => renderPullRequestChips(v) },
             { field: 'is_critical', label: 'Kritik', sortable: false, formatter: (v, row) => renderCriticalToggle(v, row) },
             { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
         ],
         selectable: true,
-        // Only material that is physically in the warehouse can be pulled.
-        isRowSelectable: (row) => row.is_delivered === true,
+        // Only material that is physically in the warehouse can be pulled —
+        // fully received lines, or the received share of a partial delivery.
+        isRowSelectable: (row) => row.is_delivered === true || Number(row.delivered_quantity || 0) > 0,
         onSelectionChange: (selectedRows) => {
             selectedItemsForPull = selectedRows;
             updateBulkActionBar();
@@ -350,7 +348,7 @@ async function loadItems() {
             planning_request_number: values.planning_request_number || undefined,
             planning_request_status: values.planning_request_status || undefined,
             job_no: values.job_no || undefined,
-            is_delivered: values.is_delivered || undefined,
+            ...deliveryFilterParams(values.is_delivered),
             is_critical: values.is_critical || undefined,
             from_inventory: values.from_inventory || undefined,
             is_available: values.is_available || undefined,
@@ -549,7 +547,12 @@ async function showPullRequestDetail(requestId) {
                 <td>${escapeHtml(item.job_no || '-')}</td>
                 <td>${escapeHtml(item.quantity ?? '-')}</td>
                 <td>${escapeHtml(item.item_unit || '-')}</td>
-                <td>${renderBoolIcon(item.is_delivered)}</td>
+                <td>${renderDeliveryState({
+                    is_delivered: item.is_delivered,
+                    delivered_quantity: item.delivered_quantity,
+                    quantity: item.planning_quantity,
+                    item_unit: item.item_unit
+                })}</td>
             </tr>
         `).join('');
         detailModal.addCustomSection({
@@ -667,7 +670,12 @@ async function openCreatePullRequestModal() {
         item_name: row.item_name,
         job_no: row.job_no,
         item_unit: row.item_unit,
-        quantity: row.quantity ?? ''
+        // What is actually in the warehouse: the whole line, or the received
+        // share of a partial delivery (the backend refuses more than that).
+        on_hand: row.is_delivered ? row.quantity : row.delivered_quantity,
+        partial: isPartiallyDelivered(row),
+        planned: row.quantity,
+        quantity: (row.is_delivered ? row.quantity : row.delivered_quantity) ?? ''
     }));
 
     createModal.clearAll();
@@ -722,10 +730,12 @@ async function openCreatePullRequestModal() {
             id: `item_qty_${item.id}`,
             name: `item_qty_${item.id}`,
             label: `${item.item_code || '-'} — ${item.item_name || '-'}`,
-            help: `İş No: ${item.job_no || '-'} · Birim: ${item.item_unit || '-'}`,
+            help: `İş No: ${item.job_no || '-'} · Birim: ${item.item_unit || '-'}`
+                + (item.partial ? ` · Depoda: ${fmtQty(item.on_hand)} / ${fmtQty(item.planned)} (kısmi teslim)` : ''),
             type: 'number',
             value: item.quantity,
             min: 0.01,
+            max: item.on_hand || undefined,
             step: 0.01,
             required: true,
             colSize: 12
