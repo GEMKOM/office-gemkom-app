@@ -2,15 +2,17 @@ import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { HeaderComponent } from '../../../components/header/header.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 import {
     fetchDailyStatus, fetchSubmission, updateSubmission, approveSubmission, sendBackSubmission, approveCleanSubmissions,
 } from '../../../apis/welding/timesheets.js';
 
-// Puantaj Onayı: one row per rostered welder for the chosen day. Pending
-// submissions open inline for correction and approval; approval writes the
-// welding time entries. Cell layout mirrors welding/timesheet_layout.py.
+// Puantaj Onayı: one row per rostered welder for the chosen day; the editor
+// shows the day exactly as the welder sees it on the phone (job cards with
+// hour cells). Cell layout mirrors welding/timesheet_layout.py.
 const CELLS = [
     { start: '07:30', end: '08:00', hours: 0.5 },
     { start: '08:00', end: '09:00', hours: 1 },
@@ -28,9 +30,9 @@ const CELLS = [
     { start: '20:00', end: '21:00', hours: 1 },
 ];
 const REGULAR_CELLS = 10;
-const LUNCH_AFTER = 4;
 const NOON_CELL = 5;
-const BUCKET_LABEL = { regular: 'N', after_hours: 'FM', holiday: 'T' };
+const GENERAL = '1000';
+const BUCKET_WORD = { regular: 'normal', after_hours: 'fazla mesai', holiday: 'tatil' };
 const STATE_BADGE = {
     none: ['status-grey', 'Girilmedi'],
     pending: ['status-orange', 'Kontrol bekliyor'],
@@ -44,8 +46,10 @@ const $ = (id) => document.getElementById(id);
 const state = {
     date: null,
     data: null,            // daily-status payload
-    open: {},              // submission id -> { detail, draft, dirty }
-    jobOptions: [],
+    jobOptions: [],        // [{value: job_no, text, title}]
+    modal: null,
+    edit: null,            // the open editor
+    dropdown: null,
 };
 
 function esc(value) {
@@ -64,6 +68,11 @@ function fromIso(value) {
     return y && m && d ? new Date(y, m - 1, d) : null;
 }
 
+function formatTr(iso) {
+    const d = fromIso(iso);
+    return d ? `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()} ${DAY_NAMES[d.getDay()]}` : '';
+}
+
 function formatTime(value) {
     if (!value) return '';
     try {
@@ -78,9 +87,9 @@ function fmtHours(h) {
     return Number.isInteger(n) ? String(n) : n.toFixed(1).replace('.', ',');
 }
 
-function hoursText(hours) {
+function hoursWords(hours) {
     const parts = Object.entries(hours || {}).filter(([, v]) => Number(v) > 0)
-        .map(([k, v]) => `${BUCKET_LABEL[k] || k} ${fmtHours(v)}`);
+        .map(([k, v]) => `${BUCKET_WORD[k] || k} ${fmtHours(v)} sa`);
     return parts.length ? parts.join(' · ') : '–';
 }
 
@@ -97,7 +106,32 @@ function hoursFor(cells, kind) {
     return out;
 }
 
+function sumHours(hours) {
+    return Object.values(hours || {}).reduce((a, b) => a + Number(b), 0);
+}
+
+/** "07:30–12:00, 12:30–15:00" from the marked cells (the lunch gap splits a run). */
+function rangesText(cells) {
+    const runs = [];
+    let start = null;
+    CELLS.forEach((cell, idx) => {
+        const on = !!(cells || [])[idx];
+        const continues = on && start !== null && CELLS[idx - 1] && CELLS[idx - 1].end === cell.start && (cells || [])[idx - 1];
+        if (on && !continues) {
+            if (start !== null) runs.push([start, idx - 1]);
+            start = idx;
+        } else if (!on && start !== null) {
+            runs.push([start, idx - 1]);
+            start = null;
+        }
+    });
+    if (start !== null) runs.push([start, CELLS.length - 1]);
+    return runs.map(([a, b]) => `${CELLS[a].start}–${CELLS[b].end}`).join(', ');
+}
+
 const short = (t) => (t.endsWith(':00') ? t.slice(0, 2) : t);
+const jobLabel = (jobNo) => (jobNo === GENERAL ? 'GENEL' : jobNo);
+const jobTitle = (jobNo, title) => (jobNo === GENERAL ? 'İş emri dışı genel işler' : (title || ''));
 
 // ---------------------------------------------------------------------------
 // Boot
@@ -130,8 +164,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     $('ts-filter').addEventListener('input', renderList);
     $('ts-state-filter').addEventListener('change', renderList);
     $('ts-list').addEventListener('click', onListClick);
-    $('ts-list').addEventListener('change', onListChange);
-    $('ts-list').addEventListener('input', onListInput);
+
+    // The modal markup is rebuilt by DisplayModal on every open; the
+    // container persists, so listen there.
+    const modalContainer = $('ts-edit-modal-container');
+    modalContainer.addEventListener('click', (ev) => {
+        if (ev.target.closest('#ts-edit-save')) { saveEdit(); return; }
+        if (ev.target.closest('#ts-edit-approve')) { onEditApprove(); return; }
+        if (ev.target.closest('#ts-edit-send-back')) { onEditSendBack(); return; }
+        if (ev.target.closest('#ts-edit-body')) onEditClick(ev);
+    });
+    modalContainer.addEventListener('input', onEditInput);
 
     loadJobOptions();
     await loadDay();
@@ -139,13 +182,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadJobOptions() {
     try {
-        state.jobOptions = await getJobOrderDropdown(true);
+        const rows = await getJobOrderDropdown(false, { weldingOnly: true });
+        state.jobOptions = rows.map((j) => ({
+            value: j.job_no,
+            title: j.title || '',
+            text: j.job_no === GENERAL ? 'GENEL (1000) — İş emri dışı genel işler' : `${j.job_no} — ${j.title || ''}`,
+        }));
     } catch (error) {
         console.error('Job order options failed', error);
         state.jobOptions = [];
     }
-    $('ts-job-datalist').innerHTML = state.jobOptions
-        .map((j) => `<option value="${esc(j.job_no)}">${esc(j.title || '')}</option>`).join('');
+    if (state.edit) renderAddSection();
 }
 
 function shiftDay(delta) {
@@ -158,8 +205,7 @@ function shiftDay(delta) {
 
 async function loadDay() {
     const d = fromIso(state.date);
-    $('ts-day-label').textContent = d ? `${DAY_NAMES[d.getDay()]}` : '';
-    state.open = {};
+    $('ts-day-label').textContent = d ? DAY_NAMES[d.getDay()] : '';
     try {
         state.data = await fetchDailyStatus(state.date);
         history.replaceState(null, '', `?date=${state.date}`);
@@ -199,10 +245,20 @@ function visibleRows() {
 }
 
 function jobsSummary(r) {
-    if (r.blank_day) return '<span class="text-muted">Bugün çalışmadım</span>';
+    if (r.blank_day) return '<span class="text-muted"><i class="fas fa-bed me-1"></i>Bugün çalışmadım (izin / rapor)</span>';
     if (!r.rows || !r.rows.length) return '';
-    return `<div class="ts-jobs">${r.rows.map((row) => `
-        <span class="ts-job"><strong>${esc(row.job_no === '1000' ? 'GENEL' : row.job_no)}</strong> ${esc(hoursText(row.hours))}</span>`).join('')}</div>`;
+    return `
+        <table class="ts-jobs">
+            <tbody>
+                ${r.rows.map((row) => `
+                    <tr>
+                        <td class="ts-job-no">${esc(jobLabel(row.job_no))}</td>
+                        <td class="ts-job-title" title="${esc(jobTitle(row.job_no, row.title))}">${esc(jobTitle(row.job_no, row.title))}</td>
+                        <td class="ts-job-ranges">${esc(rangesText(row.cells))}</td>
+                        <td class="ts-job-hours">${esc(hoursWords(row.hours))}</td>
+                    </tr>`).join('')}
+            </tbody>
+        </table>`;
 }
 
 function flagsSummary(r) {
@@ -225,270 +281,57 @@ function renderList() {
             <table class="table table-sm table-hover ts-table mb-0">
                 <thead>
                     <tr>
-                        <th>Kaynakçı</th><th>Durum</th><th>Gönderim</th><th class="text-end">Saat</th>
-                        <th>İşler</th><th>Uyarılar</th><th></th>
+                        <th>Kaynakçı</th><th>Durum</th><th>Gönderim</th><th class="text-end">Toplam</th>
+                        <th>İşler ve saatler</th><th>Uyarılar</th><th></th>
                     </tr>
                 </thead>
                 <tbody>
                     ${rows.map((r) => {
                         const [cls, label] = STATE_BADGE[r.state] || ['status-grey', r.state];
-                        const open = r.scan_id && state.open[r.scan_id];
                         const pending = r.state === 'pending';
                         const actions = [];
                         if (pending) {
                             actions.push(`<button type="button" class="btn btn-success" data-action="approve" data-id="${r.scan_id}" ${r.has_errors ? 'disabled title="Hata işaretli satırlar var"' : ''}><i class="fas fa-check"></i> Onayla</button>`);
-                            actions.push(`<button type="button" class="btn btn-outline-primary" data-action="toggle" data-id="${r.scan_id}"><i class="fas fa-pen"></i> ${open ? 'Kapat' : 'Düzelt'}</button>`);
-                            actions.push(`<button type="button" class="btn btn-outline-danger" data-action="send-back" data-id="${r.scan_id}" title="Kaynakçıya geri gönder"><i class="fas fa-rotate-left"></i></button>`);
+                            actions.push(`<button type="button" class="btn btn-outline-primary" data-action="edit" data-id="${r.scan_id}"><i class="fas fa-pen"></i> Düzelt</button>`);
                         } else if (r.scan_id) {
-                            actions.push(`<button type="button" class="btn btn-outline-secondary" data-action="toggle" data-id="${r.scan_id}"><i class="fas fa-eye"></i> ${open ? 'Kapat' : 'Görüntüle'}</button>`);
+                            actions.push(`<button type="button" class="btn btn-outline-secondary" data-action="edit" data-id="${r.scan_id}"><i class="fas fa-eye"></i> Görüntüle</button>`);
                         }
                         const when = r.state === 'approved' && r.approved_at
                             ? `<span class="text-muted small">onay ${esc(formatTime(r.approved_at))}${r.approved_by ? ' · ' + esc(r.approved_by) : ''}</span>`
                             : (r.submitted_at ? esc(formatTime(r.submitted_at)) : '');
                         return `
-                        <tr class="ts-row-${esc(r.state)}" data-row="${r.scan_id || ''}">
+                        <tr class="ts-row-${esc(r.state)}">
                             <td>${esc(r.full_name)}<br><span class="text-muted small">${esc((r.team_names || [])[0] || '')}</span></td>
                             <td><span class="status-badge ${cls}">${esc(label)}</span></td>
                             <td>${when}</td>
-                            <td class="text-end">${r.blank_day ? '' : (r.total_hours ? esc(fmtHours(r.total_hours)) : '')}</td>
+                            <td class="text-end">${r.blank_day || !r.total_hours ? '' : `<strong>${esc(fmtHours(r.total_hours))} sa</strong>`}</td>
                             <td>${jobsSummary(r)}${r.note ? `<div class="text-muted small"><i class="fas fa-comment me-1"></i>${esc(r.note)}</div>` : ''}</td>
                             <td>${flagsSummary(r)}</td>
                             <td class="text-end text-nowrap"><div class="btn-group btn-group-sm">${actions.join('')}</div></td>
-                        </tr>
-                        ${open ? `<tr class="ts-editor-row" data-editor="${r.scan_id}"><td colspan="7" class="p-0">${renderEditor(r.scan_id)}</td></tr>` : ''}`;
+                        </tr>`;
                     }).join('')}
                 </tbody>
             </table>
         </div>`;
 }
 
-// ---------------------------------------------------------------------------
-// Inline editor
-// ---------------------------------------------------------------------------
-
-async function toggleEditor(id) {
-    if (state.open[id]) {
-        if (state.open[id].dirty && !window.confirm('Kaydedilmemiş değişiklikler var. Kapatılsın mı?')) return;
-        delete state.open[id];
-        renderList();
-        return;
-    }
-    try {
-        const detail = await fetchSubmission(id);
-        state.open[id] = { detail, draft: JSON.parse(JSON.stringify(detail.parsed || {})), dirty: false };
-        renderList();
-    } catch (error) {
-        showNotification(error.message, 'error');
-    }
-}
-
-function renderEditor(id) {
-    const r = state.open[id];
-    const d = r.draft;
-    const locked = r.detail.status === 'approved' || r.detail.status === 'discarded';
-    const kind = d.kind || 'weekday';
-    let total = 0;
-
-    const headerCells = CELLS.map((cell, i) => {
-        const cls = [i === REGULAR_CELLS ? 'ts-ot-start' : '', i === LUNCH_AFTER ? 'ts-lunch-after' : ''].filter(Boolean).join(' ');
-        return `<th class="ts-hour ${cls}">${short(cell.start)}–${short(cell.end)}</th>`;
-    }).join('');
-
-    const rowsHtml = (d.rows || []).map((row) => {
-        const hours = hoursFor(row.cells || [], kind);
-        const rowTotal = Object.values(hours).reduce((a, b) => a + b, 0);
-        total += rowTotal;
-        const empty = row.kind === 'blank' && !row.job_no && !(row.cells || []).some(Boolean);
-        if (empty && locked) return '';
-        let jobCell;
-        if (row.kind === 'blank') {
-            jobCell = `
-                <input type="text" class="form-control form-control-sm" list="ts-job-datalist" data-job="${esc(row.key)}" data-sub="${id}"
-                       value="${esc(row.job_no || '')}" placeholder="İş emri no" ${locked ? 'disabled' : ''}>
-                <small>${esc(row.title || '')}${row.job_status === 'unknown' ? ' <span class="status-badge status-red">bulunamadı</span>' : ''}${row.job_status === 'corrected' ? ' <span class="status-badge status-blue">düzeltildi</span>' : ''}</small>`;
-        } else if (row.kind === 'general') {
-            jobCell = `<strong>GENEL (1000)</strong><small>${esc(row.title || '')}</small>`;
-        } else {
-            jobCell = `<strong>${esc(row.job_no)}</strong><small>${esc(row.title || '')}</small>`;
-        }
-        const cellsHtml = CELLS.map((cell, i) => {
-            const on = !!(row.cells || [])[i];
-            const classes = ['ts-cell', cell.hours < 1 ? 'half' : '', i >= REGULAR_CELLS ? 'ot' : '', on ? 'on' : ''].filter(Boolean).join(' ');
-            const tdClass = [i === REGULAR_CELLS ? 'ts-ot-start' : '', i === LUNCH_AFTER ? 'ts-lunch-after' : ''].filter(Boolean).join(' ');
-            return `<td class="${tdClass}"><button type="button" class="${classes}" data-cell="${i}" data-key="${esc(row.key)}" data-sub="${id}" title="${cell.start}–${cell.end}" ${locked ? 'disabled' : ''}>${on ? 'X' : ''}</button></td>`;
-        }).join('');
-        return `
-            <tr class="${row.kind === 'general' ? 'ts-general' : ''} ${empty ? 'ts-empty-row' : ''}">
-                <td class="ts-job-cell">${jobCell}</td>
-                ${cellsHtml}
-                <td class="ts-hours">${esc(hoursText(hours))}</td>
-            </tr>`;
-    }).join('');
-
-    const flagsHtml = (d.flags || []).length
-        ? d.flags.map((f) => `<div class="ts-flag level-${esc(f.level)}">${esc(f.text)}</div>`).join('')
-        : '';
-
-    return `
-        <div class="ts-editor">
-            <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
-                <span class="ts-code">${esc(d.code || '')}</span>
-                <span class="text-muted small">${esc(d.kind_label || '')}</span>
-                <div class="form-check mb-0">
-                    <input type="checkbox" class="form-check-input" id="ts-blank-${id}" data-blank="${id}" ${d.blank_day ? 'checked' : ''} ${locked ? 'disabled' : ''}>
-                    <label class="form-check-label" for="ts-blank-${id}">Bugün çalışmadım (izin / rapor)</label>
-                </div>
-                <div class="ms-auto d-flex gap-2">
-                    ${locked ? '' : `
-                        <button type="button" class="btn btn-outline-primary btn-sm" data-action="save" data-id="${id}" ${r.dirty ? '' : 'disabled'}><i class="fas fa-save me-1"></i>Kaydet</button>
-                        <button type="button" class="btn btn-success btn-sm" data-action="approve" data-id="${id}"><i class="fas fa-check me-1"></i>${r.dirty ? 'Kaydet ve onayla' : 'Onayla'}</button>`}
-                </div>
-            </div>
-            ${flagsHtml ? `<div class="mb-2">${flagsHtml}</div>` : ''}
-            <div class="table-responsive">
-                <table class="ts-rows">
-                    <thead><tr><th>İş emri</th>${headerCells}<th class="ts-hours">Saat</th></tr></thead>
-                    <tbody>${rowsHtml}</tbody>
-                    <tfoot><tr><td colspan="${CELLS.length + 1}" class="text-end text-muted small">N = normal, FM = fazla mesai, T = tatil · toplam</td><td class="ts-hours"><strong>${fmtHours(total)}</strong></td></tr></tfoot>
-                </table>
-            </div>
-            <div class="mt-2 d-flex gap-2 align-items-center">
-                <label class="small text-muted mb-0" for="ts-note-${id}">Not</label>
-                <input type="text" class="form-control form-control-sm" id="ts-note-${id}" data-note="${id}" value="${esc(d.note || '')}" ${locked ? 'disabled' : ''} style="max-width: 480px;">
-            </div>
-        </div>`;
-}
-
-function markDirty(id) {
-    if (state.open[id]) state.open[id].dirty = true;
-}
-
-function buildEdits(id) {
-    const d = state.open[id].draft;
-    return {
-        blank_day: !!d.blank_day,
-        note: d.note || '',
-        rows: (d.rows || []).map((row) => {
-            const item = { key: row.key, cells: (row.cells || []).map(Boolean) };
-            if (row.kind === 'blank') item.job_no = row.job_no || '';
-            return item;
-        }),
-    };
-}
-
-async function saveEditor(id, { silent = false } = {}) {
-    const r = state.open[id];
-    if (!r) return null;
-    try {
-        const detail = await updateSubmission(id, buildEdits(id));
-        r.detail = detail;
-        r.draft = JSON.parse(JSON.stringify(detail.parsed || {}));
-        r.dirty = false;
-        await refreshRow(id, { keepOpen: true });
-        if (!silent) showNotification('Kaydedildi', 'success');
-        return detail;
-    } catch (error) {
-        showNotification(error.message, 'error');
-        return null;
-    }
-}
-
-async function refreshRow(id, { keepOpen = false } = {}) {
-    const open = keepOpen ? state.open[id] : null;
-    try {
-        state.data = await fetchDailyStatus(state.date);
-    } catch (error) {
-        showNotification(error.message, 'error');
-        return;
-    }
-    state.open = open ? { [id]: open } : {};
-    renderCounts();
-    renderList();
-}
-
-// ---------------------------------------------------------------------------
-// Events
-// ---------------------------------------------------------------------------
-
 async function onListClick(ev) {
-    const cellBtn = ev.target.closest('[data-cell]');
-    if (cellBtn && !cellBtn.disabled) {
-        const r = state.open[cellBtn.dataset.sub];
-        const row = r && r.draft.rows.find((x) => x.key === cellBtn.dataset.key);
-        if (!row) return;
-        row.cells = row.cells || CELLS.map(() => false);
-        const i = Number(cellBtn.dataset.cell);
-        row.cells[i] = !row.cells[i];
-        markDirty(cellBtn.dataset.sub);
-        renderList();
-        return;
-    }
     const btn = ev.target.closest('[data-action]');
     if (!btn) return;
     const id = Number(btn.dataset.id);
-    const action = btn.dataset.action;
-    if (action === 'toggle') {
-        toggleEditor(id);
+    if (btn.dataset.action === 'edit') {
+        openEditor(id);
         return;
     }
-    if (action === 'save') {
-        await saveEditor(id);
-        return;
-    }
-    btn.disabled = true;
-    try {
-        if (action === 'approve') {
-            if (state.open[id] && state.open[id].dirty) {
-                const saved = await saveEditor(id, { silent: true });
-                if (!saved) return;
-            }
+    if (btn.dataset.action === 'approve') {
+        btn.disabled = true;
+        try {
             const res = await approveSubmission(id);
             showNotification(res.created_count ? `${res.created_count} zaman kaydı oluşturuldu` : 'Boş gün olarak onaylandı', 'success');
-            delete state.open[id];
-            await refreshRow(id);
-        } else if (action === 'send-back') {
-            const reason = window.prompt('Kaynakçıya iletilecek açıklama (telefonunda görünür):', '');
-            if (reason === null) { btn.disabled = false; return; }
-            await sendBackSubmission(id, reason);
-            showNotification('Giriş kaynakçıya geri gönderildi', 'success');
-            delete state.open[id];
-            await refreshRow(id);
-        }
-    } catch (error) {
-        showNotification(error.message, 'error');
-        btn.disabled = false;
-    }
-}
-
-function onListChange(ev) {
-    if (ev.target.dataset.blank !== undefined) {
-        const r = state.open[ev.target.dataset.blank];
-        if (!r) return;
-        r.draft.blank_day = ev.target.checked;
-        markDirty(ev.target.dataset.blank);
-        renderList();
-    } else if (ev.target.dataset.job !== undefined) {
-        const r = state.open[ev.target.dataset.sub];
-        const row = r && r.draft.rows.find((x) => x.key === ev.target.dataset.job);
-        if (!row) return;
-        row.job_no = ev.target.value.trim() || null;
-        row.job_status = row.job_no ? 'manual' : 'empty';
-        const option = state.jobOptions.find((j) => j.job_no === row.job_no);
-        row.title = option ? option.title : '';
-        markDirty(ev.target.dataset.sub);
-        renderList();
-    }
-}
-
-function onListInput(ev) {
-    if (ev.target.dataset.note !== undefined) {
-        const r = state.open[ev.target.dataset.note];
-        if (!r) return;
-        r.draft.note = ev.target.value;
-        if (!r.dirty) {
-            markDirty(ev.target.dataset.note);
-            const save = document.querySelector(`[data-action="save"][data-id="${ev.target.dataset.note}"]`);
-            if (save) save.disabled = false;
+            await loadDay();
+        } catch (error) {
+            showNotification(error.message, 'error');
+            btn.disabled = false;
         }
     }
 }
@@ -507,5 +350,314 @@ async function onApproveClean() {
     } catch (error) {
         showNotification(error.message, 'error');
         btn.disabled = false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Editor (the day as on the phone)
+// ---------------------------------------------------------------------------
+
+async function openEditor(id) {
+    try {
+        const detail = await fetchSubmission(id);
+        const parsed = detail.parsed || {};
+        const rows = parsed.rows || [];
+        state.edit = {
+            id,
+            status: detail.status,
+            locked: detail.status === 'approved' || detail.status === 'discarded',
+            name: detail.employee_name,
+            date: parsed.date || detail.date,
+            kind: parsed.kind || 'weekday',
+            kindLabel: parsed.kind_label || '',
+            code: parsed.code || detail.sheet_code,
+            offered: rows.filter((r) => r.kind === 'preprinted').map((r) => ({ job_no: r.job_no, title: r.title || '' })),
+            jobs: rows.filter((r) => (r.cells || []).some(Boolean) && r.job_no)
+                .map((r) => ({ job_no: r.job_no, title: r.title || '', cells: (r.cells || []).map(Boolean) })),
+            blankDay: !!parsed.blank_day,
+            note: parsed.note || '',
+            flags: (parsed.flags || []).filter((f) => f.level !== 'info'),
+            dirty: false,
+        };
+        buildModal();
+        renderEditor();
+        state.modal.show();
+    } catch (error) {
+        showNotification(error.message, 'error');
+    }
+}
+
+function buildModal() {
+    const e = state.edit;
+    const modal = new DisplayModal('ts-edit-modal-container', {
+        title: `${e.name} · ${formatTr(e.date)}`,
+        icon: 'fas fa-clipboard-check',
+        size: 'lg',
+        backdropStatic: true,          // the job dropdown's menu sits outside the dialog
+        showEditButton: false,
+    });
+    modal.addCustomSection({
+        id: 'ts-edit-section',
+        title: 'Günün puantajı',
+        icon: 'fas fa-fire',
+        iconColor: 'text-danger',
+        customContent: '<div class="small text-muted mb-2" id="ts-edit-subtitle"></div><div id="ts-edit-body"></div>',
+    });
+    modal.render();
+    modal.setFooterContent(`
+        <div class="d-flex w-100 align-items-center gap-3 flex-wrap">
+            <div>
+                <div class="small text-muted">Toplam</div>
+                <div class="fw-bold fs-5" id="ts-edit-total">0 saat</div>
+            </div>
+            <button type="button" class="btn btn-outline-danger btn-sm" id="ts-edit-send-back"><i class="fas fa-rotate-left me-1"></i>Kaynakçıya geri gönder</button>
+            <div class="ms-auto d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>Kapat</button>
+                <button type="button" class="btn btn-sm btn-outline-primary" id="ts-edit-save"><i class="fas fa-save me-1"></i>Kaydet</button>
+                <button type="button" class="btn btn-sm btn-success" id="ts-edit-approve"><i class="fas fa-check me-1"></i>Kaydet ve onayla</button>
+            </div>
+        </div>`);
+    modal.onCloseCallback(() => { state.edit = null; state.dropdown = null; loadDay(); });
+    const dialog = modal.modal.querySelector('.modal-dialog');
+    if (dialog) dialog.classList.add('modal-dialog-scrollable');
+    // No focus trap: the dropdown's search box lives in a portal outside the dialog.
+    bootstrap.Modal.getOrCreateInstance(modal.modal, { backdrop: 'static', focus: false });
+    state.modal = modal;
+}
+
+function cellOwner(idx, exceptJob) {
+    const row = state.edit.jobs.find((j) => j.job_no !== exceptJob && j.cells[idx]);
+    return row ? row.job_no : null;
+}
+
+function renderEditor() {
+    const e = state.edit;
+    if (!e || !$('ts-edit-body')) return;
+    $('ts-edit-subtitle').textContent = [e.kindLabel, e.code].filter(Boolean).join(' · ');
+
+    const flags = e.flags.length ? `<div class="mb-2">${e.flags.map((f) => `<div class="ts-flag level-${esc(f.level)}">${esc(f.text)}</div>`).join('')}</div>` : '';
+    const jobs = e.jobs.map((job) => renderJobCard(job)).join('');
+
+    $('ts-edit-body').innerHTML = `
+        <div class="${e.locked ? 'ts-edit-locked' : ''}">
+            ${flags}
+            <button type="button" class="ts-toggle ${e.blankDay ? 'on' : ''}" data-toggle-blank>
+                <span class="ts-check">${e.blankDay ? '<i class="fas fa-check"></i>' : ''}</span>
+                <span>Bugün çalışmadım <small class="text-muted">(izin / rapor / görevli değil)</small></span>
+            </button>
+            ${e.blankDay ? '' : `
+                ${e.jobs.length ? '<div class="ts-section-title">Günün işleri</div>' : ''}
+                ${jobs}
+                <div class="ts-section-title">${e.jobs.length ? 'İş ekle' : 'Hangi işte çalıştı?'}</div>
+                <div id="ts-edit-add"></div>
+            `}
+            <div class="ts-section-title">Not <small class="text-muted">(isteğe bağlı)</small></div>
+            <input type="text" class="form-control" id="ts-edit-note" maxlength="200" value="${esc(e.note)}" ${e.locked ? 'disabled' : ''}>
+        </div>`;
+    if (!e.blankDay) renderAddSection();
+
+    const total = e.blankDay ? 0 : e.jobs.reduce((sum, j) => sum + sumHours(hoursFor(j.cells, e.kind)), 0);
+    $('ts-edit-total').textContent = e.blankDay ? 'Çalışılmadı' : `${fmtHours(total)} saat`;
+    const canSend = e.blankDay || total > 0;
+    $('ts-edit-save').hidden = e.locked;
+    $('ts-edit-approve').hidden = e.locked;
+    $('ts-edit-send-back').hidden = e.locked;
+    $('ts-edit-save').disabled = !e.dirty || !canSend;
+    $('ts-edit-approve').disabled = !canSend;
+    $('ts-edit-approve').innerHTML = `<i class="fas fa-check me-1"></i>${e.dirty ? 'Kaydet ve onayla' : 'Onayla'}`;
+}
+
+function renderJobCard(job) {
+    const e = state.edit;
+    const grid = CELLS.map((cell, idx) => {
+        const on = job.cells[idx];
+        const owner = on ? null : cellOwner(idx, job.job_no);
+        const classes = ['ts-cell', idx >= REGULAR_CELLS ? 'ot' : '', cell.hours < 1 ? 'half' : '', on ? 'on' : '', owner ? 'used' : ''].filter(Boolean).join(' ');
+        const sub = owner ? jobLabel(owner) : (cell.hours < 1 ? '½ saat' : (idx >= REGULAR_CELLS ? 'mesai' : ''));
+        return `<button type="button" class="${classes}" data-job="${esc(job.job_no)}" data-cell="${idx}" title="${cell.start}–${cell.end}${owner ? ' · ' + esc(jobLabel(owner)) + ' işinde' : ''}">${short(cell.start)}–${short(cell.end)}<small>${esc(sub)}</small></button>`;
+    }).join('');
+    return `
+        <div class="ts-edit-job" data-row="${esc(job.job_no)}">
+            <div class="ts-edit-head">
+                <div class="ts-edit-no">${esc(jobLabel(job.job_no))}</div>
+                <div class="ts-edit-title" title="${esc(jobTitle(job.job_no, job.title))}">${esc(jobTitle(job.job_no, job.title))}</div>
+                <button type="button" class="ts-edit-remove" data-remove="${esc(job.job_no)}" aria-label="Kaldır"><i class="fas fa-xmark"></i></button>
+            </div>
+            <div class="ts-quick">
+                <button type="button" data-quick="day" data-job="${esc(job.job_no)}">Gündüz 07:30–17:00</button>
+                <button type="button" data-quick="evening" data-job="${esc(job.job_no)}">Akşam 17–21</button>
+                <button type="button" class="clear" data-quick="clear" data-job="${esc(job.job_no)}" title="Temizle"><i class="fas fa-eraser"></i></button>
+            </div>
+            <div class="ts-grid">${grid}</div>
+            <div class="ts-edit-hours">${esc(rangesText(job.cells) || '–')} <span class="text-muted">·</span> ${esc(hoursWords(hoursFor(job.cells, e.kind)))}</div>
+        </div>`;
+}
+
+function renderAddSection() {
+    const e = state.edit;
+    const box = $('ts-edit-add');
+    if (!e || !box) return;
+    const added = new Set(e.jobs.map((j) => j.job_no));
+    const offered = [...e.offered, { job_no: GENERAL, title: '' }].filter((j) => !added.has(j.job_no));
+    box.innerHTML = `
+        ${offered.length ? `<div class="ts-add-list">${offered.map((j) => `
+            <button type="button" class="ts-add" data-add="${esc(j.job_no)}" data-title="${esc(j.title || '')}">
+                <span class="ts-add-no">${esc(jobLabel(j.job_no))}</span>
+                <span class="ts-add-title">${esc(jobTitle(j.job_no, j.title))}</span>
+                <i class="fas fa-plus"></i>
+            </button>`).join('')}</div>` : ''}
+        <div id="ts-edit-dropdown"></div>`;
+    if (e.locked) return;
+    const container = $('ts-edit-dropdown');
+    state.dropdown = new ModernDropdown(container, {
+        placeholder: 'Listede yoksa iş emri ara ve ekle...',
+        searchable: true,
+        maxHeight: 260,
+        width: '100%',
+    });
+    state.dropdown.setItems(state.jobOptions.filter((o) => !added.has(o.value)).map((o) => ({ value: o.value, text: o.text })));
+    container.addEventListener('dropdown:select', (ev) => {
+        const value = ev.detail && ev.detail.value;
+        if (!value) return;
+        const option = state.jobOptions.find((o) => o.value === value);
+        addJob(value, option ? option.title : '');
+    });
+}
+
+function addJob(jobNo, title) {
+    const e = state.edit;
+    if (!e || e.jobs.some((j) => j.job_no === jobNo)) return;
+    e.jobs.push({ job_no: jobNo, title, cells: CELLS.map(() => false) });
+    e.dirty = true;
+    renderEditor();
+    const card = document.querySelector(`#ts-edit-body .ts-edit-job[data-row="${CSS.escape(jobNo)}"]`);
+    if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function onEditClick(ev) {
+    const e = state.edit;
+    if (!e || e.locked) return;
+    if (ev.target.closest('[data-toggle-blank]')) {
+        e.blankDay = !e.blankDay;
+        e.dirty = true;
+        renderEditor();
+        return;
+    }
+    const add = ev.target.closest('[data-add]');
+    if (add) {
+        addJob(add.dataset.add, add.dataset.title || '');
+        return;
+    }
+    const remove = ev.target.closest('[data-remove]');
+    if (remove) {
+        e.jobs = e.jobs.filter((j) => j.job_no !== remove.dataset.remove);
+        e.dirty = true;
+        renderEditor();
+        return;
+    }
+    const quick = ev.target.closest('[data-quick]');
+    if (quick) {
+        const job = e.jobs.find((j) => j.job_no === quick.dataset.job);
+        if (!job) return;
+        if (quick.dataset.quick === 'clear') {
+            job.cells = job.cells.map(() => false);
+        } else {
+            const range = quick.dataset.quick === 'day' ? [0, REGULAR_CELLS] : [REGULAR_CELLS, CELLS.length];
+            for (let i = range[0]; i < range[1]; i += 1) {
+                if (!cellOwner(i, job.job_no)) job.cells[i] = true;
+            }
+        }
+        e.dirty = true;
+        renderEditor();
+        return;
+    }
+    const cell = ev.target.closest('[data-cell]');
+    if (cell) {
+        const job = e.jobs.find((j) => j.job_no === cell.dataset.job);
+        if (!job) return;
+        const idx = Number(cell.dataset.cell);
+        if (job.cells[idx]) {
+            job.cells[idx] = false;
+        } else {
+            const owner = cellOwner(idx, job.job_no);
+            if (owner) {
+                const other = e.jobs.find((j) => j.job_no === owner);
+                if (other) other.cells[idx] = false;          // the hour moves to this job
+            }
+            job.cells[idx] = true;
+        }
+        e.dirty = true;
+        renderEditor();
+    }
+}
+
+function onEditInput(ev) {
+    if (!state.edit || ev.target.id !== 'ts-edit-note') return;
+    state.edit.note = ev.target.value;
+    if (!state.edit.dirty) {
+        state.edit.dirty = true;
+        $('ts-edit-save').disabled = false;
+        $('ts-edit-approve').innerHTML = '<i class="fas fa-check me-1"></i>Kaydet ve onayla';
+    }
+}
+
+function editPayload() {
+    const e = state.edit;
+    return {
+        jobs: e.blankDay ? [] : e.jobs.filter((j) => j.cells.some(Boolean)).map((j) => ({ job_no: j.job_no, cells: j.cells })),
+        blank_day: e.blankDay,
+        note: e.note || '',
+    };
+}
+
+async function saveEdit({ silent = false } = {}) {
+    const e = state.edit;
+    if (!e) return null;
+    try {
+        const detail = await updateSubmission(e.id, editPayload());
+        const parsed = detail.parsed || {};
+        e.status = detail.status;
+        e.flags = (parsed.flags || []).filter((f) => f.level !== 'info');
+        e.dirty = false;
+        renderEditor();
+        if (!silent) showNotification('Kaydedildi', 'success');
+        return detail;
+    } catch (error) {
+        showNotification(error.message, 'error');
+        return null;
+    }
+}
+
+async function onEditApprove() {
+    const e = state.edit;
+    if (!e) return;
+    const btn = $('ts-edit-approve');
+    btn.disabled = true;
+    try {
+        if (e.dirty) {
+            const saved = await saveEdit({ silent: true });
+            if (!saved) return;
+        }
+        const res = await approveSubmission(e.id);
+        showNotification(res.created_count ? `${res.created_count} zaman kaydı oluşturuldu` : 'Boş gün olarak onaylandı', 'success');
+        state.modal.hide();
+    } catch (error) {
+        showNotification(error.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+async function onEditSendBack() {
+    const e = state.edit;
+    if (!e) return;
+    const reason = window.prompt('Kaynakçıya iletilecek açıklama (telefonunda görünür):', '');
+    if (reason === null) return;
+    try {
+        await sendBackSubmission(e.id, reason);
+        showNotification('Giriş kaynakçıya geri gönderildi', 'success');
+        state.modal.hide();
+    } catch (error) {
+        showNotification(error.message, 'error');
     }
 }

@@ -748,6 +748,7 @@ export async function getJobOrderDropdown(includeAll = false, options = {}) {
         if (includeAll) params.append('all', 'true');
         if (options.rootOnly) params.append('root_only', 'true');
         if (options.withCustomer) params.append('with_customer', 'true');
+        if (options.weldingOnly) params.append('welding_only', 'true');
         const query = params.toString() ? `?${params}` : '';
         const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/${query}`);
 
