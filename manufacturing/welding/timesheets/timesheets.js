@@ -9,6 +9,7 @@ import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 import {
     fetchDailyStatus, fetchSubmission, updateSubmission, approveSubmission, sendBackSubmission, approveCleanSubmissions,
 } from '../../../apis/welding/timesheets.js';
+import { buildSubmissionEdits, padCells } from './editPayload.js';
 
 // Puantaj Onayı: one row per rostered welder for the chosen day; the editor
 // shows the day exactly as the welder sees it on the phone (job cards with
@@ -357,28 +358,45 @@ async function onApproveClean() {
 // Editor (the day as on the phone)
 // ---------------------------------------------------------------------------
 
+function rowsFromParsed(parsed) {
+    return (parsed.rows || []).map((r) => ({
+        key: r.key,
+        kind: r.kind,
+        job_no: r.job_no,
+        title: r.title || '',
+        cells: padCells(r.cells, CELLS.length),
+    }));
+}
+
+function hydrateEdit(edit, detail) {
+    const parsed = detail.parsed || {};
+    const rows = rowsFromParsed(parsed);
+    edit.status = detail.status;
+    edit.locked = detail.status === 'approved' || detail.status === 'discarded';
+    edit.kind = parsed.kind || edit.kind || 'weekday';
+    edit.kindLabel = parsed.kind_label || edit.kindLabel || '';
+    edit.code = parsed.code || detail.sheet_code || edit.code;
+    edit.sourceRows = rows.map((r) => ({ key: r.key, kind: r.kind, job_no: r.job_no, cells: r.cells.slice() }));
+    edit.offered = rows.filter((r) => r.kind === 'preprinted').map((r) => ({ job_no: r.job_no, title: r.title }));
+    edit.jobs = rows.filter((r) => r.cells.some(Boolean) && r.job_no)
+        .map((r) => ({ key: r.key, kind: r.kind, job_no: r.job_no, title: r.title, cells: r.cells.slice() }));
+    edit.blankDay = !!parsed.blank_day;
+    edit.note = parsed.note || '';
+    edit.flags = (parsed.flags || []).filter((f) => f.level !== 'info');
+    edit.dirty = false;
+}
+
 async function openEditor(id) {
     try {
         const detail = await fetchSubmission(id);
         const parsed = detail.parsed || {};
-        const rows = parsed.rows || [];
-        state.edit = {
+        const edit = {
             id,
-            status: detail.status,
-            locked: detail.status === 'approved' || detail.status === 'discarded',
             name: detail.employee_name,
             date: parsed.date || detail.date,
-            kind: parsed.kind || 'weekday',
-            kindLabel: parsed.kind_label || '',
-            code: parsed.code || detail.sheet_code,
-            offered: rows.filter((r) => r.kind === 'preprinted').map((r) => ({ job_no: r.job_no, title: r.title || '' })),
-            jobs: rows.filter((r) => (r.cells || []).some(Boolean) && r.job_no)
-                .map((r) => ({ job_no: r.job_no, title: r.title || '', cells: (r.cells || []).map(Boolean) })),
-            blankDay: !!parsed.blank_day,
-            note: parsed.note || '',
-            flags: (parsed.flags || []).filter((f) => f.level !== 'info'),
-            dirty: false,
         };
+        hydrateEdit(edit, detail);
+        state.edit = edit;
         buildModal();
         renderEditor();
         state.modal.show();
@@ -527,7 +545,7 @@ function renderAddSection() {
 function addJob(jobNo, title) {
     const e = state.edit;
     if (!e || e.jobs.some((j) => j.job_no === jobNo)) return;
-    e.jobs.push({ job_no: jobNo, title, cells: CELLS.map(() => false) });
+    e.jobs.push({ job_no: jobNo, title, cells: padCells([], CELLS.length) });
     e.dirty = true;
     renderEditor();
     const card = document.querySelector(`#ts-edit-body .ts-edit-job[data-row="${CSS.escape(jobNo)}"]`);
@@ -603,22 +621,26 @@ function onEditInput(ev) {
 
 function editPayload() {
     const e = state.edit;
-    return {
-        jobs: e.blankDay ? [] : e.jobs.filter((j) => j.cells.some(Boolean)).map((j) => ({ job_no: j.job_no, cells: j.cells })),
-        blank_day: e.blankDay,
-        note: e.note || '',
-    };
+    return buildSubmissionEdits({
+        blankDay: e.blankDay,
+        note: e.note,
+        jobs: e.jobs,
+        sourceRows: e.sourceRows,
+        cellCount: CELLS.length,
+    });
 }
 
 async function saveEdit({ silent = false } = {}) {
     const e = state.edit;
     if (!e) return null;
+    const payload = editPayload();
+    if (!payload.blank_day && !(payload.rows || []).some((row) => (row.cells || []).some(Boolean))) {
+        showNotification('Saat işaretleyin veya günü boş işaretleyin', 'error');
+        return null;
+    }
     try {
-        const detail = await updateSubmission(e.id, editPayload());
-        const parsed = detail.parsed || {};
-        e.status = detail.status;
-        e.flags = (parsed.flags || []).filter((f) => f.level !== 'info');
-        e.dirty = false;
+        const detail = await updateSubmission(e.id, payload);
+        hydrateEdit(e, detail);
         renderEditor();
         if (!silent) showNotification('Kaydedildi', 'success');
         return detail;
