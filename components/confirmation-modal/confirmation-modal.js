@@ -1,3 +1,5 @@
+import { createExclusiveRun } from '../../utils/exclusiveRun.js';
+
 /**
  * Reusable Confirmation Modal Component
  * Displays confirmation dialogs with customizable content and callbacks
@@ -23,6 +25,8 @@ export class ConfirmationModal {
         this.modal = null;
         this.onConfirm = null;
         this.onCancel = null;
+        // Double-click on Evet must not start a second write (receipts, deletes, …).
+        this._exclusiveConfirm = createExclusiveRun();
         
         this.init();
     }
@@ -91,19 +95,24 @@ export class ConfirmationModal {
     }
     
     async handleConfirm() {
-        if (this.onConfirm) {
-            const result = this.onConfirm();
-            // If onConfirm returns a promise, wait for it before hiding
-            if (result && typeof result.then === 'function') {
-                try {
-                    await result;
-                } catch (error) {
-                    // Don't hide on error - let the callback handle it
-                    return;
+        const confirmBtn = this.container.querySelector('#confirm-action-btn');
+        try {
+            const outcome = await this._exclusiveConfirm(async () => {
+                if (confirmBtn) confirmBtn.disabled = true;
+                if (this.onConfirm) {
+                    const result = this.onConfirm();
+                    // If onConfirm returns a promise, wait for it before hiding
+                    if (result && typeof result.then === 'function') {
+                        await result;
+                    }
                 }
-            }
+            });
+            if (!outcome.started) return;
+            this.hide();
+        } catch (error) {
+            // Don't hide on error - let the callback handle it
+            if (confirmBtn) confirmBtn.disabled = false;
         }
-        this.hide();
     }
     
     show(options = {}) {
@@ -148,9 +157,10 @@ export class ConfirmationModal {
             }
         }
         
-        if (options.confirmText) {
-            const confirmBtn = this.container.querySelector('#confirm-action-btn');
-            if (confirmBtn) {
+        const confirmBtn = this.container.querySelector('#confirm-action-btn');
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            if (options.confirmText) {
                 confirmBtn.innerHTML = `<i class="fas fa-check me-2"></i>${options.confirmText}`;
             }
         }
