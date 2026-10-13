@@ -228,6 +228,19 @@ function initFilters() {
             colSize: 2
         })
         .addDropdownFilter({
+            id: 'pull_state',
+            label: 'Depo Çekme',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'available', label: 'Depoda kalan var' },
+                { value: 'none', label: 'Hiç çekilmedi' },
+                { value: 'partial', label: 'Kısmen çekildi' },
+                { value: 'full', label: 'Tamamı çekildi' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
             id: 'from_inventory',
             label: 'Stoktan Karşılandı',
             options: [
@@ -285,14 +298,14 @@ function initTable() {
             { field: 'quantity_to_purchase', label: 'Satın Alınacak', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'item_unit', label: 'Birim', sortable: false, formatter: (v) => v || '-' },
             { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v, row) => renderDeliveryState(row) },
-            { field: 'pull_requests', label: 'Depo Çekme', sortable: false, formatter: (v) => renderPullRequestChips(v) },
+            { field: 'pull_requests', label: 'Depo Çekme', sortable: false, formatter: (v, row) => renderPullCell(row) },
             { field: 'is_critical', label: 'Kritik', sortable: false, formatter: (v, row) => renderCriticalToggle(v, row) },
             { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
         ],
         selectable: true,
-        // Only material that is physically in the warehouse can be pulled —
-        // fully received lines, or the received share of a partial delivery.
-        isRowSelectable: (row) => row.is_delivered === true || Number(row.delivered_quantity || 0) > 0,
+        // Only what is still physically in the warehouse can be pulled:
+        // received minus what earlier pulls (pending or handed over) claimed.
+        isRowSelectable: (row) => Number(row.quantity_available_to_pull || 0) > 0,
         onSelectionChange: (selectedRows) => {
             selectedItemsForPull = selectedRows;
             updateBulkActionBar();
@@ -352,6 +365,7 @@ async function loadItems() {
             is_critical: values.is_critical || undefined,
             from_inventory: values.from_inventory || undefined,
             is_available: values.is_available || undefined,
+            pull_state: values.pull_state || undefined,
             include_price: false,
             ordering: orderingFromFilter || currentOrdering,
             page: currentPage,
@@ -399,17 +413,38 @@ function renderPullStatusBadge(status, label) {
     return `<span class="status-badge ${classes[status] || 'status-grey'}" style="min-width: auto;">${escapeHtml(text)}</span>`;
 }
 
-// Depo Çekme column: one chip per (non-cancelled) pull request the line is
+// Depo Çekme column: the warehouse ledger of the line (received / pulled /
+// still available) above one chip per (non-cancelled) pull request the line is
 // on — the destination name, orange while pending, green once handed over.
 // Clicking a chip opens the request detail.
-function renderPullRequestChips(pulls) {
-    if (!Array.isArray(pulls) || pulls.length === 0) return '-';
+function renderPullRequestChips(pulls, unit = '') {
+    if (!Array.isArray(pulls) || pulls.length === 0) return '';
     return pulls.map((p) => {
         const cls = p.status === 'transferred' ? 'status-green' : 'status-orange';
-        const title = `${p.number} · ${p.status_label} · ${p.quantity}`;
+        const qty = `${fmtQty(p.quantity)} ${p.item_unit || unit || ''}`.trim();
+        const title = `${p.number} · ${p.status_label} · ${qty}`;
         return `<span class="status-badge ${cls} mt-pull-chip" data-pull-request-id="${p.id}"
-            style="min-width: auto; cursor: pointer;" title="${escapeHtml(title)}">${escapeHtml(p.destination_name || '-')}</span>`;
+            style="min-width: auto; cursor: pointer;" title="${escapeHtml(title)}">${escapeHtml(p.destination_name || '-')} · ${escapeHtml(qty)}</span>`;
     }).join(' ');
+}
+
+// "Depoda 900 · çekilen 600 · kalan 300 kg" — only once something arrived.
+function renderPullCell(row) {
+    if (!row) return '-';
+    const received = Number(row.delivered_quantity || 0);
+    const pulled = Number(row.pulled_quantity || 0);
+    const available = Number(row.quantity_available_to_pull ?? Math.max(received - pulled, 0));
+    const chips = renderPullRequestChips(row.pull_requests, row.item_unit);
+    if (received <= 0 && !chips) return '-';
+    const unit = escapeHtml(row.item_unit || '');
+    const ledgerCls = available > 0 ? 'text-success' : 'text-muted';
+    const ledger = received > 0
+        ? `<div class="small text-nowrap" title="Teslim alınan ${fmtQty(received)} · çekilen ${fmtQty(pulled)} · depoda kalan ${fmtQty(available)} ${unit}">
+               <span class="text-muted">Çekilen</span> ${fmtQty(pulled)} / ${fmtQty(received)}
+               · <span class="${ledgerCls}">kalan ${fmtQty(available)} ${unit}</span>
+           </div>`
+        : '';
+    return `${ledger}${chips ? `<div class="mt-1">${chips}</div>` : ''}`;
 }
 
 function renderDestinationCell(row) {
@@ -664,19 +699,26 @@ async function openCreatePullRequestModal() {
     const options = await ensureDestinationOptions();
     if (!options) return;
 
-    pullModalItems = selected.map((row) => ({
-        id: row.id,
-        item_code: row.item_code,
-        item_name: row.item_name,
-        job_no: row.job_no,
-        item_unit: row.item_unit,
-        // What is actually in the warehouse: the whole line, or the received
-        // share of a partial delivery (the backend refuses more than that).
-        on_hand: row.is_delivered ? row.quantity : row.delivered_quantity,
-        partial: isPartiallyDelivered(row),
-        planned: row.quantity,
-        quantity: (row.is_delivered ? row.quantity : row.delivered_quantity) ?? ''
-    }));
+    pullModalItems = selected.map((row) => {
+        // What can still leave the warehouse: received minus what earlier
+        // pulls claimed (the backend refuses more than that).
+        const received = Number(row.delivered_quantity || 0);
+        const pulled = Number(row.pulled_quantity || 0);
+        const available = Number(row.quantity_available_to_pull ?? Math.max(received - pulled, 0));
+        return {
+            id: row.id,
+            item_code: row.item_code,
+            item_name: row.item_name,
+            job_no: row.job_no,
+            item_unit: row.item_unit,
+            received,
+            pulled,
+            available,
+            partial: isPartiallyDelivered(row),
+            planned: row.quantity,
+            quantity: available || ''
+        };
+    });
 
     createModal.clearAll();
 
@@ -731,11 +773,13 @@ async function openCreatePullRequestModal() {
             name: `item_qty_${item.id}`,
             label: `${item.item_code || '-'} — ${item.item_name || '-'}`,
             help: `İş No: ${item.job_no || '-'} · Birim: ${item.item_unit || '-'}`
-                + (item.partial ? ` · Depoda: ${fmtQty(item.on_hand)} / ${fmtQty(item.planned)} (kısmi teslim)` : ''),
+                + ` · Teslim alınan ${fmtQty(item.received)}${item.partial ? ` / ${fmtQty(item.planned)} (kısmi teslim)` : ''}`
+                + (item.pulled > 0 ? ` · Daha önce çekilen ${fmtQty(item.pulled)}` : '')
+                + ` · Çekilebilir ${fmtQty(item.available)}`,
             type: 'number',
             value: item.quantity,
             min: 0.01,
-            max: item.on_hand || undefined,
+            max: item.available || undefined,
             step: 0.01,
             required: true,
             colSize: 12
