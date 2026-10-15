@@ -1,7 +1,6 @@
 import { guardRoute } from '../authService.js';
 import { initNavbar } from '../components/navbar.js';
 import { MenuComponent } from '../components/menu/menu.js';
-import { hasRouteAccess } from '../apis/accessControl.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {

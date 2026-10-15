@@ -109,6 +109,7 @@ export async function fetchAndStorePermissions() {
         cachedPermissions = perms;
         cachedGrantedPageRoutes = null; // recompute lazily
         localStorage.setItem('permissions', JSON.stringify(perms));
+        localStorage.setItem(PERMISSIONS_FETCHED_AT_KEY, String(Date.now()));
         return perms;
     } catch (error) {
         console.error('Failed to fetch permissions from API:', error);
@@ -206,11 +207,112 @@ export async function ensurePermissions() {
     }
 }
 
+// --- Background permission refresh -----------------------------------------
+//
+// The payload used to be fetched at login only, and rotating refresh tokens
+// keep a session alive for weeks, so a page granted later (by a migration or
+// via IT > Yetkiler) stayed invisible -- no menu entry, no landing card, route
+// guard refusing -- until the user signed out and back in. The cache is now
+// refreshed in the background: on every page load (initNavbar kicks it off,
+// throttled so rapid navigation does not refetch each time), after every
+// successful token refresh (a busy page gets one every ~5 minutes), and when
+// another tab stores a fresh payload. The first paint still comes from the
+// cache; PERMISSIONS_REFRESHED_EVENT tells listeners when the grants changed so
+// they can re-render. A failed refetch (5xx, network blip) leaves the old
+// cache in place: an outage is not a logout, and nothing is revoked on a guess.
+export const PERMISSIONS_REFRESHED_EVENT = 'permissions:refreshed';
+const PERMISSIONS_FETCHED_AT_KEY = 'permissionsFetchedAt';
+const PERMISSIONS_MAX_AGE_MS = 60 * 1000;
+
+let permissionsRefreshInFlight = null;
+
+// Everything the UI derives from the payload, order-independent: which
+// codenames are granted and the "Page: /route/" names the menus are built from.
+function permissionSignature(perms) {
+    if (!perms || typeof perms !== 'object') return '';
+    const granted = [];
+    for (const [codename, v] of Object.entries(perms)) {
+        if (v === true) {
+            granted.push(codename);
+        } else if (v && typeof v === 'object' && v.granted === true) {
+            granted.push(`${codename}=${v.name || ''}`);
+        }
+    }
+    return granted.sort().join('|');
+}
+
+function permissionsFetchedAt() {
+    const raw = Number(localStorage.getItem(PERMISSIONS_FETCHED_AT_KEY));
+    return Number.isFinite(raw) ? raw : 0;
+}
+
+function announcePermissionsRefreshed(detail) {
+    try {
+        window.dispatchEvent(new CustomEvent(PERMISSIONS_REFRESHED_EVENT, { detail }));
+    } catch (error) {
+        console.warn('Permission refresh listeners failed:', error);
+    }
+}
+
+/**
+ * Refetch the signed-in user's permissions in the background and swap the
+ * cache when they arrive. Never throws and never signs the user out on its
+ * own; a failed fetch leaves the cached payload untouched.
+ *
+ * @param {object} [options]
+ * @param {number} [options.maxAgeMs] skip the fetch while the cache is younger
+ *   than this (default one minute); 0 forces it.
+ * @returns {Promise<{refreshed: boolean, changed: boolean}>} `refreshed` is
+ *   false when the fetch was skipped or failed; `changed` says whether the
+ *   granted set differs from what this page was rendered with.
+ */
+export function refreshPermissions({ maxAgeMs = PERMISSIONS_MAX_AGE_MS } = {}) {
+    if (!isLoggedIn()) return Promise.resolve({ refreshed: false, changed: false });
+    if (permissionsRefreshInFlight) return permissionsRefreshInFlight;
+    if (localStorage.getItem('permissions') && Date.now() - permissionsFetchedAt() < maxAgeMs) {
+        return Promise.resolve({ refreshed: false, changed: false });
+    }
+
+    permissionsRefreshInFlight = (async () => {
+        const before = permissionSignature(getPermissions());
+        const perms = await fetchAndStorePermissions(); // null on failure: old cache stays
+        if (!perms) return { refreshed: false, changed: false };
+        const changed = permissionSignature(perms) !== before;
+        announcePermissionsRefreshed({ changed, source: 'fetch' });
+        return { refreshed: true, changed };
+    })().finally(() => {
+        permissionsRefreshInFlight = null;
+    });
+    return permissionsRefreshInFlight;
+}
+
+// Fire-and-forget variant for code paths that must not wait on it (the token
+// refresh). The in-flight guard above makes it a no-op when the permissions
+// fetch is the very request that triggered the token refresh.
+function schedulePermissionsRefresh() {
+    setTimeout(() => {
+        refreshPermissions({ maxAgeMs: 0 }).catch(() => {});
+    }, 0);
+}
+
+// Another tab stored a fresh payload (or dropped it on logout / a new login):
+// this tab's in-memory copy is stale, so re-read it and let the menus follow.
+// The storage event only fires in the tabs that did not do the write.
+window.addEventListener('storage', (event) => {
+    if (event.key !== 'permissions') return;
+    const before = permissionSignature(cachedPermissions || {});
+    cachedPermissions = null;
+    cachedGrantedPageRoutes = null;
+    const changed = permissionSignature(getPermissions()) !== before;
+    announcePermissionsRefreshed({ changed, source: 'storage' });
+});
+
 // Helper function to clear cached user data (useful for logout)
 export function clearCachedUser() {
     localStorage.removeItem('user');
     localStorage.removeItem('userTeam');
     localStorage.removeItem('permissions');
+    localStorage.removeItem(PERMISSIONS_FETCHED_AT_KEY);
     cachedPermissions = null;
     cachedGrantedPageRoutes = null;
     inFlightUserPromise = null;
@@ -661,6 +763,10 @@ async function requestNewAccessToken() {
     // The backend hands back a new refresh token on every refresh; keeping it is
     // what lets an active session outlive the refresh token's 7-day lifetime.
     setTokens(data.access, data.refresh || sentRefresh);
+    // A renewed session is the natural moment to pick up permission changes
+    // made since the last fetch; it never delays the request that needed the
+    // token.
+    schedulePermissionsRefresh();
     return data.access;
 }
 

@@ -1,7 +1,6 @@
 import { guardRoute } from '../authService.js';
 import { initNavbar } from '../components/navbar.js';
 import { MenuComponent } from '../components/menu/menu.js';
-import { hasRouteAccess } from '../apis/accessControl.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -63,15 +62,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
     // The İSG and Tartışmalarım cards are open to everyone, so this page can be
-    // reached by users who hold none of the other Genel pages: only show what
-    // they can open.
-    const cards = allCards.filter(card => hasRouteAccess(card.link));
-
-    // Initialize menu component
+    // reached by users who hold none of the other Genel pages; MenuComponent
+    // only renders the cards they can open.
     const menuComponent = new MenuComponent('menu-container', {
         title: 'Genel Modülü',
         subtitle: 'Şirket geneli yönetim işlemlerinizi gerçekleştirin',
-        cards
+        cards: allCards
     });
     
     // Render the menu

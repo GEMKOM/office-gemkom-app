@@ -1,3 +1,11 @@
+import { hasRouteAccess } from '../../apis/accessControl.js';
+
+// authService dispatches this on window after it swaps in a freshly fetched
+// permission payload (detail.changed says whether the granted set differs).
+// Spelled out here rather than imported so the menu keeps working on a build
+// where authService does not announce refreshes: the listener is then inert.
+const PERMISSIONS_REFRESHED_EVENT = 'permissions:refreshed';
+
 export class MenuComponent {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
@@ -7,6 +15,7 @@ export class MenuComponent {
             cards: [],
             ...options
         };
+        this.permissionsListener = null;
     }
 
     render() {
@@ -18,14 +27,51 @@ export class MenuComponent {
 
         const html = this.generateHTML();
         container.innerHTML = html;
-        
+
         // After rendering, calculate and apply consistent heights
         this.applyConsistentHeights();
+
+        this.followPermissionRefreshes();
+    }
+
+    // Landing pages pass their whole card list; only what the signed-in user
+    // may actually open is rendered. Otherwise a card such as Ödeme Listeleri
+    // sits on /procurement for a user without the page grant, and the click
+    // ends in the route guard's "erişim yetkiniz bulunmamaktadır" alert.
+    // Same rule the home page applied by hand: a card whose own link is not
+    // granted goes, ungranted feature links go, a card with no link of its own
+    // (a shell for its features) goes once nothing is left under it, and a
+    // link-less card without features is informational and always stays.
+    // hasRouteAccess lets admins through on its own.
+    visibleCards() {
+        const cards = this.options.cards || [];
+        return cards.flatMap(card => {
+            if (card.link && !hasRouteAccess(card.link)) return [];
+            const features = card.features || [];
+            const visibleFeatures = features.filter(feature => !feature.link || hasRouteAccess(feature.link));
+            if (!card.link && features.length > 0 && visibleFeatures.length === 0) return [];
+            return [{ ...card, features: visibleFeatures }];
+        });
+    }
+
+    // The first paint comes from the cached permission payload; when
+    // authService fetches a newer one in the background and the grants
+    // changed, the cards are rebuilt so a page granted since the user's last
+    // login shows up without a reload. Registered once per instance.
+    followPermissionRefreshes() {
+        if (this.permissionsListener) return;
+        this.permissionsListener = (event) => {
+            if (event.detail && event.detail.changed === false) return;
+            if (!document.getElementById(this.containerId)) return;
+            this.render();
+        };
+        window.addEventListener(PERMISSIONS_REFRESHED_EVENT, this.permissionsListener);
     }
 
     generateHTML() {
-        const { title, subtitle, cards } = this.options;
-        
+        const { title, subtitle } = this.options;
+        const cards = this.visibleCards();
+
         // Calculate column classes based on number of cards
         const columnClasses = this.getColumnClasses(cards.length);
 

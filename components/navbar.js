@@ -1,4 +1,4 @@
-import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES, isImpersonating, stopImpersonation } from '../authService.js';
+import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES, isImpersonating, stopImpersonation, refreshPermissions, PERMISSIONS_REFRESHED_EVENT } from '../authService.js';
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
 import { filterNavigationByAccess, hasRouteAccess } from '../apis/accessControl.js';
@@ -300,6 +300,32 @@ export function initNavbar() {
       return;
     }
 
+    // The menu is painted from the cached permission payload straight away;
+    // authService refreshes that payload in the background (page load, token
+    // refresh, another tab) and announces when the grants changed. Only the
+    // navigation list is rebuilt then: the bell, the assistant widget and the
+    // PDKS indicator keep their state. A change that lands before the first
+    // render has wired its handlers is applied right after it has.
+    let menusWired = false;
+    let pendingMenuRerender = false;
+
+    function rerenderNavigationItems() {
+        const navList = navbarContainer.querySelector('#main-nav-items');
+        if (!navList) return;
+        const filteredNavigation = filterNavigationByAccess(NAVIGATION_STRUCTURE);
+        navList.innerHTML = renderNavigationWithMore(filteredNavigation, window.location.pathname);
+        wireMenus(navList);
+    }
+
+    window.addEventListener(PERMISSIONS_REFRESHED_EVENT, (event) => {
+        if (!event.detail?.changed) return;
+        if (!menusWired) {
+            pendingMenuRerender = true;
+            return;
+        }
+        rerenderNavigationItems();
+    });
+
     async function renderNavbar() {
       let user = null;
       try {
@@ -362,7 +388,7 @@ export function initNavbar() {
                 </button>
                 
                 <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0" id="main-nav-items">
                         ${navigationItems}
                     </ul>
                     
@@ -678,12 +704,90 @@ export function initNavbar() {
 
         refreshAttendanceIndicator();
         
+        // Add click outside handler to close all dropdowns
+        document.addEventListener('click', (e) => {
+            const isDropdownClick = e.target.closest('.nav-item.dropdown') || 
+                                  e.target.closest('.dropdown-menu') ||
+                                  e.target.closest('.dropend');
+            
+            if (!isDropdownClick) {
+                // Close all dropdowns when clicking outside
+                navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle').forEach(toggle => {
+                    const dropdownMenu = toggle.nextElementSibling;
+                    if (dropdownMenu) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+                
+                // Close all nested submenus
+                navbarContainer.querySelectorAll('.dropend .dropdown-toggle').forEach(toggle => {
+                    const dropdownMenu = toggle.nextElementSibling;
+                    if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+            }
+        });
+        
+        // Add event listeners
+      const editProfileBtn = document.getElementById('edit-profile-btn');
+      if (editProfileBtn) {
+          editProfileBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              createUserEditModal(user);
+          });
+      }
+      
+      const teamInfoBtn = document.getElementById('team-info-btn');
+      if (teamInfoBtn) {
+          teamInfoBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              const departmentCode = user?.position?.department_code || user?.department_code || null;
+              alert(`Departmanınız: ${departmentCode || 'Atanmamış'}`);
+          });
+      }
+
+      const logoutButton = document.getElementById('logout-button');
+      if (logoutButton) {
+          logoutButton.addEventListener('click', (e) => {
+              e.preventDefault();
+              logout();
+          });
+      }
+
+      const stopImpersonationBtn = document.getElementById('stop-impersonation-btn');
+      if (stopImpersonationBtn) {
+          stopImpersonationBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              try {
+                  await stopImpersonation();
+              } catch (err) {
+                  console.error('Failed to stop impersonation:', err);
+                  alert('Impersonation sonlandırılamadı.');
+              }
+          });
+      }
+      
+        wireMenus(navbarContainer);
+        menusWired = true;
+        if (pendingMenuRerender) {
+            pendingMenuRerender = false;
+            rerenderNavigationItems();
+        }
+    }
+
+    // Hover and click behaviour for every menu entry under `root`. The first
+    // render wires the whole navbar; a permission refresh that changed the
+    // grants rebuilds only the navigation list and wires that subtree again.
+    // "Close the others" always looks the live DOM up through navbarContainer,
+    // so entries from the two generations still close each other.
+    function wireMenus(root) {
         // Add hover functionality for main navbar dropdowns (top level only)
-        const mainDropdownToggles = navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle');
+        const mainDropdownToggles = root.querySelectorAll('.nav-item.dropdown .dropdown-toggle');
         
         // Function to close all dropdowns except the specified one
         function closeOtherDropdowns(exceptElement) {
-            mainDropdownToggles.forEach(toggle => {
+            navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle').forEach(toggle => {
                 const navItem = toggle.closest('.nav-item');
                 const dropdownMenu = toggle.nextElementSibling;
                 
@@ -784,11 +888,11 @@ export function initNavbar() {
         });
         
         // Initialize nested dropdowns (dropend) with hover functionality
-        const dropendElements = navbarContainer.querySelectorAll('.dropend .dropdown-toggle');
+        const dropendElements = root.querySelectorAll('.dropend .dropdown-toggle');
         
         // Function to close all nested submenus except the specified one
         function closeOtherSubmenus(exceptElement) {
-            dropendElements.forEach(toggle => {
+            navbarContainer.querySelectorAll('.dropend .dropdown-toggle').forEach(toggle => {
                 const dropendItem = toggle.closest('.dropend');
                 const dropdownMenu = toggle.nextElementSibling;
                 
@@ -863,72 +967,8 @@ export function initNavbar() {
             }
                 });
         
-        // Add click outside handler to close all dropdowns
-        document.addEventListener('click', (e) => {
-            const isDropdownClick = e.target.closest('.nav-item.dropdown') || 
-                                  e.target.closest('.dropdown-menu') ||
-                                  e.target.closest('.dropend');
-            
-            if (!isDropdownClick) {
-                // Close all dropdowns when clicking outside
-                mainDropdownToggles.forEach(toggle => {
-                    const dropdownMenu = toggle.nextElementSibling;
-                    if (dropdownMenu) {
-                        dropdownMenu.classList.remove('show');
-                    }
-                });
-                
-                // Close all nested submenus
-                dropendElements.forEach(toggle => {
-                    const dropdownMenu = toggle.nextElementSibling;
-                    if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
-                        dropdownMenu.classList.remove('show');
-                    }
-                });
-            }
-        });
-        
-        // Add event listeners
-      const editProfileBtn = document.getElementById('edit-profile-btn');
-      if (editProfileBtn) {
-          editProfileBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              createUserEditModal(user);
-          });
-      }
-      
-      const teamInfoBtn = document.getElementById('team-info-btn');
-      if (teamInfoBtn) {
-          teamInfoBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              const departmentCode = user?.position?.department_code || user?.department_code || null;
-              alert(`Departmanınız: ${departmentCode || 'Atanmamış'}`);
-          });
-      }
-
-      const logoutButton = document.getElementById('logout-button');
-      if (logoutButton) {
-          logoutButton.addEventListener('click', (e) => {
-              e.preventDefault();
-              logout();
-          });
-      }
-
-      const stopImpersonationBtn = document.getElementById('stop-impersonation-btn');
-      if (stopImpersonationBtn) {
-          stopImpersonationBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              try {
-                  await stopImpersonation();
-              } catch (err) {
-                  console.error('Failed to stop impersonation:', err);
-                  alert('Impersonation sonlandırılamadı.');
-              }
-          });
-      }
-      
-                     // Add click handlers for navigation
-        const navLinks = navbarContainer.querySelectorAll('.nav-link, .dropdown-item');
+        // Add click handlers for navigation
+        const navLinks = root.querySelectorAll('.nav-link, .dropdown-item');
         navLinks.forEach(link => {
             link.addEventListener('click', (e) => {
                 const path = link.getAttribute('data-path');
@@ -1179,7 +1219,10 @@ export function initNavbar() {
             });
         });
     }
-    
+
+    // Kicked off before the render so the request is already out while the
+    // cached menu paints; never awaited, and a failure changes nothing.
+    refreshPermissions().catch(() => {});
     renderNavbar();
 }
 

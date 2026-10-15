@@ -2,7 +2,6 @@ import { guardRoute } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
 import { MenuComponent } from '../../components/menu/menu.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
-import { hasRouteAccess } from '../../apis/accessControl.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -16,9 +15,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await initNavbar();
 
-    // İşçilik Fiyatı is restricted to the planning manager, and MenuComponent
-    // does not filter by access on its own — an unfiltered card would just walk
-    // people into a 403.
+    // İşçilik Fiyatı is restricted to the planning manager; MenuComponent only
+    // renders the cards the user can open, so nobody is walked into a 403.
     const cards = [
         {
             title: 'Genel Bakış',
@@ -66,7 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const menuComponent = new MenuComponent('menu-container', {
         title: 'Taşeron Modülü',
         subtitle: 'Taşeron yönetimi, hakedişler ve düzeltmeler',
-        cards: cards.filter(card => hasRouteAccess(card.link))
+        cards
     });
 
     // Render the menu

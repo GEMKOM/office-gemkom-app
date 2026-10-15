@@ -2,7 +2,6 @@ import { guardRoute, isAdmin, getUser, navigateByTeamIfFreshLogin } from './auth
 import { initNavbar } from './components/navbar.js';
 import { MenuComponent } from './components/menu/menu.js';
 import { initRouteProtection, withRouteProtection } from './apis/routeProtection.js';
-import { hasRouteAccess } from './apis/accessControl.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -372,29 +371,11 @@ async function handleLandingPage() {
                 }
             ];
 
-        // Filter cards and their features based on user access
-        const filteredCards = allCards.map(card => {
-            // Check if user has access to the main card route
-            if (!hasRouteAccess(card.link)) {
-                return null; // Skip this card entirely
-            }
-            
-            // Filter features within the card
-            const filteredFeatures = card.features ? card.features.filter(feature => 
-                hasRouteAccess(feature.link)
-            ) : [];
-            
-            return {
-                ...card,
-                features: filteredFeatures
-            };
-        }).filter(card => card !== null); // Remove null cards
-
-        // Initialize menu component with filtered cards
+        // MenuComponent drops the cards and feature links the user cannot open.
         const menuComponent = new MenuComponent('menu-container', {
             title: 'Çalışma Alanları',
             subtitle: 'Takımınıza göre ilgili alanı seçin ve verimliliğinizi artırın',
-            cards: filteredCards
+            cards: allCards
         });
 
         // Render the menu
