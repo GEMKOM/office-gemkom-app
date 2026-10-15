@@ -6,6 +6,19 @@ import { hasRouteAccess } from '../../apis/accessControl.js';
 // where authService does not announce refreshes: the listener is then inert.
 const PERMISSIONS_REFRESHED_EVENT = 'permissions:refreshed';
 
+// Page grants are absolute routes ("/manufacturing/cnc-cutting/reports/finished-timers/"),
+// but some landing pages write their card links relative to the page
+// ("finished-timers/"). Resolve against the current URL before asking
+// hasRouteAccess, or every such card fails the check for non-admins. The
+// rendered href keeps the link exactly as the page wrote it.
+function resolveLink(link) {
+    try {
+        return new URL(link, window.location.href).pathname;
+    } catch (_) {
+        return link;
+    }
+}
+
 export class MenuComponent {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
@@ -46,9 +59,9 @@ export class MenuComponent {
     visibleCards() {
         const cards = this.options.cards || [];
         return cards.flatMap(card => {
-            if (card.link && !hasRouteAccess(card.link)) return [];
+            if (card.link && !hasRouteAccess(resolveLink(card.link))) return [];
             const features = card.features || [];
-            const visibleFeatures = features.filter(feature => !feature.link || hasRouteAccess(feature.link));
+            const visibleFeatures = features.filter(feature => !feature.link || hasRouteAccess(resolveLink(feature.link)));
             if (!card.link && features.length > 0 && visibleFeatures.length === 0) return [];
             return [{ ...card, features: visibleFeatures }];
         });
