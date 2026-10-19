@@ -51,6 +51,7 @@ let filters = null;
 let modal = null;
 let modalTables = [];
 let rows = [];
+let sortState = { field: null, dir: 'asc' };   // TableComponent only reports header clicks (onSort); the page sorts
 let familiesLoaded = false;
 let units = null;           // GET /estimator/parameters/ payload
 let unitsBusy = false;
@@ -148,11 +149,16 @@ function initTable() {
             { field: 'factor', label: 'Faktör', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num', exportType: 'number',
               formatter: (v, row) => {
                   const text = v == null ? '—' : fmt(v, 2);
-                  if (!row.in_house_exclusion) return `<span class="ref-factor">${text}</span>`;
+                  // The hours guard (Saat kaydı) lives here: it rarely fires, and when it does it greys the factor.
+                  const hours = `Kayıtlı kaynak saati: ${fmt(row.recorded_welding_h_total, 0)} h (${RELIABILITY_TEXT[row.hours_reliability] || row.hours_reliability || '—'})`;
+                  if (!row.in_house_exclusion) return `<span class="ref-factor" title="${escapeHtml(hours)}">${text}</span>`;
                   const why = exclusionLabel(row.in_house_exclusion);
-                  return `<span class="ref-out" title="İç imalat kalibrasyonunda kullanılmaz: ${escapeHtml(why)}">${text}<i class="fas fa-ban ref-out-icon"></i></span>`;
+                  return `<span class="ref-out" title="${escapeHtml(`İç imalat kalibrasyonunda kullanılmaz: ${why}
+${hours}`)}">${text}<i class="fas fa-ban ref-out-icon"></i></span>`;
               } },
-            { field: 'hours_reliability', label: 'Saat kaydı', sortable: true, formatter: (v) => badge(REFERENCE_RELIABILITY, v) },
+            // Model confidence of the weld list this page reviews; sort ascending to see the shaky lists first.
+            { field: 'weld_schedule_confidence', label: 'Güven', sortable: true, type: 'number', exportType: 'number',
+              formatter: (v, row) => confidenceBadge(v, row.weld_schedule_version ? `Kaynak listesi v${row.weld_schedule_version}: modelin kendi güven puanı` : '') },
             { field: 'review_status', label: 'İnceleme', sortable: true, formatter: (v, row) => {
                 const b = REFERENCE_REVIEW[v] || REFERENCE_REVIEW.unreviewed;
                 const tip = [row.review_note, row.reviewed_by_name && `${row.reviewed_by_name} · ${formatDateTime(row.reviewed_at)}`].filter(Boolean).join('\n');
@@ -175,7 +181,37 @@ function initTable() {
         exportFilename: 'tahmin-referanslari',
         emptyMessage: 'Filtreye uyan referans yok',
         onRowClick: (row) => openWeldList(row),
+        onSort: (field, dir) => { sortState = { field, dir }; showRows(); },
     });
+}
+
+const RELIABILITY_TEXT = { ok: 'güvenilir', unreliable: 'güvenilmez, ≤ 10 h', none: 'kayıt yok' };
+
+/** Weld-list confidence (0-1) as a percentage badge: < 0,4 orange, 0,4-0,5 grey, >= 0,5 green. */
+function confidenceBadge(value, title = '') {
+    if (value == null || value === '') return '<span class="text-muted">—</span>';
+    const v = Number(value);
+    const cls = v < 0.4 ? 'status-orange' : v < 0.5 ? 'status-grey' : 'status-green';
+    return `<span class="status-badge ${cls}"${title ? ` title="${escapeHtml(title)}"` : ''}>%${fmt(v * 100, 0)}</span>`;
+}
+
+/** `rows` in the clicked column's order; empty values last either way, Turkish collation for text. */
+function sortedRows() {
+    const { field, dir } = sortState;
+    if (!field) return rows;
+    const sign = dir === 'desc' ? -1 : 1;
+    const empty = (v) => v === null || v === undefined || v === '';
+    return rows.slice().sort((a, b) => {
+        const x = a[field];
+        const y = b[field];
+        if (empty(x) || empty(y)) return empty(x) - empty(y);
+        if (typeof x === 'number' && typeof y === 'number') return sign * (x - y);
+        return sign * String(x).localeCompare(String(y), 'tr', { numeric: true });
+    });
+}
+
+function showRows() {
+    table.updateData(sortedRows(), rows.length);
 }
 
 function exclusionLabel(reason) {
@@ -206,7 +242,7 @@ async function loadRows() {
             status: joinValue(f['status-filter']),
         });
         rows = data.results || [];
-        table.updateData(rows, rows.length);
+        showRows();
         if (!familiesLoaded && Array.isArray(data.families)) {
             // Only the families that have profiles, in the label order.
             const known = Object.keys(REFERENCE_FAMILY).filter((k) => data.families.includes(k));
@@ -339,7 +375,7 @@ async function openWeldList(row) {
     body.innerHTML = `
         <div class="ref-weld-meta">
             <span>Kaynak listesi <strong>v${ws.version}</strong>${ws.versions?.length > 1 ? ` (sürümler: ${ws.versions.join(', ')})` : ''}</span>
-            <span>Güven <span class="status-badge ${confidence >= 0.7 ? 'status-green' : confidence >= 0.5 ? 'status-orange' : 'status-red'}">${fmt(confidence * 100, 0)}%</span></span>
+            <span>Güven ${confidenceBadge(confidence)}</span>
             <span><strong>${ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? 0}</strong> parça</span>
             <span><strong>${ws.bends_per_unit ?? 0}</strong> büküm</span>
             <span>Birim kütle <strong>${fmt(ws.unit_mass_kg, 0)} kg</strong>${massNotes.length ? ' <span class="text-muted">(kütle notuna bakın)</span>' : ''}</span>
@@ -437,7 +473,7 @@ async function onModalClick(event) {
         const updated = await reviewReferenceProfile(btn.dataset.jobNo, reviewStatus, note);
         const i = rows.findIndex((r) => r.job_no === updated.job_no);
         if (i >= 0) rows[i] = updated;
-        table.updateData(rows, rows.length);
+        showRows();
         modal.hide();
         showNotification(`${updated.job_no}: ${REFERENCE_REVIEW[updated.review_status]?.label || updated.review_status}`, 'success');
         loadSummary();
