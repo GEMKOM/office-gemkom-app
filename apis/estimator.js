@@ -84,3 +84,64 @@ export const REVIEW_LABELS = {
     accept: { label: 'Kabul', badge: 'status-green' },
     correct: { label: 'Düzeltme', badge: 'status-orange' },
 };
+
+// ------------------------------------------------------------
+// Referanslar (reference library): profiles, review, unit times, method.
+// ------------------------------------------------------------
+
+/** Every reference profile with its factor under the current unit times:
+ *  {count, results, families}. Filters (comma-separated allowed): family,
+ *  route, reliability, review_status, status (job status), search. */
+export function listReferenceProfiles(filters = {}) {
+    return request(`${BASE}/reference-profiles/${query(filters)}`, undefined, 'Referanslar yüklenemedi');
+}
+
+/** Factor distribution per family over the profiles that calibrate in-house estimates, plus counts. */
+export function getReferenceSummary() {
+    return request(`${BASE}/reference-profiles/summary/`, undefined, 'Özet yüklenemedi');
+}
+
+/** reviewStatus: verified | excluded (note required) | unreviewed. Returns the updated row. */
+export function reviewReferenceProfile(jobNo, reviewStatus, note = '') {
+    return request(`${BASE}/reference-profiles/${encodeURIComponent(jobNo)}/review/`,
+        { method: 'POST', body: JSON.stringify({ review_status: reviewStatus, note }) }, 'İnceleme kaydedilemedi');
+}
+
+/** {parameters: [{key, label, unit, group, value, default, is_default, ...}], groups, changes}. */
+export function getEstimatorParameters() {
+    return request(`${BASE}/parameters/`, undefined, 'Parametreler yüklenemedi');
+}
+
+/** values: {key: number}. A 400 carries `data.errors` = {key: message}. */
+export function updateEstimatorParameters(values, note = '') {
+    return request(`${BASE}/parameters/`, { method: 'PUT', body: JSON.stringify({ values, note }) }, 'Parametreler kaydedilemedi');
+}
+
+/** {markdown}: the "Nasıl çalışır?" text, shared by the Referanslar page and the Tahmin tab. */
+export function getEstimatorMethod() {
+    return request(`${BASE}/method/`, undefined, 'Açıklama yüklenemedi');
+}
+
+export const REFERENCE_REVIEW = {
+    unreviewed: { label: 'İncelenmedi', badge: 'status-grey' },
+    verified: { label: 'Doğrulandı', badge: 'status-green' },
+    excluded: { label: 'Hariç', badge: 'status-red' },
+};
+
+export const REFERENCE_ROUTE = {
+    in_house: { label: 'İç imalat', badge: 'status-blue' },
+    subcontract: { label: 'Taşeron', badge: 'status-purple' },
+    mixed: { label: 'Karma', badge: 'status-orange' },
+    unknown: { label: 'Bilinmiyor', badge: 'status-grey' },
+};
+
+export const REFERENCE_RELIABILITY = {
+    ok: { label: 'Güvenilir', badge: 'status-green' },
+    unreliable: { label: '≤ 10 h', badge: 'status-orange' },
+    none: { label: 'Kayıt yok', badge: 'status-grey' },
+};
+
+export const REFERENCE_FAMILY = {
+    copper_panel: 'Bakır panel', ebt: 'EBT', roof: 'Çatı', panel: 'Panel', duct: 'Kanal / dirsek',
+    ladle: 'Pota', shell: 'Gövde', spare_parts: 'Yedek parça', other: 'Diğer',
+};

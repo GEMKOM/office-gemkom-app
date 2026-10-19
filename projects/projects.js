@@ -23,6 +23,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             icon: 'fas fa-calculator',
             iconColor: 'primary',
             link: '/projects/estimates'
+        },
+        {
+            title: 'Referanslar',
+            description: 'Tahminde kullanılan bitmiş işler: kaynak listesi, faktör, inceleme ve birim süreler.',
+            icon: 'fas fa-book-open',
+            iconColor: 'primary',
+            link: '/projects/references'
         }
     ];
 

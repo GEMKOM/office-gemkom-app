@@ -16,6 +16,7 @@ import { TableComponent } from '../table/table.js';
 import { renderMarkdown } from '../../utils/markdownLite.js';
 import { escapeHtml } from '../../utils/text.js';
 import { showNotification } from '../notification/notification.js';
+import { loadMethodHtml } from '../estimator-method/estimator-method.js';
 import {
     ESTIMATE_STATUS, REVIEW_LABELS, createEstimate, getEstimate, getLatestEstimate, getWeldSchedule, reviewEstimate,
 } from '../../apis/estimator.js';
@@ -30,12 +31,12 @@ export const COST_ROW_LABELS = {
     shipping: 'Sevkiyat', machine_rental: 'Makine Kirası', other: 'Diğer', total: 'TOPLAM', eur_per_kg: '€/kg',
 };
 
-const JOINT_TYPE_LABELS = {
+export const JOINT_TYPE_LABELS = {
     pipe_butt: 'Boru alın', pipe_to_cap: 'Boru–kep', pipe_to_elbow: 'Boru–dirsek', pipe_to_plate: 'Boru–sac',
     plate_fillet: 'Sac köşe', plate_butt: 'Sac alın', stitch_fillet: 'Aralıklı köşe', pin_to_plate: 'Pim–sac',
     nozzle_coupling: 'Nozul/manşon', other: 'Diğer',
 };
-const MATERIAL_LABELS = { copper: 'Bakır', carbon_steel: 'Çelik', stainless: 'Paslanmaz', copper_to_steel: 'Cu–çelik', other: 'Diğer' };
+export const MATERIAL_LABELS = { copper: 'Bakır', carbon_steel: 'Çelik', stainless: 'Paslanmaz', copper_to_steel: 'Cu–çelik', other: 'Diğer' };
 
 let mountCounter = 0;
 
@@ -58,6 +59,8 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         busy: false,           // our own create / review request in flight
         noteOpen: false,
         weldOpen: readFlag(WELD_OPEN_KEY),
+        methodOpen: false,
+        methodHtml: null,      // "Nasıl çalışır?" (GET /estimator/method/), loaded on first open
         pollTimer: null,
         pollCount: 0,
         destroyed: false,
@@ -330,6 +333,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
                     ${questionList('Satın almadan', q.procurement)}
                 </div>`));
         }
+        sections.push(methodSection());
         return `<div class="est-report-body">${sections.join('')}</div>`;
     }
 
@@ -363,6 +367,28 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         const open = view.weldOpen ? `<div id="${uid}-weld"></div>
             ${(ws.open_questions || []).length ? `<div class="mt-2 small text-muted"><strong>Çizimin söylemediği:</strong> ${ws.open_questions.map(escapeHtml).join(' · ')}</div>` : ''}` : '';
         return section(`Kaynak listesi (1 adet)`, summary + open, toggle);
+    }
+
+    function methodSection() {
+        const toggle = `<button type="button" class="btn btn-link btn-sm" data-est-action="method-toggle">${view.methodOpen ? 'Gizle' : 'Göster'}</button>`;
+        let html = '<span class="small text-muted">Kaynak listesi, birim süreler, referans seçimi ve faktör.</span>';
+        if (view.methodOpen) {
+            html = view.methodHtml
+                ? `<div class="est-markdown">${view.methodHtml}</div>`
+                : '<span class="small text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Yükleniyor…</span>';
+        }
+        return section('Nasıl çalışır?', html, toggle);
+    }
+
+    function toggleMethod() {
+        view.methodOpen = !view.methodOpen;
+        render();
+        if (view.methodOpen && !view.methodHtml) {
+            loadMethodHtml()
+                .then((html) => { view.methodHtml = html; })
+                .catch((error) => { view.methodHtml = `<span class="text-danger">${escapeHtml(error.message || 'Açıklama yüklenemedi')}</span>`; })
+                .finally(() => { if (!view.destroyed) render(); });
+        }
     }
 
     function foot(r) {
@@ -434,6 +460,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         else if (action === 'note') { view.noteOpen = true; render(); }
         else if (action === 'note-cancel') { view.noteOpen = false; render(); }
         else if (action === 'print') printReport(view.report, view.weldSchedule);
+        else if (action === 'method-toggle') toggleMethod();
         else if (action === 'weld-toggle') { view.weldOpen = !view.weldOpen; writeFlag(WELD_OPEN_KEY, view.weldOpen); render(); }
     }
 
@@ -499,7 +526,7 @@ export function costTableRows(costTable) {
     }));
 }
 
-function weldColumns() {
+export function weldColumns() {
     return [
         { field: 'joint_id', label: 'No', width: '60px', sortable: true },
         { field: 'description', label: 'Birleşim', sortable: false, formatter: (v) => escapeHtml(v || '') },

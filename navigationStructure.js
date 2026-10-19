@@ -133,6 +133,13 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Tahminler',
                 icon: 'fas fa-calculator',
                 children: {}
+            },
+            // Tahmin referansları (reference profiles, review, unit times).
+            // Page permission: users/0067.
+            '/projects/references': {
+                label: 'Referanslar',
+                icon: 'fas fa-book-open',
+                children: {}
             }
         }
     },
