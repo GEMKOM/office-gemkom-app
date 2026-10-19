@@ -114,6 +114,57 @@ body > .modern-dropdown-portal .modern-dropdown-menu-portal { z-index: 1080 !imp
 .ref-weld-wrap .table td { vertical-align: middle; }
 .ref-weld-wrap td.est-num, .ref-weld-wrap th.est-num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* --- weld list: versions and hand edits (Düzenle) ------------------------------------ */
+.ref-weld-h { font-size: 0.82rem; font-weight: 700; }
+.ref-weld-old, .ref-weld-edited, .ref-weld-editing {
+    font-size: 0.8rem;
+    border-radius: 8px;
+    padding: 0.35rem 0.6rem;
+    margin-bottom: 0.45rem;
+}
+.ref-weld-old { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }
+.ref-weld-edited { background: #faf5ff; border: 1px solid #e9d5ff; color: #4c1d95; }
+.ref-weld-editing { background: #f5f3ff; border: 1px solid #c4b5fd; color: #3b1a8a; }
+.ref-history-wrap { overflow-x: auto; }
+.ref-history-table { font-size: 0.78rem; margin-bottom: 0; }
+.ref-history-table td { vertical-align: middle; }
+.ref-history-table tr.is-current td { background: #faf8ff; }
+.ref-history-table .status-badge { min-width: 0; font-size: 0.66rem; }
+.ref-history-table .ref-history-note { min-width: 12rem; color: #374151; }
+
+.ref-eg-head { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; align-items: flex-end; margin-bottom: 0.6rem; }
+.ref-eg-field { display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.75rem; color: #4b5563; margin: 0; }
+.ref-eg-field > span { font-weight: 600; }
+.ref-eg-field input.ref-eg-num { width: 7rem; }
+.ref-eg-wide { flex: 1 1 100%; }
+.ref-eg-massgroup { display: flex; flex-direction: column; gap: 0.15rem; }
+.ref-eg-grouplabel { font-size: 0.75rem; font-weight: 600; color: #4b5563; }
+.ref-eg-massgroup > div { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.ref-eg-mass > span { font-weight: 500; }
+.ref-eg-mass input.ref-eg-num { width: 5.4rem; }
+.ref-eg-num { text-align: right; font-variant-numeric: tabular-nums; }
+.ref-eg-wrap { overflow-x: auto; }
+.ref-eg-table { font-size: 0.8rem; margin-bottom: 0.4rem; min-width: 860px; }
+.ref-eg-table th { font-size: 0.74rem; white-space: nowrap; }
+.ref-eg-table td { vertical-align: top; padding: 0.3rem 0.25rem; }
+.ref-eg-table td.est-num, .ref-eg-table th.est-num { text-align: right; font-variant-numeric: tabular-nums; }
+.ref-eg-table td[data-cell] { padding-top: 0.55rem; }
+.ref-eg-table .form-control-sm, .ref-eg-table .form-select-sm { font-size: 0.78rem; padding-top: 0.15rem; padding-bottom: 0.15rem; }
+.ref-eg-table textarea { resize: vertical; min-height: 2.6rem; }
+.ref-eg-table .btn-sm { padding: 0.15rem 0.4rem; }
+.ref-eg-totals {
+    margin-top: 0.6rem;
+    font-size: 0.82rem;
+    background: #fafbfc;
+    border: 1px solid #eef0f3;
+    border-radius: 8px;
+    padding: 0.45rem 0.7rem;
+    display: grid;
+    gap: 0.2rem;
+}
+.ref-eg-tlabel { color: #6b7280; }
+.ref-eg-delta { font-variant-numeric: tabular-nums; font-size: 0.76rem; color: #6d28d9; font-weight: 600; }
+
 @media (max-width: 576px) {
     .ref-units-groups { grid-template-columns: 1fr; }
     .ref-units-table td.ref-units-label { width: auto; }

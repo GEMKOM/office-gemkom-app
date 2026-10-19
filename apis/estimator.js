@@ -64,12 +64,29 @@ export function reviewEstimate(id, decision, note = '') {
     return request(`${BASE}/estimates/${id}/review/`, { method: 'POST', body: JSON.stringify({ decision, note }) }, 'İnceleme kaydedilemedi');
 }
 
-/** The latest weld list of a job order (or of an offer's customer drawings). 404 when none. */
-export function getWeldSchedule({ jobNo, offerId }) {
+/** The latest (or, for a job order, the given `version`) weld list of a job order
+ *  or of an offer's customer drawings, with `version_history` (who edited each
+ *  version, why, from which one). 404 when none. */
+export function getWeldSchedule({ jobNo, offerId, version }) {
     const url = jobNo
-        ? `${BASE}/weld-schedules/${encodeURIComponent(jobNo)}/`
+        ? `${BASE}/weld-schedules/${encodeURIComponent(jobNo)}/${query({ version })}`
         : `${BASE}/weld-schedules/offer/${offerId}/`;
     return request(url, undefined, 'Kaynak listesi yüklenemedi');
+}
+
+/** Save a hand-corrected weld list as the job's next version.
+ *  body: {base_version, part_name, unit_mass_kg, mass_basis, mass_by_material, pieces_per_unit,
+ *  bends_per_unit, joints[], design_features[], processes[], open_questions[], note}.
+ *  Returns {weld_schedule, profile}; a 400 carries `data.errors` = {'joints.3.count_per_unit': msg, note: msg, ...}. */
+export function saveWeldScheduleVersion(jobNo, body) {
+    return request(`${BASE}/weld-schedules/${encodeURIComponent(jobNo)}/versions/`,
+        { method: 'POST', body: JSON.stringify(body) }, 'Kaynak listesi kaydedilemedi');
+}
+
+/** Same body, nothing saved, note optional: {totals, bottom_up, joints}. */
+export function previewWeldScheduleVersion(jobNo, body) {
+    return request(`${BASE}/weld-schedules/${encodeURIComponent(jobNo)}/versions/preview/`,
+        { method: 'POST', body: JSON.stringify(body) }, 'Önizleme hesaplanamadı');
 }
 
 export const ESTIMATE_STATUS = {

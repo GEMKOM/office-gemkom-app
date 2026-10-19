@@ -4,7 +4,8 @@
  * Every job order with a weld list (reference profile): its weld content,
  * recorded welding hours, the bottom-up hours under the CURRENT unit times
  * and the factor (recorded ÷ bottom-up). The estimating engineer:
- *  - checks a job's weld list (row click / list button),
+ *  - checks a job's weld list (row click / list button) and corrects it
+ *    (Düzenle: a hand-edited copy saved as the next version, with a note),
  *  - marks it Doğrulandı, or Hariç (with a note: out of every estimate),
  *  - reads the factor distribution per family (summary cards),
  *  - edits the unit times and cost parameters (Birim süreler panel),
@@ -24,10 +25,12 @@ import { showNotification } from '../../components/notification/notification.js'
 import { escapeHtml } from '../../utils/text.js';
 import {
     REFERENCE_FAMILY, REFERENCE_RELIABILITY, REFERENCE_REVIEW, REFERENCE_ROUTE,
-    getEstimatorParameters, getReferenceSummary, getWeldSchedule, listReferenceProfiles,
-    reviewReferenceProfile, updateEstimatorParameters,
+    getEstimatorParameters, getReferenceSummary, getWeldSchedule, listReferenceProfiles, previewWeldScheduleVersion,
+    reviewReferenceProfile, saveWeldScheduleVersion, updateEstimatorParameters,
 } from '../../apis/estimator.js';
-import { JOINT_TYPE_LABELS, MATERIAL_LABELS, fmt, processLabel } from '../../components/estimate-report/estimate-report.js';
+import {
+    JOINT_TYPE_LABELS, MATERIAL_LABELS, PROCESS_LABELS, fmt, processLabel,
+} from '../../components/estimate-report/estimate-report.js';
 import { openEstimatorMethod } from '../../components/estimator-method/estimator-method.js';
 
 const JOB_STATUS = {
@@ -315,12 +318,23 @@ function initModal() {
         showEditButton: false,
         backdropStatic: false,
     });
-    document.getElementById('reference-modal-container').addEventListener('click', onModalClick);
+    const container = document.getElementById('reference-modal-container');
+    container.addEventListener('click', onModalClick);
+    container.addEventListener('input', onWeldInput);
+    container.addEventListener('change', onWeldInput);
+    // Unsaved weld-list edits: ask before Esc / backdrop / Kapat throws them away. Capture phase,
+    // so DisplayModal's own hide handler (which makes the dialog inert) does not run when kept open.
+    modal.modal.addEventListener('hide.bs.modal', (event) => {
+        if (confirmDiscard()) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+    }, true);
 }
 
 function resetModal(title, icon) {
-    modalTables.forEach((t) => { try { t.destroy?.(); } catch { /* gone */ } });
-    modalTables = [];
+    if (weld) clearTimeout(weld.previewTimer);
+    weld = null;
+    destroyModalTables();
     modal.clearData();
     modal.setTitle(title);
     modal.setIcon(icon);
@@ -344,49 +358,140 @@ function factsHtml(row) {
     </div>`;
 }
 
-async function openWeldList(row) {
+// ---------------------------------------------------------------- weld-list modal: view, versions, Düzenle
+//
+// A wrong count, length or mass is corrected here and saved as the job's NEXT
+// version (POST weld-schedules/{job}/versions/): the extracted versions stay,
+// the reference profile and the factor follow the new one. Older versions open
+// read-only from the history under the table.
+
+// Codes of the extraction schema (estimator weld_extraction.JointSchema); the backend refuses anything else.
+const JOINT_MATERIAL_CODES = ['carbon_steel', 'stainless', 'copper', 'copper_to_steel'];
+const MASS_MATERIAL_CODES = ['carbon_steel', 'stainless', 'copper', 'copper_to_steel', 'other'];
+const PREVIEW_DELAY_MS = 350;
+
+// {row, ws, editing, draft, dirty, errors, preview, previewSeq, previewTimer, saving}; null when the modal shows something else.
+let weld = null;
+
+async function openWeldList(row, version = null) {
     resetModal(`${row.job_no} — ${row.title || ''}`, 'fas fa-list-ol');
-    modal.addCustomSection({ customContent: `${factsHtml(row)}<div id="ref-weld-body" class="ref-weld-wrap"><div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Kaynak listesi yükleniyor…</div></div>` });
+    weld = { row, ws: null, editing: false };
+    modal.addCustomSection({ customContent: `<div id="ref-weld-facts">${factsHtml(row)}</div><div id="ref-weld-body" class="ref-weld-wrap"><div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Kaynak listesi yükleniyor…</div></div>` });
     modal.render();
     modal.show();
+    await loadWeldVersion(version);
+}
+
+async function loadWeldVersion(version) {
+    const state = weld;
+    if (!state) return;
     let ws;
     try {
-        ws = await getWeldSchedule({ jobNo: row.job_no });
+        ws = await getWeldSchedule({ jobNo: state.row.job_no, version });
     } catch (error) {
+        if (state !== weld) return;
         const body = document.getElementById('ref-weld-body');
         if (body) body.innerHTML = `<div class="text-danger small">${escapeHtml(error.message || 'Kaynak listesi yüklenemedi')}</div>`;
         return;
     }
-    const body = document.getElementById('ref-weld-body');
-    if (!body) return;
-    const bu = ws.bottom_up || {};
-    const lines = bu.lines || [];
-    const joints = (ws.joints || []).map((j, i) => ({ ...j, unit_h: lines[i]?.unit_h, unit_label: lines[i]?.unit, hours: lines[i]?.hours }));
-    const nonWelding = (bu.non_welding_lines || []).map((l) => `<tr><td>${escapeHtml(NON_WELDING_LABELS[l.step] || l.step)}</td><td class="text-end">${fmt(l.qty, l.step === 'fitup_hydrotest_cleaning' ? 1 : 0)}</td><td>${escapeHtml(UNIT_LABELS[l.unit] || l.unit)}</td><td class="text-end">${fmt(l.unit_h, 4)}</td><td class="text-end">${fmt(l.hours, 2)}</td></tr>`).join('');
-    const confidence = Number(ws.confidence || 0);
+    if (state !== weld) return;   // the modal moved on (another row, a review) while loading
+    state.ws = ws;
+    state.editing = false;
+    renderWeldView();
+}
+
+function destroyModalTables() {
+    modalTables.forEach((t) => { try { t.destroy?.(); } catch { /* gone */ } });
+    modalTables = [];
+}
+
+function weldNotesHtml(ws) {
     // A multi-group extraction joins the groups' mass notes with " | ": one paragraph each.
     const massNotes = String(ws.mass_basis || '').split(/\s+\|\s+/).map((s) => s.trim()).filter(Boolean);
     const list = (items) => `<ul class="ref-note-list">${items.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`;
-    const notes = [
+    return [
         massNotes.length ? `<details class="ref-note"><summary>Kütle notu (${massNotes.length})</summary>${list(massNotes)}</details>` : '',
         (ws.open_questions || []).length ? `<details class="ref-note"><summary>Çizimin söylemediği (${ws.open_questions.length})</summary>${list(ws.open_questions)}</details>` : '',
         (ws.design_features || []).length ? `<details class="ref-note"><summary>Tasarım özellikleri (${ws.design_features.length})</summary>${list(ws.design_features)}</details>` : '',
     ].join('');
-    body.innerHTML = `
-        <div class="ref-weld-meta">
-            <span>Kaynak listesi <strong>v${ws.version}</strong>${ws.versions?.length > 1 ? ` (sürümler: ${ws.versions.join(', ')})` : ''}</span>
-            <span>Güven ${confidenceBadge(confidence)}</span>
-            <span><strong>${ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? 0}</strong> parça</span>
-            <span><strong>${ws.bends_per_unit ?? 0}</strong> büküm</span>
-            <span>Birim kütle <strong>${fmt(ws.unit_mass_kg, 0)} kg</strong>${massNotes.length ? ' <span class="text-muted">(kütle notuna bakın)</span>' : ''}</span>
-        </div>
-        ${notes}
-        <div id="ref-weld-table"></div>
-        <h6 class="mt-3 mb-1" style="font-size:.82rem;font-weight:700">Kaynak dışı (1 adet)</h6>
+}
+
+function nonWeldingHtml(bu) {
+    const lines = (bu.non_welding_lines || []).map((l) => `<tr><td>${escapeHtml(NON_WELDING_LABELS[l.step] || l.step)}</td><td class="text-end">${fmt(l.qty, l.step === 'fitup_hydrotest_cleaning' ? 1 : 0)}</td><td>${escapeHtml(UNIT_LABELS[l.unit] || l.unit)}</td><td class="text-end">${fmt(l.unit_h, 4)}</td><td class="text-end">${fmt(l.hours, 2)}</td></tr>`).join('');
+    return `<h6 class="mt-3 mb-1 ref-weld-h">Kaynak dışı (1 adet)</h6>
         <table class="table table-sm ref-bu-table"><thead><tr><th>Adım</th><th class="text-end">Miktar</th><th>Birim</th><th class="text-end">Birim süre</th><th class="text-end">Saat</th></tr></thead>
-            <tbody>${nonWelding}</tbody>
+            <tbody>${lines}</tbody>
             <tfoot><tr><th colspan="4">Kaynak ${fmt(bu.welding_h, 1)} h + kaynak dışı ${fmt(bu.non_welding_h, 1)} h = hesaplanan saat (1 adet)</th><th class="text-end">${fmt(bu.total_h, 1)} h</th></tr></tfoot>
         </table>`;
+}
+
+/** "düzenleyen Onat Çalık · 19.10.2026 14:05: kep sayısı 7→9" for a hand-edited version. */
+function editedByText(v) {
+    if (!v.edited) return '';
+    const who = v.edited_by_name || 'bilinmeyen kullanıcı';
+    return `düzenleyen ${who} · ${formatDateTime(v.created_at)}${v.based_on_version ? ` (v${v.based_on_version} üzerinden)` : ''}`;
+}
+
+function versionHistoryHtml(ws) {
+    const history = ws.version_history || [];
+    if (!history.length) return '';
+    const latest = history[history.length - 1].version;
+    const rowsHtml = history.slice().reverse().map((v) => {
+        const current = v.version === ws.version;
+        const source = v.edited
+            ? `<span class="status-badge status-purple">Elle</span> ${escapeHtml(v.edited_by_name || '—')}${v.based_on_version ? ` <span class="text-muted">(v${v.based_on_version} üzerinden)</span>` : ''}`
+            : `<span class="status-badge status-grey">Model</span>`;
+        const action = current
+            ? '<span class="text-muted small">gösteriliyor</span>'
+            : `<button type="button" class="btn btn-link btn-sm p-0" data-weld-action="version" data-version="${v.version}">Görüntüle</button>`;
+        return `<tr class="${current ? 'is-current' : ''}">
+            <td><strong>v${v.version}</strong>${v.version === latest ? ' <span class="status-badge status-blue">son</span>' : ''}</td>
+            <td class="text-nowrap">${formatDateTime(v.created_at)}</td>
+            <td>${source}</td>
+            <td class="ref-history-note">${escapeHtml(v.edit_note || '')}</td>
+            <td class="text-end">${fmt(v.joints_total, 0)}</td>
+            <td class="text-end">${fmt(v.weld_m_total, 1)}</td>
+            <td class="text-end">${fmt(v.unit_mass_kg, 0)}</td>
+            <td class="text-end">${action}</td>
+        </tr>`;
+    }).join('');
+    return `<h6 class="mt-3 mb-1 ref-weld-h">Sürüm geçmişi (${history.length})</h6>
+        <div class="ref-history-wrap"><table class="table table-sm ref-history-table">
+            <thead><tr><th>Sürüm</th><th>Tarih</th><th>Kaynak</th><th>Not</th><th class="text-end">Birleşim</th><th class="text-end">Kaynak m</th><th class="text-end">Birim kg</th><th></th></tr></thead>
+            <tbody>${rowsHtml}</tbody>
+        </table></div>`;
+}
+
+function renderWeldView() {
+    const body = document.getElementById('ref-weld-body');
+    if (!body || !weld?.ws) return;
+    destroyModalTables();
+    const ws = weld.ws;
+    const bu = ws.bottom_up || {};
+    const lines = bu.lines || [];
+    const joints = (ws.joints || []).map((j, i) => ({ ...j, unit_h: lines[i]?.unit_h, unit_label: lines[i]?.unit, hours: lines[i]?.hours }));
+    const latest = (ws.version_history || []).slice(-1)[0]?.version ?? ws.version;
+    const old = ws.is_latest === false
+        ? `<div class="ref-weld-old"><i class="fas fa-clock-rotate-left me-1"></i>Eski sürüm <strong>v${ws.version}</strong> gösteriliyor (salt okunur). Faktör ve tahminler son sürümü (v${latest}) kullanır.
+            <button type="button" class="btn btn-link btn-sm p-0 ms-1" data-weld-action="version" data-version="">Son sürüme dön</button></div>`
+        : '';
+    const edited = ws.edited
+        ? `<div class="ref-weld-edited"><i class="fas fa-pen me-1"></i>v${ws.version} elle düzeltildi: ${escapeHtml(editedByText(ws))}${ws.edit_note ? ` — <strong>${escapeHtml(ws.edit_note)}</strong>` : ''}</div>`
+        : '';
+    body.innerHTML = `
+        ${old}
+        <div class="ref-weld-meta">
+            <span>Kaynak listesi <strong>v${ws.version}</strong></span>
+            <span>Güven ${confidenceBadge(Number(ws.confidence || 0))}</span>
+            <span><strong>${ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? 0}</strong> parça</span>
+            <span><strong>${ws.bends_per_unit ?? 0}</strong> büküm</span>
+            <span>Birim kütle <strong>${fmt(ws.unit_mass_kg, 0)} kg</strong>${ws.mass_basis ? ' <span class="text-muted">(kütle notuna bakın)</span>' : ''}</span>
+        </div>
+        ${edited}
+        ${weldNotesHtml(ws)}
+        <div id="ref-weld-table"></div>
+        ${nonWeldingHtml(bu)}
+        ${versionHistoryHtml(ws)}`;
     // 8 columns: size / process / NDT / evidence sit under the description, so
     // the table fits an 800 px dialog without a horizontal scroll.
     const detail = (j) => [
@@ -417,6 +522,408 @@ async function openWeldList(row) {
         skeleton: false,
         emptyMessage: 'Birleşim yok',
     }));
+    modal.setFooterContent(`
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>Kapat</button>
+        <button type="button" class="btn btn-sm btn-primary" data-weld-action="edit" title="Düzeltilmiş liste yeni bir sürüm olarak kaydedilir; bu sürüm değişmez">
+            <i class="fas fa-pen me-1"></i>${ws.is_latest === false ? `v${ws.version} üzerinden düzenle` : 'Düzenle'}
+        </button>`);
+}
+
+// ------------------------------------------------ edit mode
+
+/** Numbers stay as the typed text in the draft (decimal comma allowed); `draftPayload` parses them. */
+function inputText(v) {
+    return v == null ? '' : String(v).replace('.', ',');
+}
+
+function massByMaterialDict(value) {
+    if (Array.isArray(value)) return Object.fromEntries(value.filter((x) => x && x.material).map((x) => [x.material, x.kg]));
+    return { ...(value || {}) };
+}
+
+function startWeldEdit() {
+    const ws = weld.ws;
+    const mass = massByMaterialDict(ws.mass_by_material_kg ?? ws.mass_by_material);
+    weld.draft = {
+        base_version: ws.version,
+        part_name: ws.part_name || '',
+        unit_mass_kg: inputText(ws.unit_mass_kg),
+        mass_basis: ws.mass_basis || '',
+        mass_by_material: Object.fromEntries(MASS_MATERIAL_CODES.map((m) => [m, mass[m] ? inputText(mass[m]) : ''])),
+        pieces_per_unit: inputText(ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? 0),
+        bends_per_unit: inputText(ws.bends_per_unit ?? 0),
+        joints: (ws.joints || []).map((j) => ({ ...j, count_per_unit: inputText(j.count_per_unit), length_m_each: inputText(j.length_m_each) })),
+        design_features: [...(ws.design_features || [])],
+        processes: [...(ws.processes || [])],
+        open_questions: [...(ws.open_questions || [])],
+        note: '',
+    };
+    weld.editing = true;
+    weld.dirty = false;
+    weld.errors = {};
+    weld.preview = null;
+    weld.previewSeq = 0;
+    renderWeldEdit();
+    runPreview();
+}
+
+function selectHtml(field, value, labels, codes) {
+    const known = codes.includes(value);
+    const options = codes.map((c) => `<option value="${c}"${c === value ? ' selected' : ''}>${escapeHtml(labels[c] || c)}</option>`);
+    // A code outside the schema (should not happen) stays visible so the save error points at it.
+    if (!known) options.unshift(`<option value="${escapeHtml(value || '')}" selected>${escapeHtml(value || '—')} (geçersiz)</option>`);
+    return `<select class="form-select form-select-sm" data-field="${field}" aria-label="${field}">${options.join('')}</select>`;
+}
+
+function gridRowHtml(j, i) {
+    const context = [j.size && `Ölçü: ${j.size}`, j.evidence && `Pafta: ${j.evidence}`].filter(Boolean).map(escapeHtml).join(' · ');
+    return `<tr data-row="${i}">
+        <td><input type="text" class="form-control form-control-sm" data-field="joint_id" value="${escapeHtml(j.joint_id || '')}" placeholder="yeni" aria-label="No"></td>
+        <td>
+            <textarea class="form-control form-control-sm" data-field="description" rows="2" placeholder="Ne neye kaynıyor (poz numaralarıyla)" aria-label="Birleşim">${escapeHtml(j.description || '')}</textarea>
+            <input type="text" class="form-control form-control-sm mt-1" data-field="weld_detail" value="${escapeHtml(j.weld_detail || '')}" placeholder="Kaynak detayı (ör. a=5 köşe, V 60°)" aria-label="Kaynak detayı">
+            ${context ? `<div class="ref-joint-detail" title="${context}">${context}</div>` : ''}
+        </td>
+        <td>
+            ${selectHtml('joint_type', j.joint_type, JOINT_TYPE_LABELS, Object.keys(JOINT_TYPE_LABELS))}
+            <div class="mt-1">${selectHtml('material', j.material, MATERIAL_LABELS, JOINT_MATERIAL_CODES)}</div>
+        </td>
+        <td>${selectHtml('process', j.process, PROCESS_LABELS, Object.keys(PROCESS_LABELS))}</td>
+        <td><input type="text" inputmode="numeric" class="form-control form-control-sm ref-eg-num" data-field="count_per_unit" value="${escapeHtml(j.count_per_unit ?? '')}" aria-label="Adet"></td>
+        <td><input type="text" inputmode="decimal" class="form-control form-control-sm ref-eg-num" data-field="length_m_each" value="${escapeHtml(j.length_m_each ?? '')}" aria-label="m / birleşim"></td>
+        <td class="est-num" data-cell="total"></td>
+        <td class="est-num" data-cell="hours"></td>
+        <td class="text-end"><button type="button" class="btn btn-sm btn-outline-danger" data-weld-action="delete-row" title="Satırı sil" aria-label="Satırı sil"><i class="fas fa-trash"></i></button></td>
+    </tr>`;
+}
+
+function renderWeldGrid() {
+    const tbody = document.getElementById('ref-eg-rows');
+    if (!tbody) return;
+    tbody.innerHTML = weld.draft.joints.length
+        ? weld.draft.joints.map(gridRowHtml).join('')
+        : '<tr><td colspan="9" class="text-muted small text-center py-3">Birleşim yok: “Satır ekle” ile ekleyin.</td></tr>';
+    weld.draft.joints.forEach((_, i) => updateRowCells(i));
+    applyWeldErrors();
+}
+
+function renderWeldEdit() {
+    const body = document.getElementById('ref-weld-body');
+    if (!body) return;
+    destroyModalTables();
+    const d = weld.draft;
+    const ws = weld.ws;
+    const headInput = (key, label, mode = 'decimal', hint = '') => `<label class="ref-eg-field"><span>${label}</span>
+        <input type="text" inputmode="${mode}" class="form-control form-control-sm ref-eg-num" data-head="${key}" value="${escapeHtml(d[key])}"${hint ? ` title="${escapeHtml(hint)}"` : ''}></label>`;
+    const massInputs = MASS_MATERIAL_CODES.map((m) => `<label class="ref-eg-field ref-eg-mass"><span>${escapeHtml(MATERIAL_LABELS[m] || m)}</span>
+        <input type="text" inputmode="decimal" class="form-control form-control-sm ref-eg-num" data-mass="${m}" value="${escapeHtml(d.mass_by_material[m] || '')}" placeholder="—"></label>`).join('');
+    body.innerHTML = `
+        <div class="ref-weld-editing"><i class="fas fa-pen me-1"></i>v${ws.version} düzenleniyor. Kaydet, düzeltilmiş listeyi <strong>yeni sürüm</strong> olarak saklar; v${ws.version} olduğu gibi kalır.
+            Toplamlar ve hesaplanan saat yazdıkça güncellenir.</div>
+        <div class="ref-eg-head">
+            ${headInput('unit_mass_kg', 'Birim kütle (kg)')}
+            ${headInput('pieces_per_unit', 'Parça / adet', 'numeric', 'Kesilecek parça sayısı (kesim süresi)')}
+            ${headInput('bends_per_unit', 'Büküm / adet', 'numeric')}
+            <div class="ref-eg-massgroup"><span class="ref-eg-grouplabel">Malzemeye göre kg</span><div>${massInputs}</div></div>
+            <label class="ref-eg-field ref-eg-wide"><span>Kütle notu (nereden geldi)</span>
+                <textarea class="form-control form-control-sm" data-head="mass_basis" rows="2">${escapeHtml(d.mass_basis)}</textarea></label>
+        </div>
+        <div class="ref-eg-wrap">
+            <table class="table table-sm ref-eg-table">
+                <thead><tr><th style="width:70px">No</th><th>Birleşim · kaynak detayı</th><th style="width:150px">Tip · malzeme</th><th style="width:150px">Proses</th>
+                    <th class="est-num" style="width:70px">Adet</th><th class="est-num" style="width:84px">m / birleşim</th><th class="est-num" style="width:72px">m toplam</th>
+                    <th class="est-num" style="width:60px">Saat</th><th style="width:44px"></th></tr></thead>
+                <tbody id="ref-eg-rows"></tbody>
+            </table>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-primary" data-weld-action="add-row"><i class="fas fa-plus me-1"></i>Satır ekle</button>
+        <div id="ref-eg-totals" class="ref-eg-totals"></div>
+        <label class="ref-eg-field ref-eg-wide mt-2"><span>Düzeltme notu <strong class="text-danger">*</strong></span>
+            <textarea class="form-control form-control-sm" data-head="note" rows="2" placeholder="Neyi neden düzelttiniz? (ör. kep sayısı 7→9, pafta 3 kesit B-B)">${escapeHtml(d.note)}</textarea></label>
+        <div class="text-danger small mt-1" id="ref-eg-error"></div>`;
+    renderWeldGrid();
+    updateWeldTotals();
+    modal.setFooterContent(`
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-weld-action="cancel">Vazgeç</button>
+        <button type="button" class="btn btn-sm btn-primary" data-weld-action="save"><i class="fas fa-save me-1"></i>Yeni sürüm olarak kaydet</button>`);
+}
+
+const INT_RE = /^\d+$/;
+
+/** {payload, errors}: the draft with numbers parsed; `errors` uses the backend's keys (joints.<i>.<field>). */
+function draftPayload() {
+    const d = weld.draft;
+    const errors = {};
+    const number = (text, key, { integer = false } = {}) => {
+        const t = String(text ?? '').trim();
+        if (integer ? !INT_RE.test(t) : Number.isNaN(parseInput(t))) {
+            errors[key] = integer ? 'Tam sayı olmalı.' : 'Sayı olmalı.';
+            return null;
+        }
+        const v = integer ? Number(t) : parseInput(t);
+        if (v < 0) { errors[key] = 'Negatif olamaz.'; return null; }
+        return v;
+    };
+    const joints = d.joints.map((j, i) => {
+        const out = { ...j };
+        out.count_per_unit = number(j.count_per_unit, `joints.${i}.count_per_unit`, { integer: true });
+        out.length_m_each = number(j.length_m_each, `joints.${i}.length_m_each`);
+        // total_m_per_unit: the stored number, or null after a count/length edit (the backend computes count × length).
+        return out;
+    });
+    const mass = {};
+    Object.entries(d.mass_by_material).forEach(([m, text]) => {
+        if (String(text ?? '').trim() === '') return;
+        const v = number(text, `mass_by_material.${m}`);
+        if (v) mass[m] = v;
+    });
+    const payload = {
+        base_version: d.base_version,
+        part_name: d.part_name,
+        unit_mass_kg: number(d.unit_mass_kg, 'unit_mass_kg'),
+        mass_basis: d.mass_basis,
+        mass_by_material: mass,
+        pieces_per_unit: number(d.pieces_per_unit, 'pieces_per_unit', { integer: true }),
+        bends_per_unit: number(d.bends_per_unit, 'bends_per_unit', { integer: true }),
+        joints,
+        design_features: d.design_features,
+        processes: d.processes,
+        open_questions: d.open_questions,
+        note: d.note.trim(),
+    };
+    return { payload, errors };
+}
+
+/** Metres of one draft row: the stored total until count or length is touched, then count × length. */
+function rowMetres(j) {
+    if (j.total_m_per_unit != null && j.total_m_per_unit !== '') return Number(j.total_m_per_unit) || 0;
+    const t = String(j.count_per_unit ?? '').trim();
+    const count = INT_RE.test(t) ? Number(t) : NaN;
+    const length = parseInput(j.length_m_each);
+    return Number.isNaN(count) || Number.isNaN(length) ? NaN : count * length;
+}
+
+function updateRowCells(i) {
+    const tr = document.querySelector(`#ref-eg-rows tr[data-row="${i}"]`);
+    const j = weld.draft.joints[i];
+    if (!tr || !j) return;
+    const m = rowMetres(j);
+    tr.querySelector('[data-cell="total"]').textContent = Number.isNaN(m) ? '—' : fmt(m, 2);
+    const line = weld.preview?.bottom_up?.lines?.[i];
+    tr.querySelector('[data-cell="hours"]').innerHTML = line ? fmt(line.hours, 2) : '<span class="text-muted">…</span>';
+}
+
+/** Live totals from the draft (JS, instant) + the bottom-up hours of the last preview (server, debounced). */
+function updateWeldTotals() {
+    const host = document.getElementById('ref-eg-totals');
+    if (!host) return;
+    const before = weld.ws.totals || {};
+    const byMat = {};
+    let joints = 0;
+    let metres = 0;
+    let bad = false;
+    weld.draft.joints.forEach((j) => {
+        const m = rowMetres(j);
+        const t = String(j.count_per_unit ?? '').trim();
+        if (Number.isNaN(m) || !INT_RE.test(t)) { bad = true; return; }
+        joints += Number(t);
+        metres += m;
+        byMat[j.material] = (byMat[j.material] || 0) + m;
+    });
+    const delta = (now, was, digits) => {
+        const diff = now - (Number(was) || 0);
+        if (Math.abs(diff) < 10 ** -digits / 2) return '';
+        return ` <span class="ref-eg-delta ${diff > 0 ? 'up' : 'down'}">(${diff > 0 ? '+' : '−'}${fmt(Math.abs(diff), digits)})</span>`;
+    };
+    const mats = Object.entries(byMat).filter(([, v]) => v > 0)
+        .map(([m, v]) => `${escapeHtml(MATERIAL_LABELS[m] || m)} ${fmt(v, 1)} m${delta(v, before.weld_m_by_material?.[m], 1)}`).join(' · ');
+    const was = weld.ws.bottom_up || {};
+    const p = weld.preview?.bottom_up;
+    const hours = weld.previewError
+        ? `<span class="text-danger">${escapeHtml(weld.previewError)}</span>`
+        : p
+            ? `kaynak ${fmt(p.welding_h, 1)} h + kaynak dışı ${fmt(p.non_welding_h, 1)} h = <strong>${fmt(p.total_h, 1)} h/adet</strong>${delta(p.total_h, was.total_h, 1)}
+               <span class="text-muted">· v${weld.ws.version}: ${fmt(was.total_h, 1)} h</span>`
+            : '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>hesaplanıyor…</span>';
+    host.innerHTML = `
+        <div><span class="ref-eg-tlabel">Birleşim</span> <strong>${fmt(joints, 0)}</strong>${delta(joints, before.joints_total, 0)}
+            <span class="ref-eg-tlabel ms-3">Kaynak</span> <strong>${fmt(metres, 1)} m</strong>${delta(metres, before.weld_m_total, 1)}${mats ? ` <span class="text-muted">(${mats})</span>` : ''}
+            ${bad ? '<span class="text-danger ms-2">geçersiz satırlar toplama girmedi</span>' : ''}</div>
+        <div><span class="ref-eg-tlabel">Hesaplanan saat</span> ${hours}</div>`;
+}
+
+function schedulePreview() {
+    clearTimeout(weld.previewTimer);
+    weld.previewTimer = setTimeout(runPreview, PREVIEW_DELAY_MS);
+}
+
+async function runPreview() {
+    const state = weld;
+    if (!state?.editing) return;
+    const { payload, errors } = draftPayload();
+    const seq = ++state.previewSeq;
+    state.errors = errors;
+    applyWeldErrors();
+    if (Object.keys(errors).length) {
+        state.preview = null;
+        state.previewError = `${Object.keys(errors).length} hatalı alan: saat hesaplanamadı`;
+        updateWeldTotals();
+        return;
+    }
+    try {
+        const result = await previewWeldScheduleVersion(state.row.job_no, { ...payload, note: '' });
+        if (state !== weld || seq !== state.previewSeq || !state.editing) return;
+        state.preview = result;
+        state.previewError = null;
+    } catch (error) {
+        if (state !== weld || seq !== state.previewSeq || !state.editing) return;
+        state.preview = null;
+        state.errors = error.data?.errors || {};
+        state.previewError = error.data?.errors ? `${Object.keys(state.errors).length} hatalı alan: saat hesaplanamadı` : (error.message || 'Önizleme hesaplanamadı');
+        applyWeldErrors();
+    }
+    state.draft.joints.forEach((_, i) => updateRowCells(i));
+    updateWeldTotals();
+}
+
+/** Marks the inputs named by `weld.errors` (backend keys) and lists every message under the note. */
+function applyWeldErrors() {
+    const body = document.getElementById('ref-weld-body');
+    if (!body || !weld?.editing) return;
+    body.querySelectorAll('.is-invalid').forEach((el) => { el.classList.remove('is-invalid'); el.removeAttribute('title'); });
+    const messages = [];
+    Object.entries(weld.errors || {}).forEach(([key, message]) => {
+        const parts = key.split('.');
+        let el = null;
+        if (parts[0] === 'joints' && parts.length === 3) el = body.querySelector(`#ref-eg-rows tr[data-row="${parts[1]}"] [data-field="${parts[2]}"]`);
+        else if (parts[0] === 'mass_by_material') el = body.querySelector(`[data-mass="${parts[1]}"]`);
+        else el = body.querySelector(`[data-head="${parts[0]}"]`);
+        if (el) {
+            el.classList.add('is-invalid');
+            el.title = message;
+        }
+        messages.push(parts[0] === 'joints' && parts.length === 3 ? `Satır ${Number(parts[1]) + 1}: ${message}` : message);
+    });
+    const errorEl = document.getElementById('ref-eg-error');
+    if (errorEl) errorEl.textContent = messages.join(' · ');
+}
+
+function onWeldInput(event) {
+    if (!weld?.editing) return;
+    const t = event.target;
+    const d = weld.draft;
+    const tr = t.closest('#ref-eg-rows tr[data-row]');
+    if (tr && t.dataset.field) {
+        const i = Number(tr.dataset.row);
+        const j = d.joints[i];
+        if (!j) return;
+        j[t.dataset.field] = t.value;
+        // A touched count or length drops the stored total: count × length from now on (the backend does the same).
+        if (t.dataset.field === 'count_per_unit' || t.dataset.field === 'length_m_each') j.total_m_per_unit = null;
+        updateRowCells(i);
+    } else if (t.dataset.head) {
+        d[t.dataset.head] = t.value;
+    } else if (t.dataset.mass) {
+        d.mass_by_material[t.dataset.mass] = t.value;
+    } else {
+        return;
+    }
+    weld.dirty = true;
+    t.classList.remove('is-invalid');
+    updateWeldTotals();
+    if (t.dataset.head === 'note' || t.dataset.head === 'mass_basis' || ['description', 'weld_detail', 'joint_id'].includes(t.dataset.field)) {
+        if (t.dataset.head === 'note') document.getElementById('ref-eg-error').textContent = '';
+        return;   // text only: hours do not move
+    }
+    schedulePreview();
+}
+
+function confirmDiscard() {
+    return !weld?.editing || !weld.dirty || window.confirm('Kaydedilmemiş düzeltmeler kaybolacak. Devam edilsin mi?');
+}
+
+async function saveWeldEdit(btn) {
+    const { payload, errors } = draftPayload();
+    if (!payload.note) errors.note = 'Neyi neden düzelttiğinizi yazın (ör. kep sayısı 7→9, pafta 3).';
+    weld.errors = errors;
+    applyWeldErrors();
+    if (Object.keys(errors).length) {
+        document.querySelector('#ref-weld-body .is-invalid')?.focus();
+        return;
+    }
+    const state = weld;
+    btn.disabled = true;
+    state.saving = true;
+    try {
+        const result = await saveWeldScheduleVersion(state.row.job_no, payload);
+        if (state !== weld) return;
+        const ws = result.weld_schedule;
+        if (result.profile) {
+            const i = rows.findIndex((r) => r.job_no === result.profile.job_no);
+            if (i >= 0) rows[i] = result.profile;
+            state.row = result.profile;
+            showRows();
+            const facts = document.getElementById('ref-weld-facts');
+            if (facts) facts.innerHTML = factsHtml(result.profile);
+        }
+        state.ws = ws;
+        state.editing = false;
+        state.dirty = false;
+        renderWeldView();
+        showNotification(`${state.row.job_no}: kaynak listesi v${ws.version} kaydedildi; faktör yeniden hesaplandı.`, 'success');
+        loadSummary();
+    } catch (error) {
+        if (state !== weld) return;
+        state.errors = error.data?.errors || {};
+        applyWeldErrors();
+        if (!error.data?.errors) document.getElementById('ref-eg-error').textContent = error.message || 'Kaydedilemedi';
+        showNotification(error.message || 'Kaynak listesi kaydedilemedi', 'error');
+        btn.disabled = false;
+    } finally {
+        state.saving = false;
+    }
+}
+
+async function onWeldClick(btn) {
+    const action = btn.dataset.weldAction;
+    if (action === 'edit') {
+        startWeldEdit();
+    } else if (action === 'cancel') {
+        if (!confirmDiscard()) return;
+        weld.editing = false;
+        weld.dirty = false;
+        clearTimeout(weld.previewTimer);
+        renderWeldView();
+    } else if (action === 'save') {
+        await saveWeldEdit(btn);
+    } else if (action === 'add-row') {
+        const last = weld.draft.joints[weld.draft.joints.length - 1];
+        weld.draft.joints.push({
+            joint_id: '', description: '', joint_type: 'plate_fillet', material: last?.material || 'carbon_steel', size: '',
+            weld_detail: '', process: last?.process || 'MAG', position: '', count_per_unit: '1', length_m_each: '0',
+            total_m_per_unit: null, preheat_c: null, ndt: '', evidence: 'Elle eklendi',
+        });
+        weld.dirty = true;
+        weld.errors = {};
+        renderWeldGrid();
+        document.querySelector(`#ref-eg-rows tr[data-row="${weld.draft.joints.length - 1}"] [data-field="description"]`)?.focus();
+        updateWeldTotals();
+        schedulePreview();
+    } else if (action === 'delete-row') {
+        const i = Number(btn.closest('tr[data-row]')?.dataset.row);
+        if (Number.isNaN(i)) return;
+        weld.draft.joints.splice(i, 1);
+        weld.dirty = true;
+        weld.errors = {};   // keyed by row index: they no longer line up
+        renderWeldGrid();
+        updateWeldTotals();
+        schedulePreview();
+    } else if (action === 'version') {
+        if (!confirmDiscard()) return;
+        const body = document.getElementById('ref-weld-body');
+        if (body) body.insertAdjacentHTML('afterbegin', '<div class="text-muted small mb-1"><i class="fas fa-spinner fa-spin me-1"></i>Sürüm yükleniyor…</div>');
+        await loadWeldVersion(btn.dataset.version ? Number(btn.dataset.version) : null);
+    }
 }
 
 const REVIEW_TEXT = {
@@ -459,6 +966,11 @@ function openReview(row, reviewStatus) {
 }
 
 async function onModalClick(event) {
+    const weldBtn = event.target.closest('[data-weld-action]');
+    if (weldBtn && weld) {
+        await onWeldClick(weldBtn);
+        return;
+    }
     const btn = event.target.closest('[data-ref-action="review-save"]');
     if (!btn) return;
     const reviewStatus = btn.dataset.status;
