@@ -19,9 +19,10 @@ import { showNotification } from '../notification/notification.js';
 import {
     ESTIMATE_STATUS, REVIEW_LABELS, createEstimate, getEstimate, getLatestEstimate, getWeldSchedule, reviewEstimate,
 } from '../../apis/estimator.js';
+import { DEFAULT_POLL_MAX, DEFAULT_POLL_MS, createStatusPoller } from './statusPoller.js';
 
-const POLL_MS = 5000;
-const POLL_MAX = 180;           // 15 minutes; a run is 7-10
+const POLL_MS = DEFAULT_POLL_MS;
+const POLL_MAX = DEFAULT_POLL_MAX;           // 15 minutes; a run is 7-10
 const WELD_OPEN_KEY = 'estimateWeldListOpen';
 
 export const COST_ROW_LABELS = {
@@ -58,11 +59,10 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         busy: false,           // our own create / review request in flight
         noteOpen: false,
         weldOpen: readFlag(WELD_OPEN_KEY),
-        pollTimer: null,
-        pollCount: 0,
         destroyed: false,
         tables: [],
     };
+    const poller = createStatusPoller({ intervalMs: POLL_MS, maxTicks: POLL_MAX });
 
     // ------------------------------------------------------------ data
 
@@ -93,8 +93,11 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
                 }
                 if (view.destroyed) return;
             }
-            if (report && isOpen(report.status)) startPolling();
-            else stopPolling();
+            if (report && isOpen(report.status)) {
+                poller.start(() => load({ quiet: true, reportId: view.report?.id }));
+            } else {
+                poller.stop();
+            }
         } catch (error) {
             if (view.destroyed) return;
             if (error.status === 403) {
@@ -163,25 +166,6 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         }
     }
 
-    function startPolling() {
-        stopPolling();
-        view.pollCount = 0;
-        const tick = async () => {
-            view.pollCount += 1;
-            if (view.destroyed || view.pollCount > POLL_MAX) return;
-            await load({ quiet: true, reportId: view.report?.id });
-            if (!view.destroyed && view.report && isOpen(view.report.status) && view.pollCount <= POLL_MAX) {
-                view.pollTimer = setTimeout(tick, POLL_MS);
-            }
-        };
-        view.pollTimer = setTimeout(tick, POLL_MS);
-    }
-
-    function stopPolling() {
-        if (view.pollTimer) clearTimeout(view.pollTimer);
-        view.pollTimer = null;
-    }
-
     // ------------------------------------------------------------ render
 
     function render() {
@@ -201,7 +185,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
                 </div>`;
             return;
         }
-        if (!view.report && !view.error && view.pollCount === 0 && view.weldSchedule === null && !view._loaded) {
+        if (!view.report && !view.error && view.weldSchedule === null && !view._loaded) {
             // first paint, before the first answer
             container.innerHTML = `<div class="est-report"><div class="est-report-progress">
                 <span class="spinner-border spinner-border-sm" role="status"></span> Tahmin yükleniyor…</div></div>`;
@@ -460,7 +444,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         refresh: () => load({ quiet: true, reportId: view.report?.id }),
         destroy() {
             view.destroyed = true;
-            stopPolling();
+            poller.destroy();
             destroyTables();
             container.removeEventListener('click', onClick);
             container.removeEventListener('change', onChangeEvent);
