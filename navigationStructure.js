@@ -126,6 +126,13 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Proje Takibi',
                 icon: 'fas fa-tasks',
                 children: {}
+            },
+            // Tahmin raporları (estimator app); a sub-entry, so the navbar's
+            // 7-section limit is untouched. Page permission: users/0066.
+            '/projects/estimates': {
+                label: 'Tahminler',
+                icon: 'fas fa-calculator',
+                children: {}
             }
         }
     },

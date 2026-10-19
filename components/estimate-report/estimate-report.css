@@ -1,0 +1,304 @@
+/* Tahmin — the drawing-based cost and risk report card (estimate-report.js).
+ *
+ * Same family as the Neo Özeti card (discussion-summary.css): purple marks
+ * model-written content, the action button keeps the house red. Status
+ * pills are badges.css status-badge classes (never yellow). */
+
+.est-report {
+    border: 1px solid #e4dcfb;
+    border-radius: 10px;
+    background: #fbfaff;
+    overflow: hidden;
+}
+
+.est-report-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.7rem 0.85rem;
+    border-bottom: 1px solid #ece6fd;
+}
+
+.est-report-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    min-width: 0;
+}
+
+.est-report-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: #f1eafe;
+    color: #6d28d9;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.est-report-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #212529;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.est-report-version {
+    font-weight: 600;
+    font-size: 0.72rem;
+    color: #5b21b6;
+    background: #f1eafe;
+    border-radius: 6px;
+    padding: 0.05rem 0.4rem;
+}
+
+.est-report-sub {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.15rem;
+    font-size: 0.76rem;
+    color: #7b8794;
+}
+
+.est-report-sub .status-badge,
+.est-report-review .status-badge {
+    margin: 0;
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.est-report-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.est-report-actions .form-select-sm {
+    width: auto;
+    font-size: 0.78rem;
+}
+
+.est-report-generate {
+    background: #8B0000;
+    border: 1px solid #8B0000;
+    color: #fff;
+    font-weight: 600;
+}
+
+.est-report-generate:hover,
+.est-report-generate:focus {
+    background: #6d0000;
+    border-color: #6d0000;
+    color: #fff;
+}
+
+.est-report-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0.7rem 0.85rem 0;
+    padding: 0.5rem 0.7rem;
+    border-radius: 8px;
+    background: #fdf2f2;
+    border: 1px solid #f0d9d9;
+    color: #8B0000;
+    font-size: 0.82rem;
+    white-space: pre-wrap;
+}
+
+.est-report-progress {
+    padding: 1.1rem 0.85rem;
+    font-size: 0.86rem;
+    color: #4b5563;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.est-report-empty {
+    padding: 1.2rem 0.85rem;
+    font-size: 0.86rem;
+    color: #6c757d;
+}
+
+.est-report-body {
+    background: #fff;
+    padding: 0.25rem 0.85rem 0.5rem;
+}
+
+.est-report-section {
+    padding: 0.7rem 0;
+    border-bottom: 1px solid #f2f4f6;
+}
+
+.est-report-section:last-child { border-bottom: none; }
+
+.est-report-section-title {
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #6d28d9;
+    margin: 0 0 0.45rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.est-report-section-title .btn-link {
+    font-size: 0.72rem;
+    text-transform: none;
+    letter-spacing: 0;
+    padding: 0;
+    font-weight: 600;
+}
+
+/* Summary tiles: expected cost per route, €/kg, suggested price. */
+.est-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.5rem;
+}
+
+.est-tile {
+    border: 1px solid #ece6fd;
+    border-radius: 8px;
+    padding: 0.5rem 0.65rem;
+    background: #fbfaff;
+}
+
+.est-tile-label {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #7b8794;
+    font-weight: 600;
+}
+
+.est-tile-value {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #212529;
+    margin-top: 0.1rem;
+}
+
+.est-tile-value small {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #7b8794;
+}
+
+/* The cost table (TableComponent) and the weld list: compact. */
+.est-report .table-container .table { font-size: 0.82rem; }
+.est-report .table-container .table th { white-space: nowrap; }
+.est-report .table-container .table td.est-num,
+.est-report .table-container .table th.est-num { text-align: right; font-variant-numeric: tabular-nums; }
+.est-report .table-container .table tr.est-total td { font-weight: 700; background: #f8f6ff; }
+.est-report .table-container .table tr.est-total td.est-num { color: #3b1a8a; }
+.est-report .table-container .table th.est-route-in { border-bottom: 2px solid #c4b5fd; }
+.est-report .table-container .table th.est-route-sub { border-bottom: 2px solid #fdba74; }
+.est-report .table-container .table-footer,
+.est-report .table-container .pagination-wrapper { display: none; }
+
+/* The rendered report. */
+.est-markdown {
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: #212529;
+}
+
+.est-markdown h1 { font-size: 1.05rem; font-weight: 700; margin: 0.8rem 0 0.5rem; }
+.est-markdown h2 { font-size: 0.95rem; font-weight: 700; margin: 1rem 0 0.45rem; color: #3b1a8a; }
+.est-markdown h3 { font-size: 0.86rem; font-weight: 700; margin: 0.8rem 0 0.35rem; }
+.est-markdown h4, .est-markdown h5, .est-markdown h6 { font-size: 0.82rem; font-weight: 700; margin: 0.6rem 0 0.3rem; }
+.est-markdown p { margin: 0 0 0.5rem; }
+.est-markdown ul, .est-markdown ol { margin: 0 0 0.5rem; padding-left: 1.3rem; }
+.est-markdown li { margin-bottom: 0.15rem; }
+.est-markdown blockquote {
+    margin: 0 0 0.6rem;
+    padding: 0.4rem 0.7rem;
+    border-left: 3px solid #c4b5fd;
+    background: #f8f6ff;
+    color: #4b5563;
+    font-size: 0.8rem;
+}
+.est-markdown code { font-size: 0.78rem; background: #f3f4f6; padding: 0 0.25rem; border-radius: 3px; }
+.est-markdown .md-table { margin: 0.3rem 0 0.7rem; }
+.est-markdown .md-table table { font-size: 0.78rem; margin: 0; }
+.est-markdown .md-table th { background: #f8f6ff; white-space: nowrap; }
+.est-markdown .md-table td.text-end, .est-markdown .md-table th.text-end { font-variant-numeric: tabular-nums; }
+.est-markdown hr { margin: 0.8rem 0; }
+
+/* Questions: three lists side by side when there is room. */
+.est-questions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.6rem;
+}
+
+.est-questions h6 {
+    font-size: 0.76rem;
+    font-weight: 700;
+    color: #3b1a8a;
+    margin: 0 0 0.3rem;
+}
+
+.est-questions ul {
+    font-size: 0.82rem;
+    padding-left: 1.1rem;
+    margin: 0;
+}
+
+.est-questions li { margin-bottom: 0.15rem; }
+
+.est-report-review {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: #4b5563;
+    flex-wrap: wrap;
+}
+
+.est-report-review .est-note {
+    white-space: pre-wrap;
+    background: #fff7ed;
+    border: 1px solid #fed7aa;
+    border-radius: 6px;
+    padding: 0.35rem 0.6rem;
+    flex: 1 1 100%;
+}
+
+.est-report-note-form textarea {
+    font-size: 0.84rem;
+}
+
+.est-report-foot {
+    padding: 0.55rem 0.85rem;
+    border-top: 1px solid #ece6fd;
+    font-size: 0.72rem;
+    color: #7b8794;
+    background: #fff;
+}
+
+.est-weld-summary {
+    font-size: 0.8rem;
+    color: #4b5563;
+    margin-bottom: 0.4rem;
+}
+
+.est-weld-summary strong { color: #212529; }

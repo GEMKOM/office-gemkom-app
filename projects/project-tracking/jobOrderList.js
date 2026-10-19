@@ -67,6 +67,7 @@ import { fetchPriceTiers } from '../../apis/subcontracting/priceTiers.js';
 import { listNCRs } from '../../apis/qualityControl.js';
 import { escapeHtml } from '../../utils/text.js';
 import { mountDiscussionSummary } from '../../components/discussion-summary/discussion-summary.js';
+import { mountEstimateReport } from '../../components/estimate-report/estimate-report.js';
 import { openTaskPlanner } from './taskPlanner.js';
 import { openWeightPlanner } from './weightPlanner.js';
 
@@ -84,6 +85,8 @@ let isLoading = false;
 let jobOrdersStats = null; // Statistics Cards component instance
 // Neo Özeti card above the open job's discussion list (stops its polling on close)
 let topicsSummaryHandle = null;
+// The Tahmin card of the open job order modal (components/estimate-report).
+let estimateHandle = null;
 let jobOrderFilters = null; // Filters component instance
 let jobOrdersTable = null; // Table component instance
 let statusOptions = STATUS_OPTIONS; // Status options
@@ -1426,6 +1429,8 @@ function initializeModalComponents() {
     viewJobOrderModal.onCloseCallback(() => {
         topicsSummaryHandle?.destroy();
         topicsSummaryHandle = null;
+        estimateHandle?.destroy();
+        estimateHandle = null;
         // Clear tab cache when modal closes
         jobOrderTabCache = {
             jobNo: null,
@@ -2812,6 +2817,19 @@ window.viewJobOrder = async function(jobNo) {
                 customContent: '<div id="price-tiers-container" style="padding: 20px;"></div>'
             });
         }
+
+        // Tahmin: the drawing-based cost and risk report (estimator app).
+        // Costs and prices of past jobs are in it, so only `view_estimates`
+        // holders get the tab; the card itself hides on a 403 as well.
+        if (canViewEstimates()) {
+            viewJobOrderModal.addTab({
+                id: 'tahmin',
+                label: 'Tahmin',
+                icon: 'fas fa-calculator',
+                iconColor: 'text-primary',
+                customContent: '<div id="estimate-container" style="padding: 20px;"></div>'
+            });
+        }
         
         // Render the modal
         viewJobOrderModal.render();
@@ -2933,9 +2951,28 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCur
                 case 'taseron':
                     await loadPriceTiersTab(jobNo);
                     break;
+                case 'tahmin':
+                    loadEstimateTab(jobNo);
+                    break;
             }
         });
     });
+}
+
+// Tahmin tab: mounts the estimate card once per modal; it loads and polls itself.
+function loadEstimateTab(jobNo) {
+    const host = viewJobOrderModal.modal?.querySelector('#estimate-container');
+    if (!host || estimateHandle) return;
+    estimateHandle = mountEstimateReport(host, { jobNo });
+}
+
+function canViewEstimates() {
+    try {
+        return isAdmin() || hasPerm('view_estimates');
+    } catch (error) {
+        console.warn('Failed to check estimate permission:', error);
+        return false;
+    }
 }
 
 // Load Department Tasks Tab

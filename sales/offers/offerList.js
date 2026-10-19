@@ -53,7 +53,8 @@ import { initCustomerEditModal, openCustomerEditModal, getMissingCustomerFieldsF
 import { getPaymentTerms } from '../../apis/procurement.js';
 import { createComment, getTopicComments } from '../../apis/projects/topics.js';
 import { fetchUsersDropdown } from '../../apis/users.js';
-import { getUser } from '../../authService.js';
+import { getUser, isAdmin, hasPerm } from '../../authService.js';
+import { mountEstimateReport } from '../../components/estimate-report/estimate-report.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../components/file-attachments/file-attachments.js';
 
@@ -146,6 +147,17 @@ let isLoading = false;
 let offersStats = null;
 let offersFilters = null;
 let offersTable = null;
+// The Tahmin card of the open offer modal (components/estimate-report).
+let offerEstimateHandle = null;
+
+function canViewEstimates() {
+    try {
+        return isAdmin() || hasPerm('view_estimates');
+    } catch (error) {
+        console.warn('Failed to check estimate permission:', error);
+        return false;
+    }
+}
 let createOfferModal = null;
 let viewOfferModal = null;
 let approvalConfirmModal = null;
@@ -912,8 +924,22 @@ window.viewOffer = async function (id, options = {}) {
             customContent: `<div class="offer-tab-content">${buildApprovalTab()}</div>`
         });
 
+        // Tahmin: the drawing-based cost estimate from the offer's customer
+        // drawings (estimator app). Only `view_estimates` holders see the tab.
+        if (canViewEstimates()) {
+            viewOfferModal.addTab({
+                id: 'tahmin',
+                label: 'Tahmin',
+                icon: 'fas fa-calculator',
+                iconColor: 'text-primary',
+                customContent: '<div class="offer-tab-content"><div id="offer-estimate-container"></div></div>'
+            });
+        }
+
         viewOfferModal.render();
         attachOfferModalListeners();
+        offerEstimateHandle?.destroy();
+        offerEstimateHandle = null;
 
         // Reset files component so it binds to the current modal instance
         offerFilesComponent = null;
@@ -1032,6 +1058,14 @@ async function loadTabData(tabId) {
 
         pane.innerHTML = `<div class="offer-tab-content">${buildPricingTab()}</div>`;
         attachPricingTabListeners();
+        return;
+    }
+
+    if (tabId === 'tahmin') {
+        const host = pane.querySelector('#offer-estimate-container');
+        if (host && !offerEstimateHandle) {
+            offerEstimateHandle = mountEstimateReport(host, { offerId });
+        }
         return;
     }
 
@@ -5033,6 +5067,8 @@ function attachOfferModalListeners() {
     const modalEl = viewOfferModal.modal;
     if (modalEl) {
         modalEl.addEventListener('hidden.bs.modal', () => {
+            offerEstimateHandle?.destroy();
+            offerEstimateHandle = null;
             // When detail modal closes, remove offer-specific params from URL
             try {
                 const url = new URL(window.location.href);

@@ -16,6 +16,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             icon: 'fas fa-project-diagram',
             iconColor: 'primary',
             link: '/projects/project-tracking'
+        },
+        {
+            title: 'Tahminler',
+            description: 'Çizimlerden üretilen maliyet ve risk raporları; iş emri ve teklif tahminleri.',
+            icon: 'fas fa-calculator',
+            iconColor: 'primary',
+            link: '/projects/estimates'
         }
     ];
 
