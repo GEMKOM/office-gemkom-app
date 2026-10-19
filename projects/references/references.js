@@ -27,7 +27,7 @@ import {
     getEstimatorParameters, getReferenceSummary, getWeldSchedule, listReferenceProfiles,
     reviewReferenceProfile, updateEstimatorParameters,
 } from '../../apis/estimator.js';
-import { MATERIAL_LABELS, fmt, weldColumns } from '../../components/estimate-report/estimate-report.js';
+import { JOINT_TYPE_LABELS, MATERIAL_LABELS, fmt } from '../../components/estimate-report/estimate-report.js';
 import { openEstimatorMethod } from '../../components/estimator-method/estimator-method.js';
 
 const JOB_STATUS = {
@@ -324,26 +324,51 @@ async function openWeldList(row) {
     const lines = bu.lines || [];
     const joints = (ws.joints || []).map((j, i) => ({ ...j, unit_h: lines[i]?.unit_h, unit_label: lines[i]?.unit, hours: lines[i]?.hours }));
     const nonWelding = (bu.non_welding_lines || []).map((l) => `<tr><td>${escapeHtml(NON_WELDING_LABELS[l.step] || l.step)}</td><td class="text-end">${fmt(l.qty, l.step === 'fitup_hydrotest_cleaning' ? 1 : 0)}</td><td>${escapeHtml(UNIT_LABELS[l.unit] || l.unit)}</td><td class="text-end">${fmt(l.unit_h, 4)}</td><td class="text-end">${fmt(l.hours, 2)}</td></tr>`).join('');
+    const confidence = Number(ws.confidence || 0);
+    // A multi-group extraction joins the groups' mass notes with " | ": one paragraph each.
+    const massNotes = String(ws.mass_basis || '').split(/\s+\|\s+/).map((s) => s.trim()).filter(Boolean);
+    const list = (items) => `<ul class="ref-note-list">${items.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`;
+    const notes = [
+        massNotes.length ? `<details class="ref-note"><summary>Kütle notu (${massNotes.length})</summary>${list(massNotes)}</details>` : '',
+        (ws.open_questions || []).length ? `<details class="ref-note"><summary>Çizimin söylemediği (${ws.open_questions.length})</summary>${list(ws.open_questions)}</details>` : '',
+        (ws.design_features || []).length ? `<details class="ref-note"><summary>Tasarım özellikleri (${ws.design_features.length})</summary>${list(ws.design_features)}</details>` : '',
+    ].join('');
     body.innerHTML = `
-        <div class="small mb-2">
-            Kaynak listesi v${ws.version}${ws.versions?.length > 1 ? ` (sürümler: ${ws.versions.join(', ')})` : ''} ·
-            güven ${fmt((ws.confidence || 0) * 100, 0)}% · ${ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? 0} parça · ${ws.bends_per_unit ?? 0} büküm ·
-            birim kütle ${fmt(ws.unit_mass_kg, 0)} kg${ws.mass_basis ? ` [${escapeHtml(ws.mass_basis)}]` : ''}
+        <div class="ref-weld-meta">
+            <span>Kaynak listesi <strong>v${ws.version}</strong>${ws.versions?.length > 1 ? ` (sürümler: ${ws.versions.join(', ')})` : ''}</span>
+            <span>Güven <span class="status-badge ${confidence >= 0.7 ? 'status-green' : confidence >= 0.5 ? 'status-orange' : 'status-red'}">${fmt(confidence * 100, 0)}%</span></span>
+            <span><strong>${ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? 0}</strong> parça</span>
+            <span><strong>${ws.bends_per_unit ?? 0}</strong> büküm</span>
+            <span>Birim kütle <strong>${fmt(ws.unit_mass_kg, 0)} kg</strong>${massNotes.length ? ' <span class="text-muted">(kütle notuna bakın)</span>' : ''}</span>
         </div>
+        ${notes}
         <div id="ref-weld-table"></div>
         <h6 class="mt-3 mb-1" style="font-size:.82rem;font-weight:700">Kaynak dışı (1 adet)</h6>
         <table class="table table-sm ref-bu-table"><thead><tr><th>Adım</th><th class="text-end">Miktar</th><th>Birim</th><th class="text-end">Birim süre</th><th class="text-end">Saat</th></tr></thead>
             <tbody>${nonWelding}</tbody>
             <tfoot><tr><th colspan="4">Kaynak ${fmt(bu.welding_h, 1)} h + kaynak dışı ${fmt(bu.non_welding_h, 1)} h = bottom-up</th><th class="text-end">${fmt(bu.total_h, 1)} h</th></tr></tfoot>
-        </table>
-        ${(ws.open_questions || []).length ? `<div class="small text-muted"><strong>Çizimin söylemediği:</strong> ${ws.open_questions.map(escapeHtml).join(' · ')}</div>` : ''}
-        ${(ws.design_features || []).length ? `<div class="small text-muted mt-1"><strong>Tasarım özellikleri:</strong> ${ws.design_features.map(escapeHtml).join(' · ')}</div>` : ''}`;
+        </table>`;
+    // 8 columns: size / process / NDT / evidence sit under the description, so
+    // the table fits an 800 px dialog without a horizontal scroll.
+    const detail = (j) => [
+        j.size && `Ölçü: ${j.size}`,
+        j.process && `Proses: ${String(j.process).replace(/_/g, ' ')}`,
+        j.weld_detail && j.weld_detail !== 'not specified' && `Detay: ${j.weld_detail}`,
+        j.ndt && j.ndt !== 'not specified' && j.ndt !== 'none' && `NDT: ${j.ndt}`,
+    ].filter(Boolean).map(escapeHtml).join(' · ');
     modalTables.push(new TableComponent('ref-weld-table', {
         columns: [
-            ...weldColumns(),
-            { field: 'unit_h', label: 'Birim süre', type: 'number', sortable: true, headerClass: 'est-num', cellClass: 'est-num',
-              formatter: (v, r) => (v == null ? '—' : `${fmt(v, 3)} ${escapeHtml(String(r.unit_label || '').replace('joint', 'birleşim'))}`) },
-            { field: 'hours', label: 'Saat', type: 'number', sortable: true, headerClass: 'est-num', cellClass: 'est-num', formatter: num(2) },
+            { field: 'joint_id', label: 'No', width: '64px', sortable: true },
+            { field: 'description', label: 'Birleşim', sortable: false, formatter: (v, j) => `<div class="ref-joint-desc">${escapeHtml(v || '')}</div>
+                ${detail(j) ? `<div class="ref-joint-detail">${detail(j)}</div>` : ''}${j.evidence ? `<div class="ref-joint-detail" title="${escapeHtml(j.evidence)}">Pafta: ${escapeHtml(j.evidence)}</div>` : ''}` },
+            { field: 'joint_type', label: 'Tip · malzeme', sortable: true, width: '130px',
+              formatter: (v, j) => `${JOINT_TYPE_LABELS[v] || escapeHtml(v || '')}<div class="ref-joint-detail">${MATERIAL_LABELS[j.material] || escapeHtml(j.material || '')}</div>` },
+            { field: 'count_per_unit', label: 'Adet', type: 'number', sortable: true, width: '56px', headerClass: 'est-num', cellClass: 'est-num' },
+            { field: 'length_m_each', label: 'm / birleşim', type: 'number', sortable: true, width: '80px', headerClass: 'est-num', cellClass: 'est-num', formatter: num(3) },
+            { field: 'total_m_per_unit', label: 'm toplam', type: 'number', sortable: true, width: '72px', headerClass: 'est-num', cellClass: 'est-num', formatter: num(2) },
+            { field: 'unit_h', label: 'Birim süre', type: 'number', sortable: true, width: '96px', headerClass: 'est-num', cellClass: 'est-num',
+              formatter: (v, r) => (v == null ? '—' : `${fmt(v, 3)} <span class="ref-joint-detail d-inline">${escapeHtml(String(r.unit_label || '').replace('joint', 'birleşim'))}</span>`) },
+            { field: 'hours', label: 'Saat', type: 'number', sortable: true, width: '60px', headerClass: 'est-num', cellClass: 'est-num', formatter: num(2) },
         ],
         data: joints,
         sortable: true,
