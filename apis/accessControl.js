@@ -50,6 +50,8 @@ const ROUTE_ACCESS_INHERITS = {
         '/manufacturing/material-tracking',
         '/procurement/purchase-requests/create',
     ],
+    // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
+    '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking'],
 };
 
 function normalizePath(path) {

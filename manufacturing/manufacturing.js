@@ -240,6 +240,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-box',
                 iconColor: 'info',
                 link: '/manufacturing/material-tracking'
+            },
+            {
+                title: 'Depo Çekme Talepleri',
+                description: 'Taşeron ve kaynak ekiplerine depodan çekilen malzeme taleplerini izleyin.',
+                icon: 'fas fa-dolly',
+                iconColor: 'info',
+                link: '/manufacturing/material-tracking/pull-requests'
             }
         ]
     });

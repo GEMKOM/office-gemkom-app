@@ -518,6 +518,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Malzeme Takibi',
                 icon: 'fas fa-box',
                 children: {}
+            },
+            '/manufacturing/material-tracking/pull-requests': {
+                label: 'Depo Çekme Talepleri',
+                icon: 'fas fa-dolly',
+                children: {}
             }
 
 
