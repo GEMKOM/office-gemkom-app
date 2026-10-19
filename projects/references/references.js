@@ -27,7 +27,7 @@ import {
     getEstimatorParameters, getReferenceSummary, getWeldSchedule, listReferenceProfiles,
     reviewReferenceProfile, updateEstimatorParameters,
 } from '../../apis/estimator.js';
-import { JOINT_TYPE_LABELS, MATERIAL_LABELS, fmt } from '../../components/estimate-report/estimate-report.js';
+import { JOINT_TYPE_LABELS, MATERIAL_LABELS, fmt, processLabel } from '../../components/estimate-report/estimate-report.js';
 import { openEstimatorMethod } from '../../components/estimator-method/estimator-method.js';
 
 const JOB_STATUS = {
@@ -37,7 +37,10 @@ const EXCLUSION_LABELS = {
     'excluded by review': 'İnceleme ile hariç',
     'no recorded hours': 'Kayıtlı saat yok',
     'built by a subcontractor': 'Taşeronda yapılmış',
+    'not subcontracted': 'Taşerona verilmemiş',
 };
+// "Not given" in either language (English schedules until translate_weld_schedules runs).
+const EMPTY_VALUES = new Set(['not specified', 'none', 'n/a', 'belirtilmemiş', 'yok']);
 const UNIT_LABELS = { 'h/piece': 'h/parça', 'h/bend': 'h/büküm', 'h/pressure joint': 'h/basınçlı birleşim', 'h/kg': 'h/kg' };
 const NON_WELDING_LABELS = {
     cutting: 'Kesim', bending: 'Büküm', bevel_and_pt: 'Ağız açma + PT', fitup_hydrotest_cleaning: 'Çatma, hidrotest, temizlik',
@@ -346,15 +349,15 @@ async function openWeldList(row) {
         <h6 class="mt-3 mb-1" style="font-size:.82rem;font-weight:700">Kaynak dışı (1 adet)</h6>
         <table class="table table-sm ref-bu-table"><thead><tr><th>Adım</th><th class="text-end">Miktar</th><th>Birim</th><th class="text-end">Birim süre</th><th class="text-end">Saat</th></tr></thead>
             <tbody>${nonWelding}</tbody>
-            <tfoot><tr><th colspan="4">Kaynak ${fmt(bu.welding_h, 1)} h + kaynak dışı ${fmt(bu.non_welding_h, 1)} h = bottom-up</th><th class="text-end">${fmt(bu.total_h, 1)} h</th></tr></tfoot>
+            <tfoot><tr><th colspan="4">Kaynak ${fmt(bu.welding_h, 1)} h + kaynak dışı ${fmt(bu.non_welding_h, 1)} h = hesaplanan saat (1 adet)</th><th class="text-end">${fmt(bu.total_h, 1)} h</th></tr></tfoot>
         </table>`;
     // 8 columns: size / process / NDT / evidence sit under the description, so
     // the table fits an 800 px dialog without a horizontal scroll.
     const detail = (j) => [
         j.size && `Ölçü: ${j.size}`,
-        j.process && `Proses: ${String(j.process).replace(/_/g, ' ')}`,
-        j.weld_detail && j.weld_detail !== 'not specified' && `Detay: ${j.weld_detail}`,
-        j.ndt && j.ndt !== 'not specified' && j.ndt !== 'none' && `NDT: ${j.ndt}`,
+        j.process && `Proses: ${processLabel(j.process)}`,
+        j.weld_detail && !EMPTY_VALUES.has(String(j.weld_detail).trim().toLowerCase()) && `Detay: ${j.weld_detail}`,
+        j.ndt && !EMPTY_VALUES.has(String(j.ndt).trim().toLowerCase()) && `NDT: ${j.ndt}`,
     ].filter(Boolean).map(escapeHtml).join(' · ');
     modalTables.push(new TableComponent('ref-weld-table', {
         columns: [
@@ -510,7 +513,7 @@ function renderUnits(errors = {}) {
     panel.innerHTML = `
         <div class="ref-units-head">
             <h6><i class="fas fa-sliders me-1"></i>Birim süreler ve maliyet parametreleri</h6>
-            <span class="small">Bir adedin bottom-up saati bu sürelerle hesaplanır; değişiklik bütün faktörleri ve yeni tahminleri hemen etkiler. Hepsi aynı oranda değişirse tahmin değişmez.</span>
+            <span class="small">Bir adedin hesaplanan saati bu sürelerle bulunur; değişiklik bütün faktörleri ve yeni tahminleri hemen etkiler. Hepsi aynı oranda değişirse tahmin değişmez.</span>
         </div>
         <div class="ref-units-groups">${groupHtml}</div>
         <div class="ref-units-foot">

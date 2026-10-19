@@ -36,6 +36,13 @@ export const JOINT_TYPE_LABELS = {
     plate_fillet: 'Sac köşe', plate_butt: 'Sac alın', stitch_fillet: 'Aralıklı köşe', pin_to_plate: 'Pim–sac',
     nozzle_coupling: 'Nozul/manşon', other: 'Diğer',
 };
+// Weld process codes of the extraction schema (estimator weld_extraction.JointSchema).
+export const PROCESS_LABELS = {
+    TIG_root_fill: 'TIG kök + TIG dolgu', TIG_root_MAG_fill: 'TIG kök + MAG dolgu', MAG: 'MAG', TIG_copper: 'TIG (bakır)', other: 'Diğer',
+};
+export function processLabel(code) {
+    return PROCESS_LABELS[code] || String(code || '').replace(/_/g, ' ');
+}
 export const MATERIAL_LABELS = { copper: 'Bakır', carbon_steel: 'Çelik', stainless: 'Paslanmaz', copper_to_steel: 'Cu–çelik', other: 'Diğer' };
 
 let mountCounter = 0;
@@ -533,7 +540,7 @@ export function weldColumns() {
         { field: 'joint_type', label: 'Tip', sortable: true, formatter: (v) => JOINT_TYPE_LABELS[v] || escapeHtml(v || '') },
         { field: 'material', label: 'Malzeme', sortable: true, formatter: (v) => MATERIAL_LABELS[v] || escapeHtml(v || '') },
         { field: 'size', label: 'Ölçü', sortable: false, formatter: (v) => escapeHtml(v || '') },
-        { field: 'process', label: 'Proses', sortable: false, formatter: (v) => escapeHtml(String(v || '').replace(/_/g, ' ')) },
+        { field: 'process', label: 'Proses', sortable: false, formatter: (v) => escapeHtml(processLabel(v)) },
         { field: 'count_per_unit', label: 'Adet', type: 'number', sortable: true, headerClass: 'est-num', cellClass: 'est-num' },
         { field: 'length_m_each', label: 'm / birleşim', type: 'number', sortable: true, headerClass: 'est-num', cellClass: 'est-num', formatter: (v) => fmt(v, 3) },
         { field: 'total_m_per_unit', label: 'm toplam', type: 'number', sortable: true, headerClass: 'est-num', cellClass: 'est-num', formatter: (v) => fmt(v, 2) },
@@ -563,7 +570,7 @@ export function printReport(report, weldSchedule) {
     const weldHtml = weldSchedule ? `
         <h2>Kaynak listesi (1 adet) · v${weldSchedule.version}</h2>
         <table class="weld"><thead><tr><th>No</th><th>Birleşim</th><th>Tip</th><th>Malzeme</th><th>Ölçü</th><th>Proses</th><th class="n">Adet</th><th class="n">m/birleşim</th><th class="n">m toplam</th><th>NDT</th></tr></thead>
-        <tbody>${(weldSchedule.joints || []).map((j) => `<tr><td>${escapeHtml(j.joint_id || '')}</td><td>${escapeHtml(j.description || '')}</td><td>${JOINT_TYPE_LABELS[j.joint_type] || escapeHtml(j.joint_type || '')}</td><td>${MATERIAL_LABELS[j.material] || escapeHtml(j.material || '')}</td><td>${escapeHtml(j.size || '')}</td><td>${escapeHtml(String(j.process || '').replace(/_/g, ' '))}</td><td class="n">${j.count_per_unit ?? ''}</td><td class="n">${fmt(j.length_m_each, 3)}</td><td class="n">${fmt(j.total_m_per_unit, 2)}</td><td>${escapeHtml(j.ndt || '')}</td></tr>`).join('')}</tbody></table>` : '';
+        <tbody>${(weldSchedule.joints || []).map((j) => `<tr><td>${escapeHtml(j.joint_id || '')}</td><td>${escapeHtml(j.description || '')}</td><td>${JOINT_TYPE_LABELS[j.joint_type] || escapeHtml(j.joint_type || '')}</td><td>${MATERIAL_LABELS[j.material] || escapeHtml(j.material || '')}</td><td>${escapeHtml(j.size || '')}</td><td>${escapeHtml(processLabel(j.process))}</td><td class="n">${j.count_per_unit ?? ''}</td><td class="n">${fmt(j.length_m_each, 3)}</td><td class="n">${fmt(j.total_m_per_unit, 2)}</td><td>${escapeHtml(j.ndt || '')}</td></tr>`).join('')}</tbody></table>` : '';
     const u = report.usage?.report || {};
     const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
         <style>
