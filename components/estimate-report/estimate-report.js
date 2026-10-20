@@ -73,7 +73,10 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         methodOpen: false,
         methodHtml: null,      // "Nasıl çalışır?" (GET /estimator/method/), loaded on first open
         pollTimer: null,
+        pollActive: false,     // a poll chain is alive (timer pending or tick in flight)
+        pollGen: 0,            // bumped by stop/start: a tick of an older chain never reschedules
         pollCount: 0,
+        loadSeq: 0,            // only the newest load() may write the view
         destroyed: false,
         tables: [],
     };
@@ -81,9 +84,11 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
     // ------------------------------------------------------------ data
 
     async function load({ quiet = false, reportId = null } = {}) {
+        const seq = ++view.loadSeq;
+        const stale = () => view.destroyed || seq !== view.loadSeq;
+        const id = reportId || (fixed ? subject.reportId : null);
         try {
             let report;
-            const id = reportId || (fixed ? subject.reportId : null);
             if (id) {
                 report = await getEstimate(id);
             } else {
@@ -94,26 +99,35 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
                     report = null;
                 }
             }
-            if (view.destroyed) return;
-            view.report = report;
-            view.error = null;
-            view.hidden = false;
-            view.weldSchedule = report?.weld_schedule || null;
-            if (!view.weldSchedule && !fixed) {
+            if (stale()) return;
+            let weldSchedule = report?.weld_schedule || null;
+            if (!weldSchedule && !fixed) {
                 try {
-                    view.weldSchedule = await getWeldSchedule(subject);
+                    weldSchedule = await getWeldSchedule(subject);
                 } catch (error) {
                     if (error.status !== 404) console.warn('Kaynak listesi yüklenemedi:', error);
                 }
-                if (view.destroyed) return;
+                if (stale()) return;
             }
+            view.report = report;
+            view.error = null;
+            view.hidden = false;
+            view.weldSchedule = weldSchedule;
             // One poll chain at a time: a tick's own load() must not start a second one.
-            if (report && isOpen(report.status)) { if (!view.pollTimer) startPolling(); }
+            if (report && isOpen(report.status)) { if (!view.pollActive) startPolling(); }
             else stopPolling();
         } catch (error) {
-            if (view.destroyed) return;
+            if (stale()) return;
             if (error.status === 403) {
                 view.hidden = true;
+                stopPolling();
+            } else if (error.status === 404 && id) {
+                // The report shown is gone (deleted, or a stale id): stop asking for it
+                // and fall back to the subject's newest report instead of polling a 404.
+                stopPolling();
+                if (!fixed) { await load({ quiet }); return; }
+                view.report = null;
+                view.error = 'Rapor bulunamadı (silinmiş olabilir).';
             } else if (!quiet) {
                 console.error('Tahmin yüklenemedi:', error);
                 view.error = error.message;
@@ -207,23 +221,29 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         }
     }
 
+    /** One chain: every start/stop bumps `pollGen`, and a tick whose
+     *  generation is no longer current (stopped, restarted or destroyed while
+     *  its request was in flight) returns without scheduling another one. */
     function startPolling() {
         stopPolling();
+        const gen = view.pollGen;
+        view.pollActive = true;
         view.pollCount = 0;
         const tick = async () => {
+            if (gen !== view.pollGen || view.destroyed) return;
             view.pollCount += 1;
-            if (view.destroyed || view.pollCount > POLL_MAX) { view.pollTimer = null; return; }
+            if (view.pollCount > POLL_MAX) { stopPolling(); return; }
             await load({ quiet: true, reportId: view.report?.id });
-            if (!view.destroyed && view.report && isOpen(view.report.status) && view.pollCount <= POLL_MAX) {
-                view.pollTimer = setTimeout(tick, POLL_MS);
-            } else {
-                view.pollTimer = null;
-            }
+            if (gen !== view.pollGen || view.destroyed) return;
+            if (view.report && isOpen(view.report.status)) view.pollTimer = setTimeout(tick, POLL_MS);
+            else stopPolling();
         };
         view.pollTimer = setTimeout(tick, POLL_MS);
     }
 
     function stopPolling() {
+        view.pollGen += 1;
+        view.pollActive = false;
         if (view.pollTimer) clearTimeout(view.pollTimer);
         view.pollTimer = null;
     }
