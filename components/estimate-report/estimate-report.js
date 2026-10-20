@@ -7,7 +7,9 @@
  * per version, read for free by everyone with the `view_estimates` right;
  * a new version costs a model run (~2 USD, 7-10 min) and only starts when
  * someone clicks Oluştur / Yenile. While a run is queued or running the
- * card polls the server; the status pill is a badges.css status-badge.
+ * card polls the server and offers Durdur (POST …/cancel/: the row becomes
+ * failed with "Kullanıcı tarafından durduruldu"); the status pill is a
+ * badges.css status-badge.
  *
  * Subject: { jobNo } | { offerId } | { reportId } (a fixed report, no
  * create button). Users without access get nothing: the card never renders.
@@ -18,12 +20,14 @@ import { escapeHtml } from '../../utils/text.js';
 import { showNotification } from '../notification/notification.js';
 import { loadMethodHtml } from '../estimator-method/estimator-method.js';
 import {
-    ESTIMATE_STATUS, REVIEW_LABELS, createEstimate, getEstimate, getLatestEstimate, getWeldSchedule, reviewEstimate,
+    ESTIMATE_STATUS, REVIEW_LABELS, cancelEstimate, createEstimate, getEstimate, getLatestEstimate, getWeldSchedule, reviewEstimate,
 } from '../../apis/estimator.js';
 
 const POLL_MS = 5000;
 const POLL_MAX = 180;           // 15 minutes; a run is 7-10
 const WELD_OPEN_KEY = 'estimateWeldListOpen';
+const CANCEL_CONFIRM = 'Çalıştırma durdurulsun mu? Harcanan kısım iade edilmez.';
+const CANCELLED_PREFIX = 'Kullanıcı tarafından durduruldu';   // the backend's error text of a stopped run
 
 export const COST_ROW_LABELS = {
     material: 'Malzeme', labor: 'İşçilik', subcontractor: 'Taşeron', paint: 'Boya', paint_material: 'Boya Malzemesi',
@@ -103,7 +107,8 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
                 }
                 if (view.destroyed) return;
             }
-            if (report && isOpen(report.status)) startPolling();
+            // One poll chain at a time: a tick's own load() must not start a second one.
+            if (report && isOpen(report.status)) { if (!view.pollTimer) startPolling(); }
             else stopPolling();
         } catch (error) {
             if (view.destroyed) return;
@@ -173,15 +178,46 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         }
     }
 
+    /** Durdur: stop the queued / running run shown. The server answers with
+     *  the stopped row; the card is reloaded from it (status failed + the
+     *  "durduruldu" text). A 409 means it finished meanwhile: just reload. */
+    async function cancel() {
+        if (view.busy || !view.report || !isOpen(view.report.status)) return;
+        if (!window.confirm(CANCEL_CONFIRM)) return;
+        const id = view.report.id;
+        view.busy = true;
+        view.actionError = null;
+        render();
+        try {
+            await cancelEstimate(id);
+            if (view.destroyed) return;
+            stopPolling();
+            showNotification('Çalıştırma durduruldu.', 'info');
+            await load({ quiet: true, reportId: id });
+        } catch (error) {
+            if (view.destroyed) return;
+            if (error.status === 409) {
+                await load({ quiet: true, reportId: id });     // already finished: show what it became
+            } else {
+                view.actionError = error.message;
+            }
+        } finally {
+            view.busy = false;
+            if (!view.destroyed) render();
+        }
+    }
+
     function startPolling() {
         stopPolling();
         view.pollCount = 0;
         const tick = async () => {
             view.pollCount += 1;
-            if (view.destroyed || view.pollCount > POLL_MAX) return;
+            if (view.destroyed || view.pollCount > POLL_MAX) { view.pollTimer = null; return; }
             await load({ quiet: true, reportId: view.report?.id });
             if (!view.destroyed && view.report && isOpen(view.report.status) && view.pollCount <= POLL_MAX) {
                 view.pollTimer = setTimeout(tick, POLL_MS);
+            } else {
+                view.pollTimer = null;
             }
         };
         view.pollTimer = setTimeout(tick, POLL_MS);
@@ -275,6 +311,10 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
             buttons.push(`<button type="button" class="btn btn-sm est-report-generate" data-est-action="generate" ${busy ? 'disabled' : ''}>
                 <i class="fas ${r ? 'fa-rotate' : 'fa-wand-magic-sparkles'} me-1"></i>${r ? 'Yenile' : 'Oluştur'}</button>`);
         }
+        if (r && isOpen(r.status)) {
+            buttons.push(`<button type="button" class="btn btn-sm btn-outline-danger" data-est-action="cancel" ${busy ? 'disabled' : ''} title="Çalıştırmayı durdur">
+                <i class="fas fa-stop me-1"></i>Durdur</button>`);
+        }
         if (r && r.status === 'done') {
             if (r.review_decision !== 'accept') {
                 buttons.push(`<button type="button" class="btn btn-sm btn-outline-success" data-est-action="accept" ${busy ? 'disabled' : ''}>
@@ -306,8 +346,9 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
             </div>`;
         }
         if (r.status === 'failed') {
-            return `<div class="est-report-alert"><i class="fas fa-triangle-exclamation mt-1"></i>
-                <span><strong>Çalıştırma başarısız.</strong> ${escapeHtml(firstLine(r.error))}
+            const stopped = String(r.error || '').startsWith(CANCELLED_PREFIX);
+            return `<div class="est-report-alert"><i class="fas ${stopped ? 'fa-stop-circle' : 'fa-triangle-exclamation'} mt-1"></i>
+                <span><strong>${stopped ? 'Çalıştırma durduruldu.' : 'Çalıştırma başarısız.'}</strong> ${escapeHtml(firstLine(r.error))}
                 ${createSubject() ? '<br>Yenile ile yeni bir sürüm başlatılabilir.' : ''}</span></div>
                 ${view.weldSchedule ? `<div class="est-report-body">${weldSection(view.weldSchedule)}</div>` : ''}`;
         }
@@ -462,6 +503,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         if (!el || !container.contains(el) || el.tagName === 'SELECT') return;
         const action = el.dataset.estAction;
         if (action === 'generate') generate();
+        else if (action === 'cancel') cancel();
         else if (action === 'retry') load();
         else if (action === 'accept') review('accept');
         else if (action === 'note') { view.noteOpen = true; render(); }

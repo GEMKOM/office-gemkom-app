@@ -64,6 +64,13 @@ export function reviewEstimate(id, decision, note = '') {
     return request(`${BASE}/estimates/${id}/review/`, { method: 'POST', body: JSON.stringify({ decision, note }) }, 'İnceleme kaydedilemedi');
 }
 
+/** Durdur: stop a queued or running run. Returns the report (status failed,
+ *  error "Kullanıcı tarafından durduruldu (…)"). Errors carry `status`:
+ *  409 the run had already finished. What was spent is not refunded. */
+export function cancelEstimate(id) {
+    return request(`${BASE}/estimates/${id}/cancel/`, { method: 'POST' }, 'Çalıştırma durdurulamadı');
+}
+
 /** The latest (or, for a job order, the given `version`) weld list of a job order
  *  or of an offer's customer drawings, with `version_history` (who edited each
  *  version, why, from which one). 404 when none. */
