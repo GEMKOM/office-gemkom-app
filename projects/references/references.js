@@ -55,6 +55,12 @@ let modal = null;
 let modalTables = [];
 let rows = [];
 let sortState = { field: null, dir: 'asc' };   // TableComponent only reports header clicks (onSort); the page sorts
+// The page also pages: TableComponent's own client-side slicing only kicks in when
+// totalItems > data.length, so it runs in serverSidePagination mode and gets one
+// page of the sorted list (sorting stays global across pages).
+let page = 1;
+let pageSize = 50;
+let libraryTotal = null;   // every profile, unfiltered (summary counts)
 let familiesLoaded = false;
 let units = null;           // GET /estimator/parameters/ payload
 let unitsBusy = false;
@@ -179,13 +185,25 @@ ${hours}`)}">${text}<i class="fas fa-ban ref-out-icon"></i></span>`;
         ],
         data: [],
         sortable: true,
-        pagination: false,   // a few dozen to a few hundred profiles; one sortable list
+        pagination: true,
+        serverSidePagination: true,
+        itemsPerPage: pageSize,
+        currentPage: 1,
         exportable: true,
         exportFilename: 'tahmin-referanslari',
         emptyMessage: 'Filtreye uyan referans yok',
         onRowClick: (row) => openWeldList(row),
-        onSort: (field, dir) => { sortState = { field, dir }; showRows(); },
+        onSort: (field, dir) => { sortState = { field, dir }; page = 1; showRows(); },
+        onPageChange: (p) => { page = p; showRows(); },
+        onPageSizeChange: (size) => { pageSize = size; page = 1; showRows(); },
     });
+    // Excel export: the whole filtered, sorted list, not just the page on screen.
+    const pageExport = table.prepareExportData.bind(table);
+    table.prepareExportData = () => {
+        const onScreen = table.options.data;
+        table.options.data = sortedRows();
+        try { return pageExport(); } finally { table.options.data = onScreen; }
+    };
 }
 
 const RELIABILITY_TEXT = { ok: 'güvenilir', unreliable: 'güvenilmez, ≤ 10 h', none: 'kayıt yok' };
@@ -214,7 +232,27 @@ function sortedRows() {
 }
 
 function showRows() {
-    table.updateData(sortedRows(), rows.length);
+    const all = sortedRows();
+    const pages = Math.max(1, Math.ceil(all.length / pageSize));
+    page = Math.min(Math.max(1, page), pages);
+    table.options.itemsPerPage = pageSize;
+    table.updateData(all.slice((page - 1) * pageSize, page * pageSize), all.length, page);
+    renderCount();
+}
+
+function filtersActive() {
+    const f = filters?.getFilterValues() || {};
+    return Object.values(f).some((v) => (Array.isArray(v) ? v.length : String(v ?? '').trim() !== ''));
+}
+
+/** "66 referans", or "12 / 66 referans (filtreli)" while a filter is on. */
+function renderCount() {
+    const el = document.getElementById('ref-count');
+    if (!el) return;
+    const total = libraryTotal ?? rows.length;
+    el.innerHTML = filtersActive()
+        ? `<strong>${rows.length}</strong> / ${total} referans <span class="text-muted">(filtreli)</span>`
+        : `<strong>${total}</strong> referans`;
 }
 
 function exclusionLabel(reason) {
@@ -245,6 +283,7 @@ async function loadRows() {
             status: joinValue(f['status-filter']),
         });
         rows = data.results || [];
+        page = 1;
         showRows();
         if (!familiesLoaded && Array.isArray(data.families)) {
             // Only the families that have profiles, in the label order.
@@ -256,7 +295,9 @@ async function loadRows() {
     } catch (error) {
         console.error('Referanslar yüklenemedi:', error);
         showNotification(error.message || 'Referanslar yüklenemedi', 'error');
-        table.updateData([], 0);
+        rows = [];
+        table.updateData([], 0, 1);
+        renderCount();
     } finally {
         table.setLoading(false);
     }
@@ -267,7 +308,10 @@ async function loadRows() {
 async function loadSummary() {
     const host = document.getElementById('ref-summary');
     try {
-        renderSummary(await getReferenceSummary());
+        const s = await getReferenceSummary();
+        libraryTotal = s.counts?.total ?? null;
+        renderSummary(s);
+        renderCount();
     } catch (error) {
         host.innerHTML = `<div class="ref-summary-empty text-danger">${escapeHtml(error.message || 'Özet yüklenemedi')}</div>`;
     }

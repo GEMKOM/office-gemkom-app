@@ -14,6 +14,8 @@ body > .modern-dropdown-portal .modern-dropdown-menu-portal { z-index: 1080 !imp
 }
 .ref-toolbar-text { font-size: 0.85rem; color: #4b5563; max-width: 60rem; }
 .ref-toolbar-buttons { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+.ref-count { align-self: center; font-size: 0.85rem; color: #374151; margin-right: 0.25rem; white-space: nowrap; }
+.ref-count strong { color: #3b1a8a; font-variant-numeric: tabular-nums; }
 
 /* --- summary cards ------------------------------------------------------------- */
 .ref-summary {
