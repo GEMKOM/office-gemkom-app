@@ -12,7 +12,7 @@ import { renderMarkdown } from '../../utils/markdownLite.js';
 import { escapeHtml } from '../../utils/text.js';
 import { REFERENCE_ROUTE } from '../../apis/estimator.js';
 import {
-    UNIT_LABELS, exclusionLabel, fmt, hoursBreakdown, similarRow, withoutFirstTable,
+    GEOMETRY_SOURCE_LABELS, UNIT_LABELS, exclusionLabel, fmt, hoursBreakdown, hoursInfo, similarRow, withoutFirstTable,
 } from './report-model.js';
 
 export const COST_ROW_LABELS = {
@@ -288,8 +288,9 @@ function heroHtml(r, m, v, goto) {
     if (m.unitKg != null) facts.push(fact('Birim ağırlık', `${fmt(m.unitKg, 0)} kg`));
     if (m.totalKg != null) facts.push(fact('Toplam ağırlık', `${fmt(m.totalKg, 0)} kg`, m.totalKgBasis ? decorate(escapeHtml(m.totalKgBasis), goto) : ''));
     if (hours.expected_h_total != null) {
+        const band = hours.low_h_total != null && hours.high_h_total != null ? `${fmt(hours.low_h_total, 0)} – ${fmt(hours.high_h_total, 0)} h` : '';
         facts.push(fact('Kaynak saati · iç imalat', `${fmt(hours.expected_h_total, 0)} h`,
-            hours.low_h_total != null ? `${fmt(hours.low_h_total, 0)} – ${fmt(hours.high_h_total, 0)} h` : ''));
+            hoursInfo(hours).noInHouseRef ? `iç imalat referansı yok · faktör 1,0${band ? ` · ${band}` : ''}` : band));
     }
     if (m.termin) facts.push(fact('Termin', escapeHtml(m.termin), '', 'is-wide'));
     if (ws) {
@@ -490,53 +491,74 @@ function laborSection(r, m, v, goto) {
     const cal = h.calibration?.in_house;
     const bu = h.bottom_up || r.weld_schedule?.bottom_up;
     if (!cal && !bu && !sec) return '';
+    const info = hoursInfo(h);
+    const range = (lo, hi, digits, unit) => (lo != null && hi != null ? `${fmt(lo, digits)} – ${fmt(hi, digits)} ${unit}` : '');
     const kpis = [];
     if (bu?.total_h != null) {
-        kpis.push(kpi('Hesaplanan (birim sürelerle)', `${fmt(bu.total_h, 1)} h/adet`, `kaynak ${fmt(bu.welding_h, 1)} + diğer ${fmt(bu.non_welding_h, 1)}`));
+        kpis.push(kpi(info.geometry ? 'Hesaplanan (geometriden)' : 'Hesaplanan (birim sürelerle)', `${fmt(bu.total_h, 1)} h/adet`,
+            `kaynak ${fmt(bu.welding_h, 1)} + diğer ${fmt(bu.non_welding_h, 1)}`));
     }
     if (cal) {
-        const flag = cal.factor_mean != null && (cal.factor_mean < 0.6 || cal.factor_mean > 1.6);
-        kpis.push(kpi('Kalibrasyon faktörü', `${fmt(cal.factor_mean, 2)}${flag ? ` ${badge('aralık dışı', 'status-orange', 'Olağan aralık 0,6–1,6; nedeni raporun 2.2 bölümünde')}` : ''}`,
-            `${fmt(cal.factor_min, 2)} – ${fmt(cal.factor_max, 2)} · ${(cal.references_used || []).length} referans`));
-        kpis.push(kpi('Beklenen saat', `${fmt(cal.expected_h_per_unit, 1)} h/adet`, `${fmt(cal.low_h_per_unit, 1)} – ${fmt(cal.high_h_per_unit, 1)} h/adet`));
+        if (info.noInHouseRef) {
+            kpis.push(kpi('Kalibrasyon faktörü', `1,00 ${badge('referans yok', 'status-orange', 'Kullanılabilir iç imalat referansı yok')}`, 'hesaplanan saat aynen alındı'));
+        } else {
+            const flag = cal.factor_mean != null && (cal.factor_mean < 0.6 || cal.factor_mean > 1.6);
+            kpis.push(kpi('Kalibrasyon faktörü', `${fmt(cal.factor_mean, 2)}${flag ? ` ${badge('aralık dışı', 'status-orange', 'Olağan aralık 0,6–1,6; nedeni raporun 2.2 bölümünde')}` : ''}`,
+                [range(cal.factor_min, cal.factor_max, 2, ''), `${(cal.references_used || []).length} referans`].filter(Boolean).join(' · ')));
+        }
+        kpis.push(kpi('Beklenen saat', `${fmt(cal.expected_h_per_unit, 1)} h/adet`,
+            range(cal.low_h_per_unit, cal.high_h_per_unit, 1, 'h/adet') || (info.noInHouseRef ? 'aralık raporda varsayım (§2.2)' : '')));
     }
     if (h.expected_h_total != null) {
-        kpis.push(kpi(`Toplam${m.quantity ? ` (${fmt(m.quantity, 0)} adet)` : ''}`, `${fmt(h.expected_h_total, 0)} h`, `${fmt(h.low_h_total, 0)} – ${fmt(h.high_h_total, 0)} h`));
+        kpis.push(kpi(`Toplam${m.quantity ? ` (${fmt(m.quantity, 0)} adet)` : ''}`, `${fmt(h.expected_h_total, 0)} h`, range(h.low_h_total, h.high_h_total, 0, 'h')));
     }
     const wage = h.labor_eur_per_h ?? r.inputs?.parameters?.labor_eur_per_h;
     if (wage != null) kpis.push(kpi('İşçilik ücreti', `${fmt(wage, 2)} €/h`, 'referansların ortalaması'));
     if (Number(h.machining_h_per_unit_references)) kpis.push(kpi('Talaşlı (referans ort.)', `${fmt(h.machining_h_per_unit_references, 1)} h/adet`, 'çizimden hesaplanmaz'));
 
+    const noRefNote = info.noInHouseRef ? `<div class="est-callout"><i class="fas fa-triangle-exclamation"></i><span>
+        <strong>Kullanılabilir iç imalat referansı yok.</strong> İç imalat faktörü 1,0 alındı: saat, birleşimlerin geometrisinden hesaplanan
+        değerdir ve kayıtlı saatlerle doğrulanmadı. Düşük / yüksek saat raporun varsayımıdır (§2.2).</span></div>` : '';
+
     const refsUsed = cal?.references_used || [];
     const refPool = [...(h.references?.in_house || []), ...(h.references?.subcontract || [])];
     const refRows = refsUsed.map((no) => refPool.find((x) => x.job_no === no) || { job_no: no });
-    const calTable = refRows.length ? `<div class="est-sub-title">Kalibrasyon referansları <span class="est-muted">— faktör = kayıtlı saat ÷ birim sürelerle hesaplanan saat</span></div>
+    // On the in-house route a partly subcontracted reference is compared on GEMKOM's share of the work.
+    const inHouseHours = (x) => (x.bottom_up_in_house_h_per_unit != null ? x.bottom_up_in_house_h_per_unit : x.bottom_up_h_per_unit);
+    const calTable = refRows.length ? `<div class="est-sub-title">Kalibrasyon referansları <span class="est-muted">— faktör = kayıtlı saat ÷ ${info.geometry ? 'aynı yöntemle' : 'birim sürelerle'} hesaplanan saat</span></div>
         <div class="est-table-wrap"><table class="est-table">
             <thead><tr><th>İş</th><th>Rota</th><th class="num">Benzerlik</th><th class="num">Kaynak m/adet</th><th class="num">Kayıtlı h/adet</th><th class="num">Hesaplanan h/adet</th><th class="num">Faktör</th></tr></thead>
-            <tbody>${refRows.map((x) => `<tr>
+            <tbody>${refRows.map((x) => {
+                const own = inHouseHours(x);
+                const split = x.bottom_up_in_house_h_per_unit != null && x.bottom_up_h_per_unit != null && Math.abs(x.bottom_up_in_house_h_per_unit - x.bottom_up_h_per_unit) > 0.05;
+                return `<tr>
                 <td>${jobLink(x.job_no)} <span class="est-job-title">${escapeHtml(x.title || '')}</span></td>
                 <td>${routeBadge(x.route)}</td>
                 <td class="num">${similarityCell(x.similarity_to_target)}</td>
                 <td class="num">${fmt(x.weld_m_total, 1)}</td>
                 <td class="num">${fmt(x.recorded_welding_h_per_unit, 1)}</td>
-                <td class="num">${fmt(x.bottom_up_h_per_unit, 1)}</td>
+                <td class="num">${fmt(own, 1)}${split ? `<small class="est-cell-sub" title="Taşeronda kaynaklanan kilonun payı düşüldü">toplam ${fmt(x.bottom_up_h_per_unit, 1)}, iç imalat payı</small>` : ''}</td>
                 <td class="num">${factorBadge(x.factor)}</td>
-            </tr>`).join('')}</tbody>
+            </tr>`;
+            }).join('')}</tbody>
         </table></div>` : '';
 
     const subCal = h.calibration?.subcontract;
     const sameSub = subCal && cal && JSON.stringify(subCal.references_used) === JSON.stringify(cal.references_used) && subCal.factor_mean === cal.factor_mean;
-    const subNote = subCal ? (sameSub
-        ? '<div class="est-note-line"><i class="fas fa-circle-info"></i>Taşeron rotası aynı referansları ve faktörü kullanır.</div>'
-        : `<div class="est-note-line"><i class="fas fa-circle-info"></i>Taşeron rotası: faktör ${fmt(subCal.factor_mean, 2)} (${fmt(subCal.factor_min, 2)} – ${fmt(subCal.factor_max, 2)}), referanslar ${(subCal.references_used || []).map(jobLink).join(', ') || '—'}.</div>`) : '';
+    let subNote = '';
+    if (subCal && !info.noInHouseRef && sameSub) {
+        subNote = '<div class="est-note-line"><i class="fas fa-circle-info"></i>Taşeron rotası aynı referansları ve faktörü kullanır.</div>';
+    } else if (subCal && subCal.factor_mean != null) {
+        subNote = `<div class="est-note-line"><i class="fas fa-circle-info"></i><span>Taşeron rotası (GEMKOM'da kalan saat): faktör ${fmt(subCal.factor_mean, 2)}${subCal.factor_min != null ? ` (${fmt(subCal.factor_min, 2)} – ${fmt(subCal.factor_max, 2)})` : ''}, referanslar ${(subCal.references_used || []).map(jobLink).join(', ') || '—'}.</span></div>`;
+    }
 
     const exIn = h.excluded?.in_house || [];
     const exSub = h.excluded?.subcontract || [];
     const subGroups = {};
-    exSub.forEach((x) => { const k = exclusionLabel(x.reason); subGroups[k] = (subGroups[k] || 0) + 1; });
+    exSub.forEach((x) => { const k = exclusionLabel(x.reason, x); subGroups[k] = (subGroups[k] || 0) + 1; });
     const excluded = (exIn.length || exSub.length) ? `<div class="est-excluded">
         ${exIn.length ? `<div class="est-sub-title">Dışlanan referanslar</div>
-            <ul class="est-plain-list">${exIn.map((x) => `<li>${jobLink(x.job_no)} <span class="est-job-title">${escapeHtml(x.title || '')}</span> — ${escapeHtml(exclusionLabel(x.reason))}</li>`).join('')}</ul>` : ''}
+            <ul class="est-plain-list">${exIn.map((x) => `<li>${jobLink(x.job_no)} <span class="est-job-title">${escapeHtml(x.title || '')}</span> — ${escapeHtml(exclusionLabel(x.reason, x))}</li>`).join('')}</ul>` : ''}
         ${exSub.length ? `<details class="est-more"><summary>Taşeron rotası için dışlanan ${exSub.length} referans: ${Object.entries(subGroups).map(([k, c]) => `${escapeHtml(k)} (${c})`).join(', ')}</summary>
             <ul class="est-plain-list est-cols">${exSub.map((x) => `<li>${jobLink(x.job_no)} <span class="est-job-title">${escapeHtml(x.title || '')}</span></li>`).join('')}</ul></details>` : ''}
     </div>` : '';
@@ -544,12 +566,15 @@ function laborSection(r, m, v, goto) {
     const breakdown = bu ? hoursTable(hoursBreakdown(bu)) : '';
     const body = `
         ${kpis.length ? `<div class="est-kpis">${kpis.join('')}</div>` : ''}
+        ${noRefNote}
         <div class="est-two">
             <div class="est-two-main">${calTable}${subNote}${excluded}</div>
             ${breakdown ? `<div class="est-two-side">${breakdown}</div>` : ''}
         </div>
         ${sec ? `<details class="est-more" open><summary>Raporun işçilik hesabı ve gerekçeleri <span class="est-muted">(${escapeHtml(sec.num || '2.2')})</span></summary>${mdHtml(sec.body, goto)}</details>` : ''}`;
-    return section(v, 'iscilik', 'İşçilik ve saat', body, { sub: 'standart birim süre × referans faktörü' });
+    return section(v, 'iscilik', 'İşçilik ve saat', body, {
+        sub: info.geometry ? 'birleşim geometrisinden saat × referans faktörü' : 'standart birim süre × referans faktörü',
+    });
 }
 
 function kpi(label, value, sub = '') {
@@ -558,23 +583,39 @@ function kpi(label, value, sub = '') {
 
 function hoursTable(b) {
     const total = b.total || b.welding.reduce((s, x) => s + x.hours, 0) + b.other.reduce((s, x) => s + (Number(x.hours) || 0), 0);
-    const row = (label, qty, unitH, unit, hours) => `<tr>
+    const unitText = (unitH, unit, averaged) => {
+        if (unitH == null) return 'karışık';
+        const text = `${fmt(unitH, unitH < 0.1 ? 4 : 2)} ${escapeHtml(UNIT_LABELS[unit] || unit || '')}`;
+        return averaged ? `<span title="Birleşimlerin kendi geometrisinden; grup ortalaması">ort. ${text}</span>` : text;
+    };
+    const row = (label, qty, unitH, unit, hours, { averaged = false, off = false } = {}) => `<tr class="${off ? 'is-zero' : ''}">
         <td>${label}</td>
         <td class="num est-nowrap">${qty}</td>
-        <td class="num est-nowrap est-muted">${unitH != null ? `${fmt(unitH, unitH < 0.1 ? 4 : 2)} ${escapeHtml(UNIT_LABELS[unit] || unit || '')}` : 'karışık'}</td>
-        <td class="num">${fmt(hours, 1)}</td>
-        <td class="est-share-cell">${shareBar(hours, total)}</td>
+        <td class="num est-nowrap est-muted">${unitText(unitH, unit, averaged)}</td>
+        <td class="num">${off ? '—' : fmt(hours, 1)}</td>
+        <td class="est-share-cell">${off ? '' : shareBar(hours, total)}</td>
     </tr>`;
     const qtyText = (q, unit) => (unit === 'h/m' ? `${fmt(q, 1)} m` : unit === 'h/kg' ? `${fmt(q, 0)} kg` : fmt(q, 0));
+    const notes = [];
+    if (b.weldMetalKg != null) notes.push(`kaynak metali <strong>${fmt(b.weldMetalKg, 1)} kg</strong>`);
+    if (b.setupH != null) notes.push(`birleşim hazırlığı (çatma, punta, hizalama) <strong>${fmt(b.setupH, 1)} h</strong> (kaynak saatine dahil)`);
+    const defaults = Number(b.geometrySources?.default) || 0;   // shown as the orange badge, not in the list
+    const src = b.geometrySources ? Object.entries(b.geometrySources).filter(([k, n]) => n && k !== 'default') : [];
+    const srcText = src.map(([k, n]) => `${fmt(n, 0)} ${escapeHtml(GEOMETRY_SOURCE_LABELS[k] || k)}`).join(', ') || (defaults ? 'hepsi' : '');
     return `<div class="est-sub-title">Saat dağılımı · 1 adet</div>
         <div class="est-table-wrap"><table class="est-table est-hours">
             <thead><tr><th>İş adımı</th><th class="num">Miktar</th><th class="num">Birim süre</th><th class="num">Saat</th><th class="est-share-cell">Pay</th></tr></thead>
             <tbody>
-                ${b.welding.map((g) => row(`Kaynak · ${escapeHtml(JOINT_TYPE_LABELS[g.joint_type] || g.joint_type || '')} <span class="est-muted">${escapeHtml(MATERIAL_LABELS[g.material] || g.material || '')}</span>`, qtyText(g.qty, g.unit), g.unit_h, g.unit, g.hours)).join('')}
-                ${b.other.map((x) => row(escapeHtml(x.label), qtyText(x.qty, x.unit), x.unit_h, x.unit, x.hours)).join('')}
+                ${b.welding.map((g) => row(`Kaynak · ${escapeHtml(JOINT_TYPE_LABELS[g.joint_type] || g.joint_type || '')} <span class="est-muted">${escapeHtml(MATERIAL_LABELS[g.material] || g.material || '')}</span>`,
+                    qtyText(g.qty, g.unit), g.unit_h, g.unit, g.hours, { averaged: g.averaged })).join('')}
+                ${b.other.map((x) => (x.applies
+                    ? row(escapeHtml(x.label), qtyText(x.qty, x.unit), x.unit_h, x.unit, x.hours)
+                    : row(`${escapeHtml(x.label)} <span class="est-muted">— basınçlı değil, uygulanmaz</span>`, '—', x.unit_h, x.unit, 0, { off: true }))).join('')}
             </tbody>
             <tfoot><tr class="est-total"><td colspan="3">Toplam</td><td class="num">${fmt(total, 1)}</td><td></td></tr></tfoot>
-        </table></div>`;
+        </table></div>
+        ${notes.length ? `<div class="est-note-line"><i class="fas fa-circle-info"></i><span>${notes.join(' · ')}</span></div>` : ''}
+        ${srcText ? `<div class="est-note-line"><i class="fas fa-ruler-combined"></i><span>Birleşim geometrisi: ${srcText}${defaults ? ` ${badge(`${fmt(defaults, 0)} varsayılan`, 'status-orange', 'Et kalınlığı / ağız çizimden okunamadı; birleşim sınıfının varsayımı kullanıldı')}` : ''}</span></div>` : ''}`;
 }
 
 // ---------------------------------------------------------------- Benzer işler
@@ -735,7 +776,14 @@ function inputsSection(r, m, v) {
     }
     const docs = u.report?.documents;
     add('Belgeler', [docs != null ? `${fmt(docs, 0)} belge` : '', inp.pages != null ? `${fmt(inp.pages, 0)} sayfa` : ''].filter(Boolean).join(' · '));
-    if (inp.weld_schedule_version) add('Kaynak listesi', `v${escapeHtml(inp.weld_schedule_version)}${inp.weld_schedule_created ? ' · bu çalıştırmada çıkarıldı' : ' · önceki çıkarım kullanıldı'}`);
+    const method = r.hours?.method;
+    if (method || r.hours?.unit_times_h_per_m) {
+        const nParams = Object.keys(r.hours?.model_parameters || {}).length;
+        add('Saat yöntemi', method === 'geometry_v4'
+            ? `birleşim geometrisi (v4)${nParams ? ` · ${fmt(nParams, 0)} model parametresi` : ''}`
+            : (method ? escapeHtml(method) : 'standart birim süreler (v3)'));
+    }
+    if (inp.weld_schedule_version) add('Kaynak listesi',`v${escapeHtml(inp.weld_schedule_version)}${inp.weld_schedule_created ? ' · bu çalıştırmada çıkarıldı' : ' · önceki çıkarım kullanıldı'}`);
     if ((inp.references_used || []).length) add('Kalibrasyon referansları', inp.references_used.map(jobLink).join(', '));
     if ((inp.similar_job_nos || []).length) add('Benzer iş adayları', `${inp.similar_job_nos.length} iş`);
     if (inp.similar_drawings_job) add('Çizimi eklenen benzer iş', jobLink(inp.similar_drawings_job));

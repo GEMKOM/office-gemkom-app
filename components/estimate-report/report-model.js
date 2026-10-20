@@ -285,10 +285,19 @@ export function reportModel(report) {
 }
 
 // ---------------------------------------------------------------- hours
+//
+// Two payload shapes are in the wild. Up to v3 the hours came from standard
+// unit times (`hours.unit_times_h_per_m`, `non_welding`, step
+// `fitup_hydrotest_cleaning`). From `hours.method === 'geometry_v4'` each
+// joint is priced from its own geometry (thickness, prep, throat, factors on
+// every bottom-up line), the non-welding steps are cutting / bending /
+// bevel_and_pt / handling / hydrotest (hydrotest `applies: false` when the
+// unit is not pressure-bearing), and the in-house calibration may have no
+// usable reference (`no_in_house_reference`: factor 1,0, no low/high band).
 
 export const NON_WELDING_LABELS = {
-    cutting: 'Parça kesimi', bending: 'Büküm / hadde', bevel_and_pt: 'Talaşlı ağız açma + PT',
-    fitup_hydrotest_cleaning: 'Çatma, fikstür, test, temizlik',
+    cutting: 'Kesim', bending: 'Büküm', bevel_and_pt: 'Ağız açma + PT', handling: 'Çatma/çevirme/temizlik',
+    hydrotest: 'Hidrotest', fitup_hydrotest_cleaning: 'Çatma, hidrotest, temizlik',
 };
 export const UNIT_LABELS = {
     'h/m': 'h/m', 'h/joint': 'h/birleşim', 'h/piece': 'h/parça', 'h/bend': 'h/büküm',
@@ -301,12 +310,30 @@ export const EXCLUSION_LABELS = {
     'subcontracted': 'Taşeronda yapılmış',
     'not subcontracted': 'Taşerona verilmemiş',
 };
+export const GEOMETRY_SOURCE_LABELS = { fields: 'çıkarım alanlarından', text: 'ölçü metninden', default: 'varsayılan (okunamadı)' };
 
-export function exclusionLabel(reason) {
+/** Why a reference was left out, in Turkish. `row` supplies `subcontracted_kg_share` when the text has no number. */
+export function exclusionLabel(reason, row = null) {
     if (!reason) return '';
     if (EXCLUSION_LABELS[reason]) return EXCLUSION_LABELS[reason];
-    if (String(reason).startsWith('unreliable')) return 'Güvenilmez saat kaydı (≤ 10 h)';
+    const r = String(reason);
+    if (r.startsWith('unreliable')) return 'Güvenilmez saat kaydı (≤ 10 h)';
+    if (r.startsWith('mostly subcontracted')) {
+        const m = r.match(/(\d+(?:[.,]\d+)?)\s*%/);
+        const share = m ? parseTrNumber(m[1]) : (row?.subcontracted_kg_share != null ? Number(row.subcontracted_kg_share) * 100 : null);
+        return share != null ? `Kilosunun %${fmt(share, 0)}'i taşeronda kaynaklanmış` : 'Kilosunun çoğu taşeronda kaynaklanmış';
+    }
     return reason;
+}
+
+/** Which hours method the payload carries, and whether the in-house factor had a reference. */
+export function hoursInfo(hours) {
+    const h = hours || {};
+    const cal = h.calibration?.in_house || {};
+    return {
+        geometry: h.method === 'geometry_v4' || (h.bottom_up?.lines || []).some((l) => l.geometry_source != null),
+        noInHouseRef: Boolean(h.no_in_house_reference || cal.no_reference),
+    };
 }
 
 /** Bottom-up hours of one unit grouped for reading: welding by joint type × material, then the other steps. */
@@ -322,11 +349,24 @@ export function hoursBreakdown(bottomUp) {
         g.count += 1;
         groups.set(key, g);
     });
-    const welding = [...groups.values()].sort((a, b) => b.hours - a.hours).map((g) => ({
-        ...g, unit_h: g.unit_h.size === 1 ? [...g.unit_h][0] : null,
+    // Geometry-priced lines each have their own time per metre: show the group's average then.
+    const welding = [...groups.values()].sort((a, b) => b.hours - a.hours).map((g) => {
+        const single = g.unit_h.size === 1;
+        return { ...g, unit_h: single ? [...g.unit_h][0] : (g.qty ? g.hours / g.qty : null), averaged: !single };
+    });
+    const other = (bu.non_welding_lines || []).map((l) => ({
+        ...l, label: NON_WELDING_LABELS[l.step] || l.step, applies: l.applies !== false,
     }));
-    const other = (bu.non_welding_lines || []).map((l) => ({ ...l, label: NON_WELDING_LABELS[l.step] || l.step }));
-    return { welding, other, total: Number(bu.total_h) || 0, weldingTotal: Number(bu.welding_h) || 0, otherTotal: Number(bu.non_welding_h) || 0 };
+    return {
+        welding,
+        other,
+        total: Number(bu.total_h) || 0,
+        weldingTotal: Number(bu.welding_h) || 0,
+        otherTotal: Number(bu.non_welding_h) || 0,
+        weldMetalKg: bu.weld_metal_kg != null ? Number(bu.weld_metal_kg) : null,
+        setupH: bu.setup_h != null ? Number(bu.setup_h) : null,
+        geometrySources: bu.geometry_sources || null,
+    };
 }
 
 /** Similar job as a table row: €/kg figures and the realised margin. */
