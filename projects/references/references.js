@@ -46,8 +46,25 @@ const EXCLUSION_LABELS = {
 const EMPTY_VALUES = new Set(['not specified', 'none', 'n/a', 'belirtilmemiş', 'yok']);
 const UNIT_LABELS = { 'h/piece': 'h/parça', 'h/bend': 'h/büküm', 'h/pressure joint': 'h/basınçlı birleşim', 'h/kg': 'h/kg' };
 const NON_WELDING_LABELS = {
-    cutting: 'Kesim', bending: 'Büküm', bevel_and_pt: 'Ağız açma + PT', fitup_hydrotest_cleaning: 'Çatma, hidrotest, temizlik',
+    cutting: 'Kesim', bending: 'Büküm', bevel_and_pt: 'Ağız açma + PT',
+    handling: 'Çatma, çevirme, temizlik', hydrotest: 'Hidrotest',
+    fitup_hydrotest_cleaning: 'Çatma, hidrotest, temizlik',   // reports stored before the geometry method
 };
+// Groove shape of a joint as the geometry model read it (weld_geometry.PREP_CODES).
+const PREP_LABELS = { I: 'I alın', V: 'V ağız', HV: 'Yarım V', X: 'X ağız', K: 'K ağız', U: 'U ağız', fillet: 'Köşe' };
+
+/** "Geometri: t=25 mm · a=10 · Köşe · 0,90 kg/m · boğaz varsayılan": what a joint's hours were computed from. */
+function geometryText(g) {
+    if (!g || g.thickness_mm == null) return '';
+    const parts = [`t=${fmt(g.thickness_mm, 0)} mm`];
+    if (g.throat_mm) parts.push(`a=${fmt(g.throat_mm, 0)}`);
+    parts.push(`${PREP_LABELS[g.prep] || g.prep || ''}${g.sides === 2 ? ' (çift taraf)' : ''}`);
+    if (g.kg_per_m != null) parts.push(`${fmt(g.kg_per_m, 2)} kg/m`);
+    const source = String(g.geometry_source || '');
+    if (source.startsWith('default')) parts.push('ölçü okunamadı, varsayılan');
+    else if (source.includes('throat_default')) parts.push('boğaz varsayılan');
+    return `Geometri: ${parts.join(' · ')}`;
+}
 
 let table = null;
 let filters = null;
@@ -259,6 +276,11 @@ function exclusionLabel(reason) {
     if (!reason) return '';
     if (EXCLUSION_LABELS[reason]) return EXCLUSION_LABELS[reason];
     if (reason.startsWith('unreliable')) return 'Güvenilmez saat kaydı (≤ 10 h)';
+    if (reason.startsWith('mostly subcontracted')) {
+        // "mostly subcontracted (99% of kg)": the recorded hours are residual work, not the whole job
+        const m = reason.match(/(\d+)%/);
+        return m ? `Kilosunun %${m[1]}'i taşeronda kaynaklanmış` : 'Kilosunun çoğu taşeronda kaynaklanmış';
+    }
     return reason;
 }
 
@@ -391,6 +413,7 @@ function factsHtml(row) {
     return `<div class="ref-modal-facts">
         ${fact('Aile', escapeHtml(REFERENCE_FAMILY[row.family] || row.family || '—'))}
         ${fact('Güzergâh', escapeHtml(REFERENCE_ROUTE[row.route]?.label || row.route || '—'))}
+        ${row.subcontracted_kg_share > 0 ? fact('Taşeronda kaynaklanan', `kilonun %${fmt(row.subcontracted_kg_share * 100, 0)}'i`) : ''}
         ${fact('Adet', fmt(row.quantity, 0))}
         ${fact('Birim kütle', `${fmt(row.unit_mass_kg, 0)} kg`)}
         ${fact('Kaynak', `${fmt(row.weld_m_total, 1)} m${mats ? ` (${escapeHtml(mats)})` : ''}`)}
@@ -461,7 +484,7 @@ function weldNotesHtml(ws) {
 }
 
 function nonWeldingHtml(bu) {
-    const lines = (bu.non_welding_lines || []).map((l) => `<tr><td>${escapeHtml(NON_WELDING_LABELS[l.step] || l.step)}</td><td class="text-end">${fmt(l.qty, l.step === 'fitup_hydrotest_cleaning' ? 1 : 0)}</td><td>${escapeHtml(UNIT_LABELS[l.unit] || l.unit)}</td><td class="text-end">${fmt(l.unit_h, 4)}</td><td class="text-end">${fmt(l.hours, 2)}</td></tr>`).join('');
+    const lines = (bu.non_welding_lines || []).map((l) => `<tr><td>${escapeHtml(NON_WELDING_LABELS[l.step] || l.step)}${l.applies === false ? ' <span class="ref-joint-detail d-inline">(basınçlı sistem değil)</span>' : ''}</td><td class="text-end">${fmt(l.qty, l.unit === 'h/kg' ? 1 : 0)}</td><td>${escapeHtml(UNIT_LABELS[l.unit] || l.unit)}</td><td class="text-end">${fmt(l.unit_h, 4)}</td><td class="text-end">${fmt(l.hours, 2)}</td></tr>`).join('');
     return `<h6 class="mt-3 mb-1 ref-weld-h">Kaynak dışı (1 adet)</h6>
         <table class="table table-sm ref-bu-table"><thead><tr><th>Adım</th><th class="text-end">Miktar</th><th>Birim</th><th class="text-end">Birim süre</th><th class="text-end">Saat</th></tr></thead>
             <tbody>${lines}</tbody>
@@ -513,7 +536,7 @@ function renderWeldView() {
     const ws = weld.ws;
     const bu = ws.bottom_up || {};
     const lines = bu.lines || [];
-    const joints = (ws.joints || []).map((j, i) => ({ ...j, unit_h: lines[i]?.unit_h, unit_label: lines[i]?.unit, hours: lines[i]?.hours }));
+    const joints = (ws.joints || []).map((j, i) => ({ ...j, unit_h: lines[i]?.unit_h, unit_label: lines[i]?.unit, hours: lines[i]?.hours, geometry: lines[i] }));
     const latest = (ws.version_history || []).slice(-1)[0]?.version ?? ws.version;
     const old = ws.is_latest === false
         ? `<div class="ref-weld-old"><i class="fas fa-clock-rotate-left me-1"></i>Eski sürüm <strong>v${ws.version}</strong> gösteriliyor (salt okunur). Faktör ve tahminler son sürümü (v${latest}) kullanır.
@@ -543,6 +566,7 @@ function renderWeldView() {
         j.process && `Proses: ${processLabel(j.process)}`,
         j.weld_detail && !EMPTY_VALUES.has(String(j.weld_detail).trim().toLowerCase()) && `Detay: ${j.weld_detail}`,
         j.ndt && !EMPTY_VALUES.has(String(j.ndt).trim().toLowerCase()) && `NDT: ${j.ndt}`,
+        geometryText(j.geometry),
     ].filter(Boolean).map(escapeHtml).join(' · ');
     modalTables.push(new TableComponent('ref-weld-table', {
         columns: [
