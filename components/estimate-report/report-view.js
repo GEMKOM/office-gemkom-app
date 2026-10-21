@@ -10,9 +10,13 @@
  */
 import { renderMarkdown } from '../../utils/markdownLite.js';
 import { escapeHtml } from '../../utils/text.js';
-import { REFERENCE_ROUTE } from '../../apis/estimator.js';
 import {
-    GEOMETRY_SOURCE_LABELS, UNIT_LABELS, exclusionLabel, fmt, hoursBreakdown, hoursInfo, similarRow, withoutFirstTable,
+    BAND_STATUS, MACHINE_LABELS, MACHINING_KIND_LABELS, PART_KIND_LABELS, REFERENCE_ROUTE, SCHEMA_LABELS, SOURCE_LABELS,
+    STRUCTURE_CLASS_LABELS, SUB_ASSEMBLY_KIND_LABELS, TOLERANCE_LABELS, WORK_CENTRE_SHORT, machiningExclusionLabel,
+} from '../../apis/estimator.js';
+import {
+    GEOMETRY_SOURCE_LABELS, UNIT_LABELS, bandInfo, distributionRows, exclusionLabel, fmt, hoursBreakdown, hoursInfo, planGroups,
+    planInfo, planParts, similarRow, withoutFirstTable,
 } from './report-model.js';
 
 export const COST_ROW_LABELS = {
@@ -93,6 +97,27 @@ function factorBadge(f) {
 function routeBadge(route) {
     const r = REFERENCE_ROUTE[route];
     return r ? badge(r.label, r.badge) : '<span class="text-muted">—</span>';
+}
+
+/** çizim (grey) / çıkarım (purple) / kural (orange): where a joint, part or feature came from. */
+export function sourceBadge(source, { small = true } = {}) {
+    const s = SOURCE_LABELS[source] || SOURCE_LABELS.drawn;
+    return `<span class="status-badge ${s.badge}${small ? ' est-badge-sm' : ''}" title="${escapeHtml(s.title)}">${s.label}</span>`;
+}
+
+/** "plan v2" (blue) / "v1 liste" (grey). */
+export function schemaBadge(version) {
+    const s = SCHEMA_LABELS[Number(version) >= 2 ? 2 : 1];
+    return `<span class="status-badge ${s.badge} est-badge-sm" title="${escapeHtml(s.title)}">${s.label}</span>`;
+}
+
+/** Work-centre colours of the share bars: purple / blue / green / grey / dark purple, never yellow. */
+export const CENTRE_COLOURS = { shop: '#a78bfa', mach: '#60a5fa', cnc: '#34d399', bend: '#9ca3af', qc: '#7c3aed' };
+
+function centreBar(part, total, key) {
+    if (!total || part == null || !Number(part)) return '<span class="est-share is-empty"></span>';
+    const p = Math.max(0, Math.min(1, part / total));
+    return `<span class="est-share" title="${fmt(p * 100, 1)}%"><span style="width:${(p * 100).toFixed(1)}%;background:${CENTRE_COLOURS[key] || '#a78bfa'}"></span></span><span class="est-share-num">${fmt(p * 100, 0)}%</span>`;
 }
 
 function similarityCell(s) {
@@ -287,7 +312,20 @@ function heroHtml(r, m, v, goto) {
     if (m.quantity != null) facts.push(fact('Adet', fmt(m.quantity, 0)));
     if (m.unitKg != null) facts.push(fact('Birim ağırlık', `${fmt(m.unitKg, 0)} kg`));
     if (m.totalKg != null) facts.push(fact('Toplam ağırlık', `${fmt(m.totalKg, 0)} kg`, m.totalKgBasis ? decorate(escapeHtml(m.totalKgBasis), goto) : ''));
-    if (hours.expected_h_total != null) {
+    const plan = planInfo(hours);
+    if (plan.plan && (plan.expectedTotal != null || plan.computedTotal != null)) {
+        // "Toplam 1.364 h hesaplanan · 2.100 h beklenen (atölye 79 %, talaşlı 15 %)"
+        const band = plan.lowTotal != null && plan.highTotal != null ? `${fmt(plan.lowTotal, 0)} – ${fmt(plan.highTotal, 0)} h` : '';
+        const shares = [plan.shares.shop != null ? `atölye %${fmt(plan.shares.shop * 100, 0)}` : '', plan.shares.mach != null ? `talaşlı %${fmt(plan.shares.mach * 100, 0)}` : ''].filter(Boolean).join(', ');
+        const sub = [`${plan.computedTotal != null ? `${fmt(plan.computedTotal, 0)} h hesaplanan` : ''}${shares ? ` (${shares})` : ''}`.trim(), band].filter(Boolean).join(' · ');
+        facts.push(fact(`Toplam saat${m.quantity ? ` · ${fmt(m.quantity, 0)} adet` : ''}`, `${fmt(plan.expectedTotal ?? plan.computedTotal, 0)} h`,
+            plan.noInHouseRef ? `atölye referansı yok · faktör 1,0${sub ? ` · ${sub}` : ''}` : sub));
+        if (plan.structureClassLabel || plan.structureClass) {
+            const ded = plan.deduced.weldShare != null && plan.deduced.weldShare > 0 ? `kaynak metresinin %${fmt(plan.deduced.weldShare * 100, 0)}'i çıkarım` : 'çıkarım yok';
+            facts.push(fact('Yapı sınıfı', escapeHtml(plan.structureClassLabel || STRUCTURE_CLASS_LABELS[plan.structureClass] || plan.structureClass),
+                `${plan.schemaVersion >= 2 ? 'plan v2' : 'v1 liste'}${plan.proxy ? ' (uyarlandı)' : ''} · ${ded}`));
+        }
+    } else if (hours.expected_h_total != null) {
         const band = hours.low_h_total != null && hours.high_h_total != null ? `${fmt(hours.low_h_total, 0)} – ${fmt(hours.high_h_total, 0)} h` : '';
         facts.push(fact('Kaynak saati · iç imalat', `${fmt(hours.expected_h_total, 0)} h`,
             hoursInfo(hours).noInHouseRef ? `iç imalat referansı yok · faktör 1,0${band ? ` · ${band}` : ''}` : band));
@@ -295,10 +333,10 @@ function heroHtml(r, m, v, goto) {
     if (m.termin) facts.push(fact('Termin', escapeHtml(m.termin), '', 'is-wide'));
     if (ws) {
         facts.push(`<div class="est-fact">
-            <span class="est-fact-label">Kaynak listesi güveni</span>
-            <span class="est-fact-value">${confidenceBadge(ws.confidence)}
+            <span class="est-fact-label">${plan.plan && plan.schemaVersion >= 2 ? 'Plan güveni' : 'Kaynak listesi güveni'}</span>
+            <span class="est-fact-value">${confidenceBadge(plan.plan && plan.planConfidence != null ? plan.planConfidence : ws.confidence)}
                 <button type="button" class="est-help" data-est-action="conf-help" aria-expanded="${v.confOpen ? 'true' : 'false'}" title="Güven nedir?"><i class="fas fa-circle-question"></i></button></span>
-            <span class="est-fact-sub">kaynak listesi v${escapeHtml(ws.version ?? '')}</span>
+            <span class="est-fact-sub">${plan.plan && plan.schemaVersion >= 2 ? 'imalat planı' : 'kaynak listesi'} v${escapeHtml(ws.version ?? '')}${plan.plan && plan.planConfidence != null && ws.confidence != null && Math.abs(plan.planConfidence - ws.confidence) >= 0.005 ? ` · liste güveni %${fmt(ws.confidence * 100, 0)}` : ''}</span>
         </div>`);
     }
 
@@ -492,6 +530,7 @@ function laborSection(r, m, v, goto) {
     const bu = h.bottom_up || r.weld_schedule?.bottom_up;
     if (!cal && !bu && !sec) return '';
     const info = hoursInfo(h);
+    if (info.plan) return planLaborSection(r, m, v, goto);
     const range = (lo, hi, digits, unit) => (lo != null && hi != null ? `${fmt(lo, digits)} – ${fmt(hi, digits)} ${unit}` : '');
     const kpis = [];
     if (bu?.total_h != null) {
@@ -616,6 +655,336 @@ function hoursTable(b) {
         </table></div>
         ${notes.length ? `<div class="est-note-line"><i class="fas fa-circle-info"></i><span>${notes.join(' · ')}</span></div>` : ''}
         ${srcText ? `<div class="est-note-line"><i class="fas fa-ruler-combined"></i><span>Birleşim geometrisi: ${srcText}${defaults ? ` ${badge(`${fmt(defaults, 0)} varsayılan`, 'status-orange', 'Et kalınlığı / ağız çizimden okunamadı; birleşim sınıfının varsayımı kullanıldı')}` : ''}</span></div>` : ''}`;
+}
+
+// ---------------------------------------------------------------- İşçilik · imalat planı (v5)
+//
+// One total of man-hours, then its distribution over the work centres
+// (hours.distribution), the tonne-rate gauges (hours.bands), the plan table
+// grouped by centre (bottom_up), the deductions line and the calibration
+// table with the machining factor next to the welding-shop one.
+
+const PREP_LABELS = { I: 'I alın', V: 'V ağız', HV: 'Yarım V', X: 'X ağız', K: 'K ağız', U: 'U ağız', fillet: 'köşe' };
+
+function planLaborSection(r, m, v, goto) {
+    const h = r.hours || {};
+    const sec = m.sections.iscilik;
+    const plan = planInfo(h);
+    const bu = h.bottom_up || r.weld_schedule?.bottom_up || {};
+    const cal = h.calibration?.in_house || null;
+    const calMach = h.calibration?.machining || null;
+    const dist = distributionRows(h);
+    const bands = bandInfo(h);
+    const range = (lo, hi, digits, unit) => (lo != null && hi != null ? `${fmt(lo, digits)} – ${fmt(hi, digits)} ${unit}`.trim() : '');
+    const nRefs = (c) => (c?.references_used || []).length;
+
+    // --- KPIs
+    const kpis = [];
+    const centreSub = (bu.work_centres || []).filter((wc) => Number(wc.hours)).map((wc) => `${WORK_CENTRE_SHORT[wc.key] || wc.key} ${fmt(wc.hours, 0)}`).join(' + ');
+    if (plan.computedH != null) kpis.push(kpi('Hesaplanan (plan)', `${fmt(plan.computedH, 1)} h/adet`, centreSub));
+    if (plan.expectedH != null) kpis.push(kpi('Beklenen (merkez faktörleriyle)', `${fmt(plan.expectedH, 1)} h/adet`, range(plan.lowH, plan.highH, 1, 'h/adet')));
+    if (plan.expectedTotal != null) kpis.push(kpi(`Toplam${m.quantity ? ` (${fmt(m.quantity, 0)} adet)` : ''}`, `${fmt(plan.expectedTotal, 0)} h`, range(plan.lowTotal, plan.highTotal, 0, 'h')));
+    if (cal) {
+        if (plan.noInHouseRef) {
+            kpis.push(kpi('Atölye faktörü', `1,00 ${badge('referans yok', 'status-orange', 'Kullanılabilir iç imalat (atölye) referansı yok')}`, 'atölye saati plandan aynen alındı'));
+        } else {
+            const flag = cal.factor_mean != null && (cal.factor_mean < 0.6 || cal.factor_mean > 1.6);
+            kpis.push(kpi('Atölye faktörü', `${fmt(cal.factor_mean, 2)}${flag ? ` ${badge('aralık dışı', 'status-orange', 'Olağan aralık 0,6–1,6; nedeni raporun 2.2 bölümünde')}` : ''}`,
+                [range(cal.factor_min, cal.factor_max, 2, ''), `${nRefs(cal)} referans`, plan.classGate?.used ? 'aynı sınıf' : ''].filter(Boolean).join(' · ')));
+        }
+    }
+    if (calMach || plan.noMachRef) {
+        if (plan.noMachRef || !calMach || calMach.factor_mean == null) {
+            kpis.push(kpi('Talaşlı faktörü', `1,00 ${badge('referans yok', 'status-grey', 'Kullanılabilir talaşlı imalat referansı yok')}`, 'talaşlı saat plandan aynen alındı'));
+        } else {
+            kpis.push(kpi('Talaşlı faktörü', fmt(calMach.factor_mean, 2), [range(calMach.factor_min, calMach.factor_max, 2, ''), `${nRefs(calMach)} referans`].filter(Boolean).join(' · ')));
+        }
+    }
+    const wage = plan.wage ?? r.inputs?.parameters?.labor_eur_per_h;
+    if (wage != null) kpis.push(kpi('İşçilik ücreti', `${fmt(wage, 2)} €/h`, plan.machWage != null ? `talaşlı ${fmt(plan.machWage, 2)} €/h · referans ortalaması` : 'referansların ortalaması'));
+
+    // --- callouts
+    const callouts = [];
+    if (plan.noInHouseRef) {
+        callouts.push(`<div class="est-callout"><i class="fas fa-triangle-exclamation"></i><span>
+            <strong>Kullanılabilir atölye referansı yok.</strong> Kaynak atölyesi faktörü 1,0 alındı: saat, imalat planından hesaplanan
+            değerdir ve kayıtlı saatlerle doğrulanmadı. Ton başına saat bandı ve taşeron ankrajı aşağıda; düşük / yüksek saat raporun varsayımıdır (§2.2).</span></div>`);
+    }
+    if (plan.deduced.thinDrawingSet) {
+        callouts.push(`<div class="est-callout"><i class="fas fa-triangle-exclamation"></i><span>
+            <strong>Çizim seti ince:</strong> kaynak metresinin %${fmt((plan.deduced.weldShare || 0) * 100, 0)}'i çıkarım${plan.deduced.machShare ? `, talaşlı saatin %${fmt(plan.deduced.machShare * 100, 0)}'i çıkarım` : ''}.
+            Plan, çizimde görünenden çok modelin yapıdan çıkardığına dayanıyor; çıkarım satırlarını ve dayanaklarını kontrol edin.</span></div>`);
+    }
+    if (plan.proxy) {
+        callouts.push('<div class="est-note-line"><i class="fas fa-circle-info"></i><span>Bu iş için eski biçimde (v1) bir kaynak listesi var: plan, listeden uyarlandı; parça, alt montaj ve talaşlı özellikleri yok.</span></div>');
+    }
+
+    // --- Toplam adam-saat: stacked bar + distribution table
+    const distHtml = dist.rows.length ? distributionHtml(dist, m.quantity) : '';
+
+    // --- tonne-rate gauges + anchor
+    const gauges = [bands.shop ? gaugeHtml('Kaynak atölyesi', bands.shop) : '', bands.mach ? gaugeHtml('Talaşlı imalat', bands.mach) : ''].filter(Boolean).join('');
+    const a = bands.anchor;
+    const anchorLine = a ? `<div class="est-note-line"><i class="fas fa-anchor"></i><span><strong>Taşeron fiyat ankrajı:</strong> ${fmt(a.low, 0)} – ${fmt(a.high, 0)} h/adet
+        ${a.eurPerKg != null && a.loadedRate != null ? `<span class="est-muted">(${fmt(a.eurPerKg, 2)} €/kg ÷ ${fmt(a.loadedRate, 2)} €/h${a.hPerT.low != null ? ` · ${fmt(a.hPerT.low, 0)} – ${fmt(a.hPerT.high, 0)} h/t` : ''}${a.n ? ` · ${a.n} taşeron işi` : ''})</span>` : ''}
+        — taşeronun kilo fiyatının ima ettiği saat; kaynaklı işin plan saatiyle karşılaştırın.</span></div>` : '';
+    const bandBlock = gauges || anchorLine ? `<div class="est-sub-title">Ton başına saat <span class="est-muted">— plan saati ÷ birim kütle, yapı sınıfının bandına karşı${plan.hPerT.total != null ? ` · toplam ${fmt(plan.hPerT.total, 0)} h/t` : ''}</span></div>
+        ${gauges ? `<div class="est-gauges">${gauges}</div>` : ''}${anchorLine}` : '';
+
+    // --- deductions, PWHT
+    const w = plan.weldM;
+    const dedParts = [];
+    if (w.total != null) {
+        dedParts.push(`kaynak metresi: çizimden <strong>${fmt(w.drawn, 1)} m</strong>, çıkarımdan <strong>${fmt(w.deduced, 1)} m</strong>${w.rule ? `, kuraldan <strong>${fmt(w.rule, 1)} m</strong>` : ''}${plan.deduced.weldShare != null ? ` (%${fmt(plan.deduced.weldShare * 100, 0)} çıkarım)` : ''}`);
+    }
+    if (plan.deduced.machH != null && (plan.deduced.machH || plan.deduced.machDefaultH)) {
+        dedParts.push(`talaşlı: <strong>${fmt(plan.deduced.machH, 1)} h</strong> çıkarım${plan.deduced.machShare != null ? ` (%${fmt(plan.deduced.machShare * 100, 0)})` : ''}${plan.deduced.machDefaultH ? `, <strong>${fmt(plan.deduced.machDefaultH, 1)} h</strong> ölçüsüz (varsayılan)` : ''}`);
+    }
+    const deductions = dedParts.length ? `<div class="est-note-line"><i class="fas fa-wand-magic-sparkles"></i><span><strong>Çıkarımlar:</strong> ${dedParts.join(' · ')}</span></div>` : '';
+    const pwht = plan.pwht ? `<div class="est-note-line"><i class="fas fa-fire"></i><span><strong>Isıl işlem:</strong> ${fmt(plan.pwht.kg, 0)} kg, ~${money(plan.pwht.eur)} dış hizmet${plan.pwht.basis ? ` <span class="est-muted">(${escapeHtml(plan.pwht.basis)})</span>` : ''} — bedeli maliyet tablosunda (Diğer), yükleme / temizlik saati atölyede.</span></div>` : '';
+
+    // --- plan table grouped by work centre
+    const groups = planGroups(bu);
+    const planTable = groups.length ? `<div class="est-sub-title">İmalat planı ve saat hesabı <span class="est-muted">· 1 adet · iş merkezine göre</span></div>
+        <div class="est-plan">${groups.map((g) => planGroupHtml(g, plan.computedH || bu.total_h)).join('')}</div>` : '';
+
+    // --- calibration references (welding shop + machining)
+    const used = [...new Set([...(cal?.references_used || []), ...(calMach?.references_used || [])])];
+    const refPool = [...(h.references?.in_house || []), ...(h.references?.subcontract || [])];
+    const refRows = used.map((no) => refPool.find((x) => x.job_no === no) || { job_no: no });
+    const shopRefs = new Set(cal?.references_used || []);
+    const machRefs = new Set(calMach?.references_used || []);
+    const inHouseHours = (x) => (x.bottom_up_in_house_h_per_unit != null ? x.bottom_up_in_house_h_per_unit : (x.shop_h_per_unit ?? x.bottom_up_h_per_unit));
+    const calTable = refRows.length ? `<div class="est-sub-title">Kalibrasyon referansları <span class="est-muted">— atölye faktörü = kayıtlı kaynakçı saati ÷ plan atölye saati · talaşlı faktörü = kayıtlı talaşlı saati ÷ plan talaşlı saati</span></div>
+        <div class="est-table-wrap"><table class="est-table est-cal">
+            <thead><tr><th>İş</th><th>Rota</th><th>Sınıf</th><th class="num">Benzerlik</th><th class="num">Kaynak m/adet</th><th class="num">Kayıtlı h/adet</th><th class="num">Plan atölye h/adet</th><th class="num">Faktör</th><th class="num">Talaşlı faktörü</th></tr></thead>
+            <tbody>${refRows.map((x) => {
+                const own = inHouseHours(x);
+                const split = x.bottom_up_in_house_h_per_unit != null && x.shop_h_per_unit != null && Math.abs(x.bottom_up_in_house_h_per_unit - x.shop_h_per_unit) > 0.05;
+                const machCell = x.factor_mach != null
+                    ? `${factorBadge(x.factor_mach)}${x.recorded_machining_h_per_unit != null && x.mach_h_per_unit != null ? `<small class="est-cell-sub">${fmt(x.recorded_machining_h_per_unit, 1)} ÷ ${fmt(x.mach_h_per_unit, 1)} h</small>` : ''}`
+                    : `<span class="est-out" title="${escapeHtml(machiningExclusionLabel(x.machining_exclusion) || 'Talaşlı kalibrasyonunda kullanılmaz')}">—<small class="est-cell-sub">${escapeHtml(machiningExclusionLabel(x.machining_exclusion) || 'kullanılmaz')}</small></span>`;
+                const tags = [shopRefs.has(x.job_no) ? '<span class="est-tag est-tag-cal" title="Atölye faktöründe kullanıldı">atölye</span>' : '', machRefs.has(x.job_no) ? '<span class="est-tag est-tag-cal" title="Talaşlı faktöründe kullanıldı">talaşlı</span>' : ''].join('');
+                return `<tr>
+                <td class="est-job-cell"><span class="est-job-line">${jobLink(x.job_no)}${tags}</span><span class="est-job-title">${escapeHtml(x.title || '')}</span></td>
+                <td>${routeBadge(x.route)}</td>
+                <td class="est-nowrap">${x.structure_class ? escapeHtml(STRUCTURE_CLASS_LABELS[x.structure_class] || x.structure_class) : '<span class="est-muted">—</span>'}${x.schema_version != null ? ` ${schemaBadge(x.schema_version)}` : ''}</td>
+                <td class="num">${similarityCell(x.similarity_to_target)}</td>
+                <td class="num">${fmt(x.weld_m_total, 1)}</td>
+                <td class="num">${fmt(x.recorded_welding_h_per_unit, 1)}</td>
+                <td class="num">${fmt(own, 1)}${split ? `<small class="est-cell-sub" title="Taşeronda kaynaklanan kilonun payı düşüldü">atölye ${fmt(x.shop_h_per_unit, 1)}, iç imalat payı</small>` : (x.bottom_up_h_per_unit != null && own != null && Math.abs(x.bottom_up_h_per_unit - own) > 0.05 ? `<small class="est-cell-sub">plan toplamı ${fmt(x.bottom_up_h_per_unit, 1)}</small>` : '')}</td>
+                <td class="num">${shopRefs.has(x.job_no) || x.factor != null ? factorBadge(x.factor) : '<span class="est-muted">—</span>'}</td>
+                <td class="num">${machCell}</td>
+            </tr>`;
+            }).join('')}</tbody>
+        </table></div>` : '';
+    const gateNote = plan.classGate?.used
+        ? `<div class="est-note-line"><i class="fas fa-layer-group"></i><span>Atölye faktörü aynı yapı sınıfındaki referanslardan (${fmt(plan.classGate.same_class_references, 0)}${plan.classGate.structure_class ? ` · ${escapeHtml(STRUCTURE_CLASS_LABELS[plan.classGate.structure_class] || plan.classGate.structure_class)}` : ''}).</span></div>`
+        : (plan.classGate && plan.classGate.same_class_references != null && cal && !plan.noInHouseRef
+            ? `<div class="est-note-line"><i class="fas fa-layer-group"></i><span>Aynı yapı sınıfında ${fmt(plan.classGate.same_class_references, 0)} referans var (en az 2 gerekir): atölye faktörü en benzer referanslardan.</span></div>` : '');
+    let machNote;
+    if (plan.noMachRef || !calMach || calMach.factor_mean == null) {
+        machNote = `<div class="est-note-line"><i class="fas fa-gears"></i><span><strong>Talaşlı referansı yok · 1,00:</strong> talaşlı saat plandan aynen alındı${calMach?.expected_h_per_unit != null ? ` (${fmt(calMach.expected_h_per_unit, 1)} h/adet)` : ''}${Number(h.machining_h_per_unit_references) ? ` · referansların kayıtlı talaşlı ortalaması ${fmt(h.machining_h_per_unit_references, 1)} h/adet (karşılaştırma için)` : ''}.</span></div>`;
+    } else {
+        machNote = `<div class="est-note-line"><i class="fas fa-gears"></i><span><strong>Talaşlı kalibrasyonu:</strong> faktör ${fmt(calMach.factor_mean, 2)}${calMach.factor_min != null ? ` (${fmt(calMach.factor_min, 2)} – ${fmt(calMach.factor_max, 2)})` : ''}, referanslar ${(calMach.references_used || []).map(jobLink).join(', ') || '—'}: plan ${fmt(calMach.basis_h_per_unit, 1)} → beklenen ${fmt(calMach.expected_h_per_unit, 1)} h/adet${Number(h.machining_h_per_unit_references) ? ` · referansların kayıtlı ortalaması ${fmt(h.machining_h_per_unit_references, 1)} h/adet` : ''}.</span></div>`;
+    }
+    const subCal = h.calibration?.subcontract;
+    const sameSub = subCal && cal && JSON.stringify(subCal.references_used) === JSON.stringify(cal.references_used) && subCal.factor_mean === cal.factor_mean;
+    let subNote = '';
+    if (subCal && !plan.noInHouseRef && sameSub) {
+        subNote = '<div class="est-note-line"><i class="fas fa-circle-info"></i>Taşeron rotası aynı referansları ve atölye faktörünü kullanır.</div>';
+    } else if (subCal && subCal.factor_mean != null) {
+        subNote = `<div class="est-note-line"><i class="fas fa-circle-info"></i><span>Taşeron rotası (GEMKOM'da kalan atölye saati): faktör ${fmt(subCal.factor_mean, 2)}${subCal.factor_min != null ? ` (${fmt(subCal.factor_min, 2)} – ${fmt(subCal.factor_max, 2)})` : ''}, referanslar ${(subCal.references_used || []).map(jobLink).join(', ') || '—'}; talaşlı imalat GEMKOM'da kalır.</span></div>`;
+    }
+    const exIn = h.excluded?.in_house || [];
+    const exSub = h.excluded?.subcontract || [];
+    const subGroups = {};
+    exSub.forEach((x) => { const k = exclusionLabel(x.reason, x); subGroups[k] = (subGroups[k] || 0) + 1; });
+    const excluded = (exIn.length || exSub.length) ? `<div class="est-excluded">
+        ${exIn.length ? `<div class="est-sub-title">Dışlanan referanslar</div>
+            <ul class="est-plain-list">${exIn.map((x) => `<li>${jobLink(x.job_no)} <span class="est-job-title">${escapeHtml(x.title || '')}</span> — ${escapeHtml(exclusionLabel(x.reason, x))}</li>`).join('')}</ul>` : ''}
+        ${exSub.length ? `<details class="est-more"><summary>Taşeron rotası için dışlanan ${exSub.length} referans: ${Object.entries(subGroups).map(([k, c]) => `${escapeHtml(k)} (${c})`).join(', ')}</summary>
+            <ul class="est-plain-list est-cols">${exSub.map((x) => `<li>${jobLink(x.job_no)} <span class="est-job-title">${escapeHtml(x.title || '')}</span></li>`).join('')}</ul></details>` : ''}
+    </div>` : '';
+
+    const body = `
+        ${kpis.length ? `<div class="est-kpis">${kpis.join('')}</div>` : ''}
+        ${callouts.join('')}
+        ${distHtml}
+        ${bandBlock}
+        ${deductions}${pwht}
+        ${planTable}
+        ${calTable}${gateNote}${machNote}${subNote}${excluded}
+        ${sec ? `<details class="est-more" open><summary>Raporun işçilik hesabı ve gerekçeleri <span class="est-muted">(${escapeHtml(sec.num || '2.2')})</span></summary>${mdHtml(sec.body, goto)}</details>` : ''}`;
+    return section(v, 'iscilik', 'İşçilik ve saat', body, { sub: 'imalat planından iş merkezi saatleri × merkez faktörleri' });
+}
+
+/** "Toplam adam-saat": the stacked share bar and the work-centre distribution table. */
+function distributionHtml(dist, quantity) {
+    const t = dist.totals;
+    const rows = dist.rows;
+    const expTotal = t.expectedH || rows.reduce((s, r) => s + r.expectedH, 0);
+    const segs = rows.filter((r) => r.expectedH > 0).map((r) => `<span style="width:${((r.expectedH / expTotal) * 100).toFixed(1)}%;background:${CENTRE_COLOURS[r.key] || '#a78bfa'}" title="${escapeHtml(r.label)} ${fmt(r.expectedH, 0)} h · %${fmt(r.share * 100, 0)}"></span>`).join('');
+    const legend = rows.filter((r) => r.expectedH > 0).map((r) => `<span><i style="background:${CENTRE_COLOURS[r.key] || '#a78bfa'}"></i>${escapeHtml(r.label)} <strong>%${fmt(r.share * 100, 0)}</strong></span>`).join('');
+    const factorCell = (r) => (r.factorBasis === 'references'
+        ? `<span class="est-factor">${fmt(r.factor, 2)}</span><small class="est-cell-sub">${r.factorMin != null && r.factorMax != null && (r.factorMin !== r.factorMax) ? `${fmt(r.factorMin, 2)} – ${fmt(r.factorMax, 2)} · ` : ''}${r.referencesUsed.length} referans</small>`
+        : `<span class="est-muted">referans yok · 1,00</span>`);
+    const n = (val, digits = 0) => (val == null ? '<span class="est-muted">—</span>' : fmt(val, digits));
+    const qty = quantity || t.quantity;
+    const totalCol = (per) => (per == null ? '<span class="est-muted">—</span>' : fmt(qty ? per * qty : per, 0));
+    return `<div class="est-sub-title">Toplam adam-saat <span class="est-muted">· ${fmt(t.computedH, 0)} h hesaplanan → <strong>${fmt(t.expectedH, 0)} h</strong> beklenen / adet${t.expectedTotal != null && qty && qty !== 1 ? ` · ${fmt(t.expectedTotal, 0)} h / ${fmt(qty, 0)} adet` : ''}</span></div>
+        <div class="est-dist-bar" role="img" aria-label="İş merkezi dağılımı">${segs}</div>
+        <div class="est-dist-legend">${legend}</div>
+        <div class="est-table-wrap"><table class="est-table est-dist">
+            <thead><tr><th>İş merkezi</th><th class="num">Hesaplanan h</th><th class="num">Faktör<small>dayanak</small></th><th class="num is-exp">Beklenen h<small>1 adet</small></th><th class="num">Beklenen h<small>toplam${qty ? ` · ${fmt(qty, 0)} adet` : ''}</small></th><th class="est-share-cell">Pay</th></tr></thead>
+            <tbody>${rows.map((r) => `<tr class="${r.computedH ? '' : 'is-zero'}">
+                <td class="est-item"><i class="est-dot-c" style="background:${CENTRE_COLOURS[r.key] || '#a78bfa'}"></i>${escapeHtml(r.label)}</td>
+                <td class="num">${n(r.computedH, 1)}</td>
+                <td class="num">${factorCell(r)}</td>
+                <td class="num is-exp">${n(r.expectedH, 1)}${r.lowH != null && r.highH != null && (r.lowH !== r.highH) ? `<small class="est-cell-sub">${fmt(r.lowH, 0)} – ${fmt(r.highH, 0)}</small>` : ''}</td>
+                <td class="num">${totalCol(r.expectedH)}</td>
+                <td class="est-share-cell">${centreBar(r.expectedH, expTotal, r.key)}</td>
+            </tr>`).join('')}</tbody>
+            <tfoot><tr class="est-total"><td>Toplam</td><td class="num">${n(t.computedH, 1)}</td><td></td><td class="num is-exp">${n(t.expectedH, 1)}${t.lowH != null && t.highH != null ? `<small class="est-cell-sub">${fmt(t.lowH, 0)} – ${fmt(t.highH, 0)}</small>` : ''}</td><td class="num">${n(t.expectedTotal ?? (qty ? t.expectedH * qty : null), 0)}${t.lowTotal != null && t.highTotal != null ? `<small class="est-cell-sub">${fmt(t.lowTotal, 0)} – ${fmt(t.highTotal, 0)}</small>` : ''}</td><td></td></tr></tfoot>
+        </table></div>`;
+}
+
+/** One tonne-rate gauge: the value against the class band (references' p25–p75 or the parameter band). */
+function gaugeHtml(label, b) {
+    const st = BAND_STATUS[b.status] || BAND_STATUS.unknown;
+    const hasBand = b.low != null && b.high != null;
+    const max = Math.max(hasBand ? b.high * 1.3 : 0, (b.hPerT || 0) * 1.15, 1);
+    const pos = (x) => `${Math.max(0, Math.min(100, (x / max) * 100)).toFixed(1)}%`;
+    const src = b.source === 'references' ? `referanslardan (p25–p75, n=${fmt(b.referencesN, 0)})` : (b.source === 'parameter' ? `parametre${b.referencesN ? ` (sınıfta ${fmt(b.referencesN, 0)} referans, bant için az)` : ''}` : 'bant yok');
+    const implied = b.impliedLow != null && b.impliedHigh != null ? `<div class="est-gauge-sub">bant karşılığı <strong>${fmt(b.impliedLow, 0)} – ${fmt(b.impliedHigh, 0)} h/adet</strong></div>` : '';
+    return `<div class="est-gauge is-${b.status}">
+        <div class="est-gauge-head"><span>${escapeHtml(label)}</span>${badge(st.label, st.badge, hasBand ? `Bant ${fmt(b.low, 0)} – ${fmt(b.high, 0)} h/t` : 'Sınıf için bant yok')}</div>
+        <div class="est-gauge-value">${b.hPerT != null ? `${fmt(b.hPerT, 1)} <small>h/t</small>` : '<span class="est-muted">—</span>'}</div>
+        <div class="est-gauge-track">${hasBand ? `<span class="est-gauge-band" style="left:${pos(b.low)};width:${Math.max(1, ((b.high - b.low) / max) * 100).toFixed(1)}%"></span>` : ''}${b.hPerT != null ? `<span class="est-gauge-mark" style="left:${pos(b.hPerT)}"></span>` : ''}</div>
+        <div class="est-gauge-sub">${hasBand ? `bant <strong>${fmt(b.low, 0)} – ${fmt(b.high, 0)} h/t</strong>` : 'bant yok'}${b.structureClass ? ` · ${escapeHtml(STRUCTURE_CLASS_LABELS[b.structureClass] || b.structureClass)}` : ''} · ${src}</div>
+        ${implied}
+    </div>`;
+}
+
+/** The whole plan table (every work centre) of a v5 bottom-up, for the Referanslar modal; '' for older shapes. */
+export function planTableHtml(bottomUp) {
+    const groups = planGroups(bottomUp);
+    if (!groups.length) return '';
+    return `<div class="est-plan">${groups.map((g) => planGroupHtml(g, Number(bottomUp?.total_h) || 0)).join('')}</div>`;
+}
+
+/** The plan rows of one work centre: welding groups, the other steps, the machining parts with their features. */
+function planGroupHtml(g, planTotal) {
+    const total = planTotal || 1;
+    const unitText = (unitH, unit, averaged) => {
+        if (unitH == null) return 'karışık';
+        const text = `${fmt(unitH, unitH < 0.1 ? 4 : 2)} ${escapeHtml(UNIT_LABELS[unit] || unit || '')}`;
+        return averaged ? `<span title="Birleşimlerin kendi geometrisinden; grup ortalaması">ort. ${text}</span>` : text;
+    };
+    const qtyText = (q, unit) => (unit === 'h/m' ? `${fmt(q, 1)} m` : unit === 'h/kg' ? `${fmt(q, 0)} kg` : unit === 'h/t' ? `${fmt(q, 2)} t` : unit === 'oran' ? `%${fmt(q * 100, 0)}` : fmt(q, 0));
+    const row = ({ cls = '', label, driver = '', unitHtml = '', hours = null, source = '', off = false, extra = '' }) => `<tr class="${cls}${off ? ' is-zero' : ''}">
+        <td class="est-plan-op">${label}</td>
+        <td class="est-plan-driver">${driver}</td>
+        <td class="num est-nowrap est-muted">${unitHtml}</td>
+        <td class="num">${off ? '—' : fmt(hours, 1)}</td>
+        <td class="est-plan-src">${source}${extra}</td>
+        <td class="est-share-cell">${off || !hours ? '' : centreBar(hours, total, g.key)}</td>
+    </tr>`;
+    const rows = [];
+    g.welding.forEach((w) => {
+        const th = w.thickness.length ? ` ${w.thickness.length === 1 ? fmt(w.thickness[0], 0) : `${fmt(w.thickness[0], 0)}–${fmt(w.thickness[w.thickness.length - 1], 0)}`} mm` : '';
+        rows.push(row({
+            label: `Kaynak · ${escapeHtml(JOINT_TYPE_LABELS[w.joint_type] || w.joint_type || '')} <span class="est-muted">${escapeHtml(MATERIAL_LABELS[w.material] || w.material || '')}${w.prep ? ` · ${escapeHtml(PREP_LABELS[w.prep] || w.prep)}${th}` : ''}</span>`,
+            driver: `${fmt(w.qty, 1)} m${w.joints ? ` · ${fmt(w.joints, 0)} birleşim` : ''}${w.sub_ids.length ? ` <span class="est-muted">· ${w.sub_ids.map(escapeHtml).join(', ')}</span>` : ''}`,
+            unitHtml: unitText(w.unit_h, w.unit, w.averaged), hours: w.hours, source: w.source ? sourceBadge(w.source) : '',
+        }));
+    });
+    if (g.machining) {
+        const mc = g.machining;
+        const ml = g.machiningLine;
+        rows.push(row({
+            cls: 'est-plan-head', label: `<strong>${escapeHtml(ml?.label || 'Talaşlı imalat')}</strong>`,
+            driver: escapeHtml(ml?.driver || `${mc.partsCount} parça numarası, ${mc.featuresCount} özellik`),
+            unitHtml: '', hours: mc.machiningH, source: mc.defaultsCount ? badge(`${mc.defaultsCount} varsayılan`, 'status-grey', 'Ölçüsüz özellik: makinenin kayıtlı operasyon medyanı kullanıldı') : '',
+        }));
+        mc.parts.forEach((p) => {
+            rows.push(row({
+                cls: 'est-plan-part',
+                label: `${escapeHtml(p.part)} <span class="est-muted">×${fmt(p.qty, 0)}${p.subId ? ` · ${escapeHtml(p.subId)}` : ''}</span>`,
+                driver: [p.massKgEach != null ? `${fmt(p.massKgEach, 0)} kg/parça` : '', p.setups.length ? `bağlama: ${p.setups.map((s) => escapeHtml(MACHINE_LABELS[s] || s)).join(', ')}` : '', p.setupH != null ? `ayar ${fmt(p.setupH, 2)} h` : '', p.programmingH != null && p.programmingH ? `program ${fmt(p.programmingH, 2)} h` : ''].filter(Boolean).join(' · '),
+                unitHtml: p.perPieceH != null ? `${fmt(p.perPieceH, 2)} h/parça` : '', hours: p.hours,
+                source: p.deducedCount ? `<span class="est-muted small">${p.deducedCount}/${p.featureCount} çıkarım</span>` : '',
+            }));
+            p.features.forEach((f) => {
+                const kind = MACHINING_KIND_LABELS[f.kind] || f.kind || '';
+                const tol = f.tolerance && f.tolerance !== 'general' ? ` · ${escapeHtml(TOLERANCE_LABELS[f.tolerance] || f.tolerance)}` : '';
+                rows.push(row({
+                    cls: 'est-plan-feat',
+                    label: `<span class="est-plan-indent">${escapeHtml(kind)} <span class="est-muted">×${fmt(f.qty, 0)} · ${escapeHtml(MACHINE_LABELS[f.machine] || f.machine || '')}${tol}</span></span>`,
+                    driver: f.text ? `<span class="est-muted">${escapeHtml(f.text)}</span>` : '',
+                    unitHtml: f.hEach != null ? `${fmt(f.hEach, 3)} h/özellik` : '',
+                    hours: f.hoursPiece != null ? f.hoursPiece * p.qty : null,
+                    source: sourceBadge(f.source),
+                    extra: `${f.isDefault ? ` ${badge('varsayılan', 'status-grey', 'Ölçü yok: makinenin kayıtlı operasyon medyanı')}` : ''}${f.afterWelding ? ' <span class="est-plan-note" title="Kaynaklı alt montaj üzerinde işlenir">kaynak sonrası</span>' : ''}`,
+                }));
+            });
+        });
+    }
+    g.lines.forEach((l) => {
+        const off = !l.applies;
+        rows.push(row({
+            label: escapeHtml(l.label),
+            driver: `${l.driver ? escapeHtml(l.driver) : ''}${off ? ` <span class="est-muted">— uygulanmaz</span>` : ''}`,
+            unitHtml: off ? '' : `${l.unit === 'oran' ? `${fmt(l.unit_h, 1)} h × oran` : `${fmt(l.unit_h, l.unit_h < 0.1 ? 4 : 2)} ${escapeHtml(UNIT_LABELS[l.unit] || l.unit || '')}`}${l.qty != null && !off ? ` <span class="est-muted">· ${qtyText(l.qty, l.unit)}</span>` : ''}`,
+            hours: l.hours, off,
+        }));
+    });
+    const open = g.hours > 0;
+    return `<details class="est-more est-plan-group" ${open ? 'open' : ''}>
+        <summary><i class="est-dot-c" style="background:${CENTRE_COLOURS[g.key] || '#a78bfa'}"></i>${escapeHtml(g.label)}<span class="est-plan-sum"><strong>${fmt(g.hours, 1)} h</strong> · %${fmt(g.share * 100, 0)}</span></summary>
+        <div class="est-table-wrap"><table class="est-table est-plan-table">
+            <thead><tr><th>İşlem</th><th>Sürücü</th><th class="num">Birim süre</th><th class="num">Saat</th><th>Kaynak</th><th class="est-share-cell">Pay</th></tr></thead>
+            <tbody>${rows.join('') || '<tr><td colspan="6" class="est-muted">Bu merkezde iş yok.</td></tr>'}</tbody>
+        </table></div>
+    </details>`;
+}
+
+/** "Parçalar ve alt montajlar": the plan's sub-assemblies with their parts (machining feature counts, expandable features). */
+export function planPartsHtml(schedule) {
+    const p = planParts(schedule);
+    if (!p.hasPlan) return '';
+    const conf = (c) => (c == null ? '<span class="est-muted">—</span>' : confidenceBadge(c));
+    const featureList = (part) => (part.machiningCount ? `<details class="est-plan-feats"><summary>${part.machiningCount} talaşlı özellik</summary>
+        <ul class="est-plain-list">${part.machining.map((f) => `<li>${escapeHtml(MACHINING_KIND_LABELS[f.kind] || f.kind || '')} ×${fmt(f.qty ?? 1, 0)} · ${escapeHtml(MACHINE_LABELS[f.machine] || f.machine || '')}${f.tolerance && f.tolerance !== 'general' ? ` · ${escapeHtml(TOLERANCE_LABELS[f.tolerance] || f.tolerance)}` : ''}${f.text ? ` · ${escapeHtml(f.text)}` : ''} ${sourceBadge(f.source || 'drawn')}${f.after_welding ? ' <span class="est-plan-note">kaynak sonrası</span>' : ''}${f.note ? ` <span class="est-muted">— ${escapeHtml(f.note)}</span>` : ''}</li>`).join('')}</ul></details>` : '<span class="est-muted">—</span>');
+    const partRow = (x) => `<tr class="est-plan-part">
+        <td class="est-plan-indent">${escapeHtml(x.name)}<span class="est-muted"> · ${escapeHtml(x.partId)}</span></td>
+        <td>${escapeHtml(PART_KIND_LABELS[x.kind] || x.kind || '')}</td>
+        <td class="num">${fmt(x.qty, 0)}</td>
+        <td class="num">${x.massKgEach != null ? fmt(x.massKgEach, x.massKgEach < 10 ? 1 : 0) : '—'}</td>
+        <td class="num">${x.thicknessMm ? fmt(x.thicknessMm, 0) : '<span class="est-muted">—</span>'}</td>
+        <td>${x.material ? escapeHtml(MATERIAL_LABELS[x.material] || x.material) : '<span class="est-muted">—</span>'}</td>
+        <td>${sourceBadge(x.source)}${x.basis ? `<small class="est-cell-sub" title="${escapeHtml(x.basis)}">${escapeHtml(x.basis)}</small>` : ''}</td>
+        <td>${featureList(x)}</td>
+    </tr>`;
+    const subRow = (s) => `<tr class="est-plan-sub">
+        <td><strong>${escapeHtml(s.name)}</strong><span class="est-muted"> · ${escapeHtml(s.subId)}</span>${s.mainDims ? `<small class="est-cell-sub">${escapeHtml(s.mainDims)}${s.governingT ? ` · t=${fmt(s.governingT, 0)} mm` : ''}</small>` : ''}</td>
+        <td>${escapeHtml(SUB_ASSEMBLY_KIND_LABELS[s.kind] || s.kind || '')}${s.welded ? '' : ' <span class="est-muted">· kaynaksız</span>'}</td>
+        <td class="num">${fmt(s.qty, 0)}</td>
+        <td class="num">${s.massKgEach != null ? fmt(s.massKgEach, 0) : '—'}</td>
+        <td class="num"></td>
+        <td>${s.material ? escapeHtml(MATERIAL_LABELS[s.material] || s.material) : ''}</td>
+        <td>${sourceBadge(s.source)}${s.basis ? `<small class="est-cell-sub" title="${escapeHtml(s.basis)}">${escapeHtml(s.basis)}</small>` : ''}</td>
+        <td>güven ${conf(s.confidence)}</td>
+    </tr>`;
+    const seen = new Set();
+    const blocks = p.subs.map((s) => { seen.add(s.subId); return subRow(s) + (p.partsBySub[s.subId] || []).map(partRow).join(''); }).join('');
+    const loose = Object.entries(p.partsBySub).filter(([k]) => !seen.has(k)).map(([k, parts]) => `${k ? `<tr class="est-plan-sub"><td colspan="8"><strong>${escapeHtml(k)}</strong> <span class="est-muted">(alt montaj listede yok)</span></td></tr>` : '<tr class="est-plan-sub"><td colspan="8"><strong>Tek parçalar</strong></td></tr>'}${parts.map(partRow).join('')}`).join('');
+    return `<details class="est-more est-plan-parts"><summary>Parçalar ve alt montajlar <span class="est-muted">· ${p.subs.length} alt montaj, ${p.parts.length} parça${p.machinedParts ? `, ${p.machinedParts} işlenen` : ''}${p.totalMassKg ? ` · ${fmt(p.totalMassKg, 0)} kg` : ''}</span></summary>
+        <div class="est-table-wrap"><table class="est-table est-parts">
+            <thead><tr><th>Alt montaj / parça</th><th>Tür</th><th class="num">Adet</th><th class="num">kg/adet</th><th class="num">t mm</th><th>Malzeme</th><th>Kaynak</th><th>Talaşlı</th></tr></thead>
+            <tbody>${blocks}${loose}</tbody>
+        </table></div>
+    </details>`;
 }
 
 // ---------------------------------------------------------------- Benzer işler
@@ -777,7 +1146,22 @@ function inputsSection(r, m, v) {
     const docs = u.report?.documents;
     add('Belgeler', [docs != null ? `${fmt(docs, 0)} belge` : '', inp.pages != null ? `${fmt(inp.pages, 0)} sayfa` : ''].filter(Boolean).join(' · '));
     const method = r.hours?.method;
-    if (method || r.hours?.unit_times_h_per_m) {
+    const plan = planInfo(r.hours);
+    if (plan.plan) {
+        const nParams = Object.keys(r.hours?.model_parameters || {}).length;
+        add('Saat yöntemi', `imalat planı (v5)${nParams ? ` · ${fmt(nParams, 0)} model parametresi` : ''}`);
+        add('Plan şeması', `${plan.schemaVersion >= 2 ? 'plan v2 (alt montajlar, parçalar, talaşlı özellikler)' : 'v1 kaynak listesi'}${plan.proxy ? ' · eski liste plana uyarlandı (proxy)' : ''}${plan.structureClassLabel ? ` · sınıf: ${escapeHtml(plan.structureClassLabel)}` : ''}`);
+        const ded = [
+            plan.deduced.weldShare != null ? `kaynak metresi %${fmt(plan.deduced.weldShare * 100, 0)} çıkarım (${fmt(plan.weldM.deduced, 1)} / ${fmt(plan.weldM.total, 1)} m${plan.weldM.rule ? `, ${fmt(plan.weldM.rule, 1)} m kural` : ''})` : '',
+            plan.deduced.machShare != null && plan.deduced.machH != null ? `talaşlı saat %${fmt(plan.deduced.machShare * 100, 0)} çıkarım (${fmt(plan.deduced.machH, 1)} h${plan.deduced.machDefaultH ? `, ${fmt(plan.deduced.machDefaultH, 1)} h varsayılan` : ''})` : '',
+            plan.deduced.thinDrawingSet ? '<strong>çizim seti ince</strong>' : '',
+        ].filter(Boolean).join(' · ');
+        add('Çıkarım payı', ded);
+        if (plan.subAssemblies.length) {
+            add('Alt montaj güveni', plan.subAssemblies.map((s) => `${escapeHtml(s.name || s.sub_id || '')} ${s.confidence != null ? `%${fmt(Number(s.confidence) * 100, 0)}` : '—'}`).join(' · ')
+                + (plan.planConfidence != null ? ` <span class="est-muted">(kütle ağırlıklı %${fmt(plan.planConfidence * 100, 0)})</span>` : ''));
+        }
+    } else if (method || r.hours?.unit_times_h_per_m) {
         const nParams = Object.keys(r.hours?.model_parameters || {}).length;
         add('Saat yöntemi', method === 'geometry_v4'
             ? `birleşim geometrisi (v4)${nParams ? ` · ${fmt(nParams, 0)} model parametresi` : ''}`

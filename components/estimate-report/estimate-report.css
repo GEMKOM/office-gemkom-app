@@ -9,7 +9,8 @@
 
 /* .est-markdown: the "Nasıl çalışır?" modal of the Referanslar page renders with the same markdown styles. */
 .est-report,
-.est-markdown {
+.est-markdown,
+.est-vars {
     --est-purple: #6d28d9;
     --est-purple-dark: #3b1a8a;
     --est-purple-soft: #f1eafe;
@@ -914,3 +915,80 @@
 .est-step.is-current { color: var(--est-purple-dark); font-weight: 700; }
 .est-step.is-current i { color: var(--est-purple); }
 .est-step-detail { font-weight: 500; color: var(--est-muted); margin-left: 0.2rem; }
+
+/* ---------------------------------------------------------------- İşçilik · imalat planı (v5) */
+
+/* Small badges inside tables (çizim / çıkarım / kural, plan v2, varsayılan). */
+.est-badge-sm, .est-table .status-badge, .est-vars .status-badge.est-badge-sm { min-width: 0; font-size: 0.62rem; padding: 0.1rem 0.4rem; letter-spacing: 0.02em; margin: 0; }
+.est-fact-value .status-badge { min-width: 0; font-size: 0.68rem; }
+.est-out { color: #9ca3af; font-weight: 500; }
+.est-factor { font-weight: 700; }
+.est-dot-c { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.4rem; vertical-align: -0.05rem; }
+
+/* The stacked work-centre bar on top of the distribution table. */
+.est-dist-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #eef0f3; margin: 0.15rem 0 0.35rem; }
+.est-dist-bar > span { display: block; height: 100%; min-width: 2px; }
+.est-dist-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.76rem; color: #4b5563; margin-bottom: 0.5rem; }
+.est-dist-legend i { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 2px; margin-right: 0.3rem; vertical-align: -0.05rem; }
+.est-dist-legend strong { font-variant-numeric: tabular-nums; }
+.est-dist td.est-item { white-space: normal; }
+
+/* Tonne-rate gauges (one per centre) against the class band. */
+.est-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.6rem; margin-bottom: 0.4rem; max-width: 760px; }
+.est-gauge { border: 1px solid var(--est-line); border-radius: 10px; padding: 0.5rem 0.75rem; background: #fff; min-width: 0; }
+.est-gauge.is-below, .est-gauge.is-above { border-color: #fed7aa; background: #fffaf5; }
+.est-gauge.is-inside { border-color: #a7f3d0; background: #f6fffb; }
+.est-gauge-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.74rem; font-weight: 700; color: var(--est-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.est-gauge-head .status-badge { min-width: 0; font-size: 0.64rem; margin: 0; }
+.est-gauge-value { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; margin: 0.1rem 0 0.25rem; }
+.est-gauge-value small { font-size: 0.72rem; font-weight: 600; color: var(--est-muted); }
+.est-gauge-track { position: relative; height: 8px; border-radius: 4px; background: #eef0f3; overflow: visible; margin: 0.2rem 0 0.35rem; }
+.est-gauge-band { position: absolute; top: 0; bottom: 0; background: #c4b5fd; border-radius: 4px; }
+.est-gauge.is-inside .est-gauge-band { background: #6ee7b7; }
+.est-gauge-mark { position: absolute; top: -3px; width: 3px; height: 14px; margin-left: -1.5px; background: var(--est-purple-dark); border-radius: 2px; }
+.est-gauge.is-below .est-gauge-mark, .est-gauge.is-above .est-gauge-mark { background: #c2410c; }
+.est-gauge-sub { font-size: 0.72rem; color: #4b5563; line-height: 1.35; }
+.est-gauge-sub strong { font-variant-numeric: tabular-nums; }
+
+/* The plan table grouped by work centre (one <details> per centre). */
+/* minmax(0, 1fr) + min-width: 0: a wide plan table scrolls inside its group instead of widening the card on a phone. */
+.est-plan { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; margin-top: 0.2rem; min-width: 0; }
+.est-plan-group { margin-top: 0; min-width: 0; max-width: 100%; }
+.est-plan-group > .est-table-wrap, .est-plan-parts > .est-table-wrap { max-width: 100%; overflow-x: auto; }
+.est-plan-group > summary { font-size: 0.82rem; }
+.est-plan-group > .est-table-wrap { border: none; border-radius: 0 0 10px 10px; margin: 0; }
+.est-plan-sum { margin-left: auto; font-weight: 500; color: var(--est-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.est-plan-sum strong { color: var(--est-purple-dark); }
+.est-plan-table td.est-plan-op { min-width: 160px; }
+.est-plan-table td.est-plan-driver { color: #4b5563; font-size: 0.78rem; min-width: 150px; line-height: 1.4; }
+.est-plan-table td.est-plan-src { white-space: nowrap; }
+.est-plan-table tr.est-plan-head td { background: #f8f6ff; }
+.est-plan-table tr.est-plan-part td { background: #fcfbff; }
+.est-plan-table tr.est-plan-part td.est-plan-op { padding-left: 1.3rem; font-weight: 600; }
+.est-plan-table tr.est-plan-feat td { font-size: 0.78rem; color: #374151; }
+.est-plan-table tr.est-plan-feat td.est-plan-op { padding-left: 2.2rem; }
+.est-plan-indent { display: inline-block; }
+.est-plan-note { font-size: 0.66rem; font-weight: 700; color: #5b21b6; background: var(--est-purple-soft); border-radius: 4px; padding: 0.02rem 0.32rem; margin-left: 0.25rem; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em; }
+.est-plan-table .est-share-cell { width: 80px; }
+
+/* Parçalar ve alt montajlar */
+.est-plan-parts { margin-top: 0.6rem; }
+.est-plan-parts > .est-table-wrap { border: none; border-radius: 0 0 10px 10px; margin: 0; }
+.est-parts tr.est-plan-sub td { background: #f8f6ff; }
+.est-parts tr.est-plan-part td.est-plan-indent, .est-parts td.est-plan-indent { padding-left: 1.3rem; }
+.est-parts .est-cell-sub { white-space: normal; max-width: 260px; }
+.est-plan-feats { font-size: 0.78rem; }
+.est-plan-feats > summary { cursor: pointer; color: #5b21b6; font-weight: 600; list-style: none; }
+.est-plan-feats > summary::-webkit-details-marker { display: none; }
+.est-plan-feats > summary::before { content: '\f054'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 0.55rem; margin-right: 0.3rem; color: var(--est-muted); display: inline-block; transition: transform 0.15s ease; }
+.est-plan-feats[open] > summary::before { transform: rotate(90deg); }
+.est-plan-feats .est-plain-list { margin-top: 0.25rem; min-width: 240px; }
+.est-plan-feats .est-plain-list li { margin-bottom: 0.25rem; line-height: 1.4; }
+
+.est-cal td.est-nowrap .status-badge { margin-left: 0.2rem; }
+
+@media (max-width: 575.98px) {
+    .est-gauges { grid-template-columns: minmax(0, 1fr); }
+    .est-dist-legend { font-size: 0.72rem; }
+    .est-plan-table td.est-plan-op, .est-plan-table td.est-plan-driver { min-width: 120px; }
+}

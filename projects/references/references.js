@@ -24,13 +24,15 @@ import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { escapeHtml } from '../../utils/text.js';
 import {
-    REFERENCE_FAMILY, REFERENCE_RELIABILITY, REFERENCE_REVIEW, REFERENCE_ROUTE,
-    getEstimatorParameters, getReferenceSummary, getWeldSchedule, listReferenceProfiles, previewWeldScheduleVersion,
-    reviewReferenceProfile, saveWeldScheduleVersion, updateEstimatorParameters,
+    REFERENCE_FAMILY, REFERENCE_RELIABILITY, REFERENCE_REVIEW, REFERENCE_ROUTE, SCHEMA_LABELS, STRUCTURE_CLASS_LABELS,
+    WORK_CENTRE_LABELS, getEstimatorParameters, getReferenceSummary, getWeldSchedule, listReferenceProfiles, machiningExclusionLabel,
+    previewWeldScheduleVersion, reviewReferenceProfile, saveWeldScheduleVersion, updateEstimatorParameters,
 } from '../../apis/estimator.js';
 import {
     JOINT_TYPE_LABELS, MATERIAL_LABELS, PROCESS_LABELS, fmt, processLabel,
 } from '../../components/estimate-report/estimate-report.js';
+import { planPartsHtml, planTableHtml, schemaBadge, sourceBadge } from '../../components/estimate-report/report-view.js';
+import { isPlanBottomUp } from '../../components/estimate-report/report-model.js';
 import { openEstimatorMethod } from '../../components/estimator-method/estimator-method.js';
 
 const JOB_STATUS = {
@@ -143,6 +145,26 @@ function initFilters() {
         id: 'status-filter', label: 'İş durumu', multiple: true, placeholder: 'Tümü', colSize: 2,
         options: Object.entries(JOB_STATUS).map(([value, label]) => ({ value, label })),
     });
+    // Structure class and schema are filtered on the page (the list endpoint has no such query parameters;
+    // every profile is loaded and paged here anyway).
+    filters.addDropdownFilter({
+        id: 'class-filter', label: 'Yapı sınıfı', multiple: true, placeholder: 'Tümü', colSize: 2,
+        options: Object.entries(STRUCTURE_CLASS_LABELS).map(([value, label]) => ({ value, label })),
+    });
+    filters.addDropdownFilter({
+        id: 'schema-filter', label: 'Şema', multiple: true, placeholder: 'Tümü', colSize: 2,
+        options: [{ value: '2', label: 'plan v2' }, { value: '1', label: 'v1 liste' }],
+    });
+}
+
+/** The page-side filters (class, schema) applied to the loaded rows. */
+function clientFiltered(list) {
+    const f = filters?.getFilterValues() || {};
+    const classes = new Set(Array.isArray(f['class-filter']) ? f['class-filter'] : (f['class-filter'] ? [f['class-filter']] : []));
+    const schemas = new Set((Array.isArray(f['schema-filter']) ? f['schema-filter'] : (f['schema-filter'] ? [f['schema-filter']] : [])).map(String));
+    if (!classes.size && !schemas.size) return list;
+    return list.filter((r) => (!classes.size || classes.has(r.structure_class || 'other'))
+        && (!schemas.size || schemas.has(String(Number(r.schema_version) >= 2 ? 2 : 1))));
 }
 
 function badge(map, value) {
@@ -162,6 +184,11 @@ function initTable() {
             { field: 'customer', label: 'Müşteri', sortable: true, formatter: (v) => escapeHtml(v || '') },
             { field: 'family', label: 'Aile', sortable: true, formatter: (v) => escapeHtml(REFERENCE_FAMILY[v] || v || '') },
             { field: 'route', label: 'Güzergâh', sortable: true, formatter: (v) => badge(REFERENCE_ROUTE, v) },
+            // Structure class of the plan + the schema badge ("plan v2" blue / "v1 liste" grey).
+            { field: 'structure_class', label: 'Sınıf', sortable: true, formatter: (v, row) => {
+                const label = row.structure_class_label || STRUCTURE_CLASS_LABELS[v] || v || '';
+                return `<span class="ref-class">${escapeHtml(label || '—')}</span>${row.schema_version != null ? `<span class="ref-schema">${schemaBadge(row.schema_version)}</span>` : ''}`;
+            } },
             { field: 'quantity', label: 'Adet', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num', exportType: 'number' },
             { field: 'unit_mass_kg', label: 'Birim kg', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num',
               exportType: 'number', formatter: num(0) },
@@ -170,17 +197,40 @@ function initTable() {
             { field: 'joints_total', label: 'Birleşim', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num', exportType: 'number' },
             { field: 'recorded_welding_h_per_unit', label: 'Kayıtlı h/adet', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num',
               exportType: 'number', formatter: num(1) },
-            { field: 'bottom_up_h_per_unit', label: 'Hesap h/adet', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num',
-              exportType: 'number', formatter: num(1) },
-            { field: 'factor', label: 'Faktör', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num', exportType: 'number',
+            // Plan hours of the welding shop (the factor's denominator); the whole plan (every centre) in the tooltip.
+            { field: 'shop_h_per_unit', label: 'Atölye h/adet', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num',
+              exportType: 'number', formatter: (v, row) => {
+                  const total = row.total_h_per_unit ?? row.bottom_up_h_per_unit;
+                  const centres = (row.work_centres || []).filter((wc) => Number(wc.hours)).map((wc) => `${wc.label}: ${fmt(wc.hours, 1)} h`).join('\n');
+                  const tip = [total != null ? `Plan toplamı ${fmt(total, 1)} h/adet (tüm iş merkezleri)` : '', centres,
+                      row.shop_in_house_h_per_unit != null && row.shop_h_per_unit != null && Math.abs(row.shop_in_house_h_per_unit - row.shop_h_per_unit) > 0.05 ? `İç imalat payı ${fmt(row.shop_in_house_h_per_unit, 1)} h (taşeron kilosu düşüldü)` : ''].filter(Boolean).join('\n');
+                  return `<span title="${escapeHtml(tip)}">${v == null ? '—' : fmt(v, 1)}</span>`;
+              } },
+            { field: 'mach_h_per_unit', label: 'Talaşlı h/adet', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num',
+              exportType: 'number', formatter: (v, row) => (v == null ? '—'
+                  : `<span title="${escapeHtml(row.recorded_machining_h_per_unit != null ? `Kayıtlı talaşlı saati ${fmt(row.recorded_machining_h_per_unit, 1)} h/adet` : 'Kayıtlı talaşlı saati yok')}">${fmt(v, 1)}</span>`) },
+            // The header is inserted as HTML by TableComponent: the tooltip rides on a span; exportLabel keeps the Excel header plain.
+            { field: 'factor', label: '<span title="Kayıtlı kaynakçı saati ÷ planın atölye saati (çatım, kaynak, taşlama, doğrultma, çevirme, montaj)">Faktör</span>',
+              exportLabel: 'Faktör', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num', exportType: 'number',
               formatter: (v, row) => {
                   const text = v == null ? '—' : fmt(v, 2);
                   // The hours guard (Saat kaydı) lives here: it rarely fires, and when it does it greys the factor.
                   const hours = `Kayıtlı kaynak saati: ${fmt(row.recorded_welding_h_total, 0)} h (${RELIABILITY_TEXT[row.hours_reliability] || row.hours_reliability || '—'})`;
-                  if (!row.in_house_exclusion) return `<span class="ref-factor" title="${escapeHtml(hours)}">${text}</span>`;
+                  const calc = row.recorded_welding_h_per_unit != null && row.shop_in_house_h_per_unit != null ? `${fmt(row.recorded_welding_h_per_unit, 1)} ÷ ${fmt(row.shop_in_house_h_per_unit, 1)} h/adet (kayıtlı ÷ plan atölye)` : 'kayıtlı ÷ plan atölye saati';
+                  if (!row.in_house_exclusion) return `<span class="ref-factor" title="${escapeHtml(`${calc}\n${hours}`)}">${text}</span>`;
                   const why = exclusionLabel(row.in_house_exclusion);
                   return `<span class="ref-out" title="${escapeHtml(`İç imalat kalibrasyonunda kullanılmaz: ${why}
+${calc}
 ${hours}`)}">${text}<i class="fas fa-ban ref-out-icon"></i></span>`;
+              } },
+            { field: 'factor_mach', label: '<span title="Kayıtlı talaşlı saati ÷ planın talaşlı saati (plan v2 ve > 10 h talaşlı kaydı gerekir)">Talaşlı faktörü</span>',
+              exportLabel: 'Talaşlı faktörü', sortable: true, type: 'number', cellClass: 'ref-num', headerClass: 'ref-num', exportType: 'number',
+              formatter: (v, row) => {
+                  if (v != null && !row.machining_exclusion) {
+                      return `<span class="ref-factor" title="${escapeHtml(`${fmt(row.recorded_machining_h_per_unit, 1)} ÷ ${fmt(row.mach_h_per_unit, 1)} h/adet (kayıtlı ÷ plan talaşlı)`)}">${fmt(v, 2)}</span>`;
+                  }
+                  const why = machiningExclusionLabel(row.machining_exclusion) || 'Talaşlı kalibrasyonunda kullanılmaz';
+                  return `<span class="ref-out" title="${escapeHtml(`Talaşlı kalibrasyonunda kullanılmaz: ${why}`)}">${v == null ? '—' : fmt(v, 2)}<i class="fas fa-ban ref-out-icon"></i></span>`;
               } },
             // Model confidence of the weld list this page reviews; sort ascending to see the shaky lists first.
             { field: 'weld_schedule_confidence', label: 'Güven', sortable: true, type: 'number', exportType: 'number',
@@ -233,13 +283,14 @@ function confidenceBadge(value, title = '') {
     return `<span class="status-badge ${cls}"${title ? ` title="${escapeHtml(title)}"` : ''}>%${fmt(v * 100, 0)}</span>`;
 }
 
-/** `rows` in the clicked column's order; empty values last either way, Turkish collation for text. */
+/** `rows` (page-side filters applied) in the clicked column's order; empty values last either way, Turkish collation for text. */
 function sortedRows() {
     const { field, dir } = sortState;
-    if (!field) return rows;
+    const list = clientFiltered(rows);
+    if (!field) return list;
     const sign = dir === 'desc' ? -1 : 1;
     const empty = (v) => v === null || v === undefined || v === '';
-    return rows.slice().sort((a, b) => {
+    return list.slice().sort((a, b) => {
         const x = a[field];
         const y = b[field];
         if (empty(x) || empty(y)) return empty(x) - empty(y);
@@ -267,8 +318,9 @@ function renderCount() {
     const el = document.getElementById('ref-count');
     if (!el) return;
     const total = libraryTotal ?? rows.length;
+    const shown = clientFiltered(rows).length;
     el.innerHTML = filtersActive()
-        ? `<strong>${rows.length}</strong> / ${total} referans <span class="text-muted">(filtreli)</span>`
+        ? `<strong>${shown}</strong> / ${total} referans <span class="text-muted">(filtreli)</span>`
         : `<strong>${total}</strong> referans`;
 }
 
@@ -339,15 +391,23 @@ async function loadSummary() {
     }
 }
 
-function distCard(title, dist, extraClass = '') {
+/** "Atölye h/t 102–127 (n=2) · Talaşlı h/t 8–15 (n=2)": the recorded hours-per-tonne bands (p25–p75) of a family / class. */
+function bandLine(shop, mach) {
+    const one = (label, d) => (d && d.n ? `${label} <strong>${fmt(d.p25, 0)}–${fmt(d.p75, 0)}</strong> h/t <span class="ref-band-n">(n=${d.n}${d.n < 3 ? ', bant için az' : ''})</span>` : '');
+    const parts = [one('Atölye', shop), one('Talaşlı', mach)].filter(Boolean);
+    return parts.length ? `<div class="ref-card-band" title="Kayıtlı saat ÷ birim kütle, çeyrekler arası (p25–p75); 3 referanstan az ise tahmin parametre bandını kullanır">${parts.join(' · ')}</div>` : '';
+}
+
+function distCard(title, dist, extraClass = '', { bands = '', kicker = 'ortalama faktör' } = {}) {
     if (!dist || !dist.n) return '';
     const range = dist.n > 1
         ? `medyan ${fmt(dist.median, 2)} · çeyrekler ${fmt(dist.p25, 2)}–${fmt(dist.p75, 2)}<br>en düşük ${fmt(dist.min, 2)} · en yüksek ${fmt(dist.max, 2)}`
         : 'tek iş: aralık yok';
     return `<div class="ref-card ${extraClass}">
         <div class="ref-card-title"><span>${escapeHtml(title)}</span><span>n = ${dist.n}</span></div>
-        <div class="ref-card-value">${fmt(dist.mean, 2)} <small>ortalama faktör</small></div>
+        <div class="ref-card-value">${fmt(dist.mean, 2)} <small>${kicker}</small></div>
         <div class="ref-card-sub">${range}</div>
+        ${bands}
     </div>`;
 }
 
@@ -355,22 +415,51 @@ function renderSummary(s) {
     const host = document.getElementById('ref-summary');
     const c = s.counts || {};
     const rs = c.review_status || {};
+    const schemaCounts = c.schema_version || {};
     const counts = `<div class="ref-card ref-card-counts">
         <div class="ref-card-title"><span>Profiller</span><span>${c.total ?? 0}</span></div>
-        <div class="ref-count-line"><span>Kalibrasyonda kullanılan</span><strong>${(s.jobs_used || []).length}</strong></div>
+        <div class="ref-count-line"><span>Atölye kalibrasyonunda</span><strong>${(s.jobs_used || []).length}</strong></div>
+        <div class="ref-count-line"><span>Talaşlı kalibrasyonunda</span><strong>${(s.machining?.jobs_used || []).length}</strong></div>
         <div class="ref-count-line"><span>Doğrulandı</span><strong>${rs.verified || 0}</strong></div>
         <div class="ref-count-line"><span>İncelenmedi</span><strong>${rs.unreviewed || 0}</strong></div>
         <div class="ref-count-line"><span>Hariç</span><strong>${rs.excluded || 0}</strong></div>
+        ${Object.keys(schemaCounts).length ? `<div class="ref-count-line"><span>plan v2 · v1 liste</span><strong>${schemaCounts['2'] || 0} · ${schemaCounts['1'] || 0}</strong></div>` : ''}
     </div>`;
+    const bands = s.bands || {};
+    const classLabels = { ...STRUCTURE_CLASS_LABELS, ...(s.class_labels || {}) };
     const families = Object.entries(s.families || {})
         .sort((a, b) => (b[1].n || 0) - (a[1].n || 0))
-        .map(([fam, dist]) => distCard(REFERENCE_FAMILY[fam] || fam, dist))
+        .map(([fam, dist]) => distCard(REFERENCE_FAMILY[fam] || fam, dist, '', { bands: bandLine(bands.shop?.family?.[fam], bands.mach?.family?.[fam]) }))
         .join('');
-    const all = distCard('Tüm aileler', s.all, 'ref-card-all');
+    const classes = Object.entries(s.classes || {})
+        .sort((a, b) => (b[1].n || 0) - (a[1].n || 0))
+        .map(([cls, dist]) => distCard(`Sınıf: ${classLabels[cls] || cls}`, dist, 'ref-card-class', { bands: bandLine(bands.shop?.class?.[cls], bands.mach?.class?.[cls]) }))
+        .join('');
+    const all = distCard('Tüm aileler · atölye', s.all, 'ref-card-all', { kicker: 'ortalama atölye faktörü' });
+    // Machining: one block with the overall distribution and the per-class medians.
+    const m = s.machining || {};
+    let machining = '';
+    if (m.all && m.all.n) {
+        const perClass = Object.entries(m.classes || {}).filter(([, d]) => d && d.n)
+            .sort((a, b) => (b[1].n || 0) - (a[1].n || 0))
+            .map(([cls, d]) => `<div class="ref-count-line"><span>${escapeHtml(classLabels[cls] || cls)}</span><strong>${fmt(d.median, 2)}${d.n > 1 ? ` <span class="ref-band-n">(${fmt(d.p25, 2)}–${fmt(d.p75, 2)}, n=${d.n})</span>` : ' <span class="ref-band-n">(n=1)</span>'}</strong></div>`).join('');
+        machining = `<div class="ref-card ref-card-mach">
+            <div class="ref-card-title"><span>Talaşlı faktörü</span><span>n = ${m.all.n}</span></div>
+            <div class="ref-card-value">${fmt(m.all.mean, 2)} <small>ortalama · medyan ${fmt(m.all.median, 2)}</small></div>
+            <div class="ref-card-sub">${m.all.n > 1 ? `çeyrekler ${fmt(m.all.p25, 2)}–${fmt(m.all.p75, 2)} · en düşük ${fmt(m.all.min, 2)} · en yüksek ${fmt(m.all.max, 2)}` : 'tek iş: aralık yok'}</div>
+            ${perClass ? `<div class="ref-card-lines">${perClass}</div>` : ''}
+        </div>`;
+    } else {
+        machining = `<div class="ref-card ref-card-mach">
+            <div class="ref-card-title"><span>Talaşlı faktörü</span><span>n = 0</span></div>
+            <div class="ref-card-value">1,00 <small>referans yok</small></div>
+            <div class="ref-card-sub">Talaşlı faktörü için > 10 h talaşlı saati kayıtlı, plan v2 şemalı ve hariç tutulmamış bir referans gerekiyor.</div>
+        </div>`;
+    }
     const empty = !all
         ? '<div class="ref-summary-empty">Faktör dağılımı için iç imalat, güvenilir saatli (> 10 h) ve hariç tutulmamış bir referans gerekiyor.</div>'
         : '';
-    host.innerHTML = counts + all + families + empty;
+    host.innerHTML = counts + all + machining + classes + families + empty;
     host.title = s.population || '';
 }
 
@@ -419,9 +508,13 @@ function factsHtml(row) {
         ${fact('Kaynak', `${fmt(row.weld_m_total, 1)} m${mats ? ` (${escapeHtml(mats)})` : ''}`)}
         ${fact('Birleşim', fmt(row.joints_total, 0))}
         ${fact('Kayıtlı', `${fmt(row.recorded_welding_h_per_unit, 1)} h/adet (toplam ${fmt(row.recorded_welding_h_total, 0)} h)`)}
-        ${fact('Hesap', `${fmt(row.bottom_up_h_per_unit, 1)} h/adet`)}
+        ${fact('Plan atölye', `${fmt(row.shop_h_per_unit ?? row.bottom_up_h_per_unit, 1)} h/adet${row.total_h_per_unit != null ? ` <span class="text-muted">(toplam ${fmt(row.total_h_per_unit, 1)})</span>` : ''}`)}
         ${fact('Faktör', row.factor == null ? '—' : fmt(row.factor, 2))}
         ${row.in_house_exclusion ? fact('Kalibrasyon', escapeHtml(exclusionLabel(row.in_house_exclusion))) : ''}
+        ${row.mach_h_per_unit != null ? fact('Plan talaşlı', `${fmt(row.mach_h_per_unit, 1)} h/adet${row.recorded_machining_h_per_unit != null ? ` <span class="text-muted">(kayıtlı ${fmt(row.recorded_machining_h_per_unit, 1)})</span>` : ''}`) : ''}
+        ${fact('Talaşlı faktörü', row.factor_mach != null && !row.machining_exclusion ? fmt(row.factor_mach, 2) : `<span class="text-muted">— ${escapeHtml(machiningExclusionLabel(row.machining_exclusion) || 'kullanılmaz')}</span>`)}
+        ${row.structure_class ? fact('Sınıf', `${escapeHtml(row.structure_class_label || STRUCTURE_CLASS_LABELS[row.structure_class] || row.structure_class)} ${row.schema_version != null ? schemaBadge(row.schema_version) : ''}`) : ''}
+        ${row.plan_confidence != null ? fact('Plan güveni', `%${fmt(Number(row.plan_confidence) * 100, 0)}`) : ''}
     </div>`;
 }
 
@@ -484,12 +577,38 @@ function weldNotesHtml(ws) {
 }
 
 function nonWeldingHtml(bu) {
+    if (isPlanBottomUp(bu)) return planHoursHtml(bu);
     const lines = (bu.non_welding_lines || []).map((l) => `<tr><td>${escapeHtml(NON_WELDING_LABELS[l.step] || l.step)}${l.applies === false ? ' <span class="ref-joint-detail d-inline">(basınçlı sistem değil)</span>' : ''}</td><td class="text-end">${fmt(l.qty, l.unit === 'h/kg' ? 1 : 0)}</td><td>${escapeHtml(UNIT_LABELS[l.unit] || l.unit)}</td><td class="text-end">${fmt(l.unit_h, 4)}</td><td class="text-end">${fmt(l.hours, 2)}</td></tr>`).join('');
     return `<h6 class="mt-3 mb-1 ref-weld-h">Kaynak dışı (1 adet)</h6>
         <table class="table table-sm ref-bu-table"><thead><tr><th>Adım</th><th class="text-end">Miktar</th><th>Birim</th><th class="text-end">Birim süre</th><th class="text-end">Saat</th></tr></thead>
             <tbody>${lines}</tbody>
             <tfoot><tr><th colspan="4">Kaynak ${fmt(bu.welding_h, 1)} h + kaynak dışı ${fmt(bu.non_welding_h, 1)} h = hesaplanan saat (1 adet)</th><th class="text-end">${fmt(bu.total_h, 1)} h</th></tr></tfoot>
         </table>`;
+}
+
+/** Plan hours (v5): the work-centre subtotals, then every centre's lines (welding, other steps, machining parts and features). */
+function planHoursHtml(bu) {
+    const centres = (bu.work_centres || []).map((wc) => `<tr class="${Number(wc.hours) ? '' : 'text-muted'}"><td>${escapeHtml(WORK_CENTRE_LABELS[wc.key] || wc.label || wc.key)}</td><td class="text-end">${fmt(wc.hours, 1)}</td><td class="text-end">%${fmt((Number(wc.share) || 0) * 100, 0)}</td></tr>`).join('');
+    const hpt = bu.h_per_t || {};
+    const d = bu.deduced || {};
+    const facts = [
+        bu.structure_class ? `Sınıf <strong>${escapeHtml(bu.structure_class_label || STRUCTURE_CLASS_LABELS[bu.structure_class] || bu.structure_class)}</strong>` : '',
+        hpt.shop != null ? `atölye <strong>${fmt(hpt.shop, 0)} h/t</strong>` : '',
+        hpt.mach != null && Number(bu.mach_h) ? `talaşlı <strong>${fmt(hpt.mach, 0)} h/t</strong>` : '',
+        bu.weld_m != null ? `kaynak <strong>${fmt(bu.weld_m, 1)} m</strong> (çizim ${fmt(bu.weld_m_drawn, 1)}, çıkarım ${fmt(bu.weld_m_deduced, 1)}${Number(bu.weld_m_rule) ? `, kural ${fmt(bu.weld_m_rule, 1)}` : ''})` : '',
+        d.mach_h != null && Number(bu.mach_h) ? `talaşlı çıkarım <strong>${fmt(d.mach_h, 1)} h</strong>${d.mach_default_h ? `, varsayılan ${fmt(d.mach_default_h, 1)} h` : ''}` : '',
+        d.thin_drawing_set ? '<span class="status-badge status-orange">çizim seti ince</span>' : '',
+        bu.pwht?.required ? `ısıl işlem <strong>${fmt(bu.pwht.kg, 0)} kg</strong> (~${fmt(bu.pwht.eur, 0)} €)` : '',
+        bu.proxy ? '<span class="status-badge status-grey">v1 listeden uyarlandı</span>' : '',
+    ].filter(Boolean).join(' · ');
+    return `<h6 class="mt-3 mb-1 ref-weld-h">İş merkezi saatleri (1 adet, plan)</h6>
+        ${facts ? `<div class="ref-plan-facts">${facts}</div>` : ''}
+        <table class="table table-sm ref-bu-table ref-centres"><thead><tr><th>İş merkezi</th><th class="text-end">Saat</th><th class="text-end">Pay</th></tr></thead>
+            <tbody>${centres}</tbody>
+            <tfoot><tr><th>Toplam (kaynak ${fmt(bu.welding_h, 1)} h + diğer ${fmt(bu.non_welding_h, 1)} h)</th><th class="text-end">${fmt(bu.total_h, 1)} h</th><th></th></tr></tfoot>
+        </table>
+        <h6 class="mt-3 mb-1 ref-weld-h">İmalat planı ve saat hesabı</h6>
+        <div class="est-vars">${planTableHtml(bu)}</div>`;
 }
 
 /** "düzenleyen Onat Çalık · 19.10.2026 14:05: kep sayısı 7→9" for a hand-edited version. */
@@ -545,17 +664,26 @@ function renderWeldView() {
     const edited = ws.edited
         ? `<div class="ref-weld-edited"><i class="fas fa-pen me-1"></i>v${ws.version} elle düzeltildi: ${escapeHtml(editedByText(ws))}${ws.edit_note ? ` — <strong>${escapeHtml(ws.edit_note)}</strong>` : ''}</div>`
         : '';
+    const schema = Number(ws.schema_version ?? bu.schema_version ?? 1) || 1;
+    const plan = isPlanBottomUp(bu);
+    const hasSub = joints.some((j) => j.sub_id);
+    const hasSource = joints.some((j) => j.source);
+    const t = ws.totals || {};
     body.innerHTML = `
         ${old}
         <div class="ref-weld-meta">
-            <span>Kaynak listesi <strong>v${ws.version}</strong></span>
-            <span>Güven ${confidenceBadge(Number(ws.confidence || 0))}</span>
-            <span><strong>${ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? 0}</strong> parça</span>
+            <span>${schema >= 2 ? 'İmalat planı' : 'Kaynak listesi'} <strong>v${ws.version}</strong> ${schemaBadge(schema)}</span>
+            <span>Güven ${confidenceBadge(Number(ws.confidence || 0))}${plan && bu.plan_confidence != null ? ` <span class="text-muted">plan %${fmt(Number(bu.plan_confidence) * 100, 0)}</span>` : ''}</span>
+            ${schema >= 2 ? `<span><strong>${(ws.sub_assemblies || []).length}</strong> alt montaj · <strong>${(ws.parts || []).length}</strong> parça</span>` : ''}
+            <span><strong>${ws.pieces_to_cut_per_unit ?? ws.pieces_per_unit ?? bu.parts_count ?? 0}</strong> kesilecek parça</span>
             <span><strong>${ws.bends_per_unit ?? 0}</strong> büküm</span>
+            ${t.weld_m_drawn != null && t.weld_m_deduced != null ? `<span>Kaynak <strong>${fmt(t.weld_m_total, 1)} m</strong> <span class="text-muted">(çizim ${fmt(t.weld_m_drawn, 1)} · çıkarım ${fmt(t.weld_m_deduced, 1)})</span></span>` : ''}
             <span>Birim kütle <strong>${fmt(ws.unit_mass_kg, 0)} kg</strong>${ws.mass_basis ? ' <span class="text-muted">(kütle notuna bakın)</span>' : ''}</span>
         </div>
         ${edited}
         ${weldNotesHtml(ws)}
+        ${schema >= 2 ? `<div class="est-vars ref-plan-parts">${planPartsHtml(ws)}</div>` : ''}
+        <h6 class="mt-3 mb-1 ref-weld-h">Birleşimler (${joints.length})</h6>
         <div id="ref-weld-table"></div>
         ${nonWeldingHtml(bu)}
         ${versionHistoryHtml(ws)}`;
@@ -566,13 +694,16 @@ function renderWeldView() {
         j.process && `Proses: ${processLabel(j.process)}`,
         j.weld_detail && !EMPTY_VALUES.has(String(j.weld_detail).trim().toLowerCase()) && `Detay: ${j.weld_detail}`,
         j.ndt && !EMPTY_VALUES.has(String(j.ndt).trim().toLowerCase()) && `NDT: ${j.ndt}`,
+        j.basis && `Dayanak: ${j.basis}`,
         geometryText(j.geometry),
     ].filter(Boolean).map(escapeHtml).join(' · ');
     modalTables.push(new TableComponent('ref-weld-table', {
         columns: [
             { field: 'joint_id', label: 'No', width: '64px', sortable: true },
+            ...(hasSub ? [{ field: 'sub_id', label: 'Alt montaj', width: '84px', sortable: true, formatter: (v) => escapeHtml(v || '') }] : []),
             { field: 'description', label: 'Birleşim', sortable: false, formatter: (v, j) => `<div class="ref-joint-desc">${escapeHtml(v || '')}</div>
                 ${detail(j) ? `<div class="ref-joint-detail">${detail(j)}</div>` : ''}${j.evidence ? `<div class="ref-joint-detail" title="${escapeHtml(j.evidence)}">Pafta: ${escapeHtml(j.evidence)}</div>` : ''}` },
+            ...(hasSource ? [{ field: 'source', label: 'Kaynak', width: '84px', sortable: true, formatter: (v) => sourceBadge(v || 'drawn') }] : []),
             { field: 'joint_type', label: 'Tip · malzeme', sortable: true, width: '130px',
               formatter: (v, j) => `${JOINT_TYPE_LABELS[v] || escapeHtml(v || '')}<div class="ref-joint-detail">${MATERIAL_LABELS[j.material] || escapeHtml(j.material || '')}</div>` },
             { field: 'count_per_unit', label: 'Adet', type: 'number', sortable: true, width: '56px', headerClass: 'est-num', cellClass: 'est-num' },
@@ -644,9 +775,10 @@ function selectHtml(field, value, labels, codes) {
 }
 
 function gridRowHtml(j, i) {
-    const context = [j.size && `Ölçü: ${j.size}`, j.evidence && `Pafta: ${j.evidence}`].filter(Boolean).map(escapeHtml).join(' · ');
+    // Plan joints keep their sub-assembly and source (read-only here; the draft carries them unchanged).
+    const context = [j.sub_id && `Alt montaj: ${j.sub_id}`, j.size && `Ölçü: ${j.size}`, j.evidence && `Pafta: ${j.evidence}`].filter(Boolean).map(escapeHtml).join(' · ');
     return `<tr data-row="${i}">
-        <td><input type="text" class="form-control form-control-sm" data-field="joint_id" value="${escapeHtml(j.joint_id || '')}" placeholder="yeni" aria-label="No"></td>
+        <td><input type="text" class="form-control form-control-sm" data-field="joint_id" value="${escapeHtml(j.joint_id || '')}" placeholder="yeni" aria-label="No">${j.source ? `<div class="mt-1">${sourceBadge(j.source)}</div>` : ''}</td>
         <td>
             <textarea class="form-control form-control-sm" data-field="description" rows="2" placeholder="Ne neye kaynıyor (poz numaralarıyla)" aria-label="Birleşim">${escapeHtml(j.description || '')}</textarea>
             <input type="text" class="form-control form-control-sm mt-1" data-field="weld_detail" value="${escapeHtml(j.weld_detail || '')}" placeholder="Kaynak detayı (ör. a=5 köşe, V 60°)" aria-label="Kaynak detayı">
@@ -1097,12 +1229,19 @@ function parseInput(text) {
 
 function renderUnits(errors = {}) {
     const panel = document.getElementById('ref-units-panel');
-    const groups = units.groups || {};
+    // Groups and their Turkish labels come from the server, in the server's order
+    // (plan_hours / weld_geometry GROUP_LABELS + cost); a parameter whose group
+    // the map does not name still renders, under its raw key, at the end.
+    const groups = { ...(units.groups || {}) };
     const byGroup = {};
-    (units.parameters || []).forEach((p) => { (byGroup[p.group] = byGroup[p.group] || []).push(p); });
+    (units.parameters || []).forEach((p) => {
+        const g = p.group || 'other';
+        (byGroup[g] = byGroup[g] || []).push(p);
+        if (!(g in groups)) groups[g] = g;
+    });
     const groupHtml = Object.keys(groups).filter((g) => byGroup[g]).map((g) => `
         <div class="ref-units-group">
-            <h6>${escapeHtml(groups[g])}</h6>
+            <h6>${escapeHtml(groups[g])} <span class="ref-units-count">${byGroup[g].length}</span></h6>
             <table class="ref-units-table"><tbody>
                 ${byGroup[g].map((p) => `
                     <tr class="${p.is_default ? '' : 'is-custom'}" title="${escapeHtml([p.description, p.changed_by_name && `Son değişiklik: ${p.changed_by_name} · ${formatDateTime(p.changed_at)}`].filter(Boolean).join('\n'))}">
@@ -1128,8 +1267,8 @@ function renderUnits(errors = {}) {
         </details>` : '';
     panel.innerHTML = `
         <div class="ref-units-head">
-            <h6><i class="fas fa-sliders me-1"></i>Birim süreler ve maliyet parametreleri</h6>
-            <span class="small">Bir adedin hesaplanan saati bu sürelerle bulunur; değişiklik bütün faktörleri ve yeni tahminleri hemen etkiler. Hepsi aynı oranda değişirse tahmin değişmez.</span>
+            <h6><i class="fas fa-sliders me-1"></i>Birim süreler ve maliyet parametreleri <span class="ref-units-count">${(units.parameters || []).length}</span></h6>
+            <span class="small">Bir adedin plan saati (kaynak atölyesi, talaşlı, CNC, büküm, kalite kontrol) bu parametrelerle bulunur; değişiklik bütün faktörleri ve yeni tahminleri hemen etkiler. Bir merkezin parametreleri aynı oranda değişirse o merkezin tahmini değişmez.</span>
         </div>
         <div class="ref-units-groups">${groupHtml}</div>
         <div class="ref-units-foot">

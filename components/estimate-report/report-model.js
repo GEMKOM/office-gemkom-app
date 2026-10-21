@@ -326,38 +326,67 @@ export function exclusionLabel(reason, row = null) {
     return reason;
 }
 
+/** True for the manufacturing-plan method (v5): the bottom-up carries work centres. */
+export function isPlanBottomUp(bottomUp) {
+    const bu = bottomUp || {};
+    return bu.method === 'plan_v5' || Array.isArray(bu.work_centres);
+}
+
 /** Which hours method the payload carries, and whether the in-house factor had a reference. */
 export function hoursInfo(hours) {
     const h = hours || {};
     const cal = h.calibration?.in_house || {};
     return {
-        geometry: h.method === 'geometry_v4' || (h.bottom_up?.lines || []).some((l) => l.geometry_source != null),
+        plan: h.method === 'plan_v5' || isPlanBottomUp(h.bottom_up),
+        geometry: h.method === 'geometry_v4' || h.method === 'plan_v5' || (h.bottom_up?.lines || []).some((l) => l.geometry_source != null),
         noInHouseRef: Boolean(h.no_in_house_reference || cal.no_reference),
+        noMachRef: Boolean(h.no_machining_reference || h.calibration?.machining?.no_reference),
     };
 }
 
-/** Bottom-up hours of one unit grouped for reading: welding by joint type × material, then the other steps. */
+/**
+ * Bottom-up hours of one unit grouped for reading: welding by joint type ×
+ * material (plan payloads also split by prep and source, so every row has
+ * one "Kaynak" badge), then the other steps. Plan lines keep the server's
+ * Turkish `label`, `driver` and `work_centre`; older payloads get the label
+ * from NON_WELDING_LABELS, as before.
+ */
 export function hoursBreakdown(bottomUp) {
     const bu = bottomUp || {};
+    const plan = isPlanBottomUp(bu);
     const groups = new Map();
     (bu.lines || []).forEach((l) => {
-        const key = `${l.joint_type || 'other'}|${l.material || 'other'}`;
-        const g = groups.get(key) || { joint_type: l.joint_type, material: l.material, qty: 0, hours: 0, unit: l.unit, unit_h: new Set(), count: 0 };
+        const source = l.source || 'drawn';
+        const key = plan ? `${l.joint_type || 'other'}|${l.material || 'other'}|${l.prep || ''}|${source}` : `${l.joint_type || 'other'}|${l.material || 'other'}`;
+        const g = groups.get(key) || {
+            joint_type: l.joint_type, material: l.material, prep: l.prep || null, source: plan ? source : null,
+            qty: 0, hours: 0, unit: l.unit, unit_h: new Set(), count: 0, joints: 0, sub_ids: new Set(), thickness: new Set(),
+        };
         g.qty += Number(l.qty) || 0;
         g.hours += Number(l.hours) || 0;
         g.unit_h.add(l.unit_h);
         g.count += 1;
+        g.joints += Number(l.count) || 0;
+        if (l.sub_id) g.sub_ids.add(l.sub_id);
+        if (l.thickness_mm != null) g.thickness.add(Number(l.thickness_mm));
         groups.set(key, g);
     });
     // Geometry-priced lines each have their own time per metre: show the group's average then.
     const welding = [...groups.values()].sort((a, b) => b.hours - a.hours).map((g) => {
         const single = g.unit_h.size === 1;
-        return { ...g, unit_h: single ? [...g.unit_h][0] : (g.qty ? g.hours / g.qty : null), averaged: !single };
+        return {
+            ...g,
+            unit_h: single ? [...g.unit_h][0] : (g.qty ? g.hours / g.qty : null),
+            averaged: !single,
+            sub_ids: [...g.sub_ids],
+            thickness: [...g.thickness].sort((a, b) => a - b),
+        };
     });
     const other = (bu.non_welding_lines || []).map((l) => ({
-        ...l, label: NON_WELDING_LABELS[l.step] || l.step, applies: l.applies !== false,
+        ...l, label: l.label || NON_WELDING_LABELS[l.step] || l.step, applies: l.applies !== false,
     }));
     return {
+        plan,
         welding,
         other,
         total: Number(bu.total_h) || 0,
@@ -366,6 +395,263 @@ export function hoursBreakdown(bottomUp) {
         weldMetalKg: bu.weld_metal_kg != null ? Number(bu.weld_metal_kg) : null,
         setupH: bu.setup_h != null ? Number(bu.setup_h) : null,
         geometrySources: bu.geometry_sources || null,
+    };
+}
+
+// ---------------------------------------------------------------- manufacturing plan (v5)
+//
+// From `hours.method === 'plan_v5'` the extraction is a manufacturing plan
+// (schema 2: sub-assemblies, parts, machining features) and the bottom-up
+// prices every work centre: shop (fit-up, welding, grinding, straightening,
+// handling, assembly, hydrotest, rework, PWHT handling), mach (machining,
+// rework, waiting), cnc (cutting, bevel), bend, qc (NDT). `hours.distribution`
+// applies one factor per centre (shop: in-house references, mach: machining
+// references, the rest 1,0) and sums the expected hours; `hours.bands` checks
+// the hours per tonne against the class band; `hours.anchors` carries the
+// subcontract-price anchor. Old lists (schema 1) go through an adapter
+// (`bottom_up.proxy === true`).
+
+const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+
+/** Everything the summary header and the İşçilik section say about a plan payload; `{plan: false}` for older shapes. */
+export function planInfo(hours) {
+    const h = hours || {};
+    const bu = h.bottom_up || {};
+    if (!(h.method === 'plan_v5' || isPlanBottomUp(bu))) return { plan: false };
+    const dist = h.distribution || {};
+    const rows = dist.work_centres || [];
+    const share = (key) => num(rows.find((r) => r.key === key)?.share);
+    const d = bu.deduced || {};
+    const pwht = bu.pwht || {};
+    return {
+        plan: true,
+        schemaVersion: Number(h.schema_version ?? bu.schema_version ?? 1) || 1,
+        proxy: Boolean(h.proxy_plan ?? bu.proxy),
+        structureClass: bu.structure_class || null,
+        structureClassLabel: bu.structure_class_label || '',
+        planConfidence: num(bu.plan_confidence),
+        computedH: num(bu.total_h),
+        expectedH: num(dist.expected_h_per_unit),
+        lowH: num(dist.low_h_per_unit),
+        highH: num(dist.high_h_per_unit),
+        computedTotal: num(dist.computed_h_total),
+        expectedTotal: num(dist.expected_h_total) ?? num(h.expected_h_total),
+        lowTotal: num(dist.low_h_total),
+        highTotal: num(dist.high_h_total),
+        shares: { shop: share('shop'), mach: share('mach'), cnc: share('cnc'), bend: share('bend'), qc: share('qc') },
+        weldM: { total: num(bu.weld_m), drawn: num(bu.weld_m_drawn), deduced: num(bu.weld_m_deduced), rule: num(bu.weld_m_rule), perT: num(bu.weld_m_per_t) },
+        deduced: {
+            weldM: num(d.weld_m), weldShare: num(d.weld_share), machH: num(d.mach_h), machShare: num(d.mach_share),
+            machDefaultH: num(d.mach_default_h), thinDrawingSet: Boolean(d.thin_drawing_set),
+        },
+        pwht: pwht.required ? { kg: num(pwht.kg), eur: num(pwht.eur), basis: pwht.basis || '' } : null,
+        hPerT: { shop: num(bu.h_per_t?.shop), mach: num(bu.h_per_t?.mach), total: num(bu.h_per_t?.total) },
+        classGate: h.class_gate || null,
+        noInHouseRef: Boolean(h.no_in_house_reference || h.calibration?.in_house?.no_reference),
+        noMachRef: Boolean(h.no_machining_reference || h.calibration?.machining?.no_reference),
+        subAssemblies: bu.sub_assemblies || [],
+        partsCount: num(bu.parts_count),
+        wage: num(h.labor_eur_per_h),
+        machWage: num(h.machining_labor_eur_per_h),
+    };
+}
+
+/** The work-centre distribution table: one row per centre plus the totals (per unit and for every unit). */
+export function distributionRows(hours) {
+    const dist = hours?.distribution;
+    if (!dist || !Array.isArray(dist.work_centres)) return { rows: [], totals: null };
+    const computedTotal = num(dist.computed_h_per_unit) ?? dist.work_centres.reduce((s, r) => s + (num(r.computed_h) || 0), 0);
+    const rows = dist.work_centres.map((r) => ({
+        key: r.key,
+        label: r.label || r.key,
+        computedH: num(r.computed_h) ?? 0,
+        factor: num(r.factor) ?? 1,
+        factorMin: num(r.factor_min),
+        factorMax: num(r.factor_max),
+        factorBasis: r.factor_basis === 'references' ? 'references' : 'none',
+        referencesUsed: Array.isArray(r.references_used) ? r.references_used : [],
+        expectedH: num(r.expected_h) ?? 0,
+        lowH: num(r.low_h),
+        highH: num(r.high_h),
+        share: num(r.share) ?? 0,
+        computedShare: computedTotal ? (num(r.computed_h) || 0) / computedTotal : 0,
+    }));
+    return {
+        rows,
+        totals: {
+            computedH: computedTotal,
+            expectedH: num(dist.expected_h_per_unit) ?? rows.reduce((s, r) => s + r.expectedH, 0),
+            lowH: num(dist.low_h_per_unit),
+            highH: num(dist.high_h_per_unit),
+            computedTotal: num(dist.computed_h_total),
+            expectedTotal: num(dist.expected_h_total),
+            lowTotal: num(dist.low_h_total),
+            highTotal: num(dist.high_h_total),
+            quantity: num(hours?.quantity),
+        },
+    };
+}
+
+/** The machining block of a plan bottom-up: parts with their features and the block totals; null without machining. */
+export function machiningRows(bottomUp) {
+    const m = bottomUp?.machining;
+    if (!m || typeof m !== 'object') return null;
+    const parts = (m.parts || []).map((p) => {
+        const features = (p.features || []).map((f) => ({
+            ...f,
+            qty: num(f.qty) ?? 1,
+            hEach: num(f.h_each),
+            hoursPiece: num(f.hours_piece),
+            source: f.source || 'drawn',
+            isDefault: f.geometry === 'default' || f.kind === 'op_default',
+            afterWelding: Boolean(f.after_welding),
+            // The dimension text: `spec` from a real extraction ("Ø100×60 H7 (pafta 4 detay G)"), else the old `basis`.
+            text: String(f.spec || f.basis || ''),
+        }));
+        return {
+            partId: p.part_id || '',
+            subId: p.sub_id || '',
+            part: p.part || p.part_id || '',
+            qty: num(p.qty) ?? 1,
+            massKgEach: num(p.mass_kg_each),
+            perPieceH: num(p.per_piece_h),
+            featuresH: num(p.features_h),
+            setupH: num(p.setup_h),
+            programmingH: num(p.programming_h),
+            hours: num(p.hours) ?? 0,
+            deducedH: num(p.deduced_h) ?? 0,
+            defaultH: num(p.default_h) ?? 0,
+            setups: Array.isArray(p.setups) ? p.setups : [],
+            features,
+            featureCount: features.length,
+            defaultCount: features.filter((f) => f.isDefault).length,
+            deducedCount: features.filter((f) => f.source !== 'drawn').length,
+        };
+    }).sort((a, b) => b.hours - a.hours);
+    return {
+        machiningH: num(m.machining_h) ?? parts.reduce((s, p) => s + p.hours, 0),
+        deducedH: num(m.deduced_h) ?? 0,
+        defaultH: num(m.default_h) ?? 0,
+        parts,
+        partsCount: parts.length,
+        featuresCount: parts.reduce((s, p) => s + p.featureCount, 0),
+        defaultsCount: parts.reduce((s, p) => s + p.defaultCount, 0),
+    };
+}
+
+/** The tonne-rate gauges (shop, mach) and the subcontract-price anchor of a plan payload. */
+export function bandInfo(hours) {
+    const b = hours?.bands || {};
+    const one = (c) => {
+        if (!c || typeof c !== 'object' || (c.h_per_t == null && c.low == null)) return null;
+        const status = ['below', 'inside', 'above'].includes(c.status) ? c.status : 'unknown';
+        return {
+            centre: c.centre,
+            structureClass: c.structure_class || null,
+            hPerT: num(c.h_per_t),
+            low: num(c.low),
+            high: num(c.high),
+            source: c.source === 'references' ? 'references' : (c.source === 'parameter' ? 'parameter' : null),
+            referencesN: num(c.references_n) ?? 0,
+            status,
+            impliedLow: num(c.implied_h_per_unit?.low),
+            impliedHigh: num(c.implied_h_per_unit?.high),
+        };
+    };
+    const a = hours?.anchors || {};
+    const unit = a.subcontract_implied_h_per_unit;
+    const anchor = unit && (unit.low != null || unit.median != null) ? {
+        low: num(unit.low),
+        median: num(unit.median),
+        high: num(unit.high),
+        hPerT: { low: num(a.subcontract_implied_h_per_t?.low), median: num(a.subcontract_implied_h_per_t?.median), high: num(a.subcontract_implied_h_per_t?.high) },
+        loadedRate: num(a.subcontract_implied_h_per_t?.loaded_eur_per_h),
+        eurPerKg: num(a.subcontract_eur_per_kg?.eur_per_kg),
+        eurLow: num(a.subcontract_eur_per_kg?.low),
+        eurHigh: num(a.subcontract_eur_per_kg?.high),
+        jobs: a.subcontract_eur_per_kg?.jobs || [],
+        n: num(a.subcontract_eur_per_kg?.n) ?? 0,
+    } : null;
+    return { shop: one(b.shop), mach: one(b.mach), anchor };
+}
+
+/** The plan table of a v5 bottom-up: one group per work centre with its welding rows, other lines and (mach) the machining block. */
+export function planGroups(bottomUp) {
+    const bu = bottomUp || {};
+    if (!isPlanBottomUp(bu)) return [];
+    const b = hoursBreakdown(bu);
+    const centres = (bu.work_centres || []).map((wc) => ({ key: wc.key, label: wc.label || wc.key, hours: num(wc.hours) ?? 0, share: num(wc.share) ?? 0 }));
+    const machining = machiningRows(bu);
+    return centres.map((c) => {
+        const lines = b.other.filter((l) => (l.work_centre || 'shop') === c.key && !(c.key === 'mach' && machining && l.step === 'machining'));
+        return {
+            ...c,
+            welding: c.key === 'shop' ? b.welding : [],
+            lines,
+            machining: c.key === 'mach' ? machining : null,
+            machiningLine: c.key === 'mach' ? b.other.find((l) => l.step === 'machining') || null : null,
+        };
+    });
+}
+
+/** "Ø100 × 60 mm · 244 dm²": the dimensions of a machining feature from its numeric fields (older plans); '' when none. */
+export function featureDims(f) {
+    if (!f) return '';
+    const parts = [];
+    if (Number(f.dia_mm)) parts.push(`Ø${fmt(f.dia_mm, 0)}${Number(f.dia2_mm) ? `/${fmt(f.dia2_mm, 0)}` : ''}${Number(f.depth_mm) ? ` × ${fmt(f.depth_mm, 0)} mm` : ''}`);
+    else if (Number(f.depth_mm)) parts.push(`${fmt(f.depth_mm, 0)} mm derinlik`);
+    if (Number(f.length_mm)) parts.push(`${fmt(f.length_mm, 0)}${Number(f.width_mm) ? ` × ${fmt(f.width_mm, 0)}` : ''} mm`);
+    if (Number(f.area_dm2)) parts.push(`${fmt(f.area_dm2, 0)} dm²`);
+    if (Number(f.removed_cm3)) parts.push(`${fmt(f.removed_cm3, 0)} cm³ talaş`);
+    if (Number(f.ra_um)) parts.push(`Ra ${fmt(f.ra_um, 1)}`);
+    return parts.join(' · ');
+}
+
+/**
+ * Parts and sub-assemblies of a plan (weld schedule or report), joined for
+ * the "Parçalar ve alt montajlar" table. Every descriptive field is optional:
+ * a real extraction has no `basis` on parts / sub-assemblies, no `material`
+ * on sub-assemblies, no `length_m` on parts, and its machining features carry
+ * a `spec` text instead of numeric dimensions.
+ */
+export function planParts(schedule) {
+    const ws = schedule || {};
+    const subs = (ws.sub_assemblies || []).map((s) => ({
+        subId: s.sub_id || '',
+        name: s.name || s.sub_id || '',
+        kind: s.kind || 'other',
+        qty: num(s.qty_per_unit) ?? 1,
+        massKgEach: num(s.mass_kg_each),
+        mainDims: s.main_dims_mm || '',
+        governingT: num(s.governing_t_mm),
+        material: s.material || '',
+        welded: s.welded !== false,
+        confidence: num(s.confidence),
+        basis: s.basis || '',
+        source: s.source || 'drawn',
+    }));
+    const parts = (ws.parts || []).map((p) => ({
+        partId: p.part_id || '',
+        subId: p.sub_id || '',
+        name: p.name || p.part_id || '',
+        kind: p.kind || '',
+        qty: num(p.qty_per_unit) ?? 1,
+        massKgEach: num(p.mass_kg_each),
+        thicknessMm: num(p.thickness_mm),
+        lengthM: num(p.length_m),
+        material: p.material || '',
+        source: p.source || 'drawn',
+        basis: p.basis || '',
+        machining: (Array.isArray(p.machining) ? p.machining : []).map((f) => ({ ...f, text: String(f.spec || featureDims(f) || ''), note: f.spec ? '' : String(f.basis || '') })),
+        machiningCount: Array.isArray(p.machining) ? p.machining.length : 0,
+    }));
+    return {
+        subs,
+        parts,
+        hasPlan: subs.length > 0 || parts.length > 0,
+        partsBySub: parts.reduce((acc, p) => { (acc[p.subId] = acc[p.subId] || []).push(p); return acc; }, {}),
+        totalMassKg: subs.reduce((s, x) => s + (x.massKgEach || 0) * x.qty, 0),
+        machinedParts: parts.filter((p) => p.machiningCount).length,
     };
 }
 

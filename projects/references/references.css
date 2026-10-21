@@ -62,6 +62,22 @@ body > .modern-dropdown-portal .modern-dropdown-menu-portal { z-index: 1080 !imp
 .ref-page-table .ref-factor { font-weight: 700; }
 .ref-page-table .ref-out { color: #9ca3af; font-weight: 500; }
 .ref-page-table .ref-out-icon { color: #9ca3af; margin-left: 0.25rem; font-size: 0.75rem; }
+.ref-page-table .ref-class { display: block; white-space: nowrap; }
+.ref-page-table .ref-schema .status-badge { font-size: 0.6rem; padding: 0.05rem 0.35rem; margin-top: 0.1rem; }
+/* 17 columns + actions: headers wrap to two lines and numbers stay compact so the table still fits ~1310 px at 1400 px. */
+.ref-page-table .table th { white-space: normal; }
+.ref-page-table .table td, .ref-page-table .table th { padding-left: 0.3rem; padding-right: 0.3rem; }
+.ref-page-table .ref-title { max-width: 11rem; }
+
+/* --- summary cards: class / machining cards and the h/t band lines ------------------- */
+.ref-card.ref-card-class { border-color: #bfdbfe; background: #f8fbff; }
+.ref-card.ref-card-mach { border-color: #a7f3d0; background: #f6fffb; }
+.ref-card-band { font-size: 0.74rem; color: #374151; margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px dashed #e5e7eb; font-variant-numeric: tabular-nums; }
+.ref-band-n { color: #6b7280; font-weight: 400; }
+.ref-card-lines { margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px dashed #e5e7eb; }
+.ref-card-lines .ref-count-line { display: flex; justify-content: space-between; gap: 0.5rem; font-size: 0.76rem; }
+.ref-card-lines .ref-count-line strong { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ref-units-count { font-size: 0.68rem; font-weight: 600; color: #6b7280; background: #f3f4f6; border-radius: 999px; padding: 0.02rem 0.45rem; margin-left: 0.3rem; vertical-align: middle; }
 
 /* --- unit times panel -------------------------------------------------------------- */
 .ref-units-panel {
@@ -115,6 +131,32 @@ body > .modern-dropdown-portal .modern-dropdown-menu-portal { z-index: 1080 !imp
 .ref-bu-table { font-size: 0.8rem; }
 .ref-weld-wrap .table td { vertical-align: middle; }
 .ref-weld-wrap td.est-num, .ref-weld-wrap th.est-num { text-align: right; font-variant-numeric: tabular-nums; }
+/* Plan modal (schema 2): parts / sub-assemblies, work-centre subtotals and the plan table reuse the Tahmin card's est-* styles. */
+.ref-centres { max-width: 520px; }
+.ref-plan-facts { font-size: 0.8rem; color: #374151; margin-bottom: 0.4rem; line-height: 1.6; }
+.ref-plan-facts .status-badge { min-width: 0; font-size: 0.66rem; }
+.ref-plan-parts .est-more { margin-top: 0; margin-bottom: 0.5rem; }
+.ref-weld-wrap .est-vars { font-size: 0.82rem; }
+.ref-weld-wrap .est-vars .est-table-wrap { border: 1px solid #eceff3; border-radius: 10px; overflow-x: auto; }
+.ref-weld-wrap .est-vars .est-plan-group > .est-table-wrap, .ref-weld-wrap .est-vars .est-plan-parts > .est-table-wrap { border: none; border-radius: 0 0 10px 10px; }
+.ref-weld-wrap .est-vars .est-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.ref-weld-wrap .est-vars .est-table th { text-align: left; font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: #6b7280; padding: 0.4rem 0.6rem; border-bottom: 1px solid #eceff3; background: #fafafa; white-space: nowrap; }
+.ref-weld-wrap .est-vars .est-table td { padding: 0.4rem 0.6rem; border-bottom: 1px solid #f2f4f6; vertical-align: top; }
+.ref-weld-wrap .est-vars .est-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ref-weld-wrap .est-vars .est-muted { color: #6b7280; }
+.ref-weld-wrap .est-vars .est-share { display: inline-block; width: 52px; height: 6px; border-radius: 3px; background: #eef0f3; vertical-align: middle; overflow: hidden; }
+.ref-weld-wrap .est-vars .est-share > span { display: block; height: 100%; border-radius: 3px; }
+.ref-weld-wrap .est-vars .est-share-num { font-size: 0.7rem; color: #6b7280; margin-left: 0.3rem; font-variant-numeric: tabular-nums; }
+.ref-weld-wrap .est-vars .est-share-cell { width: 92px; white-space: nowrap; }
+.ref-weld-wrap .est-vars .est-cell-sub { display: block; font-size: 0.68rem; color: #6b7280; }
+.ref-weld-wrap .est-vars .est-plain-list { margin: 0; padding-left: 1.1rem; font-size: 0.78rem; }
+.ref-weld-wrap .est-vars .est-more { border: 1px solid #eceff3; border-radius: 10px; background: #fff; margin-top: 0; }
+.ref-weld-wrap .est-vars .est-more > summary { cursor: pointer; list-style: none; padding: 0.45rem 0.75rem; font-size: 0.8rem; font-weight: 600; color: #374151; display: flex; align-items: center; gap: 0.4rem; }
+.ref-weld-wrap .est-vars .est-more > summary::-webkit-details-marker { display: none; }
+.ref-weld-wrap .est-vars .est-more > summary::before { content: '\f054'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 0.62rem; color: #6b7280; transition: transform 0.15s ease; }
+.ref-weld-wrap .est-vars .est-more[open] > summary::before { transform: rotate(90deg); }
+.ref-weld-wrap .est-vars .est-more[open] > summary { border-bottom: 1px solid #eceff3; }
+.ref-weld-wrap .est-vars tr.is-zero td { color: #9ca3af; }
 
 /* --- weld list: versions and hand edits (Düzenle) ------------------------------------ */
 .ref-weld-h { font-size: 0.82rem; font-weight: 700; }
