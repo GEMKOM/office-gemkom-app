@@ -890,3 +890,27 @@
 @media print {
     .est-nav, .est-head-actions { display: none; }
 }
+
+/* Running report: determinate bar + step list (report.progress) */
+.est-progress.is-determinate { height: 8px; }
+.est-progress.is-determinate > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    background: var(--est-purple);
+    border-radius: 3px;
+    animation: none;
+    transition: width 1s linear;
+}
+.est-prog-meta { display: flex; justify-content: space-between; gap: 0.75rem; max-width: 460px; font-size: 0.76rem; color: var(--est-muted); font-variant-numeric: tabular-nums; margin-bottom: 0.5rem; }
+.est-prog-pct { font-weight: 700; color: var(--est-purple-dark); }
+.est-steps { list-style: none; margin: 0.15rem 0 0.6rem; padding: 0; max-width: 460px; }
+.est-step { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.15rem 0; color: var(--est-muted); }
+.est-step i { width: 1rem; text-align: center; font-size: 0.78rem; flex-shrink: 0; }
+.est-step.is-done { color: var(--est-ink); }
+.est-step.is-done i { color: var(--est-down); }
+.est-step.is-current { color: var(--est-purple-dark); font-weight: 700; }
+.est-step.is-current i { color: var(--est-purple); }
+.est-step-detail { font-weight: 500; color: var(--est-muted); margin-left: 0.2rem; }

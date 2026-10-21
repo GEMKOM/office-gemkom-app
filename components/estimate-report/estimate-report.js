@@ -26,7 +26,7 @@ import { loadMethodHtml } from '../estimator-method/estimator-method.js';
 import {
     ESTIMATE_STATUS, REVIEW_LABELS, cancelEstimate, createEstimate, getEstimate, getLatestEstimate, getWeldSchedule, reviewEstimate,
 } from '../../apis/estimator.js';
-import { fmt, reportModel } from './report-model.js';
+import { fmt, progressModel, remainingLabel, reportModel } from './report-model.js';
 import {
     COST_ROW_LABELS, DEFAULT_COLLAPSED, JOINT_TYPE_LABELS, MATERIAL_LABELS, ROUTE_LABELS,
     confidenceBadge, costTableHtml, doneReportHtml, formatDateTime, gotoResolver, money, runMinutes, section,
@@ -89,6 +89,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         tables: [],
         activeNav: null,
         spyTimer: null,
+        tickTimer: null,       // 1 s ticker moving the progress bar between polls
     };
 
     // ------------------------------------------------------------ data
@@ -319,10 +320,49 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
                 ${r && r.status === 'done' ? '<div class="est-foot"><i class="fas fa-robot me-1"></i>Yapay zekâ tahminidir; fiyatları ve saatleri referans işlerle doğrulayın.</div>' : ''}
             </div>`;
         writeDetails(openDetails);
+        syncTicker();
         mountTables();
         if (!view.collapsed.has('yontem')) ensureMethod();
         view.activeNav = null;
         updateNav();
+    }
+
+    /** Step list + determinate bar of a running report that carries `progress`;
+     *  the old indeterminate bar for queued rows and older runs. */
+    function progressHtml(r) {
+        const pm = r.status === 'running' ? progressModel(r.progress) : null;
+        if (!pm) return '<div class="est-progress" aria-hidden="true"><span></span></div>';
+        const icons = { done: 'fa-check', current: 'fa-circle-notch fa-spin', pending: 'fa-circle' };
+        const steps = pm.steps.map((st) => `<li class="est-step is-${st.state}"><i class="${st.state === 'pending' ? 'far' : 'fas'} ${icons[st.state]}"></i><span>${escapeHtml(st.label)}${st.detail ? `<span class="est-step-detail">· ${escapeHtml(st.detail)}</span>` : ''}</span></li>`).join('');
+        const pct = Math.round(pm.fraction * 100);
+        return `<div class="est-prog">
+                <ol class="est-steps">${steps}</ol>
+                <div class="est-progress is-determinate" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><span style="width:${(pm.fraction * 100).toFixed(1)}%"></span></div>
+                <div class="est-prog-meta"><span class="est-prog-pct">%${pct}</span><span class="est-prog-left">${escapeHtml(remainingLabel(pm))}</span></div>
+            </div>`;
+    }
+
+    /** Keep a 1 s ticker alive only while a progress block is on screen. */
+    function syncTicker() {
+        const has = !view.destroyed && container.querySelector('.est-prog');
+        if (!has) {
+            if (view.tickTimer) clearInterval(view.tickTimer);
+            view.tickTimer = null;
+            return;
+        }
+        if (!view.tickTimer) view.tickTimer = setInterval(tickProgress, 1000);
+    }
+
+    function tickProgress() {
+        const root = container.querySelector('.est-prog');
+        const pm = root && view.report?.status === 'running' ? progressModel(view.report.progress) : null;
+        if (!pm) { syncTicker(); return; }
+        const pct = Math.round(pm.fraction * 100);
+        const bar = root.querySelector('.est-progress');
+        bar.setAttribute('aria-valuenow', String(pct));
+        bar.firstElementChild.style.width = `${(pm.fraction * 100).toFixed(1)}%`;
+        root.querySelector('.est-prog-pct').textContent = `%${pct}`;
+        root.querySelector('.est-prog-left').textContent = remainingLabel(pm);
     }
 
     function headHtml(r) {
@@ -430,7 +470,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
                         <div class="est-state-title">${r.status === 'queued' ? 'Sırada bekliyor' : `Çalışıyor${elapsed(r.started_at)}`}</div>
                         <div>${r.status === 'queued' ? 'Çalıştırma sıraya alındı, birazdan başlar.' : 'Çizimler okunuyor, kaynak listesi çıkarılıyor ve rapor yazılıyor.'}
                             ${r.inputs?.weld_schedule_version ? '' : 'İlk çalıştırmada kaynak listesi çıkarımı da yapılır.'}</div>
-                        <div class="est-progress" aria-hidden="true"><span></span></div>
+                        ${progressHtml(r)}
                         <div class="est-muted small">Genelde 6–15 dakika sürer. Bu sekme kendini günceller; pencereyi kapatabilirsiniz, çalıştırma sunucuda sürer.</div>
                         ${view.pollExpired ? '<div class="mt-2"><span class="est-muted small">Otomatik güncelleme durdu.</span> <button type="button" class="btn btn-link btn-sm p-0" data-est-action="retry">Durumu kontrol et</button></div>' : ''}
                         ${prev ? `<div class="mt-2 small">Önceki hazır sürüm: <button type="button" class="btn btn-link btn-sm p-0 align-baseline" data-est-action="show-version" data-id="${prev.id}">v${escapeHtml(prev.version)} raporunu aç</button></div>` : ''}
@@ -728,6 +768,8 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         destroy() {
             view.destroyed = true;
             stopPolling();
+            if (view.tickTimer) clearInterval(view.tickTimer);
+            view.tickTimer = null;
             destroyTables();
             if (view.spyTimer) clearTimeout(view.spyTimer);
             container.removeEventListener('click', onClick);

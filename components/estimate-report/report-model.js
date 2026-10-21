@@ -380,3 +380,52 @@ export function similarRow(job) {
         margin: sell && cost != null ? (sell - cost) / sell : null,
     };
 }
+
+/** Share of the bar a running report may fill before the server says done. */
+export const PROGRESS_CAP = 0.95;
+
+/**
+ * The running-state progress of one report payload (`report.progress`, see
+ * the backend `EstimateReport.set_progress`) at time `now` (ms): the step
+ * list, the bar fill (0..PROGRESS_CAP) and the seconds left. Null when the
+ * report carries no progress (queued, or an older run) so the caller keeps
+ * the indeterminate bar.
+ *
+ * Fill = expected seconds of the finished stages + the elapsed seconds of
+ * the current stage (never more than that stage's expected seconds, so a
+ * slow stage waits at its boundary instead of eating the next one's share),
+ * over the expected total. Seconds left = what the current stage still
+ * expects + every later stage; 0 means the run is past its expected time.
+ */
+export function progressModel(progress, now = Date.now()) {
+    const stages = progress && Array.isArray(progress.stages) ? progress.stages : null;
+    if (!stages || !stages.length) return null;
+    const index = Math.min(Math.max(Number(progress.stage_index) || 0, 0), stages.length - 1);
+    const expected = (s) => Math.max(0, Number(s.expected_s) || 0);
+    const total = stages.reduce((sum, s) => sum + expected(s), 0) || 1;
+    const cur = stages[index];
+    const startedMs = cur.started_at ? new Date(cur.started_at).getTime() : NaN;
+    const stageElapsed = Number.isFinite(startedMs) ? Math.max(0, (now - startedMs) / 1000) : 0;
+    const finished = stages.slice(0, index).reduce((sum, s) => sum + expected(s), 0);
+    const inStage = Math.min(stageElapsed, expected(cur));
+    const later = stages.slice(index + 1).reduce((sum, s) => sum + expected(s), 0);
+    const remaining = Math.max(0, expected(cur) - stageElapsed) + later;
+    return {
+        fraction: Math.min(PROGRESS_CAP, (finished + inStage) / total),
+        remainingS: remaining,
+        overdue: remaining <= 0,
+        steps: stages.map((s, i) => ({
+            key: s.key,
+            label: s.label,
+            state: i < index ? 'done' : i === index ? 'current' : 'pending',
+            detail: i === index ? String(progress.detail || '') : '',
+        })),
+    };
+}
+
+/** "~N dk kaldı" (whole minutes, at least 1) or "biraz daha sürüyor" past the expected time. */
+export function remainingLabel(model) {
+    if (!model) return '';
+    if (model.overdue) return 'biraz daha sürüyor';
+    return `~${Math.max(1, Math.ceil(model.remainingS / 60))} dk kaldı`;
+}
