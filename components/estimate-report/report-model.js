@@ -221,18 +221,37 @@ export function reportModel(report) {
     if (!floor && r.hours?.summary?.floor_price_eur != null) {
         floor = { total: null, perUnit: null, perKg: null, computed: null, raw: Number(r.hours.summary.floor_price_eur) };
     }
+    // The backend reads price / floor / €/kg / basis route / margin from the stored text and the recomputed
+    // cost table the same way for every report (services/presentation.py): prefer those figures. (0276 v3 wrote
+    // '3,65 €/kg → 2.549.694 €' and the text parse showed 4 €.)
+    const sum = r.hours?.summary || {};
+    const backendFigures = sum.suggested_eur_per_kg !== undefined || sum.basis_route !== undefined;
+    const fromBackend = (eur, perKg) => {
+        const total = Number(eur);
+        const q = Number(quantity) || null;
+        return { total, perUnit: q ? total / q : null, perKg: perKg != null ? Number(perKg) : (totalKg ? total / totalKg : null),
+                 computed: q ? 'perUnit' : null, text: '' };
+    };
+    if (backendFigures && sum.suggested_price_eur != null) price = fromBackend(sum.suggested_price_eur, sum.suggested_eur_per_kg);
+    if (backendFigures && sum.floor_price_eur != null) floor = fromBackend(sum.floor_price_eur, sum.floor_eur_per_kg);
     if (price && price.perKg == null && price.total != null && totalKg) price.perKg = price.total / totalKg;
 
     const ct = r.cost_table || {};
     const routes = (ct.routes && ct.routes.length) ? ct.routes : (ct.found ? ['in_house'] : []);
     let basis = routeOf(labeledLine(s3body, /dayandığı rota/i));
+    if (sum.basis_route === 'in_house' || sum.basis_route === 'subcontract') {
+        basis = { key: sum.basis_route, label: basis?.key === sum.basis_route ? basis.label : '' };
+    }
     if (!basis?.key && routes.length === 1) basis = { key: routes[0], label: basis?.label || '' };
-    const marginText = labeledLine(s3body, /hedef marj/i);
-    const targetMargin = marginText !== null ? (marginText.match(/%\s?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s?%/) || [null])[0] : null;
+    // only a line that states it ('Hedef marj: %12,5'): a sentence quoting past margins is not the target
+    const marginLine = s3body.split('\n').map((l) => l.replace(/\*\*/g, '').replace(/^\s*(?:[-*•]|\d+[.)])\s+/, '').trim())
+        .find((l) => /^hedef marj\s*[:：]/i.test(l));
+    const targetMargin = marginLine ? (marginLine.match(/%\s?\d+(?:[.,]\d+)?|\d+(?:[.,]\d+)?\s?%/) || [null])[0] : null;
 
     const expected = ct.expected_total || {};
     const basisCost = basis?.key ? expected[basis.key] : null;
-    const margin = price?.total && basisCost ? (price.total - basisCost) / price.total : null;
+    const margin = sum.margin_pct != null ? Number(sum.margin_pct) / 100
+        : (price?.total && basisCost ? (price.total - basisCost) / price.total : null);
 
     const summary = splitSummary(s1?.body || '');
     const s21 = findSub(s2, '2.1', /malzeme/i);
