@@ -715,6 +715,13 @@ function planLaborSection(r, m, v, goto) {
             <strong>Çizim seti ince:</strong> kaynak metresinin %${fmt((plan.deduced.weldShare || 0) * 100, 0)}'i çıkarım${plan.deduced.machShare ? `, talaşlı saatin %${fmt(plan.deduced.machShare * 100, 0)}'i çıkarım` : ''}.
             Plan, çizimde görünenden çok modelin yapıdan çıkardığına dayanıyor; çıkarım satırlarını ve dayanaklarını kontrol edin.</span></div>`);
     }
+    if (plan.massCoverage && plan.massCoverage.status !== 'ok') {
+        const mc = plan.massCoverage;
+        callouts.push(`<div class="est-callout"><i class="fas fa-triangle-exclamation"></i><span>
+            <strong>Plan kütlesi birim kütlesiyle uyuşmuyor:</strong> planın alt montajları <strong>${fmt(mc.planKg, 0)} kg</strong>, birim <strong>${fmt(mc.unitKg, 0)} kg</strong>${mc.ratio != null ? ` (${fmt(mc.ratio, 2)}×)` : ''}.
+            ${mc.status === 'over' ? 'Çizim seti birden çok varyant / konfigürasyon içeriyor olabilir ve plan hepsini kapsıyor' : 'Birimin büyük bölümü planda yok'};
+            saatler planın kapsadığı iş içindir ve ton başına saat plan kütlesiyle hesaplandı. Birimin tanımı (hangi varyant, kaç adet) teklifle netleşmeli; saatleri birim kütlesine ölçeklemeyin.</span></div>`);
+    }
     if (plan.proxy) {
         callouts.push('<div class="est-note-line"><i class="fas fa-circle-info"></i><span>Bu iş için eski biçimde (v1) bir kaynak listesi var: plan, listeden uyarlandı; parça, alt montaj ve talaşlı özellikleri yok.</span></div>');
     }
@@ -728,7 +735,8 @@ function planLaborSection(r, m, v, goto) {
     const anchorLine = a ? `<div class="est-note-line"><i class="fas fa-anchor"></i><span><strong>Taşeron fiyat ankrajı:</strong> ${fmt(a.low, 0)} – ${fmt(a.high, 0)} h/adet
         ${a.eurPerKg != null && a.loadedRate != null ? `<span class="est-muted">(${fmt(a.eurPerKg, 2)} €/kg ÷ ${fmt(a.loadedRate, 2)} €/h${a.hPerT.low != null ? ` · ${fmt(a.hPerT.low, 0)} – ${fmt(a.hPerT.high, 0)} h/t` : ''}${a.n ? ` · ${a.n} taşeron işi` : ''})</span>` : ''}
         — taşeronun kilo fiyatının ima ettiği saat; kaynaklı işin plan saatiyle karşılaştırın.</span></div>` : '';
-    const bandBlock = gauges || anchorLine ? `<div class="est-sub-title">Ton başına saat <span class="est-muted">— plan saati ÷ birim kütle, yapı sınıfının bandına karşı${plan.hPerT.total != null ? ` · toplam ${fmt(plan.hPerT.total, 0)} h/t` : ''}</span></div>
+    const basisText = plan.hPerTBasis?.source === 'plan' ? `plan kütlesi (${fmt(plan.hPerTBasis.kg, 0)} kg, birim kütlesi değil)` : 'birim kütle';
+    const bandBlock = gauges || anchorLine ? `<div class="est-sub-title">Ton başına saat <span class="est-muted">— plan saati ÷ ${basisText}, yapı sınıfının bandına karşı${plan.hPerT.total != null ? ` · toplam ${fmt(plan.hPerT.total, 0)} h/t` : ''}</span></div>
         ${gauges ? `<div class="est-gauges">${gauges}</div>` : ''}${anchorLine}` : '';
 
     // --- deductions, PWHT

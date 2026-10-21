@@ -446,6 +446,8 @@ export function planInfo(hours) {
         },
         pwht: pwht.required ? { kg: num(pwht.kg), eur: num(pwht.eur), basis: pwht.basis || '' } : null,
         hPerT: { shop: num(bu.h_per_t?.shop), mach: num(bu.h_per_t?.mach), total: num(bu.h_per_t?.total) },
+        hPerTBasis: bu.h_per_t_basis ? { kg: num(bu.h_per_t_basis.kg), source: bu.h_per_t_basis.source === 'plan' ? 'plan' : 'unit' } : null,
+        massCoverage: massCoverageInfo(bu.mass_coverage),
         classGate: h.class_gate || null,
         noInHouseRef: Boolean(h.no_in_house_reference || h.calibration?.in_house?.no_reference),
         noMachRef: Boolean(h.no_machining_reference || h.calibration?.machining?.no_reference),
@@ -454,6 +456,13 @@ export function planInfo(hours) {
         wage: num(h.labor_eur_per_h),
         machWage: num(h.machining_labor_eur_per_h),
     };
+}
+
+/** Does the plan's content weigh what one unit weighs? null when the backend did not say or could not tell
+ *  (no unit mass); status 'ok' | 'over' (several variants of a drawing set planned together) | 'under'. */
+export function massCoverageInfo(c) {
+    if (!c || typeof c !== 'object' || !['ok', 'over', 'under'].includes(c.status)) return null;
+    return { planKg: num(c.plan_kg), unitKg: num(c.unit_kg), ratio: num(c.ratio), status: c.status };
 }
 
 /** The work-centre distribution table: one row per centre plus the totals (per unit and for every unit). */
