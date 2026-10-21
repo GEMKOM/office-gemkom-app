@@ -20,10 +20,20 @@ import {
 } from './report-model.js';
 
 export const COST_ROW_LABELS = {
-    material: 'Malzeme', labor: 'İşçilik', subcontractor: 'Taşeron', paint: 'Boya', paint_material: 'Boya Malzemesi',
-    general_expenses: 'Genel Giderler', employee_overhead: 'Personel Genel Giderleri', qc: 'Kalite Kontrol',
+    material: 'Malzeme', labor: 'Atölye İşçiliği', machining_labor: 'Talaşlı İşçilik', cnc_labor: 'CNC Kesim İşçiliği',
+    employee_overhead: 'Personel Genel Giderleri', subcontractor: 'Taşeron', paint: 'Boya', paint_material: 'Boya Malzemesi',
+    general_expenses: 'Genel Giderler', qc: 'Kalite Kontrol',
     shipping: 'Sevkiyat', machine_rental: 'Makine Kirası', other: 'Diğer', total: 'TOPLAM', eur_per_kg: '€/kg',
 };
+
+/** Rows GEMKOM always does itself: the same amount in both routes (subcontractors do no machining or CNC cutting). */
+export const SAME_IN_BOTH_ROUTES = ['machining_labor', 'cnc_labor'];
+
+/** A cost-table row's label; reports from before 2026-10-21 have a single "İşçilik" row (all centres) and keep that name. */
+export function costRowLabel(row) {
+    if (row.key === 'labor' && row.label === 'İşçilik') return 'İşçilik';
+    return COST_ROW_LABELS[row.key] || row.label || row.key;
+}
 
 export const JOINT_TYPE_LABELS = {
     pipe_butt: 'Boru alın', pipe_to_cap: 'Boru–kep', pipe_to_elbow: 'Boru–dirsek', pipe_to_plate: 'Boru–sac',
@@ -312,12 +322,14 @@ function heroHtml(r, m, v, goto) {
     if (m.quantity != null) facts.push(fact('Adet', fmt(m.quantity, 0)));
     if (m.unitKg != null) facts.push(fact('Birim ağırlık', `${fmt(m.unitKg, 0)} kg`));
     if (m.totalKg != null) facts.push(fact('Toplam ağırlık', `${fmt(m.totalKg, 0)} kg`, m.totalKgBasis ? decorate(escapeHtml(m.totalKgBasis), goto) : ''));
-    const plan = planInfo(hours);
+    const plan = planInfo(hours, ct.labour);
     if (plan.plan && (plan.expectedTotal != null || plan.computedTotal != null)) {
-        // "Toplam 1.364 h hesaplanan · 2.100 h beklenen (atölye 79 %, talaşlı 15 %)"
+        // "Toplam 1.364 h hesaplanan · 2.100 h beklenen (atölye 79 %, talaşlı 15 %)"; with corrected hours "plan 77.570 h · rapor düzeltti · …"
         const band = plan.lowTotal != null && plan.highTotal != null ? `${fmt(plan.lowTotal, 0)} – ${fmt(plan.highTotal, 0)} h` : '';
         const shares = [plan.shares.shop != null ? `atölye %${fmt(plan.shares.shop * 100, 0)}` : '', plan.shares.mach != null ? `talaşlı %${fmt(plan.shares.mach * 100, 0)}` : ''].filter(Boolean).join(', ');
-        const sub = [`${plan.computedTotal != null ? `${fmt(plan.computedTotal, 0)} h hesaplanan` : ''}${shares ? ` (${shares})` : ''}`.trim(), band].filter(Boolean).join(' · ');
+        const corr = plan.recomputed && plan.planExpectedTotal != null
+            ? `plan ${fmt(plan.planExpectedTotal, 0)} h${plan.labour.anyCorrected ? ` ${badge('rapor düzeltti', 'status-orange est-badge-sm', 'Maliyet tablosu raporun düzelttiği saatleri fiyatlar')}` : ''}` : '';
+        const sub = [corr, `${plan.computedTotal != null ? `${fmt(plan.computedTotal, 0)} h hesaplanan` : ''}${shares ? ` (${shares})` : ''}`.trim(), band].filter(Boolean).join(' · ');
         facts.push(fact(`Toplam saat${m.quantity ? ` · ${fmt(m.quantity, 0)} adet` : ''}`, `${fmt(plan.expectedTotal ?? plan.computedTotal, 0)} h`,
             plan.noInHouseRef ? `atölye referansı yok · faktör 1,0${sub ? ` · ${sub}` : ''}` : sub));
         if (plan.structureClassLabel || plan.structureClass) {
@@ -434,11 +446,17 @@ function costSection(r, m, v, goto) {
 
 /** The cost table for one route (Düşük / Beklenen / Yüksek) or both routes' Beklenen side by side. */
 export function costTableHtml(ct, route, goto) {
-    const rows = (ct.rows || []).map((x) => ({ ...x, label: COST_ROW_LABELS[x.key] || x.label || x.key }));
+    const rows = (ct.rows || []).map((x) => ({ ...x, label: costRowLabel(x) }));
     const body = rows.filter((x) => x.key !== 'total' && x.key !== 'eur_per_kg');
     const total = rows.find((x) => x.key === 'total');
     const perKg = rows.find((x) => x.key === 'eur_per_kg');
-    const basisCell = (x) => `<td class="est-basis">${x.basis ? decorate(escapeHtml(x.basis), goto) : ''}</td>`;
+    // machining / CNC labour: a grey "iki rotada aynı" badge instead of the basis' own "; iki rotada aynı (GEMKOM)"
+    const sameBoth = (x) => SAME_IN_BOTH_ROUTES.includes(x.key) && x.in_house && x.subcontract;
+    const basisCell = (x) => {
+        const same = sameBoth(x);
+        const text = same ? (x.basis || '').replace(/[;,]?\s*iki rotada aynı(\s*\(GEMKOM\))?\s*$/i, '') : x.basis;
+        return `<td class="est-basis">${same ? `${badge('iki rotada aynı', 'status-grey est-badge-sm est-same-badge', 'Talaşlı ve CNC kesimi taşeron yapmaz: GEMKOM iki rotada da aynı tutarla yapar')} ` : ''}${text ? decorate(escapeHtml(text), goto) : ''}</td>`;
+    };
     const n = (val, digits = 0) => (val == null ? '<span class="est-muted">—</span>' : fmt(val, digits));
 
     if (route === 'compare') {
@@ -669,21 +687,31 @@ const PREP_LABELS = { I: 'I alın', V: 'V ağız', HV: 'Yarım V', X: 'X ağız'
 function planLaborSection(r, m, v, goto) {
     const h = r.hours || {};
     const sec = m.sections.iscilik;
-    const plan = planInfo(h);
+    const labour = r.cost_table?.labour;
+    const plan = planInfo(h, labour);
     const bu = h.bottom_up || r.weld_schedule?.bottom_up || {};
     const cal = h.calibration?.in_house || null;
     const calMach = h.calibration?.machining || null;
-    const dist = distributionRows(h);
+    const dist = distributionRows(h, labour);
     const bands = bandInfo(h);
     const range = (lo, hi, digits, unit) => (lo != null && hi != null ? `${fmt(lo, digits)} – ${fmt(hi, digits)} ${unit}`.trim() : '');
     const nRefs = (c) => (c?.references_used || []).length;
 
     // --- KPIs
     const kpis = [];
-    const centreSub = (bu.work_centres || []).filter((wc) => Number(wc.hours)).map((wc) => `${WORK_CENTRE_SHORT[wc.key] || wc.key} ${fmt(wc.hours, 0)}`).join(' + ');
-    if (plan.computedH != null) kpis.push(kpi('Hesaplanan (plan)', `${fmt(plan.computedH, 1)} h/adet`, centreSub));
+    const lab = plan.recomputed ? plan.labour : null;
+    const centreSub = lab
+        ? Object.values(lab.centres).filter((c) => c.correctedH).map((c) => `${WORK_CENTRE_SHORT[c.key] || c.key} ${fmt(c.correctedH, 0)}`).join(' + ')
+        : (bu.work_centres || []).filter((wc) => Number(wc.hours)).map((wc) => `${WORK_CENTRE_SHORT[wc.key] || wc.key} ${fmt(wc.hours, 0)}`).join(' + ');
+    if (plan.computedH != null) {
+        kpis.push(kpi(lab ? 'Hesaplanan (rapor düzeltmesi)' : 'Hesaplanan (plan)', `${fmt(plan.computedH, 1)} h/adet`,
+            [lab ? `plan ${fmt(plan.planComputedH, 1)} h/adet` : '', centreSub].filter(Boolean).join(' · ')));
+    }
     if (plan.expectedH != null) kpis.push(kpi('Beklenen (merkez faktörleriyle)', `${fmt(plan.expectedH, 1)} h/adet`, range(plan.lowH, plan.highH, 1, 'h/adet')));
-    if (plan.expectedTotal != null) kpis.push(kpi(`Toplam${m.quantity ? ` (${fmt(m.quantity, 0)} adet)` : ''}`, `${fmt(plan.expectedTotal, 0)} h`, range(plan.lowTotal, plan.highTotal, 0, 'h')));
+    if (plan.expectedTotal != null) {
+        kpis.push(kpi(`Toplam${m.quantity ? ` (${fmt(m.quantity, 0)} adet)` : ''}`, `${fmt(plan.expectedTotal, 0)} h`,
+            [range(plan.lowTotal, plan.highTotal, 0, 'h'), lab && plan.planExpectedTotal != null ? `plan ${fmt(plan.planExpectedTotal, 0)} h` : ''].filter(Boolean).join(' · ')));
+    }
     if (cal) {
         if (plan.noInHouseRef) {
             kpis.push(kpi('Atölye faktörü', `1,00 ${badge('referans yok', 'status-orange', 'Kullanılabilir iç imalat (atölye) referansı yok')}`, 'atölye saati plandan aynen alındı'));
@@ -856,22 +884,31 @@ function distributionHtml(dist, quantity) {
         : `<span class="est-muted">referans yok · 1,00</span>`);
     const n = (val, digits = 0) => (val == null ? '<span class="est-muted">—</span>' : fmt(val, digits));
     const qty = quantity || t.quantity;
-    const totalCol = (per) => (per == null ? '<span class="est-muted">—</span>' : fmt(qty ? per * qty : per, 0));
-    return `<div class="est-sub-title">Toplam adam-saat <span class="est-muted">· ${fmt(t.computedH, 0)} h hesaplanan → <strong>${fmt(t.expectedH, 0)} h</strong> beklenen / adet${t.expectedTotal != null && qty && qty !== 1 ? ` · ${fmt(t.expectedTotal, 0)} h / ${fmt(qty, 0)} adet` : ''}</span></div>
+    // corrected hours (cost_table.labour): the priced totals come from the backend, not per unit × adet
+    const totalCol = (r) => (r.expectedTotalH != null ? fmt(r.expectedTotalH, 0) : (r.expectedH == null ? '<span class="est-muted">—</span>' : fmt(qty ? r.expectedH * qty : r.expectedH, 0)));
+    const fixed = dist.recomputed;
+    const planSub = (r) => (fixed && r.corrected ? `<small class="est-cell-sub est-plan-h" title="Python'un plan saati (1 adet)">plan ${fmt(r.planH, 1)} h</small>` : '');
+    const corrBadge = (r) => (fixed && r.corrected ? ` ${badge('rapor düzeltti', 'status-orange', 'Rapor bu merkezin plan saatini düzeltti; maliyet tablosu düzeltilmiş saati fiyatlar')}` : '');
+    const anyCorrected = fixed && rows.some((r) => r.corrected);
+    const head = fixed
+        ? `· ${fmt(t.computedH, 0)} h hesaplanan${anyCorrected ? ` (plan ${fmt(t.planH, 0)} h)` : ''} → <strong>${fmt(t.expectedH, 0)} h</strong> beklenen / adet`
+        : `· ${fmt(t.computedH, 0)} h hesaplanan → <strong>${fmt(t.expectedH, 0)} h</strong> beklenen / adet`;
+    return `<div class="est-sub-title">Toplam adam-saat <span class="est-muted">${head}${t.expectedTotal != null && qty && qty !== 1 ? ` · ${fmt(t.expectedTotal, 0)} h / ${fmt(qty, 0)} adet` : ''}</span></div>
         <div class="est-dist-bar" role="img" aria-label="İş merkezi dağılımı">${segs}</div>
         <div class="est-dist-legend">${legend}</div>
         <div class="est-table-wrap"><table class="est-table est-dist">
-            <thead><tr><th>İş merkezi</th><th class="num">Hesaplanan h</th><th class="num">Faktör<small>dayanak</small></th><th class="num is-exp">Beklenen h<small>1 adet</small></th><th class="num">Beklenen h<small>toplam${qty ? ` · ${fmt(qty, 0)} adet` : ''}</small></th><th class="est-share-cell">Pay</th></tr></thead>
-            <tbody>${rows.map((r) => `<tr class="${r.computedH ? '' : 'is-zero'}">
-                <td class="est-item"><i class="est-dot-c" style="background:${CENTRE_COLOURS[r.key] || '#a78bfa'}"></i>${escapeHtml(r.label)}</td>
-                <td class="num">${n(r.computedH, 1)}</td>
+            <thead><tr><th>İş merkezi</th><th class="num">Hesaplanan h${fixed ? '<small>rapor düzeltmesiyle</small>' : ''}</th><th class="num">Faktör<small>dayanak</small></th><th class="num is-exp">Beklenen h<small>1 adet</small></th><th class="num">Beklenen h<small>toplam${qty ? ` · ${fmt(qty, 0)} adet` : ''}</small></th><th class="est-share-cell">Pay</th></tr></thead>
+            <tbody>${rows.map((r) => `<tr class="${r.computedH ? '' : 'is-zero'}${fixed && r.corrected ? ' is-corrected' : ''}">
+                <td class="est-item"><i class="est-dot-c" style="background:${CENTRE_COLOURS[r.key] || '#a78bfa'}"></i>${escapeHtml(r.label)}${corrBadge(r)}</td>
+                <td class="num">${n(r.computedH, 1)}${planSub(r)}</td>
                 <td class="num">${factorCell(r)}</td>
                 <td class="num is-exp">${n(r.expectedH, 1)}${r.lowH != null && r.highH != null && (r.lowH !== r.highH) ? `<small class="est-cell-sub">${fmt(r.lowH, 0)} – ${fmt(r.highH, 0)}</small>` : ''}</td>
-                <td class="num">${totalCol(r.expectedH)}</td>
+                <td class="num">${totalCol(r)}</td>
                 <td class="est-share-cell">${centreBar(r.expectedH, expTotal, r.key)}</td>
             </tr>`).join('')}</tbody>
-            <tfoot><tr class="est-total"><td>Toplam</td><td class="num">${n(t.computedH, 1)}</td><td></td><td class="num is-exp">${n(t.expectedH, 1)}${t.lowH != null && t.highH != null ? `<small class="est-cell-sub">${fmt(t.lowH, 0)} – ${fmt(t.highH, 0)}</small>` : ''}</td><td class="num">${n(t.expectedTotal ?? (qty ? t.expectedH * qty : null), 0)}${t.lowTotal != null && t.highTotal != null ? `<small class="est-cell-sub">${fmt(t.lowTotal, 0)} – ${fmt(t.highTotal, 0)}</small>` : ''}</td><td></td></tr></tfoot>
-        </table></div>`;
+            <tfoot><tr class="est-total"><td>Toplam</td><td class="num">${n(t.computedH, 1)}${anyCorrected ? `<small class="est-cell-sub est-plan-h">plan ${fmt(t.planH, 1)} h</small>` : ''}</td><td></td><td class="num is-exp">${n(t.expectedH, 1)}${t.lowH != null && t.highH != null ? `<small class="est-cell-sub">${fmt(t.lowH, 0)} – ${fmt(t.highH, 0)}</small>` : ''}</td><td class="num">${n(t.expectedTotal ?? (qty ? t.expectedH * qty : null), 0)}${t.lowTotal != null && t.highTotal != null ? `<small class="est-cell-sub">${fmt(t.lowTotal, 0)} – ${fmt(t.highTotal, 0)}</small>` : ''}</td><td></td></tr></tfoot>
+        </table></div>
+        ${fixed ? '<div class="est-note-line"><i class="fas fa-circle-info"></i><span>Maliyet tablosu düzeltilmiş saatleri fiyatlar; plan saati Python\'un ilk hesabıdır.</span></div>' : ''}`;
 }
 
 /** One tonne-rate gauge: the value against the class band (references' p25–p75 or the parameter band). */

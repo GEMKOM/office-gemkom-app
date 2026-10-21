@@ -413,8 +413,61 @@ export function hoursBreakdown(bottomUp) {
 
 const num = (v) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
 
-/** Everything the summary header and the İşçilik section say about a plan payload; `{plan: false}` for older shapes. */
-export function planInfo(hours) {
+/**
+ * The report's corrected hours (`cost_table.labour`, 2026-10-21): the backend
+ * prices the labour rows from the hours the report corrected, not from the
+ * plan. Per centre: plan / corrected hours of one unit and the priced
+ * (corrected × factor × quantity) low / expected / high hours. null unless
+ * `labour.recomputed` (older reports, or no corrected-hours block).
+ */
+export function labourInfo(labour) {
+    if (!labour || labour.recomputed !== true || !Array.isArray(labour.centres) || !labour.centres.length) return null;
+    const quantity = num(labour.quantity) || 1;
+    const centres = {};
+    labour.centres.forEach((c) => {
+        if (!c || !c.key) return;
+        const planH = num(c.plan_h) ?? 0;
+        centres[c.key] = {
+            key: c.key,
+            label: c.label || c.key,
+            planH,
+            correctedH: num(c.corrected_h) ?? planH,
+            corrected: Boolean(c.corrected),
+            factor: num(c.factor) ?? 1,
+            factorMin: num(c.factor_min),
+            factorMax: num(c.factor_max),
+            lowTotal: num(c.low_h) ?? 0,
+            expectedTotal: num(c.expected_h) ?? 0,
+            highTotal: num(c.high_h) ?? 0,
+        };
+    });
+    const list = Object.values(centres);
+    const sum = (f) => list.reduce((s, c) => s + (c[f] || 0), 0);
+    const expectedTotal = sum('expectedTotal');
+    const lowTotal = sum('lowTotal');
+    const highTotal = sum('highTotal');
+    return {
+        quantity,
+        centres,
+        planH: sum('planH'),
+        correctedH: sum('correctedH'),
+        anyCorrected: list.some((c) => c.corrected),
+        expectedTotal, lowTotal, highTotal,
+        expectedH: expectedTotal / quantity,
+        lowH: lowTotal / quantity,
+        highH: highTotal / quantity,
+        wage: num(labour.wage_eur_per_h),
+        machWage: num(labour.machining_wage_eur_per_h),
+        subcontractShopShare: num(labour.subcontract_shop_share),
+        subcontractShopShareSource: labour.subcontract_shop_share_source === 'report' ? 'report' : 'default',
+        overheadShare: num(labour.overhead_share),
+    };
+}
+
+/** Everything the summary header and the İşçilik section say about a plan payload; `{plan: false}` for older shapes.
+ *  With `cost_table.labour` recomputed, the hour totals are the report's corrected (priced) hours and the plan's
+ *  own totals move to `planComputedH` / `planExpectedTotal`. */
+export function planInfo(hours, labour = null) {
     const h = hours || {};
     const bu = h.bottom_up || {};
     if (!(h.method === 'plan_v5' || isPlanBottomUp(bu))) return { plan: false };
@@ -423,6 +476,29 @@ export function planInfo(hours) {
     const share = (key) => num(rows.find((r) => r.key === key)?.share);
     const d = bu.deduced || {};
     const pwht = bu.pwht || {};
+    const base = planBase(h, bu, dist, share, d, pwht);
+    const lab = labourInfo(labour);
+    if (!lab) return { ...base, recomputed: false, labour: null };
+    const corrShare = (key) => (lab.centres[key] && lab.expectedTotal ? lab.centres[key].expectedTotal / lab.expectedTotal : null);
+    return {
+        ...base,
+        recomputed: true,
+        labour: lab,
+        planComputedH: lab.planH,
+        planExpectedTotal: base.expectedTotal,
+        computedH: lab.correctedH,
+        expectedH: lab.expectedH,
+        lowH: lab.lowH,
+        highH: lab.highH,
+        computedTotal: lab.correctedH * lab.quantity,
+        expectedTotal: lab.expectedTotal,
+        lowTotal: lab.lowTotal,
+        highTotal: lab.highTotal,
+        shares: { shop: corrShare('shop'), mach: corrShare('mach'), cnc: corrShare('cnc'), bend: corrShare('bend'), qc: corrShare('qc') },
+    };
+}
+
+function planBase(h, bu, dist, share, d, pwht) {
     return {
         plan: true,
         schemaVersion: Number(h.schema_version ?? bu.schema_version ?? 1) || 1,
@@ -491,8 +567,52 @@ export function massCoverageInfo(c) {
     return { planKg: num(c.plan_kg), unitKg: num(c.unit_kg), ratio: num(c.ratio), status: c.status };
 }
 
-/** The work-centre distribution table: one row per centre plus the totals (per unit and for every unit). */
-export function distributionRows(hours) {
+/** The work-centre distribution table: one row per centre plus the totals (per unit and for every unit).
+ *  With `cost_table.labour` recomputed, the hours are the report's corrected (priced) ones and each row
+ *  keeps the plan's own hours in `planH` (`recomputed: true`). */
+export function distributionRows(hours, labour = null) {
+    const base = distributionBase(hours);
+    const lab = labourInfo(labour);
+    if (!lab || !base.rows.length) return base;
+    const q = lab.quantity;
+    const rows = base.rows.map((r) => {
+        const c = lab.centres[r.key];
+        if (!c) return { ...r, planH: r.computedH, corrected: false };
+        return {
+            ...r,
+            planH: c.planH,
+            computedH: c.correctedH,
+            corrected: c.corrected,
+            factor: c.factor,
+            factorMin: c.factorMin,
+            factorMax: c.factorMax,
+            expectedH: c.expectedTotal / q,
+            lowH: c.lowTotal / q,
+            highH: c.highTotal / q,
+            expectedTotalH: c.expectedTotal,
+            share: lab.expectedTotal ? c.expectedTotal / lab.expectedTotal : 0,
+            computedShare: lab.correctedH ? c.correctedH / lab.correctedH : 0,
+        };
+    });
+    return {
+        recomputed: true,
+        rows,
+        totals: {
+            computedH: lab.correctedH,
+            planH: lab.planH,
+            expectedH: lab.expectedH,
+            lowH: lab.lowH,
+            highH: lab.highH,
+            computedTotal: lab.correctedH * q,
+            expectedTotal: lab.expectedTotal,
+            lowTotal: lab.lowTotal,
+            highTotal: lab.highTotal,
+            quantity: q,
+        },
+    };
+}
+
+function distributionBase(hours) {
     const dist = hours?.distribution;
     if (!dist || !Array.isArray(dist.work_centres)) return { rows: [], totals: null };
     const computedTotal = num(dist.computed_h_per_unit) ?? dist.work_centres.reduce((s, r) => s + (num(r.computed_h) || 0), 0);

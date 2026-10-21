@@ -934,6 +934,13 @@
 .est-dist-legend i { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 2px; margin-right: 0.3rem; vertical-align: -0.05rem; }
 .est-dist-legend strong { font-variant-numeric: tabular-nums; }
 .est-dist td.est-item { white-space: normal; }
+/* The report's corrected hours (cost_table.labour): "rapor düzeltti" badge, the plan hours as a muted sub-line. */
+.est-dist td.est-item .status-badge { margin-left: 0.35rem; vertical-align: 0.05rem; white-space: nowrap; }
+.est-dist .est-plan-h { font-style: italic; }
+.est-fact-sub .status-badge { margin-left: 0.25rem; vertical-align: 0.05rem; }
+
+/* Cost table: machining / CNC labour carry the same amount in both routes. */
+.est-cost .est-same-badge { margin-right: 0.35rem; vertical-align: 0.05rem; white-space: nowrap; }
 
 /* Tonne-rate gauges (one per centre) against the class band. */
 .est-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.6rem; margin-bottom: 0.4rem; max-width: 760px; }

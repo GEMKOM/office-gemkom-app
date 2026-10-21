@@ -29,7 +29,7 @@ import {
 import { fmt, progressModel, remainingLabel, reportModel } from './report-model.js';
 import {
     COST_ROW_LABELS, DEFAULT_COLLAPSED, JOINT_TYPE_LABELS, MATERIAL_LABELS, ROUTE_LABELS,
-    confidenceBadge, costTableHtml, doneReportHtml, formatDateTime, gotoResolver, money, planPartsHtml, runMinutes, schemaBadge, section, sourceBadge,
+    confidenceBadge, costRowLabel, costTableHtml, doneReportHtml, formatDateTime, gotoResolver, money, planPartsHtml, runMinutes, schemaBadge, section, sourceBadge,
 } from './report-view.js';
 import { STRUCTURE_CLASS_LABELS } from '../../apis/estimator.js';
 
@@ -837,7 +837,7 @@ export function costTableColumns(costTable) {
 export function costTableRows(costTable) {
     return (costTable.rows || []).map((r) => ({
         key: r.key,
-        label: COST_ROW_LABELS[r.key] || r.label,
+        label: costRowLabel(r),
         in_low: r.in_house?.low ?? null, in_expected: r.in_house?.expected ?? null, in_high: r.in_house?.high ?? null,
         sub_low: r.subcontract?.low ?? null, sub_expected: r.subcontract?.expected ?? null, sub_high: r.subcontract?.high ?? null,
         basis: r.basis || '',
