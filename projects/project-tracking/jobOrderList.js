@@ -2445,6 +2445,11 @@ window.viewJobOrder = async function(jobNo) {
         // Clear and configure the view modal
         viewJobOrderModal.clearData();
         viewJobOrderModal.setTitle(`İş Emri Detayları: ${jobOrder.job_no}`);
+        // Re-rendered for another job order (e.g. a child opened from inside the
+        // modal): the previous job's Tahmin card must not keep polling, and the
+        // new job's tab must be free to mount its own.
+        estimateHandle?.destroy();
+        estimateHandle = null;
         
         // Helper functions for badge classes
         const getStatusBadgeClass = (status) => {

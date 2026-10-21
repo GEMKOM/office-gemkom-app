@@ -5,7 +5,7 @@
  * tag in the output was written by this module, so nothing in the source can
  * survive as markup. Unlike richText, which renders what people type in
  * comments, this handles the document structure a report needs: headings,
- * pipe tables, lists, block quotes, rules, bold / italic / code, and links
+ * pipe tables, lists (nested by indentation), block quotes, rules, bold / italic / code, and links
  * only in the explicit `[text](https://…)` form. Square-bracket citations
  * such as `[Çizim C1602 sh.2]` are left exactly as written.
  */
@@ -78,7 +78,9 @@ export function renderMarkdown(source, { headingOffset = 0 } = {}) {
     const lines = String(source ?? '').replace(/\r\n?/g, '\n').split('\n');
     const out = [];
     let paragraph = [];
-    let list = null;      // { type, items }
+    // Open lists, outermost first: { type, indent, items: [{ html, sub }] }. An item
+    // indented deeper than its list starts a nested list inside the previous item.
+    let lists = [];
     let quote = [];
 
     const flushParagraph = () => {
@@ -87,11 +89,30 @@ export function renderMarkdown(source, { headingOffset = 0 } = {}) {
             paragraph = [];
         }
     };
+    const renderList = (l) => `<${l.type}>${l.items.map((it) => `<li>${it.html}${it.sub ? renderList(it.sub) : ''}</li>`).join('')}</${l.type}>`;
     const flushList = () => {
-        if (list) {
-            out.push(`<${list.type}>${list.items.map((it) => `<li>${it}</li>`).join('')}</${list.type}>`);
-            list = null;
+        if (lists.length) {
+            out.push(renderList(lists[0]));
+            lists = [];
         }
+    };
+    const addItem = (type, indent, html) => {
+        let top = lists[lists.length - 1];
+        while (top && indent < top.indent && lists.length > 1) {
+            lists.pop();
+            top = lists[lists.length - 1];
+        }
+        if (top && indent > top.indent + 1 && top.items.length) {
+            const parent = top.items[top.items.length - 1];
+            parent.sub = { type, indent, items: [] };
+            lists.push(parent.sub);
+            top = parent.sub;
+        } else if (!top || (lists.length === 1 && top.type !== type)) {
+            flushList();
+            top = { type, indent, items: [] };
+            lists.push(top);
+        }
+        top.items.push({ html, sub: null });
     };
     const flushQuote = () => {
         if (quote.length) {
@@ -133,19 +154,18 @@ export function renderMarkdown(source, { headingOffset = 0 } = {}) {
         }
         flushQuote();
 
-        const bullet = line.match(/^\s*[-*•]\s+(.*)$/);
-        const numbered = line.match(/^\s*\d+[.)]\s+(.*)$/);
+        const bullet = line.match(/^(\s*)[-*•]\s+(.*)$/);
+        const numbered = line.match(/^(\s*)\d+[.)]\s+(.*)$/);
         const item = bullet || numbered;
         if (item) {
             flushParagraph();
-            const type = bullet ? 'ul' : 'ol';
-            if (!list || list.type !== type) { flushList(); list = { type, items: [] }; }
-            list.items.push(inline(item[1]));
+            addItem(bullet ? 'ul' : 'ol', item[1].replace(/\t/g, '    ').length, inline(item[2]));
             continue;
         }
         // a wrapped list item continues the previous one
-        if (list && /^\s{2,}\S/.test(line)) {
-            list.items[list.items.length - 1] += ` ${inline(trimmed)}`;
+        if (lists.length && /^\s{2,}\S/.test(line)) {
+            const items = lists[lists.length - 1].items;
+            items[items.length - 1].html += ` ${inline(trimmed)}`;
             continue;
         }
         flushList();
