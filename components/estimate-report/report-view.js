@@ -726,6 +726,22 @@ function planLaborSection(r, m, v, goto) {
         callouts.push('<div class="est-note-line"><i class="fas fa-circle-info"></i><span>Bu iş için eski biçimde (v1) bir kaynak listesi var: plan, listeden uyarlandı; parça, alt montaj ve talaşlı özellikleri yok.</span></div>');
     }
 
+    // --- programme: one row per variant
+    const prog = plan.programme;
+    const progHtml = prog ? `<div class="est-sub-title">Varyantlar <span class="est-muted">— program kapsamı: ${fmt(prog.sets, 0)} takım${prog.unplanned.length ? `, ${fmt(prog.plannedSets, 0)} takım planlandı` : ''} · her varyant bir takım olarak planlandı, saat × BoQ adedi</span></div>
+        <div class="est-table-wrap"><table class="est-table est-programme">
+            <thead><tr><th>Varyant</th><th class="num">Adet</th><th class="num">Takım kg</th><th class="num">Saat / takım</th><th class="num">Atölye / talaşlı</th><th class="num">Toplam saat</th><th class="num">h/t</th></tr></thead>
+            <tbody>${prog.variants.map((v) => `<tr>
+                <td><strong>${escapeHtml(v.name)}</strong><small class="est-cell-sub">${escapeHtml(v.id)}${v.basis ? ` · ${escapeHtml(v.basis)}` : ''}</small></td>
+                <td class="num">${fmt(v.qty, 0)}</td>
+                <td class="num">${fmt(v.massKg, 0)}</td>
+                ${v.planned
+                    ? `<td class="num">${fmt(v.hPerSet, 0)}</td><td class="num">${fmt(v.shopPerSet, 0)} / ${fmt(v.machPerSet, 0)}</td><td class="num"><strong>${fmt(v.totalH, 0)}</strong></td><td class="num">${fmt(v.hPerT, 0)}</td>`
+                    : `<td colspan="4" class="num"><span class="status-badge status-orange" title="Bu varyantın genel montaj çizimi sette yok: saat hesaplanmadı">planlanmadı</span></td>`}
+            </tr>`).join('')}</tbody>
+        </table></div>
+        <div class="est-note-line"><i class="fas fa-circle-info"></i><span>Toplam adam-saat programın tamamıdır; programlama ve parti bağlamaları programda bir kez sayıldığı için satırların toplamından biraz küçüktür.${prog.unplanned.length ? ` <strong>Planlanmamış varyantlar (${fmt(prog.unplannedKg, 0)} kg) işçiliğe dahil değil.</strong>` : ''}</span></div>` : '';
+
     // --- Toplam adam-saat: stacked bar + distribution table
     const distHtml = dist.rows.length ? distributionHtml(dist, m.quantity) : '';
 
@@ -819,6 +835,7 @@ function planLaborSection(r, m, v, goto) {
         ${kpis.length ? `<div class="est-kpis">${kpis.join('')}</div>` : ''}
         ${callouts.join('')}
         ${distHtml}
+        ${progHtml}
         ${bandBlock}
         ${deductions}${pwht}
         ${planTable}

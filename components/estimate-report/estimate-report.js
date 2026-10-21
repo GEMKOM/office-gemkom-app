@@ -73,6 +73,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         error: null,
         actionError: null,
         busy: false,           // our own create / review request in flight
+        scope: null,           // 'unit' | 'programme' chosen next to Oluştur / Yenile (default: the shown report's)
         noteOpen: false,
         weldOpen: readFlag(WELD_OPEN_KEY),
         collapsed: new Set(readList(COLLAPSED_KEY) ?? DEFAULT_COLLAPSED),
@@ -176,6 +177,11 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         return r.job_no ? { jobNo: r.job_no } : (r.offer_id ? { offerId: r.offer_id } : null);
     }
 
+    /** The scope the next run uses: the user's pick, else the shown report's, else one unit. */
+    function currentScope() {
+        return view.scope || (view.report?.hours?.scope === 'programme' ? 'programme' : 'unit');
+    }
+
     async function generate() {
         if (view.busy) return;
         const target = createSubject();
@@ -184,7 +190,7 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
         view.actionError = null;
         render();
         try {
-            const row = await createEstimate(target);
+            const row = await createEstimate({ ...target, scope: currentScope() });
             if (view.destroyed) return;
             showNotification(`Tahmin v${row.version} sıraya alındı. 6–15 dakika sürer; bu sekme kendini günceller.`, 'info');
             await load({ quiet: true, reportId: row.id });
@@ -426,6 +432,11 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
             buttons.push(`<button type="button" class="btn btn-sm btn-outline-danger" data-est-action="cancel" ${busy} title="Çalıştırmayı durdur"><i class="fas fa-stop me-1"></i>Durdur</button>`);
         }
         if (createSubject() && (!r || !isOpen(r.status))) {
+            const sc = currentScope();
+            buttons.push(`<select class="form-select form-select-sm est-scope" data-est-action="scope" ${busy} title="Birim: ilk genel montaj çiziminin ana montajı · Program: setteki bütün varyantlar, her biri BoQ adediyle (kapsam değişirse çizimler yeniden okunur)">
+                <option value="unit" ${sc === 'unit' ? 'selected' : ''}>Tek birim</option>
+                <option value="programme" ${sc === 'programme' ? 'selected' : ''}>Program (tüm varyantlar × adet)</option>
+            </select>`);
             buttons.push(`<button type="button" class="btn btn-sm est-generate" data-est-action="generate" ${busy} title="Yeni sürüm: ${RUN_HINT}">
                 <i class="fas ${r ? 'fa-rotate' : 'fa-wand-magic-sparkles'} me-1"></i>${r ? 'Yenile' : 'Oluştur'}</button>`);
         }
@@ -760,6 +771,11 @@ export function mountEstimateReport(container, subject, { onChange } = {}) {
     }
 
     function onChangeEvent(event) {
+        const scopeEl = event.target.closest('[data-est-action="scope"]');
+        if (scopeEl && container.contains(scopeEl)) {
+            view.scope = scopeEl.value === 'programme' ? 'programme' : 'unit';
+            return;
+        }
         const el = event.target.closest('[data-est-action="version"]');
         if (!el || !container.contains(el)) return;
         load({ reportId: parseInt(el.value, 10) });

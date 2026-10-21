@@ -448,6 +448,8 @@ export function planInfo(hours) {
         hPerT: { shop: num(bu.h_per_t?.shop), mach: num(bu.h_per_t?.mach), total: num(bu.h_per_t?.total) },
         hPerTBasis: bu.h_per_t_basis ? { kg: num(bu.h_per_t_basis.kg), source: bu.h_per_t_basis.source === 'plan' ? 'plan' : 'unit' } : null,
         massCoverage: massCoverageInfo(bu.mass_coverage),
+        scope: h.scope === 'programme' ? 'programme' : 'unit',
+        programme: programmeInfo(bu.programme),
         classGate: h.class_gate || null,
         noInHouseRef: Boolean(h.no_in_house_reference || h.calibration?.in_house?.no_reference),
         noMachRef: Boolean(h.no_machining_reference || h.calibration?.machining?.no_reference),
@@ -460,6 +462,30 @@ export function planInfo(hours) {
 
 /** Does the plan's content weigh what one unit weighs? null when the backend did not say or could not tell
  *  (no unit mass); status 'ok' | 'over' (several variants of a drawing set planned together) | 'under'. */
+/** Programme scope: one row per variant (one set and × its BoQ quantity); unplanned variants have no hours. */
+export function programmeInfo(p) {
+    if (!p || typeof p !== 'object' || !Array.isArray(p.variants) || !p.variants.length) return null;
+    return {
+        sets: num(p.sets) ?? 0,
+        plannedSets: num(p.planned_sets) ?? 0,
+        unplanned: Array.isArray(p.unplanned_variants) ? p.unplanned_variants : [],
+        unplannedKg: num(p.unplanned_kg) ?? 0,
+        variants: p.variants.map((v) => ({
+            id: v.variant_id || '',
+            name: v.name || v.variant_id || '',
+            qty: num(v.qty) ?? 1,
+            massKg: num(v.mass_kg_each),
+            planned: Boolean(v.planned),
+            hPerSet: num(v.h_per_set),
+            shopPerSet: num(v.shop_h_per_set),
+            machPerSet: num(v.mach_h_per_set),
+            totalH: num(v.total_h),
+            hPerT: num(v.h_per_t),
+            basis: v.basis || '',
+        })),
+    };
+}
+
 export function massCoverageInfo(c) {
     if (!c || typeof c !== 'object' || !['ok', 'over', 'under'].includes(c.status)) return null;
     return { planKg: num(c.plan_kg), unitKg: num(c.unit_kg), ratio: num(c.ratio), status: c.status };

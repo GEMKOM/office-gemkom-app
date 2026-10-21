@@ -55,8 +55,11 @@ export function listEstimates(filters = {}) {
 }
 
 /** Queue a new version. Errors carry `status`: 409 one is already running. */
-export function createEstimate({ jobNo, offerId }) {
+/** `scope`: 'unit' (the main assembly of the first drawing, default) or 'programme' (every variant of the
+ *  drawing set × its BoQ quantity; a new extraction when the set was planned as one unit). */
+export function createEstimate({ jobNo, offerId, scope }) {
     const body = jobNo ? { job_no: jobNo } : { offer_id: offerId };
+    if (scope === 'programme') body.scope = 'programme';
     return request(`${BASE}/estimates/`, { method: 'POST', body: JSON.stringify(body) }, 'Tahmin başlatılamadı');
 }
 

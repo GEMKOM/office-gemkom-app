@@ -479,6 +479,8 @@
 }
 .est-callout i { color: #c2410c; margin-top: 0.2rem; }
 .est-table .est-cell-sub { display: block; font-size: 0.68rem; color: var(--est-muted); white-space: nowrap; }
+.est-scope { width: auto; display: inline-block; max-width: 15rem; }
+.est-programme td small.est-cell-sub { display: block; }
 .est-note-line { display: flex; gap: 0.45rem; align-items: flex-start; font-size: 0.8rem; color: #4b5563; margin-top: 0.45rem; }
 .est-note-line i { color: var(--est-purple); margin-top: 0.2rem; }
 .est-empty-line { font-size: 0.84rem; color: var(--est-muted); padding: 0.3rem 0; }
