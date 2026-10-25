@@ -1,5 +1,9 @@
 // Items Manager Module
 import { UNIT_CHOICES } from '../../../apis/constants.js';
+import {
+    reindexKeyedByItemIndex,
+    reindexOffersByItemIndex,
+} from './reindexByItemIndex.js';
 
 export class ItemsManager {
     constructor(requestData, autoSave) {
@@ -252,23 +256,15 @@ export class ItemsManager {
     confirmDeleteItem(index, modalId) {
         const item = this.requestData.items[index];
         
-        // Remove all offers for this item
-        Object.keys(this.requestData.offers).forEach(supplierId => {
-            if (this.requestData.offers[supplierId][index]) {
-                delete this.requestData.offers[supplierId][index];
-                // Reindex the offers
-                const reindexedOffers = {};
-                Object.keys(this.requestData.offers[supplierId]).forEach(key => {
-                    const numKey = parseInt(key);
-                    if (numKey > index) {
-                        reindexedOffers[numKey - 1] = this.requestData.offers[supplierId][key];
-                    } else if (numKey < index) {
-                        reindexedOffers[numKey] = this.requestData.offers[supplierId][key];
-                    }
-                });
-                this.requestData.offers[supplierId] = reindexedOffers;
-            }
-        });
+        // Offers and recommended-supplier picks are keyed by item index.
+        // Always shift later keys — skipping a supplier that never quoted the
+        // deleted row (or leaving itemRecommendations unshifted) attaches the
+        // deleted line's winner to the next surviving material on Gönder.
+        this.requestData.offers = reindexOffersByItemIndex(this.requestData.offers, index);
+        this.requestData.itemRecommendations = reindexKeyedByItemIndex(
+            this.requestData.itemRecommendations,
+            index
+        );
 
         // Remove from planning_request_item_ids if this item came from a planning request
         if (item.source_planning_request_item_id) {
@@ -368,6 +364,7 @@ export class ItemsManager {
         this.requestData.items = [];
         // Clear all offers since there are no items left
         this.requestData.offers = {};
+        this.requestData.itemRecommendations = {};
         this.renderItemsTable();
         this.autoSave();
         
@@ -884,6 +881,7 @@ export class ItemsManager {
 
         // Clear offers for removed items (they will be recreated if needed)
         this.requestData.offers = {};
+        this.requestData.itemRecommendations = {};
 
         this.renderItemsTable();
         
