@@ -42,6 +42,7 @@ import {
 } from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
 import { fmtQty as fmtDeliveryQty } from '../../utils/deliveryState.js';
+import { createExclusiveRun } from '../../utils/exclusiveRun.js';
 import { getCncParts } from '../../apis/cnc_cutting/parts.js';
 import { getParts as getMachiningParts } from '../../apis/machining/parts.js';
 import { 
@@ -7539,6 +7540,9 @@ async function handleStartTask(taskId) {
     });
 }
 
+// mark_delivered appends a receipt; overlapping confirms would double-count kg.
+const runDeliveryReceipt = createExclusiveRun();
+
 async function handleCompleteTask(taskId, taskRow = null) {
     // For procurement_item tasks with planning_request_item_id, use special completion flow
     if (taskRow && taskRow.task_type === 'procurement_item' && taskRow.planning_request_item_id) {
@@ -7586,8 +7590,13 @@ async function handleCompleteTask(taskId, taskRow = null) {
                         receipt.quantity = value;
                     }
 
-                    // Use planning_request_item_id from the task response
-                    const result = await markPlanningRequestItemDelivered(task.planning_request_item_id, receipt);
+                    // Each POST appends a receipt. Hold the lock only around the
+                    // write so a later Tamamla on another row is not dropped.
+                    const outcome = await runDeliveryReceipt(() =>
+                        markPlanningRequestItemDelivered(task.planning_request_item_id, receipt)
+                    );
+                    if (!outcome.started) return;
+                    const result = outcome.result;
                     showNotification(result && result.is_delivered === false
                         ? `Kısmi teslimat kaydedildi (${fmtDeliveryQty(result.delivered_quantity)} / ${fmtDeliveryQty(result.quantity)} ${unit})`
                         : 'Planlama talebi kalemi teslim alındı olarak işaretlendi', 'success');
