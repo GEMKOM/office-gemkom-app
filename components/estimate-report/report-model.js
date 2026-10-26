@@ -206,7 +206,9 @@ export function reportModel(report) {
     const quantity = parseTrNumber(r.hours?.quantity) ?? parseTrNumber(pickRow(row, /^adet/i));
     const unitKg = parseTrNumber(pickRow(row, /^birim kg/i)) ?? parseTrNumber(r.weld_schedule?.unit_mass_kg);
     const totalKgText = pickRow(row, /^toplam kg/i);
-    const totalKg = parseTrNumber(totalKgText) ?? (unitKg && quantity ? unitKg * quantity : null);
+    // the backend's kg first (the report's own §1 total, services/presentation.py): every €/kg card divides by it;
+    // the summary row is the first part only when the report lists several (OF-2026-0265: platform + king pin)
+    const totalKg = parseTrNumber(r.hours?.summary?.total_kg) ?? parseTrNumber(totalKgText) ?? (unitKg && quantity ? unitKg * quantity : null);
 
     const s3body = s3?.body || '';
     let price = parsePrice(s3body, /önerilen fiyat/i, quantity);
