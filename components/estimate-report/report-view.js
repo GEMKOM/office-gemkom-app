@@ -458,6 +458,11 @@ export function costTableHtml(ct, route, goto) {
         return `<td class="est-basis">${same ? `${badge('iki rotada aynı', 'status-grey est-badge-sm est-same-badge', 'Talaşlı ve CNC kesimi taşeron yapmaz: GEMKOM iki rotada da aynı tutarla yapar')} ` : ''}${text ? decorate(escapeHtml(text), goto) : ''}</td>`;
     };
     const n = (val, digits = 0) => (val == null ? '<span class="est-muted">—</span>' : fmt(val, digits));
+    // every money cell also in €/kg on the report's own kg (the backend's total_kg, the €/kg row's basis)
+    const kgTotal = Number(ct.total_kg) || null;
+    const perKgSub = (val, digits) => (kgTotal && digits === 0 && val != null && Number(val)
+        ? `<small class="est-cell-sub">${fmt(Number(val) / kgTotal, 2)} €/kg</small>` : '');
+    const nk = (val, digits = 0) => `${n(val, digits)}${perKgSub(val, digits)}`;
 
     if (route === 'compare') {
         const a = 'in_house';
@@ -472,8 +477,8 @@ export function costTableHtml(ct, route, goto) {
         };
         const tr = (x, cls = '', digits = 0) => `<tr class="${cls}">
             <td class="est-item">${escapeHtml(x.label)}</td>
-            <td class="num">${n(x[a]?.expected, digits)}</td>
-            <td class="num">${n(x[b]?.expected, digits)}</td>
+            <td class="num">${nk(x[a]?.expected, digits)}</td>
+            <td class="num">${nk(x[b]?.expected, digits)}</td>
             ${delta(x, digits)}
             ${basisCell(x)}
         </tr>`;
@@ -488,9 +493,9 @@ export function costTableHtml(ct, route, goto) {
     const totalExp = total?.[k]?.expected || body.reduce((s, x) => s + (Number(x[k]?.expected) || 0), 0);
     const tr = (x, cls = '', digits = 0, share = true) => `<tr class="${cls}">
         <td class="est-item">${escapeHtml(x.label)}</td>
-        <td class="num est-lohi">${n(x[k]?.low, digits)}</td>
-        <td class="num is-exp">${n(x[k]?.expected, digits)}</td>
-        <td class="num est-lohi">${n(x[k]?.high, digits)}</td>
+        <td class="num est-lohi">${nk(x[k]?.low, digits)}</td>
+        <td class="num is-exp">${nk(x[k]?.expected, digits)}</td>
+        <td class="num est-lohi">${nk(x[k]?.high, digits)}</td>
         <td class="est-share-cell">${share ? shareBar(x[k]?.expected, totalExp) : ''}</td>
         ${basisCell(x)}
     </tr>`;
