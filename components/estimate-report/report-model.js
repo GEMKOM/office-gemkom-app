@@ -644,7 +644,7 @@ function distributionBase(hours) {
         factor: num(r.factor) ?? 1,
         factorMin: num(r.factor_min),
         factorMax: num(r.factor_max),
-        factorBasis: r.factor_basis === 'references' ? 'references' : 'none',
+        factorBasis: ['references', 'same_part'].includes(r.factor_basis) ? r.factor_basis : 'none',
         referencesUsed: Array.isArray(r.references_used) ? r.references_used : [],
         expectedH: num(r.expected_h) ?? 0,
         lowH: num(r.low_h),

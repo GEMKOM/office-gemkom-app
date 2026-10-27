@@ -723,7 +723,10 @@ function planLaborSection(r, m, v, goto) {
     }
     if (calMach || plan.noMachRef) {
         if (plan.noMachRef || !calMach || calMach.factor_mean == null) {
-            kpis.push(kpi('Talaşlı faktörü', `1,00 ${badge('referans yok', 'status-grey', 'Kullanılabilir talaşlı imalat referansı yok')}`, 'talaşlı saat plandan aynen alındı'));
+            // machining is not calibrated by references (2026-10-27): the drawing analysis stands
+            kpis.push(kpi('Talaşlı faktörü', `1,00 ${badge('çizim analizi', 'status-grey', 'Talaşlı referansla kalibre edilmez; saat çizim analizinden gelir')}`, 'talaşlı saat plandan (ve raporun çizime göre düzeltmesinden) alındı'));
+        } else if (calMach.basis === 'same_part') {
+            kpis.push(kpi('Talaşlı · aynı parça', `${fmt(calMach.expected_h_per_unit, 1)} h/adet`, `${(calMach.references_used || []).join(', ')} kayıtlı saati · ±%10`));
         } else {
             kpis.push(kpi('Talaşlı faktörü', fmt(calMach.factor_mean, 2), [range(calMach.factor_min, calMach.factor_max, 2, ''), `${nRefs(calMach)} referans`].filter(Boolean).join(' · ')));
         }
@@ -836,7 +839,14 @@ function planLaborSection(r, m, v, goto) {
             ? `<div class="est-note-line"><i class="fas fa-layer-group"></i><span>Aynı yapı sınıfında ${fmt(plan.classGate.same_class_references, 0)} referans var (en az 2 gerekir): atölye faktörü en benzer referanslardan.</span></div>` : '');
     let machNote;
     if (plan.noMachRef || !calMach || calMach.factor_mean == null) {
-        machNote = `<div class="est-note-line"><i class="fas fa-gears"></i><span><strong>Talaşlı referansı yok · 1,00:</strong> talaşlı saat plandan aynen alındı${calMach?.expected_h_per_unit != null ? ` (${fmt(calMach.expected_h_per_unit, 1)} h/adet)` : ''}${Number(h.machining_h_per_unit_references) ? ` · referansların kayıtlı talaşlı ortalaması ${fmt(h.machining_h_per_unit_references, 1)} h/adet (karşılaştırma için)` : ''}.</span></div>`;
+        const cross = Array.isArray(calMach?.crosscheck) ? calMach.crosscheck.filter((c) => c && c.job_no) : [];
+        const crossText = cross.length
+            ? ` · çapraz kontrol: ${cross.map((c) => `${jobLink(c.job_no)} kayıt ${fmt(c.recorded_machining_h_per_unit, 0)} / plan ${fmt(c.mach_h_per_unit, 0)} h`).join(', ')}`
+            : (Number(h.machining_h_per_unit_references) ? ` · referansların kayıtlı talaşlı ortalaması ${fmt(h.machining_h_per_unit_references, 1)} h/adet (karşılaştırma için)` : '');
+        machNote = `<div class="est-note-line"><i class="fas fa-gears"></i><span><strong>Talaşlı · çizim analizi (faktör 1,00):</strong> talaşlı referansla kalibre edilmez; saat plandan ve raporun çizime göre düzeltmesinden alındı${calMach?.expected_h_per_unit != null ? ` (${fmt(calMach.expected_h_per_unit, 1)} h/adet)` : ''}${crossText}.</span></div>`;
+    } else if (calMach.basis === 'same_part') {
+        const sp = calMach.same_part || {};
+        machNote = `<div class="est-note-line"><i class="fas fa-gears"></i><span><strong>Talaşlı · aynı parça:</strong> ${jobLink(sp.job_no || (calMach.references_used || [])[0])} (${escapeHtml((sp.shared || []).join(', '))}) kayıtlı talaşlı saati ${fmt(calMach.expected_h_per_unit, 1)} h/adet doğrudan alındı (±%10; plan ${fmt(calMach.basis_h_per_unit, 1)} h/adet).</span></div>`;
     } else {
         machNote = `<div class="est-note-line"><i class="fas fa-gears"></i><span><strong>Talaşlı kalibrasyonu:</strong> faktör ${fmt(calMach.factor_mean, 2)}${calMach.factor_min != null ? ` (${fmt(calMach.factor_min, 2)} – ${fmt(calMach.factor_max, 2)})` : ''}, referanslar ${(calMach.references_used || []).map(jobLink).join(', ') || '—'}: plan ${fmt(calMach.basis_h_per_unit, 1)} → beklenen ${fmt(calMach.expected_h_per_unit, 1)} h/adet${Number(h.machining_h_per_unit_references) ? ` · referansların kayıtlı ortalaması ${fmt(h.machining_h_per_unit_references, 1)} h/adet` : ''}.</span></div>`;
     }
@@ -879,9 +889,12 @@ function distributionHtml(dist, quantity) {
     const expTotal = t.expectedH || rows.reduce((s, r) => s + r.expectedH, 0);
     const segs = rows.filter((r) => r.expectedH > 0).map((r) => `<span style="width:${((r.expectedH / expTotal) * 100).toFixed(1)}%;background:${CENTRE_COLOURS[r.key] || '#a78bfa'}" title="${escapeHtml(r.label)} ${fmt(r.expectedH, 0)} h · %${fmt(r.share * 100, 0)}"></span>`).join('');
     const legend = rows.filter((r) => r.expectedH > 0).map((r) => `<span><i style="background:${CENTRE_COLOURS[r.key] || '#a78bfa'}"></i>${escapeHtml(r.label)} <strong>%${fmt(r.share * 100, 0)}</strong></span>`).join('');
+    // machining is not calibrated by references (2026-10-27): the drawing analysis stands, unless the same part was made before
     const factorCell = (r) => (r.factorBasis === 'references'
         ? `<span class="est-factor">${fmt(r.factor, 2)}</span><small class="est-cell-sub">${r.factorMin != null && r.factorMax != null && (r.factorMin !== r.factorMax) ? `${fmt(r.factorMin, 2)} – ${fmt(r.factorMax, 2)} · ` : ''}${r.referencesUsed.length} referans</small>`
-        : `<span class="est-muted">referans yok · 1,00</span>`);
+        : r.factorBasis === 'same_part'
+            ? `<span class="est-factor">${fmt(r.factor, 2)}</span><small class="est-cell-sub">aynı parça · ${escapeHtml(r.referencesUsed.join(', '))}</small>`
+            : `<span class="est-muted">${r.key === 'mach' ? 'çizim analizi' : 'referans yok'} · 1,00</span>`);
     const n = (val, digits = 0) => (val == null ? '<span class="est-muted">—</span>' : fmt(val, digits));
     const qty = quantity || t.quantity;
     // corrected hours (cost_table.labour): the priced totals come from the backend, not per unit × adet
