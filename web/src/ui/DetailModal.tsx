@@ -6,10 +6,8 @@ import {
   Code,
   CopyButton,
   Grid,
-  Group,
   LoadingOverlay,
   Modal,
-  Paper,
   Stack,
   Text,
   Tooltip,
@@ -25,6 +23,7 @@ import {
   formatTime,
 } from '@/lib/format';
 import { FaIcon } from './FaIcon';
+import { ModalBody, ModalFooter, ModalHeader, ModalSection, modalClassNames } from './ModalParts';
 
 export type DetailFieldType =
   | 'text'
@@ -72,6 +71,9 @@ export interface DetailModalProps {
   opened: boolean;
   onClose: () => void;
   title: ReactNode;
+  /** One line under the title. */
+  subtitle?: ReactNode;
+  /** Font Awesome classes, shown in the header's tile. */
   icon?: string;
   /** Default 'lg'. 'full' = fullscreen. */
   size?: MantineSize | 'full' | number | string;
@@ -163,6 +165,7 @@ export function DetailModal({
   opened,
   onClose,
   title,
+  subtitle,
   icon,
   size = 'lg',
   sections,
@@ -177,47 +180,30 @@ export function DetailModal({
       onClose={onClose}
       size={size === 'full' ? '100%' : size}
       fullScreen={size === 'full'}
-      title={
-        <Text fw={600}>
-          {icon ? <FaIcon icon={icon} style={{ marginRight: 8 }} /> : null}
-          {title}
-        </Text>
-      }
+      withCloseButton={false}
+      classNames={modalClassNames}
     >
-      <Box pos="relative">
+      <ModalHeader title={title} subtitle={subtitle} icon={icon} />
+      <ModalBody>
         <LoadingOverlay visible={loading} />
-        <Stack gap="md">
-          {sections
-            .filter((section) => !section.hidden)
-            .map((section, index) => (
-              <Paper key={index} withBorder p="sm">
-                {section.title ? (
-                  <Text fw={600} size="sm" mb="xs">
-                    {section.icon ? (
-                      <FaIcon
-                        icon={section.icon}
-                        color="var(--mantine-primary-color-filled)"
-                        style={{ marginRight: 6 }}
-                      />
-                    ) : null}
-                    {section.title}
-                  </Text>
-                ) : null}
-                {section.fields && section.fields.length > 0 ? (
-                  <Grid gap="sm">
-                    {section.fields
-                      .filter((field) => !field.hidden)
-                      .map((field, fieldIndex) => (
-                        <Field key={fieldIndex} field={field} />
-                      ))}
-                  </Grid>
-                ) : null}
-                {section.content}
-              </Paper>
-            ))}
-        </Stack>
-      </Box>
-      <Group justify="flex-end" mt="md" gap="xs">
+        {sections
+          .filter((section) => !section.hidden)
+          .map((section, index) => (
+            <ModalSection key={index} title={section.title} icon={section.icon}>
+              {section.fields && section.fields.length > 0 ? (
+                <Grid gap="sm">
+                  {section.fields
+                    .filter((field) => !field.hidden)
+                    .map((field, fieldIndex) => (
+                      <Field key={fieldIndex} field={field} />
+                    ))}
+                </Grid>
+              ) : null}
+              {section.content}
+            </ModalSection>
+          ))}
+      </ModalBody>
+      <ModalFooter>
         {footerActions}
         <Button variant="default" onClick={onClose} leftSection={<FaIcon icon="fas fa-times" />}>
           Kapat
@@ -227,7 +213,7 @@ export function DetailModal({
             {editLabel}
           </Button>
         ) : null}
-      </Group>
+      </ModalFooter>
     </Modal>
   );
 }

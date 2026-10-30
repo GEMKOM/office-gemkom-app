@@ -14,6 +14,51 @@ const manufacturingHub = async () => ({
 // here must also be listed in migrated-routes.json (router.test.ts checks this).
 export const appRoutes: RouteObject[] = [
   {
+    // The landing page; every signed-in user may open it ('/' is always allowed).
+    path: '/',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/home/HomePage')).HomePage }),
+  },
+  {
+    path: '/general',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/general/GeneralHubPage')).GeneralHubPage }),
+  },
+  {
+    path: '/general/crane-requests',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/general/CraneRequestsHubPage')).CraneRequestsHubPage,
+    }),
+  },
+  {
+    path: '/general/department-requests',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/general/DepartmentRequestsHubPage')).DepartmentRequestsHubPage,
+    }),
+  },
+  {
+    path: '/general/overtime',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/general/OvertimeHubPage')).OvertimeHubPage }),
+  },
+  {
+    path: '/general/vacation',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/general/VacationHubPage')).VacationHubPage }),
+  },
+  {
+    path: '/it',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/it/ItHubPage')).ItHubPage }),
+  },
+  {
+    path: '/isg',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/isg/IsgHubPage')).IsgHubPage }),
+  },
+  {
     path: '/sales',
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/sales/SalesHubPage')).SalesHubPage }),
