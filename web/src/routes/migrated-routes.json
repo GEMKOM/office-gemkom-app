@@ -30,5 +30,12 @@
   "/logistics",
   "/accounting",
   "/finance",
-  "/finance/reports"
+  "/finance/reports",
+  "/management",
+  "/management/reports",
+  "/human_resources",
+  "/human_resources/attendance",
+  "/quality-control",
+  "/projects",
+  "/design"
 ]

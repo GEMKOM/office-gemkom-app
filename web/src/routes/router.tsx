@@ -22,7 +22,9 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/general',
     handle: hub,
-    lazy: async () => ({ Component: (await import('@/pages/general/GeneralHubPage')).GeneralHubPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/general/GeneralHubPage')).GeneralHubPage,
+    }),
   },
   {
     path: '/general/crane-requests',
@@ -35,18 +37,23 @@ export const appRoutes: RouteObject[] = [
     path: '/general/department-requests',
     handle: hub,
     lazy: async () => ({
-      Component: (await import('@/pages/general/DepartmentRequestsHubPage')).DepartmentRequestsHubPage,
+      Component: (await import('@/pages/general/DepartmentRequestsHubPage'))
+        .DepartmentRequestsHubPage,
     }),
   },
   {
     path: '/general/overtime',
     handle: hub,
-    lazy: async () => ({ Component: (await import('@/pages/general/OvertimeHubPage')).OvertimeHubPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/general/OvertimeHubPage')).OvertimeHubPage,
+    }),
   },
   {
     path: '/general/vacation',
     handle: hub,
-    lazy: async () => ({ Component: (await import('@/pages/general/VacationHubPage')).VacationHubPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/general/VacationHubPage')).VacationHubPage,
+    }),
   },
   {
     path: '/it',
@@ -152,6 +159,57 @@ export const appRoutes: RouteObject[] = [
     lazy: async () => ({
       Component: (await import('@/pages/finance/FinanceReportsHubPage')).FinanceReportsHubPage,
     }),
+  },
+  {
+    path: '/management',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/management/ManagementHubPage')).ManagementHubPage,
+    }),
+  },
+  {
+    path: '/management/reports',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/ManagementReportsHubPage'))
+        .ManagementReportsHubPage,
+    }),
+  },
+  {
+    path: '/human_resources',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/HumanResourcesHubPage'))
+        .HumanResourcesHubPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/AttendanceHubPage'))
+        .AttendanceHubPage,
+    }),
+  },
+  {
+    path: '/quality-control',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/QualityControlHubPage'))
+        .QualityControlHubPage,
+    }),
+  },
+  {
+    path: '/projects',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/projects/ProjectsHubPage')).ProjectsHubPage,
+    }),
+  },
+  {
+    path: '/design',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),
   },
 ];
 
