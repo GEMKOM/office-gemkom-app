@@ -1,23 +1,35 @@
-import { Alert, Stack, Text } from '@mantine/core';
+import { Button, Text } from '@mantine/core';
 import { modals } from '@mantine/modals';
 import type { ReactNode } from 'react';
+import { FaIcon } from './FaIcon';
+import classes from './Modal.module.css';
+import { ModalBody, ModalFooter, ModalHeader, modalClassNames } from './ModalParts';
 
 export interface ConfirmOptions {
   /** Default 'Onay'. */
   title?: ReactNode;
+  /** One line under the title, e.g. 'Bu işlem geri alınamaz'. */
+  subtitle?: ReactNode;
+  /**
+   * Font Awesome classes for the header tile (and the confirm button when
+   * `danger`). Default a question mark, or a warning when `danger`.
+   */
+  icon?: string;
   /** Default 'Bu işlemi yapmak istediğinize emin misiniz?'. */
   message?: ReactNode;
   /** Smaller grey text under the message. */
   description?: ReactNode;
-  /** Highlighted box under the message (legacy `details`). */
+  /** Boxed under the message, e.g. the record a delete affects (legacy `details`). */
   details?: ReactNode;
   /** Default 'Evet'. */
   confirmLabel?: ReactNode;
   /** Default 'İptal'. */
   cancelLabel?: ReactNode;
-  /** Red confirm button, for deletes and other destructive actions. */
+  /** Danger tile and a red confirm button, for deletes and other destructive actions. */
   danger?: boolean;
 }
+
+let lastId = 0;
 
 /**
  * Replaces ConfirmationModal. Resolves true on confirm, false on cancel or
@@ -29,6 +41,7 @@ export function confirm(options: ConfirmOptions | string = {}): Promise<boolean>
   const opts = typeof options === 'string' ? { message: options } : options;
   const {
     title = 'Onay',
+    subtitle,
     message = 'Bu işlemi yapmak istediğinize emin misiniz?',
     description,
     details,
@@ -36,48 +49,56 @@ export function confirm(options: ConfirmOptions | string = {}): Promise<boolean>
     cancelLabel = 'İptal',
     danger = false,
   } = opts;
+  const icon = opts.icon ?? (danger ? 'fas fa-exclamation-triangle' : 'fas fa-question-circle');
 
   return new Promise<boolean>((resolve) => {
-    // onConfirm is followed by onClose; only the first answer counts.
+    // Answering closes the modal, which calls onClose; only the first answer counts.
     let settled = false;
     const settle = (value: boolean) => {
       if (settled) return;
       settled = true;
       resolve(value);
     };
+    const modalId = `gk-confirm-${++lastId}`;
+    const answer = (value: boolean) => {
+      settle(value);
+      modals.close(modalId);
+    };
 
-    modals.openConfirmModal({
-      title: (
-        <Text fw={600}>
-          <i
-            className={danger ? 'fas fa-exclamation-triangle' : 'fas fa-question-circle'}
-            style={{ marginRight: 8, color: danger ? 'var(--mantine-color-red-6)' : undefined }}
-            aria-hidden
-          />
-          {title}
-        </Text>
-      ),
+    modals.open({
+      modalId,
       centered: true,
-      children: (
-        <Stack gap="xs">
-          {typeof message === 'string' ? <Text>{message}</Text> : message}
-          {description ? (
-            <Text size="sm" c="dimmed">
-              {description}
-            </Text>
-          ) : null}
-          {details ? (
-            <Alert color={danger ? 'red' : 'blue'} variant="light">
-              {details}
-            </Alert>
-          ) : null}
-        </Stack>
-      ),
-      labels: { confirm: confirmLabel, cancel: cancelLabel },
-      confirmProps: danger ? { color: 'red' } : {},
-      onConfirm: () => settle(true),
-      onCancel: () => settle(false),
+      size: 460,
+      withCloseButton: false,
+      classNames: modalClassNames,
       onClose: () => settle(false),
+      children: (
+        <>
+          <ModalHeader
+            tone={danger ? 'danger' : 'neutral'}
+            icon={icon}
+            title={title}
+            subtitle={subtitle}
+          />
+          <ModalBody>
+            {typeof message === 'string' ? <p className={classes.message}>{message}</p> : message}
+            {description ? <Text className={classes.description}>{description}</Text> : null}
+            {details ? <div className={classes.record}>{details}</div> : null}
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="default" onClick={() => answer(false)}>
+              {cancelLabel}
+            </Button>
+            <Button
+              color={danger ? 'red.9' : undefined}
+              leftSection={danger && opts.icon ? <FaIcon icon={opts.icon} /> : undefined}
+              onClick={() => answer(true)}
+            >
+              {confirmLabel}
+            </Button>
+          </ModalFooter>
+        </>
+      ),
     });
   });
 }

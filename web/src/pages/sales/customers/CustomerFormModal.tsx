@@ -1,7 +1,6 @@
-import { Checkbox, Grid, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { Checkbox, Grid, Select, Stack, TextInput, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
-import type { ReactNode } from 'react';
 import { z } from 'zod';
 import {
   CUSTOMER_CURRENCY_OPTIONS,
@@ -11,7 +10,7 @@ import {
   type Customer,
   type CustomerInput,
 } from '@/api';
-import { FaIcon, FormModal, notify } from '@/ui';
+import { FormModal, ModalSection, notify } from '@/ui';
 
 const REQUIRED = 'Bu alan gereklidir';
 // Same check as the legacy EditModal (email fields, only when filled in).
@@ -66,15 +65,6 @@ export function customerErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
-function SectionTitle({ icon, color, children }: { icon: string; color: string; children: ReactNode }) {
-  return (
-    <Text fw={600} size="sm">
-      <FaIcon icon={icon} color={`var(--mantine-color-${color}-6)`} style={{ marginRight: 8 }} />
-      {children}
-    </Text>
-  );
-}
-
 const currencyData = CUSTOMER_CURRENCY_OPTIONS.map(({ value, label }) => ({ value, label }));
 
 export interface CustomerFormModalProps {
@@ -122,7 +112,7 @@ export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormMo
     field: keyof CustomerFormValues,
     label: string,
     placeholder: string,
-    description: string,
+    description?: string,
     extra: { required?: boolean; type?: string } = {},
   ) => (
     <TextInput
@@ -140,15 +130,17 @@ export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormMo
       opened
       onClose={onClose}
       title={editing ? 'Müşteri Düzenle' : 'Yeni Müşteri Oluştur'}
-      icon={editing ? 'fas fa-edit' : 'fas fa-plus-circle'}
-      size="lg"
+      subtitle={
+        customer
+          ? [customer.code, customer.name].filter(Boolean).join(' · ')
+          : 'Kod ve firma adı zorunlu; diğer bilgiler sonradan da eklenebilir'
+      }
+      icon={editing ? 'fas fa-user-edit' : 'fas fa-user-plus'}
+      size={720}
       submitting={submitting}
       onSubmit={form.onSubmit(save)}
     >
-      <Stack gap="md">
-        <SectionTitle icon="fas fa-info-circle" color="blue">
-          Temel Bilgiler
-        </SectionTitle>
+      <ModalSection title="Temel Bilgiler">
         <Grid gap="sm">
           <Grid.Col span={{ base: 12, sm: 6 }}>
             {text('code', 'Müşteri Kodu', 'Müşteri kodunu girin', 'Benzersiz müşteri kodu', { required: true })}
@@ -156,73 +148,55 @@ export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormMo
           <Grid.Col span={{ base: 12, sm: 6 }}>
             {text('name', 'Firma Adı', 'Firma adını girin', 'Tam firma adı', { required: true })}
           </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            {text('short_name', 'Kısa Ad', 'Kısa gösterim adı', 'Kısa gösterim adı')}
-          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>{text('short_name', 'Kısa Ad', 'Kısa gösterim adı')}</Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6 }}>
             <Select
               label="Para Birimi"
               placeholder="Para birimi seçin..."
-              description="Varsayılan para birimi"
               data={currencyData}
               allowDeselect={false}
               {...form.getInputProps('default_currency')}
             />
           </Grid.Col>
         </Grid>
+      </ModalSection>
 
-        <SectionTitle icon="fas fa-address-book" color="green">
-          İletişim Bilgileri
-        </SectionTitle>
+      <ModalSection title="İletişim Bilgileri">
         <Grid gap="sm">
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            {text('contact_person', 'İletişim Kişisi', 'İletişim kişisi adı', 'Ana iletişim kişisi')}
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            {text('contact_person', 'İletişim Kişisi', 'İletişim kişisi adı')}
           </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            {text('phone', 'Telefon', 'Telefon numarası', 'Telefon numarası')}
+          <Grid.Col span={{ base: 12, sm: 4 }}>{text('phone', 'Telefon', 'Telefon numarası')}</Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            {text('email', 'E-posta', 'E-posta adresi', undefined, { type: 'email' })}
           </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            {text('email', 'E-posta', 'E-posta adresi', 'E-posta adresi', { type: 'email' })}
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
-            <Textarea
-              label="Adres"
-              placeholder="Tam adres"
-              description="Tam adres"
-              rows={3}
-              {...form.getInputProps('address')}
-            />
+          <Grid.Col span={12}>
+            <Textarea label="Adres" placeholder="Tam adres" rows={2} {...form.getInputProps('address')} />
           </Grid.Col>
         </Grid>
+      </ModalSection>
 
-        <SectionTitle icon="fas fa-file-invoice" color="cyan">
-          Vergi Bilgileri
-        </SectionTitle>
+      <ModalSection title="Vergi Bilgileri">
         <Grid gap="sm">
           <Grid.Col span={{ base: 12, sm: 6 }}>
-            {text('tax_id', 'Vergi Numarası', 'Vergi kimlik numarası', 'Vergi kimlik numarası')}
+            {text('tax_id', 'Vergi Numarası', 'Vergi kimlik numarası')}
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6 }}>
-            {text('tax_office', 'Vergi Dairesi', 'Vergi dairesi adı', 'Bağlı olduğu vergi dairesi')}
+            {text('tax_office', 'Vergi Dairesi', 'Bağlı olduğu vergi dairesi')}
           </Grid.Col>
         </Grid>
+      </ModalSection>
 
-        <SectionTitle icon="fas fa-toggle-on" color="yellow">
-          Durum
-        </SectionTitle>
-        <Checkbox
-          label="Aktif"
-          description="Müşterinin aktif durumu"
-          {...form.getInputProps('is_active', { type: 'checkbox' })}
-        />
-        <Textarea
-          label="Notlar"
-          placeholder="İç notlar"
-          description="İç notlar"
-          rows={3}
-          {...form.getInputProps('notes')}
-        />
-      </Stack>
+      <ModalSection title="Durum ve Notlar">
+        <Stack gap="md">
+          <Checkbox
+            label="Aktif"
+            description="Pasif müşteriler listede varsayılan olarak gizlenir"
+            {...form.getInputProps('is_active', { type: 'checkbox' })}
+          />
+          <Textarea label="Notlar" placeholder="İç notlar" rows={3} {...form.getInputProps('notes')} />
+        </Stack>
+      </ModalSection>
     </FormModal>
   );
 }
