@@ -13,6 +13,8 @@
   --gk-rail: #1e2227;
   --gk-rail-raised: #2a2f35;
   --gk-rail-icon: #9aa3ad;
+  /* Labels in the expanded rail (10.9:1 on the rail). */
+  --gk-rail-label: #c9cfd6;
   --gk-on-dark: #ffffff;
   --gk-on-band-muted: rgba(255, 255, 255, 0.78);
   --gk-page: #f4f5f7;

@@ -40,6 +40,16 @@ export {
   type DetailSection,
 } from './DetailModal';
 export { FormModal, type FormModalProps } from './FormModal';
+export {
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  ModalSection,
+  modalClassNames,
+  type ModalHeaderProps,
+  type ModalSectionProps,
+  type ModalTone,
+} from './ModalParts';
 export { confirm, type ConfirmOptions } from './confirm';
 export { notify, errorMessage, type NotifyOptions, type NotifyType } from './notify';
 export { SelectRemote, type RemoteOption, type SelectRemoteProps } from './SelectRemote';

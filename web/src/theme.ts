@@ -4,12 +4,14 @@ import {
   Input,
   InputWrapper,
   Menu,
+  Modal,
   Paper,
   Popover,
   Table,
   type MantineColorsTuple,
 } from '@mantine/core';
 import classes from './styles/components.module.css';
+import modalClasses from './ui/Modal.module.css';
 
 // GEMKOM red (#8b0000, the logo's red) at shade 7; shade 8 is the hover.
 const gemkom: MantineColorsTuple = [
@@ -34,6 +36,8 @@ export const theme = createTheme({
   primaryShade: 7,
   colors: { gemkom },
   defaultRadius: 'md',
+  // Mantine transitions (modals, menus) stand still under prefers-reduced-motion.
+  respectReducedMotion: true,
   fontFamily: sans,
   fontFamilyMonospace: '"IBM Plex Mono", Consolas, ui-monospace, monospace',
   headings: { fontFamily: sans, fontWeight: '700' },
@@ -51,6 +55,14 @@ export const theme = createTheme({
     Input: Input.extend({ classNames: { input: classes.input } }),
     InputWrapper: InputWrapper.extend({ classNames: { label: classes.inputLabel } }),
     Menu: Menu.extend({ classNames: { dropdown: classes.dropdown } }),
+    Modal: Modal.extend({
+      defaultProps: {
+        radius: 'lg',
+        overlayProps: { color: '#1f2933', backgroundOpacity: 0.5, blur: 2 },
+        transitionProps: { transition: 'pop', duration: 180, timingFunction: 'ease-out' },
+      },
+      classNames: { root: modalClasses.root, content: modalClasses.content },
+    }),
     Popover: Popover.extend({ classNames: { dropdown: classes.dropdown } }),
     Paper: Paper.extend({ defaultProps: { radius: 'lg' } }),
     Table: Table.extend({
