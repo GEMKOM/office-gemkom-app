@@ -1,4 +1,12 @@
 [
+  "/",
+  "/general",
+  "/general/crane-requests",
+  "/general/department-requests",
+  "/general/overtime",
+  "/general/vacation",
+  "/it",
+  "/isg",
   "/sales",
   "/sales/customers"
 ]
