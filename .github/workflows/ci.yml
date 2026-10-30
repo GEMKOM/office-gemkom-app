@@ -30,6 +30,7 @@ jobs:
       - run: npm run lint
       - run: npm run test
       - run: npm run test:legacy
+      - run: npm run check:legacy-imports
       - run: npm run build
       - run: npm run assemble
       # Smoke tests against the assembled _site, in the runner's Google Chrome

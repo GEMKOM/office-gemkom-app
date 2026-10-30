@@ -49,7 +49,7 @@ import {
 } from '../../apis/sales/offers.js';
 import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren, searchOfferTemplateNodes } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
-import { initCustomerEditModal, openCustomerEditModal, getMissingCustomerFieldsForConversion } from '../customers/customerEditModal.js';
+import { initCustomerEditModal, openCustomerEditModal, getMissingCustomerFieldsForConversion } from '../shared/customerEditModal.js';
 import { getPaymentTerms } from '../../apis/procurement.js';
 import { createComment, getTopicComments } from '../../apis/projects/topics.js';
 import { fetchUsersDropdown } from '../../apis/users.js';
