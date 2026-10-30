@@ -1,0 +1,209 @@
+/* The icon rail, its flyouts, the mobile top bar and the page frame. */
+
+.navbar {
+  border: 0;
+  background: var(--gk-surface);
+}
+
+@media (min-width: 48em) {
+  .navbar {
+    background: var(--gk-rail);
+  }
+}
+
+.rail {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 14px 0 12px;
+  gap: 6px;
+}
+
+.logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #fff;
+  display: grid;
+  place-items: center;
+  margin-bottom: 10px;
+  flex: none;
+}
+
+.logo img {
+  width: 28px;
+  height: 28px;
+}
+
+.railScroll {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.railItems {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+}
+
+.railItem {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  color: var(--gk-rail-icon);
+  font-size: 17px;
+  text-decoration: none;
+  transition:
+    background 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.railItem:hover,
+.railItem[aria-expanded='true'] {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--gk-on-dark);
+}
+
+.railItem[data-active] {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--gk-on-dark);
+}
+
+/* The active marker sits on the rail's left edge, 14px out from the button. */
+.railItem[data-active]::before {
+  content: '';
+  position: absolute;
+  left: -14px;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--gk-red-on-dark);
+}
+
+.railItem:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px #fff;
+}
+
+.railEnd {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  width: 48px;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--gk-red-700);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0.3px;
+}
+
+.badgeDot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--gk-red-700);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--gk-rail);
+}
+
+/* Flyouts: the rail's sections open to the right, on the raised graphite. */
+.flyout {
+  background: var(--gk-rail-raised);
+  border: 0;
+  border-radius: var(--gk-radius-lg);
+  box-shadow: var(--gk-shadow-popover);
+  padding: 6px;
+}
+
+.flyoutTitle {
+  padding: 8px 12px 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.flyoutLabel {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.flyoutItem {
+  color: rgba(255, 255, 255, 0.88);
+  border-radius: var(--gk-radius-sm);
+  font-size: 14px;
+}
+
+.flyoutItem[data-hovered] {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.flyoutItem[data-active] {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--gk-red-on-dark);
+}
+
+.flyoutDivider {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Small screens: a graphite top bar instead of the rail. */
+.topbar {
+  background: var(--gk-rail);
+  border: 0;
+  color: #fff;
+}
+
+.topbarBrand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-decoration: none;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.topbarBrand img {
+  width: 26px;
+  height: 26px;
+  background: #fff;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.content {
+  padding: 24px var(--gk-page-pad) 40px;
+  min-width: 0;
+}

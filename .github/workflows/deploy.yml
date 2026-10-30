@@ -1,0 +1,62 @@
+# Deploys the assembled site (legacy pages + React SPA, see web/scripts/assemble.mjs)
+# to GitHub Pages.
+#
+# REQUIRES: repo Settings -> Pages -> Build and deployment -> Source = "GitHub Actions".
+# Until that is switched, the branch deploy (main, repo root, built by Jekyll) keeps
+# serving the repo as-is and the deploy job below fails without changing the site.
+# After switching, check that the custom domain (CNAME) is still set in that settings
+# page: an Actions deploy takes the domain from the settings, not from the CNAME file.
+
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a newer push waits instead of cancelling one in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test
+      - run: npm run test:legacy
+      - run: npm run build
+      - run: npm run assemble
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,228 @@
+import { Checkbox, Grid, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { useForm } from '@mantine/form';
+import { zod4Resolver } from 'mantine-form-zod-resolver';
+import type { ReactNode } from 'react';
+import { z } from 'zod';
+import {
+  CUSTOMER_CURRENCY_OPTIONS,
+  isApiError,
+  useCreateCustomer,
+  usePatchCustomer,
+  type Customer,
+  type CustomerInput,
+} from '@/api';
+import { FaIcon, FormModal, notify } from '@/ui';
+
+const REQUIRED = 'Bu alan gereklidir';
+// Same check as the legacy EditModal (email fields, only when filled in).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export const customerSchema = z.object({
+  code: z.string().min(1, REQUIRED),
+  name: z.string().min(1, REQUIRED),
+  short_name: z.string(),
+  default_currency: z.string(),
+  contact_person: z.string(),
+  phone: z.string(),
+  email: z.string().refine((v) => v === '' || EMAIL_RE.test(v), 'Geçerli bir e-posta adresi girin'),
+  address: z.string(),
+  tax_id: z.string(),
+  tax_office: z.string(),
+  is_active: z.boolean(),
+  notes: z.string(),
+});
+
+export type CustomerFormValues = z.infer<typeof customerSchema>;
+
+export function customerFormValues(customer?: Customer | null): CustomerFormValues {
+  return {
+    code: customer?.code || '',
+    name: customer?.name || '',
+    short_name: customer?.short_name || '',
+    default_currency: customer?.default_currency || 'TRY',
+    contact_person: customer?.contact_person || '',
+    phone: customer?.phone || '',
+    email: customer?.email || '',
+    address: customer?.address || '',
+    tax_id: customer?.tax_id || '',
+    tax_office: customer?.tax_office || '',
+    is_active: customer ? customer.is_active !== false : true,
+    notes: customer?.notes || '',
+  };
+}
+
+/**
+ * Legacy parseCustomerApiError: a DRF field-error body becomes all its
+ * messages joined with ', '; anything else gives the fallback.
+ */
+export function customerErrorMessage(error: unknown, fallback: string): string {
+  if (isApiError(error) && error.data && typeof error.data === 'object') {
+    const messages = Object.values(error.data as Record<string, unknown>)
+      .flat(Infinity)
+      .filter((v) => v !== null && v !== undefined && v !== '')
+      .map(String);
+    return messages.join(', ') || fallback;
+  }
+  return fallback;
+}
+
+function SectionTitle({ icon, color, children }: { icon: string; color: string; children: ReactNode }) {
+  return (
+    <Text fw={600} size="sm">
+      <FaIcon icon={icon} color={`var(--mantine-color-${color}-6)`} style={{ marginRight: 8 }} />
+      {children}
+    </Text>
+  );
+}
+
+const currencyData = CUSTOMER_CURRENCY_OPTIONS.map(({ value, label }) => ({ value, label }));
+
+export interface CustomerFormModalProps {
+  /** Without a customer the modal creates one. */
+  customer?: Customer | null;
+  onClose: () => void;
+  onSaved?: (customer: Customer) => void;
+}
+
+/**
+ * Port of the create modal in customerList.js and of customerEditModal.js.
+ * Mount it when it should open, so the form starts from `customer` each time.
+ */
+export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormModalProps) {
+  const editing = Boolean(customer);
+  const form = useForm<CustomerFormValues>({
+    initialValues: customerFormValues(customer),
+    validate: zod4Resolver(customerSchema),
+  });
+  const create = useCreateCustomer();
+  const patch = usePatchCustomer();
+  const submitting = create.isPending || patch.isPending;
+
+  const save = async (values: CustomerFormValues) => {
+    const data: CustomerInput = values;
+    try {
+      const saved = customer
+        ? await patch.mutateAsync({ id: customer.id, data })
+        : await create.mutateAsync(data);
+      if (!saved?.id) throw new Error(customer ? 'Müşteri güncellenemedi' : 'Müşteri oluşturulamadı');
+      notify.success(customer ? 'Müşteri başarıyla güncellendi' : 'Müşteri başarıyla oluşturuldu');
+      onSaved?.(saved);
+      onClose();
+    } catch (error) {
+      notify.error(
+        customerErrorMessage(
+          error,
+          customer ? 'Müşteri güncellenirken hata oluştu' : 'Müşteri oluşturulurken hata oluştu',
+        ),
+      );
+    }
+  };
+
+  const text = (
+    field: keyof CustomerFormValues,
+    label: string,
+    placeholder: string,
+    description: string,
+    extra: { required?: boolean; type?: string } = {},
+  ) => (
+    <TextInput
+      label={label}
+      placeholder={placeholder}
+      description={description}
+      withAsterisk={extra.required}
+      type={extra.type}
+      {...form.getInputProps(field)}
+    />
+  );
+
+  return (
+    <FormModal
+      opened
+      onClose={onClose}
+      title={editing ? 'Müşteri Düzenle' : 'Yeni Müşteri Oluştur'}
+      icon={editing ? 'fas fa-edit' : 'fas fa-plus-circle'}
+      size="lg"
+      submitting={submitting}
+      onSubmit={form.onSubmit(save)}
+    >
+      <Stack gap="md">
+        <SectionTitle icon="fas fa-info-circle" color="blue">
+          Temel Bilgiler
+        </SectionTitle>
+        <Grid gap="sm">
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('code', 'Müşteri Kodu', 'Müşteri kodunu girin', 'Benzersiz müşteri kodu', { required: true })}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('name', 'Firma Adı', 'Firma adını girin', 'Tam firma adı', { required: true })}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('short_name', 'Kısa Ad', 'Kısa gösterim adı', 'Kısa gösterim adı')}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            <Select
+              label="Para Birimi"
+              placeholder="Para birimi seçin..."
+              description="Varsayılan para birimi"
+              data={currencyData}
+              allowDeselect={false}
+              {...form.getInputProps('default_currency')}
+            />
+          </Grid.Col>
+        </Grid>
+
+        <SectionTitle icon="fas fa-address-book" color="green">
+          İletişim Bilgileri
+        </SectionTitle>
+        <Grid gap="sm">
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('contact_person', 'İletişim Kişisi', 'İletişim kişisi adı', 'Ana iletişim kişisi')}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('phone', 'Telefon', 'Telefon numarası', 'Telefon numarası')}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('email', 'E-posta', 'E-posta adresi', 'E-posta adresi', { type: 'email' })}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            <Textarea
+              label="Adres"
+              placeholder="Tam adres"
+              description="Tam adres"
+              rows={3}
+              {...form.getInputProps('address')}
+            />
+          </Grid.Col>
+        </Grid>
+
+        <SectionTitle icon="fas fa-file-invoice" color="cyan">
+          Vergi Bilgileri
+        </SectionTitle>
+        <Grid gap="sm">
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('tax_id', 'Vergi Numarası', 'Vergi kimlik numarası', 'Vergi kimlik numarası')}
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('tax_office', 'Vergi Dairesi', 'Vergi dairesi adı', 'Bağlı olduğu vergi dairesi')}
+          </Grid.Col>
+        </Grid>
+
+        <SectionTitle icon="fas fa-toggle-on" color="yellow">
+          Durum
+        </SectionTitle>
+        <Checkbox
+          label="Aktif"
+          description="Müşterinin aktif durumu"
+          {...form.getInputProps('is_active', { type: 'checkbox' })}
+        />
+        <Textarea
+          label="Notlar"
+          placeholder="İç notlar"
+          description="İç notlar"
+          rows={3}
+          {...form.getInputProps('notes')}
+        />
+      </Stack>
+    </FormModal>
+  );
+}

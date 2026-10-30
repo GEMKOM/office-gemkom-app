@@ -1,0 +1,76 @@
+/* GEMKOM İç Sistem, direction B "Kırmızı bant". The values mirror the design
+   system's tokens.json (claude.ai design system "GEMKOM İç Sistem"); change
+   them there and here together. */
+
+:root {
+  --gk-red-700: #8b0000;
+  --gk-red-800: #730000;
+  --gk-red-900: #5c0000;
+  --gk-red-100: #ffdede;
+  --gk-red-050: #fff0f0;
+  /* Brand red lifted for marks on graphite (4.1:1 on the rail, 3.5:1 on flyouts). */
+  --gk-red-on-dark: #e5484d;
+  --gk-rail: #1e2227;
+  --gk-rail-raised: #2a2f35;
+  --gk-rail-icon: #9aa3ad;
+  --gk-on-dark: #ffffff;
+  --gk-on-band-muted: rgba(255, 255, 255, 0.78);
+  --gk-page: #f4f5f7;
+  --gk-surface: #ffffff;
+  --gk-surface-subtle: #f8f9fb;
+  --gk-line: #e3e6ea;
+  --gk-line-strong: #8a929b;
+  --gk-ink: #1f2933;
+  --gk-ink-2: #4a525b;
+  --gk-muted: #6b7480;
+  --gk-danger: #c92a2a;
+
+  --gk-font-sans: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
+  --gk-font-mono: 'IBM Plex Mono', Consolas, ui-monospace, monospace;
+
+  --gk-radius-sm: 6px;
+  --gk-radius-md: 8px;
+  --gk-radius-lg: 14px;
+
+  --gk-shadow-card: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 16px rgba(16, 24, 40, 0.05);
+  --gk-shadow-card-hover: 0 10px 28px rgba(16, 24, 40, 0.12);
+  --gk-shadow-popover: 0 12px 32px rgba(16, 24, 40, 0.18);
+  --gk-shadow-band-button: 0 2px 8px rgba(0, 0, 0, 0.18);
+  --gk-focus-ring: 0 0 0 3px rgba(139, 0, 0, 0.25);
+
+  /* Side padding of page content; the band bleeds past it. */
+  --gk-page-pad: 24px;
+  /* How far the first block under the band rises into it. */
+  --gk-band-overlap: 36px;
+}
+
+@media (max-width: 48em) {
+  :root {
+    --gk-page-pad: 16px;
+  }
+}
+
+body {
+  background: var(--gk-page);
+  color: var(--gk-ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Status / category families: pill fills and icon tiles. */
+[data-family='green'] { --fam-bg: #e7f6ee; --fam-fg: #11633d; }
+[data-family='blue'] { --fam-bg: #e6effd; --fam-fg: #1a4fa0; }
+[data-family='yellow'] { --fam-bg: #fdf3d8; --fam-fg: #8a5a00; }
+[data-family='orange'] { --fam-bg: #ffeddc; --fam-fg: #9a3d0b; }
+[data-family='red'] { --fam-bg: #fde8e8; --fam-fg: #a31d1d; }
+[data-family='purple'] { --fam-bg: #efeafd; --fam-fg: #5530a8; }
+[data-family='grey'] { --fam-bg: #eef0f2; --fam-fg: #4a525b; }
+[data-family='brand'] { --fam-bg: #fff0f0; --fam-fg: #8b0000; }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0s !important;
+    animation-duration: 0s !important;
+  }
+}
