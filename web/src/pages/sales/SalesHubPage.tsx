@@ -3,7 +3,8 @@ import { useQueries, useQuery } from '@tanstack/react-query';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { useState } from 'react';
 import { customersQueryOptions } from '@/api';
-import { offerCountQueryOptions, offersQueryOptions, type OffersParams } from '@/api/sales/offers';
+import { offerCountQueryOptions, offersQueryOptions, type Offer, type OffersParams } from '@/api/sales/offers';
+import { useAuth } from '@/auth/AuthProvider';
 import { formatNumber } from '@/lib/format';
 import { AppLink } from '@/shell/AppLink';
 import { FaIcon, MenuCards, PendingValue, type MenuCard, type PageFigure } from '@/ui';
@@ -21,14 +22,16 @@ const STAGES: (Omit<PipelineStage, 'count'> & { filter: Pick<OffersParams, 'stat
 ];
 const PENDING = STAGES.findIndex((stage) => stage.key === 'pending');
 const WON: Pick<OffersParams, 'status__in'> = { status__in: 'won,converted' };
-const RECENT: OffersParams = { ordering: '-created_at', page_size: 6 };
+const RECENT_COUNT = 6;
 
 function figure(value: number | undefined, failed: boolean) {
   return failed ? '-' : value === undefined ? undefined : formatNumber(value);
 }
 
+const byNewest = (a: Offer, b: Offer) => (b.created_at ?? '').localeCompare(a.created_at ?? '');
+
 /** Every request starts at once; nothing waits on anything else. */
-function useSalesFigures(canCustomers: boolean, canOffers: boolean) {
+function useSalesFigures(canCustomers: boolean, canOffers: boolean, userId: number) {
   const customers = useQuery({
     ...customersQueryOptions({ is_active: true, page_size: 1 }),
     select: (page) => page.count,
@@ -40,7 +43,13 @@ function useSalesFigures(canCustomers: boolean, canOffers: boolean) {
       enabled: canOffers,
     })),
   });
-  const recent = useQuery({ ...offersQueryOptions(RECENT), enabled: canOffers });
+  // The user's own offers. The backend lists offers awaiting the user's
+  // approval first whatever the ordering, so take a few extra and sort here.
+  const recent = useQuery({
+    ...offersQueryOptions({ created_by: userId, ordering: '-created_at', page_size: RECENT_COUNT * 2 }),
+    select: (page) => [...page.results].sort(byNewest).slice(0, RECENT_COUNT),
+    enabled: canOffers,
+  });
 
   const stageCounts = counts.slice(0, STAGES.length);
   const stages: PipelineStage[] = STAGES.map(({ key, label, color }, i) => ({
@@ -67,7 +76,8 @@ export function SalesHubPage() {
   // Figures follow the cards: nothing is fetched for a page the user cannot open.
   const canCustomers = hasRouteAccess('/sales/customers');
   const canOffers = hasRouteAccess('/sales/offers');
-  const data = useSalesFigures(canCustomers, canOffers);
+  const { user } = useAuth();
+  const data = useSalesFigures(canCustomers, canOffers, user.id);
   const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   // Ported from sales/sales.js. Cards the user cannot open hide themselves.
@@ -148,7 +158,7 @@ export function SalesHubPage() {
         {canOffers ? (
           <div className={css.panels}>
             <div className={css.cell}>
-              <RecentOffers query={data.recent} />
+              <RecentOffers query={data.recent} userId={user.id} />
             </div>
             <div className={css.cell}>
               <OfferPipeline stages={data.stages} won={data.won} />

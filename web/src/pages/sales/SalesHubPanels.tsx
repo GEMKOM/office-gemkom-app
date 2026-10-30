@@ -1,8 +1,7 @@
 import { Skeleton } from '@mantine/core';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { Paginated } from '@/api';
 import { offerStatusFamily, offerStatusLabel, type Offer } from '@/api/sales/offers';
-import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
+import { formatDate, formatNumber } from '@/lib/format';
 import { AppLink } from '@/shell/AppLink';
 import { FaIcon, Panel, PendingValue, StatusBadge, type StatusFamily } from '@/ui';
 import css from './SalesHubPage.module.css';
@@ -14,14 +13,15 @@ function offerLink(offer: Offer) {
   return `${OFFERS_PAGE}?offer_no=${encodeURIComponent(offer.offer_no)}`;
 }
 
-const ALL_OFFERS = (
-  <AppLink to={OFFERS_PAGE} className={css.more}>
-    Tümü <FaIcon icon="fas fa-arrow-right" />
-  </AppLink>
-);
+/** The list sends no currency, so the amount goes without a symbol, as on the offers page. */
+function offerPrice(offer: Offer) {
+  const amount = Number(offer.total_price);
+  return Number.isFinite(amount) && amount !== 0 ? formatNumber(amount, 2) : '-';
+}
 
-export function RecentOffers({ query }: { query: UseQueryResult<Paginated<Offer>> }) {
-  const offers = query.data?.results ?? [];
+/** The signed-in user's latest offers; "Tümü" opens the offers page filtered the same way. */
+export function RecentOffers({ query, userId }: { query: UseQueryResult<Offer[]>; userId: number }) {
+  const offers = query.data ?? [];
   let body;
   if (query.isPending) {
     body = (
@@ -41,7 +41,7 @@ export function RecentOffers({ query }: { query: UseQueryResult<Paginated<Offer>
       </p>
     );
   } else if (offers.length === 0) {
-    body = <p className={css.note}>Henüz teklif yok.</p>;
+    body = <p className={css.note}>Henüz oluşturduğunuz bir teklif yok.</p>;
   } else {
     body = (
       <ul className={css.offers}>
@@ -57,7 +57,7 @@ export function RecentOffers({ query }: { query: UseQueryResult<Paginated<Offer>
                 <StatusBadge color={offerStatusFamily(offer.status)}>{offerStatusLabel(offer)}</StatusBadge>
               </span>
               <span className={css.offerPrice}>
-                {offer.total_price ? formatCurrency(offer.total_price, offer.currency || 'TRY') : '-'}
+                {offerPrice(offer)}
               </span>
               <span className={css.offerDate}>
                 {offer.created_at ? formatDate(offer.created_at, { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
@@ -69,7 +69,16 @@ export function RecentOffers({ query }: { query: UseQueryResult<Paginated<Offer>
     );
   }
   return (
-    <Panel title="Son Teklifler" icon="fas fa-clock-rotate-left" actions={ALL_OFFERS} padded={false}>
+    <Panel
+      title="Son Tekliflerim"
+      icon="fas fa-clock-rotate-left"
+      actions={
+        <AppLink to={`${OFFERS_PAGE}?created_by=${userId}`} className={css.more}>
+          Tümü <FaIcon icon="fas fa-arrow-right" />
+        </AppLink>
+      }
+      padded={false}
+    >
       {body}
     </Panel>
   );

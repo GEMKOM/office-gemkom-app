@@ -25,8 +25,9 @@ export interface Offer {
   status: OfferStatus | string;
   status_display?: string;
   customer_name?: string;
+  /** Decimal string. The list sends no currency (it lives on price revisions). */
   total_price?: string | number | null;
-  currency?: string;
+  created_by_name?: string;
   offer_expiry_date?: string | null;
   created_at?: string;
   [key: string]: unknown;
@@ -74,6 +75,12 @@ export type OffersParams = {
   /** Comma-separated, e.g. "consultation,pricing". */
   status__in?: string;
   customer?: number | string;
+  /** User id: that user's own offers. */
+  created_by?: number | string;
+  /**
+   * The backend always puts offers awaiting the current user's approval
+   * first, then applies this.
+   */
   ordering?: string;
   page?: number;
   page_size?: number;
