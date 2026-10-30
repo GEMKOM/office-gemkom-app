@@ -2,48 +2,18 @@ import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { getCustomerById, patchCustomer, CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
 import { showNotification } from '../../components/notification/notification.js';
 
+// Legacy customer edit modal, shared by the legacy pages that still need it (the
+// offers page). The customers page itself is React now (web/src/pages/sales/customers).
+
 let editCustomerModal = null;
 let editingCustomerId = null;
 let onSuccessCallback = null;
-let urlSyncBound = false;
+let hiddenResetBound = false;
 
-function isCustomersPage() {
-    return window.location.pathname.replace(/\/+$/, '').endsWith('/sales/customers');
-}
-
-export function buildCustomerEditUrl(customerId) {
-    const url = new URL(window.location.origin + '/sales/customers/');
-    url.searchParams.set('customer_id', String(customerId));
-    return url.toString();
-}
-
-function setCustomerEditUrl(customerId) {
-    if (!isCustomersPage()) return;
-    try {
-        const url = new URL(window.location.href);
-        url.searchParams.set('customer_id', String(customerId));
-        window.history.replaceState({}, '', url);
-    } catch (e) {
-        console.error('Failed to set customer edit URL:', e);
-    }
-}
-
-function clearCustomerEditUrl() {
-    if (!isCustomersPage()) return;
-    try {
-        const url = new URL(window.location.href);
-        url.searchParams.delete('customer_id');
-        window.history.replaceState({}, '', url);
-    } catch (e) {
-        console.error('Failed to clear customer edit URL:', e);
-    }
-}
-
-function bindCustomerEditUrlSync(modal) {
-    if (!modal?.modal || urlSyncBound) return;
-    urlSyncBound = true;
+function bindResetOnHidden(modal) {
+    if (!modal?.modal || hiddenResetBound) return;
+    hiddenResetBound = true;
     modal.modal.addEventListener('hidden.bs.modal', () => {
-        clearCustomerEditUrl();
         editingCustomerId = null;
     });
 }
@@ -246,7 +216,6 @@ async function saveCustomerEdit(formData) {
         }
 
         editCustomerModal.hide();
-        clearCustomerEditUrl();
         editingCustomerId = null;
         showNotification('Müşteri başarıyla güncellendi', 'success');
 
@@ -270,7 +239,7 @@ export function initCustomerEditModal(containerId, options = {}) {
     editCustomerModal.onSaveCallback(async (formData) => {
         await saveCustomerEdit(formData);
     });
-    bindCustomerEditUrlSync(editCustomerModal);
+    bindResetOnHidden(editCustomerModal);
     return editCustomerModal;
 }
 
@@ -294,7 +263,6 @@ export async function openCustomerEditModal(customerId) {
         editingCustomerId = customerId;
         populateCustomerEditFields(editCustomerModal, customer);
         editCustomerModal.render();
-        setCustomerEditUrl(customerId);
         editCustomerModal.show();
     } catch (error) {
         console.error('Error loading customer for edit:', error);
