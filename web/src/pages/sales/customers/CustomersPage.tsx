@@ -1,4 +1,4 @@
-import { Button } from '@mantine/core';
+import { Button, Group, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -151,9 +151,20 @@ export function CustomersPage() {
   const deleteCustomer = async (row: Customer) => {
     const ok = await confirm({
       title: 'Müşteri Silme Onayı',
+      subtitle: 'Bu işlem geri alınamaz',
+      icon: 'fas fa-trash',
       message: 'Bu müşteriyi silmek istediğinize emin misiniz?',
-      details: row.name || row.code,
-      description: 'Bu işlem geri alınamaz ve müşteri kalıcı olarak silinecektir.',
+      details: (
+        <Group gap="sm" wrap="nowrap">
+          {row.code ? (
+            <Text ff="monospace" size="xs" c="dimmed">
+              {row.code}
+            </Text>
+          ) : null}
+          <Text size="sm">{row.name || row.code}</Text>
+        </Group>
+      ),
+      description: 'Müşteri kalıcı olarak silinecektir.',
       confirmLabel: 'Evet, Sil',
       cancelLabel: 'İptal',
       danger: true,

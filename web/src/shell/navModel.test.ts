@@ -1,5 +1,5 @@
 import type { NavTree } from '@legacy/navigationStructure.js';
-import { findTrail, flattenMenu, isPathActive, isUnbuiltGeneralPage } from './navModel';
+import { findTrail, flattenMenu, isPathActive, isUnbuiltGeneralPage, withoutPaths } from './navModel';
 
 const leaf = (label: string) => ({ label, icon: 'fas fa-circle', children: {} });
 
@@ -19,6 +19,13 @@ const tree: NavTree = {
 };
 
 describe('navModel', () => {
+  it('drops removed paths, and a parent left without pages', () => {
+    const pruned = withoutPaths(tree, ['/isg/issues', '/general/overtime/pending']);
+    expect(pruned).toEqual({});
+    const kept = withoutPaths(tree, ['/isg/issues']);
+    expect(Object.keys(kept['/general']!.children)).toEqual(['/general/overtime']);
+  });
+
   it('marks a parent active for descendants that do not share its prefix', () => {
     expect(isPathActive('/general', tree['/general']!, '/isg/issues/')).toBe(true);
     expect(isPathActive('/general', tree['/general']!, '/sales')).toBe(false);

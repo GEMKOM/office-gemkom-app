@@ -1,12 +1,16 @@
-import { Alert, Box, Button, Group, Modal, Text, type MantineSize } from '@mantine/core';
+import { Alert, Button, Modal, type MantineSize } from '@mantine/core';
 import type { FormEvent, ReactNode } from 'react';
 import { FaIcon } from './FaIcon';
+import { ModalBody, ModalFooter, ModalHeader, modalClassNames } from './ModalParts';
 import { errorMessage } from './notify';
 
 export interface FormModalProps {
   opened: boolean;
   onClose: () => void;
   title: ReactNode;
+  /** One line under the title, e.g. the record being edited. */
+  subtitle?: ReactNode;
+  /** Font Awesome classes, shown in the header's tile. */
   icon?: string;
   /** Default 'lg'. */
   size?: MantineSize | number | string;
@@ -44,6 +48,7 @@ export function FormModal({
   opened,
   onClose,
   title,
+  subtitle,
   icon,
   size = 'lg',
   onSubmit,
@@ -66,13 +71,10 @@ export function FormModal({
       size={size}
       closeOnClickOutside={!submitting}
       closeOnEscape={!submitting}
-      title={
-        <Text fw={600}>
-          {icon ? <FaIcon icon={icon} style={{ marginRight: 8 }} /> : null}
-          {title}
-        </Text>
-      }
+      withCloseButton={false}
+      classNames={modalClassNames}
     >
+      <ModalHeader title={title} subtitle={subtitle} icon={icon} />
       <form
         noValidate
         onSubmit={(event) => {
@@ -80,18 +82,20 @@ export function FormModal({
           if (!submitting) onSubmit(event);
         }}
       >
-        <Box>{children}</Box>
-        {hasError ? (
-          <Alert
-            color="red"
-            variant="light"
-            mt="md"
-            icon={<FaIcon icon="fas fa-exclamation-circle" />}
-          >
-            {typeof error === 'string' ? error : errorMessage(error, 'Kaydedilemedi')}
-          </Alert>
-        ) : null}
-        <Group justify="flex-end" mt="md" gap="xs">
+        <ModalBody>
+          {children}
+          {hasError ? (
+            <Alert
+              color="red"
+              variant="light"
+              mt="md"
+              icon={<FaIcon icon="fas fa-exclamation-circle" />}
+            >
+              {typeof error === 'string' ? error : errorMessage(error, 'Kaydedilemedi')}
+            </Alert>
+          ) : null}
+        </ModalBody>
+        <ModalFooter>
           {footerActions}
           <Button
             variant="default"
@@ -109,7 +113,7 @@ export function FormModal({
           >
             {submitLabel}
           </Button>
-        </Group>
+        </ModalFooter>
       </form>
     </Modal>
   );

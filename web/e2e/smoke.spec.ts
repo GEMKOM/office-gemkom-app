@@ -91,14 +91,14 @@ test.describe('navigation', () => {
     await page.goto(CUSTOMERS);
     await expectCustomersTable(page);
 
-    // React rail: Genel -> Makineler is a legacy page, so a full load.
+    // React rail: Genel's flyout -> Makineler is a legacy page, so a full load.
     await page.evaluate(() => {
       window.__spaMarker = 'spa';
     });
     await page
       .getByRole('navigation', { name: 'Ana menü' })
       .getByRole('button', { name: 'Genel' })
-      .click();
+      .hover();
     await page.getByRole('menuitem', { name: 'Makineler' }).click();
 
     await expect(page).toHaveURL(/\/general\/machines\/$/);
@@ -271,6 +271,86 @@ test.describe('legacy pages', () => {
     await expect(editModal.locator('.modal-title-text')).toHaveText('Müşteri Düzenle');
     await expect(editModal.locator('input[name="code"]')).toHaveValue(customer.code);
     expect(backend.callsTo(`/projects/customers/${customer.id}/`, 'GET')).toHaveLength(1);
+    consoleErrors.expectNone();
+  });
+});
+
+test.describe('rail', () => {
+  test('sections open their hubs, collapsed or expanded, and the choice is remembered', async ({
+    page,
+    consoleErrors,
+  }) => {
+    const session = await seedSession(page, { admin: true });
+    await mockBackend(page, {}, { session });
+    await page.goto(CUSTOMERS);
+    const nav = page.getByRole('navigation', { name: 'Ana menü' });
+
+    // Collapsed: hovering a section shows its pages; clicking opens its hub.
+    const sales = nav.getByRole('button', { name: 'Satış' });
+    await sales.hover();
+    await expect(page.getByRole('menuitem', { name: 'Müşteriler' })).toBeVisible();
+    // Personal pages live in the user menu, not under Genel.
+    await nav.getByRole('button', { name: 'Genel' }).hover();
+    await expect(page.getByRole('menuitem', { name: 'Makineler' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Tartışmalarım' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'İzin Taleplerim' })).toHaveCount(0);
+    await sales.click();
+    await expect(page).toHaveURL(/\/sales\/?$/);
+    await expect(sales).toHaveAttribute('aria-current', 'page');
+
+    await nav.getByRole('button', { name: 'Menüyü Genişlet' }).click();
+    await page.reload();
+    await expect(nav.getByRole('button', { name: 'Menüyü Daralt' })).toBeVisible();
+    // Expanded: the top level only, as rows that open the hubs.
+    await expect(nav.getByRole('button', { name: 'Müşteriler' })).toHaveCount(0);
+    await nav.getByRole('button', { name: 'E2E Admin' }).click();
+    await expect(page.getByRole('menuitem', { name: 'Tartışmalarım' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'İzin Taleplerim' })).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    await nav.getByRole('button', { name: 'Menüyü Daralt' }).click();
+    await expect(nav.getByRole('button', { name: 'Menüyü Genişlet' })).toBeVisible();
+    consoleErrors.expectNone();
+  });
+
+  test('the bell lists unread first and marks a notification read', async ({ page, consoleErrors }) => {
+    const session = await seedSession(page, { admin: true });
+    let unread = 1;
+    const backend = await mockBackend(
+      page,
+      {
+        'GET /notifications/unread_count/': () => ({ json: { count: unread } }),
+        'GET /notifications/': {
+          json: paginated([
+            { id: 71, title: 'Okunmuş bildirim', is_read: true, created_at: '2026-01-02T10:00:00Z', link: null },
+            { id: 72, title: 'Yeni bildirim', body: 'Onay bekliyor', category: 'sales', is_read: false, created_at: '2026-01-01T10:00:00Z', link: null },
+          ]),
+        },
+        'POST /notifications/72/mark_read/': () => {
+          unread = 0;
+          return { json: {} };
+        },
+      },
+      { session },
+    );
+    await page.goto(CUSTOMERS);
+    const nav = page.getByRole('navigation', { name: 'Ana menü' });
+    const bell = nav.getByRole('button', { name: 'Bildirimler, 1 okunmamış' });
+    await bell.click();
+
+    const panel = page.getByRole('dialog');
+    const rows = panel.getByRole('listitem');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.first()).toContainText('Yeni bildirim');
+    await expect(panel.getByRole('link', { name: 'Tümünü Gör' })).toHaveAttribute('href', '/general/notifications');
+
+    await rows.first().getByRole('button').click();
+    await expect.poll(() => backend.callsTo('/notifications/72/mark_read/', 'POST').length).toBe(1);
+    await expect(panel.getByRole('button', { name: 'Tümünü Okundu Yap' })).toBeHidden();
+
+    await page.keyboard.press('Escape');
+    await expect(panel).toBeHidden();
+    await expect(nav.getByRole('button', { name: 'Bildirimler', exact: true })).toBeFocused();
     consoleErrors.expectNone();
   });
 });
