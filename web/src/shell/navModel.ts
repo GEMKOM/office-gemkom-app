@@ -15,6 +15,27 @@ const BUILT_GENERAL_PAGES = [
   '/general/discussions',
 ];
 
+// Personal pages reached from the user menu instead of the section menus.
+export const USER_MENU_PATHS = ['/general/discussions', '/general/vacation/requests'];
+
+/**
+ * The tree without these paths. A parent whose pages were all removed goes
+ * too, rather than turning into a link of its own.
+ */
+export function withoutPaths(tree: NavTree, paths: readonly string[]): NavTree {
+  const out: NavTree = {};
+  for (const [path, item] of Object.entries(tree)) {
+    if (paths.includes(path)) continue;
+    if (!hasChildren(item)) {
+      out[path] = item;
+      continue;
+    }
+    const children = withoutPaths(item.children, paths);
+    if (Object.keys(children).length > 0) out[path] = { ...item, children };
+  }
+  return out;
+}
+
 export function isUnbuiltGeneralPage(path: string): boolean {
   return path.startsWith('/general/') && !BUILT_GENERAL_PAGES.some((page) => path.startsWith(page));
 }

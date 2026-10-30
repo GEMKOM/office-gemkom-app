@@ -1,3 +1,4 @@
+import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { logout, stopImpersonation } from '@legacy/authService.js';
 import { Menu, UnstyledButton, type FloatingPosition } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
@@ -37,19 +38,39 @@ export function ImpersonationBadge() {
   );
 }
 
-export function UserMenu({ position = 'bottom-end' }: { position?: FloatingPosition }) {
+/** The avatar and its menu; `row` is the expanded rail's version with the name next to it. */
+export function UserMenu({
+  position = 'bottom-end',
+  variant = 'icon',
+}: {
+  position?: FloatingPosition;
+  variant?: 'icon' | 'row';
+}) {
   const { user, isImpersonating } = useAuth();
   const navigate = useAppNavigate();
   const [profileOpened, profile] = useDisclosure(false);
   const department = user.position?.department_code || user.department_code || 'Atanmamış';
+  const name = displayName(user) || user.username;
+  const avatar = <span className={classes.avatar}>{initials(name || '?')}</span>;
 
   return (
     <>
-      <Menu position={position} width={240} offset={14} withinPortal classNames={railMenuClassNames}>
+      <Menu position={position} width={240} offset={variant === 'row' ? 10 : 14} withinPortal classNames={railMenuClassNames}>
         <Menu.Target>
-          <UnstyledButton className={classes.railItem} aria-label={displayName(user)} title={displayName(user)}>
-            <span className={classes.avatar}>{initials(displayName(user) || user.username || '?')}</span>
-          </UnstyledButton>
+          {variant === 'row' ? (
+            <UnstyledButton className={classes.railRow} data-user aria-label={name}>
+              {avatar}
+              <span className={classes.userText}>
+                <span className={classes.railRowLabel}>{name}</span>
+                <span className={classes.userSub}>{department}</span>
+              </span>
+              <FaIcon icon="fas fa-ellipsis-vertical" className={classes.rowEnd} />
+            </UnstyledButton>
+          ) : (
+            <UnstyledButton className={classes.railItem} aria-label={name} title={name}>
+              {avatar}
+            </UnstyledButton>
+          )}
         </Menu.Target>
         <Menu.Dropdown>
           <Menu.Label>Kullanıcı Bilgileri</Menu.Label>
@@ -59,11 +80,16 @@ export function UserMenu({ position = 'bottom-end' }: { position?: FloatingPosit
           <Menu.Item leftSection={<FaIcon icon="fas fa-comments" />} onClick={() => navigate('/general/discussions')}>
             Tartışmalarım
           </Menu.Item>
+          {hasRouteAccess('/general/vacation/requests') && (
+            <Menu.Item leftSection={<FaIcon icon="fas fa-calendar-plus" />} onClick={() => navigate('/general/vacation/requests')}>
+              İzin Taleplerim
+            </Menu.Item>
+          )}
           <Menu.Label>Departman: {department}</Menu.Label>
           <Menu.Divider />
           {isImpersonating && (
             <Menu.Item
-              color="yellow"
+              data-tone="warning"
               leftSection={<FaIcon icon="fas fa-user-slash" />}
               onClick={() =>
                 stopImpersonation().catch((error: Error) =>
@@ -74,7 +100,7 @@ export function UserMenu({ position = 'bottom-end' }: { position?: FloatingPosit
               Impersonation&apos;ı Bitir
             </Menu.Item>
           )}
-          <Menu.Item color="red" leftSection={<FaIcon icon="fas fa-sign-out-alt" />} onClick={() => logout()}>
+          <Menu.Item data-tone="danger" leftSection={<FaIcon icon="fas fa-sign-out-alt" />} onClick={() => logout()}>
             Çıkış Yap
           </Menu.Item>
         </Menu.Dropdown>
