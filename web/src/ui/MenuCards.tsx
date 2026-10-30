@@ -11,7 +11,7 @@ export interface MenuFeature {
   label: ReactNode;
   /** Font Awesome classes. */
   icon?: string;
-  /** CSS colour of the icon. Default the GEMKOM red. */
+  /** CSS colour of the icon. Default the card's own colour. */
   iconColor?: string;
   link?: string;
 }
@@ -37,7 +37,7 @@ export interface MenuCard {
 export interface MenuCardsProps {
   title?: ReactNode;
   subtitle?: ReactNode;
-  /** Key figures for the module, shown large on the band. */
+  /** Key figures for the module, as tiles on the band; give each an icon and a link. */
   stats?: PageFigure[];
   /** Quick actions on the band (white primary, ghost default). */
   actions?: ReactNode;
@@ -107,45 +107,46 @@ function isFromLink(event: MouseEvent) {
 function Card({ card, compact }: { card: MenuCard; compact: boolean }) {
   const navigate = useAppNavigate();
   const { link, stat, badge } = card;
-  const summary = stat ? (
-    <span className={classes.hubStat}>
-      <b>{stat.value === undefined ? <PendingValue /> : stat.value}</b> {stat.label}
-    </span>
-  ) : compact && card.description ? (
-    <span className={classes.hubStat}>{card.description}</span>
-  ) : null;
+  // A compact card shows its figure, or its description when it has none.
+  const showText = Boolean(card.description) && (!compact || !stat);
   return (
     <article
       className={classes.hubCard}
+      // The area's family colours the border, the figure and the corner icon.
+      data-family={tileFamily(card.iconColor)}
       data-link={link ? true : undefined}
       data-compact={compact || undefined}
       // The whole card is clickable like legacy; the title link keeps
       // middle-click / new tab working. Feature links handle themselves.
       onClick={link ? (event) => !isFromLink(event) && navigate(link) : undefined}
     >
+      <FaIcon icon={card.icon} className={classes.hubWatermark} />
       {link ? <FaIcon icon="fas fa-arrow-right" className={classes.hubArrow} /> : null}
-      <div className={classes.hubHead}>
-        <span className={classes.tile} data-family={tileFamily(card.iconColor)} style={{ width: 44, height: 44, fontSize: 18 }}>
-          <FaIcon icon={card.icon} />
-        </span>
-        <div className={classes.hubHeadText}>
-          <h3 className={classes.hubTitle}>{link ? <AppLink to={link}>{card.title}</AppLink> : card.title}</h3>
-          {summary || badge ? (
-            <div className={classes.hubMeta}>
-              {summary}
-              {badge ? <StatusBadge color={badge.color}>{badge.label}</StatusBadge> : null}
-            </div>
+      <h3 className={classes.hubTitle}>
+        <FaIcon icon={card.icon} className={classes.hubTitleIcon} />
+        {link ? <AppLink to={link}>{card.title}</AppLink> : card.title}
+      </h3>
+      {showText ? <p className={classes.hubText}>{card.description}</p> : null}
+      {stat || badge ? (
+        <div className={classes.hubFigure}>
+          {stat ? (
+            <>
+              <span className={classes.hubFigureValue}>
+                {stat.value === undefined ? <PendingValue /> : stat.value}
+              </span>{' '}
+              <span className={classes.hubFigureLabel}>{stat.label}</span>
+            </>
           ) : null}
+          {badge ? <StatusBadge color={badge.color}>{badge.label}</StatusBadge> : null}
         </div>
-      </div>
-      {!compact && card.description ? <p className={classes.hubText}>{card.description}</p> : null}
+      ) : null}
       {card.features && card.features.length > 0 ? (
         <ul className={classes.hubLinks}>
           {card.features.map((feature, index) => {
             const content = (
               <>
                 {feature.icon ? (
-                  <FaIcon icon={feature.icon} color={feature.iconColor ?? 'var(--gk-red-700)'} style={{ width: 16 }} />
+                  <FaIcon icon={feature.icon} color={feature.iconColor ?? 'var(--fam-fg)'} style={{ width: 16 }} />
                 ) : null}
                 {feature.label}
                 {feature.link ? <i className={`fas fa-chevron-right ${classes.hubLinkChevron}`} aria-hidden /> : null}
@@ -180,12 +181,11 @@ export function MenuCards({ title, subtitle, stats, actions, compact = false, ca
   return (
     <>
       {title || subtitle || stats?.length || actions ? (
-        <PageHeader title={title ?? ''} subtitle={subtitle} stats={stats} actions={actions} />
+        <PageHeader title={title ?? ''} subtitle={subtitle} stats={stats} figureStyle="tiles" actions={actions} />
       ) : null}
       <div
         className={classes.hubGrid}
-        data-compact={compact || undefined}
-        style={single ? { maxWidth: 520 } : undefined}
+        style={single ? { maxWidth: 520, gridTemplateColumns: 'minmax(0, 1fr)' } : undefined}
       >
         {visible.map((card, index) => (
           <Card key={card.link ?? index} card={card} compact={compact} />

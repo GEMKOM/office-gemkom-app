@@ -1,24 +1,42 @@
-import { Button } from '@mantine/core';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { useState } from 'react';
 import { customersQueryOptions } from '@/api';
-import { offerCountQueryOptions, offersQueryOptions, type Offer, type OffersParams } from '@/api/sales/offers';
+import {
+  offerCountQueryOptions,
+  offersQueryOptions,
+  type Offer,
+  type OffersParams,
+} from '@/api/sales/offers';
 import { useAuth } from '@/auth/AuthProvider';
 import { formatNumber } from '@/lib/format';
-import { AppLink } from '@/shell/AppLink';
-import { FaIcon, MenuCards, PendingValue, type MenuCard, type PageFigure } from '@/ui';
-import { CustomerFormModal } from './customers/CustomerFormModal';
+import { MenuCards, PendingValue, type MenuCard, type PageFigure } from '@/ui';
 import { OfferPipeline, RecentOffers, type PipelineStage } from './SalesHubPanels';
 import css from './SalesHubPage.module.css';
 
 // Open offers, stage by stage. Won and converted are counted apart; lost and
 // cancelled are left out.
-const STAGES: (Omit<PipelineStage, 'count'> & { filter: Pick<OffersParams, 'status' | 'status__in'> })[] = [
+const STAGES: (Omit<PipelineStage, 'count'> & {
+  filter: Pick<OffersParams, 'status' | 'status__in'>;
+})[] = [
   { key: 'draft', label: 'Taslak', color: 'grey', filter: { status: 'draft' } },
-  { key: 'preparing', label: 'Danışma / Fiyatlandırma', color: 'blue', filter: { status__in: 'consultation,pricing' } },
-  { key: 'pending', label: 'Onay Bekliyor', color: 'yellow', filter: { status: 'pending_approval' } },
-  { key: 'customer', label: 'Onaylandı / Sunuldu', color: 'purple', filter: { status__in: 'approved,submitted_customer' } },
+  {
+    key: 'preparing',
+    label: 'Danışma / Fiyatlandırma',
+    color: 'blue',
+    filter: { status__in: 'consultation,pricing' },
+  },
+  {
+    key: 'pending',
+    label: 'Onay Bekliyor',
+    color: 'yellow',
+    filter: { status: 'pending_approval' },
+  },
+  {
+    key: 'customer',
+    label: 'Onaylandı / Sunuldu',
+    color: 'purple',
+    filter: { status__in: 'approved,submitted_customer' },
+  },
 ];
 const PENDING = STAGES.findIndex((stage) => stage.key === 'pending');
 const WON: Pick<OffersParams, 'status__in'> = { status__in: 'won,converted' };
@@ -46,7 +64,11 @@ function useSalesFigures(canCustomers: boolean, canOffers: boolean, userId: numb
   // The user's own offers. The backend lists offers awaiting the user's
   // approval first whatever the ordering, so take a few extra and sort here.
   const recent = useQuery({
-    ...offersQueryOptions({ created_by: userId, ordering: '-created_at', page_size: RECENT_COUNT * 2 }),
+    ...offersQueryOptions({
+      created_by: userId,
+      ordering: '-created_at',
+      page_size: RECENT_COUNT * 2,
+    }),
     select: (page) => [...page.results].sort(byNewest).slice(0, RECENT_COUNT),
     enabled: canOffers,
   });
@@ -64,7 +86,10 @@ function useSalesFigures(canCustomers: boolean, canOffers: boolean, userId: numb
 
   return {
     activeCustomers: figure(customers.data, customers.isError),
-    openOffers: figure(open, stageCounts.some((q) => q.isError)),
+    openOffers: figure(
+      open,
+      stageCounts.some((q) => q.isError),
+    ),
     pendingOffers: figure(stages[PENDING]!.count, stageCounts[PENDING]!.isError),
     won: counts[STAGES.length]!.data,
     stages,
@@ -78,7 +103,6 @@ export function SalesHubPage() {
   const canOffers = hasRouteAccess('/sales/offers');
   const { user } = useAuth();
   const data = useSalesFigures(canCustomers, canOffers, user.id);
-  const [creatingCustomer, setCreatingCustomer] = useState(false);
 
   // Ported from sales/sales.js. Cards the user cannot open hide themselves.
   const cards: MenuCard[] = [
@@ -109,64 +133,62 @@ export function SalesHubPage() {
       title: 'Ürün Kataloğu',
       description: 'Teklif şablonları ve ürün ağaçları',
       icon: 'fas fa-book',
-      iconColor: 'info',
+      iconColor: 'purple',
       link: '/sales/catalog',
     },
   ];
 
+  // Each figure opens the list behind it.
   const stats: PageFigure[] = [
-    ...(canCustomers ? [{ id: 'active-customers', label: 'Aktif Müşteri', value: data.activeCustomers }] : []),
+    ...(canCustomers
+      ? [
+          {
+            id: 'active-customers',
+            label: 'Aktif Müşteri',
+            value: data.activeCustomers,
+            icon: 'fas fa-users',
+            link: '/sales/customers',
+          },
+        ]
+      : []),
     ...(canOffers
       ? [
-          { id: 'open-offers', label: 'Açık Teklif', value: data.openOffers },
-          { id: 'pending-offers', label: 'Onay Bekleyen', value: data.pendingOffers },
+          {
+            id: 'open-offers',
+            label: 'Açık Teklif',
+            value: data.openOffers,
+            icon: 'fas fa-file-invoice-dollar',
+            link: '/sales/offers/',
+          },
+          {
+            id: 'pending-offers',
+            label: 'Onay Bekleyen',
+            value: data.pendingOffers,
+            icon: 'fas fa-hourglass-half',
+            link: '/sales/offers/',
+          },
         ]
       : []),
   ].map((f) => ({ ...f, value: f.value ?? <PendingValue /> }));
 
-  const actions =
-    canCustomers || canOffers ? (
-      <>
-        {canOffers ? (
-          <Button
-            variant="default"
-            component={AppLink}
-            to="/sales/offers/"
-            leftSection={<FaIcon icon="fas fa-list" />}
-          >
-            Teklif Listesi
-          </Button>
-        ) : null}
-        {canCustomers ? (
-          <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreatingCustomer(true)}>
-            Yeni Müşteri
-          </Button>
-        ) : null}
-      </>
-    ) : undefined;
-
   return (
-    <>
-      <MenuCards
-        title="Satış Modülü"
-        subtitle="Müşteri yönetimi, teklif oluşturma ve satış süreçlerinizi yönetin"
-        stats={stats}
-        actions={actions}
-        compact={canOffers}
-        cards={cards}
-      >
-        {canOffers ? (
-          <div className={css.panels}>
-            <div className={css.cell}>
-              <RecentOffers query={data.recent} userId={user.id} />
-            </div>
-            <div className={css.cell}>
-              <OfferPipeline stages={data.stages} won={data.won} />
-            </div>
+    <MenuCards
+      title="Satış Modülü"
+      subtitle="Müşteri yönetimi, teklif oluşturma ve satış süreçlerinizi yönetin"
+      stats={stats}
+      compact={canOffers}
+      cards={cards}
+    >
+      {canOffers ? (
+        <div className={css.panels}>
+          <div className={css.cell}>
+            <RecentOffers query={data.recent} userId={user.id} />
           </div>
-        ) : null}
-      </MenuCards>
-      {creatingCustomer ? <CustomerFormModal onClose={() => setCreatingCustomer(false)} /> : null}
-    </>
+          <div className={css.cell}>
+            <OfferPipeline stages={data.stages} won={data.won} />
+          </div>
+        </div>
+      ) : null}
+    </MenuCards>
   );
 }

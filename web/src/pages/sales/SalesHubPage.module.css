@@ -3,7 +3,8 @@
   display: grid;
   gap: 16px;
   grid-template-columns: minmax(0, 1.75fr) minmax(280px, 1fr);
-  align-items: stretch;
+  /* Each panel keeps its own height: a short list stays a short card. */
+  align-items: start;
 }
 
 @media (max-width: 64em) {
@@ -12,22 +13,9 @@
   }
 }
 
-/* Each panel in its own cell, so they stretch to the same height. */
+/* A cell per panel, so the panels are not siblings and keep no stacking margin. */
 .cell {
-  display: flex;
-  flex-direction: column;
   min-width: 0;
-}
-
-.cell > * {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-}
-
-/* A panel's footer stays at the bottom of a stretched panel. */
-.cell > * > :last-child {
-  margin-top: auto;
 }
 
 .more {

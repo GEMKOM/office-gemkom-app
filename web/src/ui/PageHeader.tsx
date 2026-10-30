@@ -10,6 +10,10 @@ export interface PageFigure {
   id?: string;
   label: ReactNode;
   value: ReactNode;
+  /** Font Awesome classes; shown on a tile (figureStyle 'tiles'). */
+  icon?: string;
+  /** Makes the tile a link to the list behind the figure (figureStyle 'tiles'). */
+  link?: string;
 }
 
 export interface PageHeaderProps {
@@ -19,6 +23,12 @@ export interface PageHeaderProps {
   icon?: string;
   /** Key figures shown large on the band (replaces stat cards on list pages). */
   stats?: PageFigure[];
+  /**
+   * 'plain' (default): numbers set straight on the band, as on list pages.
+   * 'tiles': each figure in a translucent tile with its icon, a link when it
+   * has one; hub pages use these.
+   */
+  figureStyle?: 'plain' | 'tiles';
   /**
    * Buttons on the right. A filled button turns white on the band and a
    * default one becomes a ghost, e.g. <Button leftSection={...}>Yeni Müşteri</Button>.
@@ -51,7 +61,47 @@ function Breadcrumbs() {
  * actions. The next block on the page rises into the band. Replaces
  * components/header/header.js.
  */
-export function PageHeader({ title, subtitle, icon, stats, actions, backTo, backLabel = 'Geri Dön' }: PageHeaderProps) {
+function FigureTiles({ figures }: { figures: PageFigure[] }) {
+  return (
+    <ul className={classes.figureTiles}>
+      {figures.map((figure, index) => {
+        const content = (
+          <>
+            {figure.icon ? (
+              <span className={classes.figureTileIcon} aria-hidden>
+                <FaIcon icon={figure.icon} />
+              </span>
+            ) : null}
+            <span className={classes.figureValue}>{figure.value}</span>
+            <span className={classes.figureLabel}>{figure.label}</span>
+          </>
+        );
+        return (
+          <li key={figure.id ?? index} id={figure.id}>
+            {figure.link ? (
+              <AppLink to={figure.link} className={classes.figureTile}>
+                {content}
+              </AppLink>
+            ) : (
+              <div className={classes.figureTile}>{content}</div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+export function PageHeader({
+  title,
+  subtitle,
+  icon,
+  stats,
+  figureStyle = 'plain',
+  actions,
+  backTo,
+  backLabel = 'Geri Dön',
+}: PageHeaderProps) {
   return (
     <header className={classes.band}>
       <Breadcrumbs />
@@ -72,7 +122,9 @@ export function PageHeader({ title, subtitle, icon, stats, actions, backTo, back
         </div>
         {stats?.length || actions ? (
           <div className={classes.bandSide}>
-            {stats?.length ? (
+            {stats?.length && figureStyle === 'tiles' ? (
+              <FigureTiles figures={stats} />
+            ) : stats?.length ? (
               <dl className={classes.figures}>
                 {stats.map((figure, index) => (
                   <div key={figure.id ?? index} id={figure.id} className={classes.figure}>
