@@ -33,6 +33,9 @@ Port 4173 by default (`E2E_PORT` changes it). Locally an already running
   `<main>`, and logs no console errors. New routes are picked up on their own;
   give them the mocks they need (below).
 
+`manufacturing.spec.ts`: the manufacturing hubs, as admin (cards, band counts,
+hub to hub inside the SPA) and as a user with a few page grants.
+
 ## Fixtures (`fixtures.ts`)
 
 Import `test` and `expect` from `./fixtures`, not from `@playwright/test`: that
