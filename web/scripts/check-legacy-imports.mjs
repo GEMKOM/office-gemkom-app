@@ -45,7 +45,8 @@ const sources = [...known].filter(
 // (so `// import ...` is skipped), and `import('...')` with a literal specifier.
 const STATIC_IMPORT = /^[ \t]*(?:import|export)\s+(?:[^'";]*?\s*from\s*)?['"]([^'"\n]+)['"]/gm;
 const DYNAMIC_IMPORT = /\bimport\(\s*['"]([^'"\n]+)['"]\s*\)/g;
-const SCRIPT_TAG = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+// The end tag may carry spaces or junk before its `>` (`</script >`); browsers accept both.
+const SCRIPT_TAG = /<script\b([^>]*)>([\s\S]*?)<\/script\b[^>]*>/gi;
 const SRC_ATTR = /\bsrc\s*=\s*["']([^"']+)["']/i;
 const HTML_COMMENT = /<!--[\s\S]*?-->/g;
 
