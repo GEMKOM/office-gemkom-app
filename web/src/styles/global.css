@@ -15,6 +15,10 @@
   --gk-rail-icon: #9aa3ad;
   /* Labels in the expanded rail (10.9:1 on the rail). */
   --gk-rail-label: #c9cfd6;
+  /* PDKS state dots on the rail (all 4.5:1 or more on the rail). */
+  --gk-rail-ok: #2fb170;
+  --gk-rail-info: #5b9cf5;
+  --gk-rail-warn: #f5b94a;
   --gk-on-dark: #ffffff;
   --gk-on-band-muted: rgba(255, 255, 255, 0.78);
   --gk-page: #f4f5f7;

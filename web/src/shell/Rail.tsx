@@ -2,6 +2,7 @@ import type { NavItem, NavTree } from '@legacy/navigationStructure.js';
 import { Menu, ScrollArea, Tooltip, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router';
 import { AppLink } from './AppLink';
+import { AttendanceButton } from './AttendanceButton';
 import { FaIcon } from './FaIcon';
 import { flattenMenu, hasChildren, isPathActive, type MenuRow } from './navModel';
 import { NotificationBell } from './NotificationBell';
@@ -153,6 +154,7 @@ export function Rail({ expanded, onToggle }: { expanded: boolean; onToggle: () =
       </ScrollArea>
       <div className={classes.railEnd}>
         <ToggleButton expanded={expanded} onToggle={onToggle} />
+        <AttendanceButton variant={expanded ? 'row' : 'icon'} position="right-end" />
         <NotificationBell variant={expanded ? 'row' : 'icon'} position="right-end" />
         <UserMenu variant={expanded ? 'row' : 'icon'} position="right-end" />
       </div>

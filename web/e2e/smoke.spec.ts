@@ -353,4 +353,43 @@ test.describe('rail', () => {
     await expect(nav.getByRole('button', { name: 'Bildirimler', exact: true })).toBeFocused();
     consoleErrors.expectNone();
   });
+
+  test('PDKS: off the office network, check-in asks for a reason', async ({ page, consoleErrors }) => {
+    // The browser logs the refused check-in as a failed resource load.
+    consoleErrors.allow(/status of 403/);
+    const session = await seedSession(page, { admin: true });
+    let today: Record<string, unknown> = {};
+    const backend = await mockBackend(
+      page,
+      {
+        'GET /attendance/today/': () => ({ json: today }),
+        'POST /attendance/check-in/': ({ body }) => {
+          const reason = (body as { override_reason?: string } | undefined)?.override_reason;
+          if (!reason) return { status: 403, json: { reason: 'not_on_office_network' } };
+          today = { status: 'pending_override', status_display: 'İK onayı bekliyor' };
+          return { status: 201, json: today };
+        },
+      },
+      { session },
+    );
+    await page.goto(CUSTOMERS);
+    const nav = page.getByRole('navigation', { name: 'Ana menü' });
+
+    await nav.getByRole('button', { name: 'PDKS, Giriş yapılmadı' }).click();
+    const panel = page.getByRole('dialog');
+    await panel.getByRole('button', { name: 'Giriş Yap' }).click();
+    await expect(panel.getByText('Ofis ağı dışındasınız', { exact: false })).toBeVisible();
+
+    // A reason is required.
+    await panel.getByRole('button', { name: 'Ofis Dışı Giriş Yap' }).click();
+    await expect(panel.getByText('Açıklama girin')).toBeVisible();
+    await panel.getByLabel('Açıklama').fill('Sahada montaj');
+    await panel.getByRole('button', { name: 'Ofis Dışı Giriş Yap' }).click();
+
+    await expect(panel.getByText('İK onayı bekliyor')).toBeVisible();
+    const posts = backend.callsTo('/attendance/check-in/', 'POST');
+    expect(posts.map((c) => c.body)).toEqual([{}, { override_reason: 'Sahada montaj' }]);
+    await expect(nav.getByRole('button', { name: 'PDKS, Onay bekliyor' })).toBeVisible();
+    consoleErrors.expectNone();
+  });
 });

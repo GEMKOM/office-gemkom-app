@@ -331,6 +331,158 @@
   text-align: center;
 }
 
+/* PDKS: today's state as a dot on the fingerprint. Not checked in is an
+   empty ring; the rest are filled. */
+.pdksIcon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  flex: none;
+  color: var(--gk-rail-icon);
+  font-size: 16px;
+  transition: color 150ms ease-out;
+}
+
+.railRow:hover .pdksIcon,
+.railEnd .railRow[aria-expanded='true'] .pdksIcon {
+  color: var(--gk-on-dark);
+}
+
+.pdksDot {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--gk-rail-icon);
+  box-shadow: 0 0 0 2px var(--gk-rail);
+}
+
+.pdksIcon .pdksDot {
+  top: -3px;
+  right: -4px;
+}
+
+.pdksDot[data-tone='grey'] {
+  background: var(--gk-rail);
+  border: 2px solid var(--gk-rail-icon);
+}
+
+.pdksDot[data-tone='green'] {
+  background: var(--gk-rail-ok);
+}
+
+.pdksDot[data-tone='blue'] {
+  background: var(--gk-rail-info);
+}
+
+.pdksDot[data-tone='yellow'] {
+  background: var(--gk-rail-warn);
+}
+
+.pdksDot[data-tone='red'] {
+  background: var(--gk-red-on-dark);
+}
+
+.rowMeta {
+  flex: none;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gk-rail-icon);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdksPill {
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdksRefresh {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--gk-radius-sm);
+  color: var(--gk-muted);
+  font-size: 13px;
+}
+
+.pdksRefresh:hover {
+  background: var(--gk-surface-subtle);
+  color: var(--gk-ink);
+}
+
+.pdksRefresh:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.pdksBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
+}
+
+.pdksTimes {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.pdksTimes dt {
+  color: var(--gk-muted);
+}
+
+.pdksTimes dd {
+  margin: 0;
+  color: var(--gk-ink);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.pdksOverride {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pdksNote {
+  margin: 0;
+  color: var(--gk-ink-2);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.pdksNote[data-family] {
+  padding: 8px 10px;
+  border-radius: var(--gk-radius-md);
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+}
+
+.pdksNote[data-tone='danger'] {
+  color: var(--gk-danger);
+}
+
 /* Flyouts: the rail's sections open to the right, on the raised graphite. */
 .flyout {
   background: var(--gk-rail-raised);

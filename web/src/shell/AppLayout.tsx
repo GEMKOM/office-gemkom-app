@@ -3,6 +3,7 @@ import { useDisclosure } from '@mantine/hooks';
 import { Outlet } from 'react-router';
 import { RequireRoute } from '@/auth/RequireRoute';
 import { AppLink } from './AppLink';
+import { AttendanceButton } from './AttendanceButton';
 import { NotificationBell } from './NotificationBell';
 import { Rail } from './Rail';
 import { useRailExpanded } from './railState';
@@ -38,6 +39,7 @@ export function AppLayout() {
             </AppLink>
           </Group>
           <Group gap={4} wrap="nowrap">
+            <AttendanceButton />
             <NotificationBell />
             <UserMenu />
           </Group>
