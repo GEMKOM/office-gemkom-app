@@ -19,6 +19,52 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/sales/customers/CustomersPage')).CustomersPage,
     }),
   },
+  {
+    path: '/management',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/management/ManagementHubPage')).ManagementHubPage,
+    }),
+  },
+  {
+    path: '/management/reports',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/ManagementReportsHubPage'))
+        .ManagementReportsHubPage,
+    }),
+  },
+  {
+    path: '/human_resources',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/HumanResourcesHubPage')).HumanResourcesHubPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/AttendanceHubPage')).AttendanceHubPage,
+    }),
+  },
+  {
+    path: '/quality-control',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/QualityControlHubPage')).QualityControlHubPage,
+    }),
+  },
+  {
+    path: '/projects',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/projects/ProjectsHubPage')).ProjectsHubPage }),
+  },
+  {
+    path: '/design',
+    handle: hub,
+    lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

@@ -1,4 +1,11 @@
 [
   "/sales",
-  "/sales/customers"
+  "/sales/customers",
+  "/management",
+  "/management/reports",
+  "/human_resources",
+  "/human_resources/attendance",
+  "/quality-control",
+  "/projects",
+  "/design"
 ]
