@@ -1,4 +1,14 @@
 [
   "/sales",
-  "/sales/customers"
+  "/sales/customers",
+  "/procurement",
+  "/procurement/purchase-requests",
+  "/procurement/reports",
+  "/procurement/suppliers",
+  "/planning",
+  "/planning/inventory",
+  "/logistics",
+  "/accounting",
+  "/finance",
+  "/finance/reports"
 ]
