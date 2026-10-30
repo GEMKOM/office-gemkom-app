@@ -81,6 +81,78 @@ export const appRoutes: RouteObject[] = [
   { path: '/manufacturing/subcontracting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/welding', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/welding/reports', handle: hub, lazy: manufacturingHub },
+  {
+    path: '/procurement',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/ProcurementHubPage')).ProcurementHubPage,
+    }),
+  },
+  {
+    path: '/procurement/purchase-requests',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/PurchaseRequestsHubPage'))
+        .PurchaseRequestsHubPage,
+    }),
+  },
+  {
+    path: '/procurement/reports',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/ProcurementReportsHubPage'))
+        .ProcurementReportsHubPage,
+    }),
+  },
+  {
+    path: '/procurement/suppliers',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/SuppliersHubPage')).SuppliersHubPage,
+    }),
+  },
+  {
+    path: '/planning',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/PlanningHubPage')).PlanningHubPage,
+    }),
+  },
+  {
+    path: '/planning/inventory',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/InventoryHubPage')).InventoryHubPage,
+    }),
+  },
+  {
+    path: '/logistics',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/logistics/LogisticsHubPage')).LogisticsHubPage,
+    }),
+  },
+  {
+    path: '/accounting',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/accounting/AccountingHubPage')).AccountingHubPage,
+    }),
+  },
+  {
+    path: '/finance',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/FinanceHubPage')).FinanceHubPage,
+    }),
+  },
+  {
+    path: '/finance/reports',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/FinanceReportsHubPage')).FinanceReportsHubPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

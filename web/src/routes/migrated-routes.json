@@ -20,5 +20,15 @@
   "/manufacturing/maintenance",
   "/manufacturing/subcontracting",
   "/manufacturing/welding",
-  "/manufacturing/welding/reports"
+  "/manufacturing/welding/reports",
+  "/procurement",
+  "/procurement/purchase-requests",
+  "/procurement/reports",
+  "/procurement/suppliers",
+  "/planning",
+  "/planning/inventory",
+  "/logistics",
+  "/accounting",
+  "/finance",
+  "/finance/reports"
 ]
