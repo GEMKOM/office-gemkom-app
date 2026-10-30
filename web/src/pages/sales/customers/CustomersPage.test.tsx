@@ -131,8 +131,7 @@ it('the create form validates and then posts every field', async () => {
   renderPage();
   await screen.findByText('C-001');
   fireEvent.click(screen.getByRole('button', { name: 'Yeni Müşteri' }));
-  const dialog = await screen.findByRole('dialog');
-  expect(within(dialog).getByText('Yeni Müşteri Oluştur')).toBeInTheDocument();
+  const dialog = await screen.findByRole('dialog', { name: 'Yeni Müşteri Oluştur' });
 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
   expect(await within(dialog).findAllByText('Bu alan gereklidir')).toHaveLength(2);
@@ -190,7 +189,9 @@ it('deletes a customer only after the confirm', async () => {
 
   fireEvent.click(screen.getAllByRole('button', { name: 'Sil' })[0]!);
   expect(await screen.findByText('Bu müşteriyi silmek istediğinize emin misiniz?')).toBeInTheDocument();
-  expect(screen.getByText('Bu işlem geri alınamaz ve müşteri kalıcı olarak silinecektir.')).toBeInTheDocument();
+  expect(screen.getByText('Bu işlem geri alınamaz')).toBeInTheDocument();
+  expect(screen.getByText('Müşteri kalıcı olarak silinecektir.')).toBeInTheDocument();
+  expect(screen.getByRole('dialog', { name: 'Müşteri Silme Onayı' })).toBeInTheDocument();
   expect(calls().some((c) => c.method === 'DELETE')).toBe(false);
 
   fireEvent.click(screen.getByRole('button', { name: 'Evet, Sil' }));
