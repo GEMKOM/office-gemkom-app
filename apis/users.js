@@ -2,7 +2,6 @@ import { backendBase } from "../base.js";
 import { extractResultsFromResponse } from "./paginationHelper.js";
 import { authedFetch } from "../authService.js";
 
-
 /**
  * Ultra-light, un-paginated user list for dropdowns / pickers / @mentions.
  * Hits the dedicated `/users/dropdown/` endpoint which returns only
@@ -195,37 +194,6 @@ export async function fetchCurrentUserPermissions() {
 }
 
 /**
- * Permissions matrix for admin page.
- * GET /users/permissions/matrix/
- */
-export async function fetchPermissionsMatrix(params = {}) {
-    const search = params.search || '';
-    const group = params.group || '';
-    const isActive = params.is_active ?? params.active;
-    const officeAccess = params.office_access;
-    const workshopAccess = params.workshop_access;
-
-    const query = new URLSearchParams();
-    if (search) query.set('search', search);
-    if (group) query.set('group', group);
-    if (officeAccess !== undefined && officeAccess !== null && officeAccess !== '') {
-        query.set('office_access', String(officeAccess));
-    }
-    if (workshopAccess !== undefined && workshopAccess !== null && workshopAccess !== '') {
-        query.set('workshop_access', String(workshopAccess));
-    }
-    if (isActive !== undefined && isActive !== null && isActive !== '') {
-        query.set('is_active', String(isActive));
-    }
-
-    const resp = await authedFetch(`${backendBase}/users/permissions/matrix/${query.toString() ? `?${query.toString()}` : ''}`);
-    if (!resp.ok) {
-        throw new Error('Yetki matrisi alınamadı');
-    }
-    return await resp.json();
-}
-
-/**
  * Fetch all groups.
  * GET /organization/groups/
  */
@@ -253,53 +221,6 @@ export async function fetchUserGroupMembers(groupId) {
 }
 
 /**
- * Fetch full permission state for a single user.
- * GET /users/{id}/permissions/
- */
-export async function fetchUserPermissionsDetail(userId) {
-    const resp = await authedFetch(`${backendBase}/users/${userId}/permissions/`);
-    if (!resp.ok) {
-        throw new Error('Kullanıcı yetki detayları alınamadı');
-    }
-    return await resp.json();
-}
-
-
-/**
- * Create or update a per-user permission override.
- * POST /users/{id}/permission-overrides/
- */
-export async function saveUserPermissionOverride(userId, { codename, granted, reason }) {
-    const resp = await authedFetch(`${backendBase}/users/${userId}/permission-overrides/`, {
-        method: 'POST',
-        body: JSON.stringify({
-            codename,
-            granted,
-            reason: reason || ''
-        })
-    });
-    if (!resp.ok) {
-        throw new Error('Yetki geçersiz kılma kaydedilemedi');
-    }
-    return await resp.json();
-}
-
-/**
- * Delete a per-user permission override.
- * DELETE /users/{id}/permission-overrides/{codename}/
- */
-export async function deleteUserPermissionOverride(userId, codename) {
-    const resp = await authedFetch(`${backendBase}/users/${userId}/permission-overrides/${codename}/`, {
-        method: 'DELETE'
-    });
-    if (!resp.ok) {
-        throw new Error('Yetki geçersiz kılma silinemedi');
-    }
-    return await resp.json();
-}
-
-
-/**
  * Fetch groups including permissions in a single request (preferred).
  * GET /users/groups/
  *
@@ -313,28 +234,6 @@ export async function fetchGroupsWithPermissions() {
     const resp = await authedFetch(`${backendBase}/organization/groups/`);
     if (!resp.ok) {
         throw new Error('Kullanıcı grupları alınamadı');
-    }
-    const data = await resp.json();
-    return Array.isArray(data) ? data : (data.results || data.data || []);
-}
-
-/**
- * Permissions -> users listing for admin page.
- * GET /users/permissions/
- *
- * Expected shape:
- * [
- *   {
- *     codename, name,
- *     users: [{id, username, full_name, source, source_detail}],
- *     overrides: [{id, username, full_name, granted}]
- *   }
- * ]
- */
-export async function fetchPermissionsUsersList() {
-    const resp = await authedFetch(`${backendBase}/users/permissions/`);
-    if (!resp.ok) {
-        throw new Error('Yetki listesi alınamadı');
     }
     const data = await resp.json();
     return Array.isArray(data) ? data : (data.results || data.data || []);

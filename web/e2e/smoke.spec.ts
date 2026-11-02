@@ -94,20 +94,20 @@ test.describe('navigation', () => {
     const session = await seedSession(page, { admin: true });
     await mockBackend(page, {}, { session });
 
-    await page.goto('/it/');
+    await page.goto('/sales/');
     await expectSpa(page);
 
-    // A hub card to a page that is still legacy (Yetki Yönetimi): a full load.
+    // A hub card to a page that is still legacy (Teklifler): a full load.
     await page.evaluate(() => {
       window.__spaMarker = 'spa';
     });
     await page
       .getByRole('main')
-      .getByRole('link', { name: /Yetki Yönetimi/ })
+      .getByRole('link', { name: /Teklifler/ })
       .first()
       .click();
 
-    await expect(page).toHaveURL(/\/it\/permissions\/?$/);
+    await expect(page).toHaveURL(/\/sales\/offers\/?$/);
     await expect(page.locator('#navbar-container')).toHaveCount(1);
     await expect(page.locator('#root')).toHaveCount(0);
     expect(await page.evaluate(() => window.__spaMarker)).toBeUndefined();
@@ -120,11 +120,11 @@ test.describe('navigation', () => {
 
     // Back to the SPA hub with a full load, as any legacy link does. (Driving
     // the legacy navbar's nested Bootstrap dropdowns here was flaky.)
-    await page.goto('/sales/');
+    await page.goto('/it/');
 
-    await expect(page).toHaveURL(/\/sales\/$/);
+    await expect(page).toHaveURL(/\/it\/$/);
     await expect(
-      page.getByRole('main').getByRole('heading', { name: 'Satış Modülü' }),
+      page.getByRole('main').getByRole('heading', { name: 'Bilgi İşlem Departmanı' }),
     ).toBeVisible();
     await expectSpa(page);
     stored = await readSession(page);

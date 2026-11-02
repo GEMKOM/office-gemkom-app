@@ -48,6 +48,8 @@
   "/it/inventory",
   "/it/neo",
   "/it/password-resets",
+  "/it/permissions",
+  "/it/job-completion",
   "/quality-control/cost-lines",
   "/quality-control/documents",
   "/quality-control/ncrs",
@@ -135,5 +137,10 @@
   "/manufacturing/linear-cutting/capacity/planning",
   "/manufacturing/machining/capacity/planning",
   "/manufacturing/machining/reports/history",
-  "/manufacturing/machining/reports/production-plan"
+  "/manufacturing/machining/reports/production-plan",
+  "/management/reports/overview",
+  "/finance/reports/executive-overview",
+  "/management/reports/cash-flow",
+  "/management/dashboard",
+  "/management/analytics"
 ]

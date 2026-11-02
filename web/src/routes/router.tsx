@@ -238,6 +238,14 @@ export const appRoutes: RouteObject[] = [
     path: '/it/password-resets',
     lazy: async () => ({ Component: (await import('@/pages/it/password-resets/PasswordResetsPage')).PasswordResetsPage }),
   },
+  {
+    path: '/it/permissions',
+    lazy: async () => ({ Component: (await import('@/pages/it/permissions/PermissionsPage')).PermissionsPage }),
+  },
+  {
+    path: '/it/job-completion',
+    lazy: async () => ({ Component: (await import('@/pages/it/job-completion/JobCompletionPage')).JobCompletionPage }),
+  },
   // Phase 3b: quality control, HR and other list pages.
   {
     path: '/quality-control/cost-lines',
@@ -858,6 +866,41 @@ export const appRoutes: RouteObject[] = [
       Component: (
         await import('@/pages/manufacturing/machining/reports/production-plan/ProductionPlanPage')
       ).ProductionPlanPage,
+    }),
+  },
+  // Management and finance dashboards (charts load with these pages only).
+  {
+    path: '/management/reports/overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/overview/OverviewReportPage'))
+        .OverviewReportPage,
+    }),
+  },
+  {
+    path: '/finance/reports/executive-overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/reports/executive-overview/ExecutiveOverviewPage'))
+        .ExecutiveOverviewPage,
+    }),
+  },
+  {
+    path: '/management/reports/cash-flow',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/cash-flow/CashFlowReportPage'))
+        .CashFlowReportPage,
+    }),
+  },
+  {
+    path: '/management/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/dashboard/ManagementDashboardPage'))
+        .ManagementDashboardPage,
+    }),
+  },
+  {
+    path: '/management/analytics',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/analytics/AnalyticsPage')).AnalyticsPage,
     }),
   },
 ];
