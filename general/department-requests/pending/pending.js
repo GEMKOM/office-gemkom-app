@@ -302,10 +302,11 @@ async function loadRequests() {
         requests = response.results || response || [];
         totalRequests = response.count || (Array.isArray(response) ? response.length : 0);
 
-        // Add items_count to each request based on items array
+        // The list endpoint already returns items_count and omits the items
+        // array, so only fall back to counting when the count is missing.
         requests = requests.map(request => ({
             ...request,
-            items_count: request.items ? request.items.length : 0
+            items_count: request.items_count ?? (request.items ? request.items.length : 0)
         }));
 
         // Update the table component
@@ -344,10 +345,10 @@ async function loadApprovedRequests() {
             totalApprovedRequests = 0;
         }
 
-        // Add items_count to each request based on items array
+        // Same as above: keep the server-provided count when present.
         approvedRequests = approvedRequests.map(request => ({
             ...request,
-            items_count: request.items ? request.items.length : 0
+            items_count: request.items_count ?? (request.items ? request.items.length : 0)
         }));
 
         // Update the table component

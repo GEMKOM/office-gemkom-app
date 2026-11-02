@@ -8,7 +8,13 @@ import { authedFetch } from "../authService.js";
  * Hits the dedicated `/users/dropdown/` endpoint which returns only
  * id/username/first_name/last_name/full_name/is_active — no heavy profile
  * data, keeping payloads small even with thousands of users.
- * @param {{ is_active?: boolean | string, department_code?: string }} [options]
+ *
+ * Deactivated (pasif) accounts are excluded by default — pickers, filters
+ * and @mentions must never offer them. Pass `is_active: 'all'` only when
+ * the list is used to resolve names on historical rows (e.g. matching an
+ * imported time entry to an employee who has since left), or
+ * `is_active: false` for deactivated accounts only.
+ * @param {{ is_active?: boolean | 'all' | string, department_code?: string, group?: string }} [options]
  *   department_code: comma-separated position department codes
  *   (e.g. 'manufacturing' or 'design,planning') to scope assignment pickers.
  * @returns {Promise<Array>} plain array of light user objects
@@ -34,18 +40,29 @@ export async function fetchUsersDropdown(options = {}) {
 
 /**
  * Backwards-compatible alias for {@link fetchUsersDropdown}. The `page_size`
- * option is now ignored (the dropdown endpoint is un-paginated).
- * @param {{ is_active?: boolean | string, page_size?: number }} [options]
+ * option is now ignored (the dropdown endpoint is un-paginated). Despite the
+ * name it returns *active* users unless `is_active: 'all'` is passed.
+ * @param {{ is_active?: boolean | 'all' | string, page_size?: number }} [options]
  */
 export async function fetchAllUsers(options = {}) {
     return fetchUsersDropdown(options);
 }
 
-export async function fetchUsers(group = null) {
-    let url = `${backendBase}/users/`;
-    if (group) {
-        url += `?group=${group}`;
+/**
+ * First page of the full `/users/` list. Active accounts only unless
+ * `options.is_active` is 'all' / false. Prefer {@link fetchUsersDropdown}
+ * for pickers.
+ * @param {string|null} group  (legacy; the list endpoint ignores it)
+ * @param {{ is_active?: boolean | 'all' | string }} [options]
+ */
+export async function fetchUsers(group = null, options = {}) {
+    const params = new URLSearchParams();
+    if (group) params.set('group', group);
+    if (options.is_active !== undefined && options.is_active !== null && options.is_active !== '') {
+        params.set('is_active', String(options.is_active));
     }
+    const query = params.toString();
+    const url = `${backendBase}/users/${query ? `?${query}` : ''}`;
     const resp = await authedFetch(url);
     if (!resp.ok) return [];
     const data = await resp.json();

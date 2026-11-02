@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Finans - Ödeme Listeleri</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../style.css">
+    <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/dropdown/dropdown.css">
+    <link rel="stylesheet" href="../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../components/header/header.css">
+    <link rel="stylesheet" href="../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../components/table/table.css">
+    <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../components/confirmation-modal/confirmation-modal.css">
+    <link rel="stylesheet" href="../../components/edit-modal/edit-modal.css">
+    <link rel="stylesheet" href="../../components/file-attachments/file-attachments.css">
+    <link rel="stylesheet" href="../../components/file-viewer/file-viewer.css">
+    <link rel="stylesheet" href="payment-lists.css">
+    <link rel="icon" type="image/png" href="../../images/gemkom.png">
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <div id="header-placeholder"></div>
+
+            <div class="dashboard-card mb-3" id="pl-view-switcher">
+                <div class="card-body py-2">
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Görünüm seçimi">
+                            <button type="button" class="btn btn-outline-primary" data-pl-view="lists" id="pl-switch-lists">
+                                <i class="fas fa-list-check me-1"></i>Listeler
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" data-pl-view="pool" id="pl-switch-pool">
+                                <i class="fas fa-water me-1"></i>Ödeme Havuzu
+                            </button>
+                        </div>
+                        <span class="text-muted small ms-2" id="pl-switcher-hint"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Lists overview -->
+            <div id="pl-view-lists" class="d-none">
+                <div id="pl-lists-stats"></div>
+                <div id="pl-lists-filters"></div>
+                <div id="pl-lists-table"></div>
+            </div>
+
+            <!-- List detail -->
+            <div id="pl-view-detail" class="d-none">
+                <div class="dashboard-card mb-3" id="pl-detail-strip-card">
+                    <div class="card-body py-3" id="pl-detail-strip"></div>
+                </div>
+                <div class="dashboard-card mb-3" id="pl-detail-toolbar-card">
+                    <div class="card-body py-2" id="pl-detail-toolbar"></div>
+                </div>
+                <div id="pl-detail-alert"></div>
+                <div id="pl-items-table"></div>
+            </div>
+
+            <!-- Pool -->
+            <div id="pl-view-pool" class="d-none">
+                <div id="pl-pool-filters"></div>
+                <div id="pl-pool-table"></div>
+                <div id="pl-pool-bulk-bar" class="pl-bulk-bar d-none"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Add-from-pool picker (static: stacked modals need their own backdrop) -->
+    <div class="modal fade" id="plPoolPickerModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-water me-2"></i>Havuzdan Kalem Ekle
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="pl-picker-filters" class="mb-3"></div>
+                    <div id="pl-picker-table"></div>
+                </div>
+                <div class="modal-footer">
+                    <div class="me-auto">
+                        <span id="pl-picker-count" class="text-muted">0 kalem seçildi</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary" id="pl-picker-add" disabled>
+                        <i class="fas fa-plus me-1"></i>Seçilenleri Ekle
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="pl-list-form-modal-container"></div>
+    <div id="pl-budget-modal-container"></div>
+    <div id="pl-fx-modal-container"></div>
+    <div id="pl-mark-paid-modal-container"></div>
+    <div id="pl-bulk-paid-modal-container"></div>
+    <div id="pl-split-modal-container"></div>
+    <div id="pl-exclude-modal-container"></div>
+    <div id="pl-decide-modal-container"></div>
+    <div id="pl-proforma-modal-container"></div>
+    <div id="pl-add-to-list-modal-container"></div>
+    <div id="pl-cancel-modal-container"></div>
+    <div id="pl-confirm-modal-container"></div>
+
+    <footer class="footer-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>GEMKOM</h5>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-light mb-0">&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="payment-lists.js"></script>
+</body>
+</html>

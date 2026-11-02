@@ -1,0 +1,87 @@
+import { MenuCards, type MenuCard } from '@/ui';
+
+// Ported from it/it.js. The four Envanter links all open the inventory page,
+// as in legacy.
+const CARDS: MenuCard[] = [
+  {
+    title: 'Envanter',
+    description: 'IT cihazlarını yönetin, donanım envanterini takip edin ve cihaz durumlarını izleyin.',
+    icon: 'fas fa-desktop',
+    iconColor: 'primary',
+    link: '/it/inventory',
+    features: [
+      { label: 'Bilgisayarlar', icon: 'fas fa-desktop', link: '/it/inventory' },
+      { label: 'Laptoplar', icon: 'fas fa-laptop', link: '/it/inventory' },
+      { label: 'Yazıcılar', icon: 'fas fa-print', link: '/it/inventory' },
+      { label: 'Ağ Cihazları', icon: 'fas fa-network-wired', link: '/it/inventory' },
+    ],
+  },
+  {
+    title: 'Şifre Sıfırlama Talepleri',
+    description: 'Kullanıcı şifre sıfırlama taleplerini yönetin ve işleme alın.',
+    icon: 'fas fa-key',
+    iconColor: 'warning',
+    link: '/it/password-resets',
+  },
+  {
+    title: 'Bildirim Yönlendirmeleri',
+    description: 'Bildirim türlerine göre kullanıcı atamalarını yönetin ve yapılandırın.',
+    icon: 'fas fa-bell',
+    iconColor: 'info',
+    link: '/it/notifications',
+  },
+  {
+    title: 'Yetki Yönetimi',
+    description: 'Kullanıcı gruplarını ve detaylı yetki matrisini yönetin.',
+    icon: 'fas fa-user-shield',
+    iconColor: 'danger',
+    link: '/it/permissions',
+  },
+  {
+    title: 'Onay Yönetimi',
+    description: 'Onay akışlarını ve adım şablonlarını görüntüleyin ve düzenleyin.',
+    icon: 'fas fa-check-circle',
+    iconColor: 'success',
+    link: '/it/approvals',
+  },
+  {
+    title: 'Organizasyon Grupları',
+    description: 'Pozisyon gruplarını oluşturun, düzenleyin ve gruba toplu pozisyon atayın.',
+    icon: 'fas fa-object-group',
+    iconColor: 'secondary',
+    link: '/it/groups',
+  },
+  {
+    title: 'İş Emri Tamamlama',
+    description:
+      'Seçilen iş emirlerini ve tüm departman görevlerini kontrolleri atlayarak toplu tamamlayın.',
+    icon: 'fas fa-check-double',
+    iconColor: 'danger',
+    link: '/it/job-completion',
+  },
+  {
+    title: 'Neo Kullanımı',
+    description:
+      'Neo asistanın kullanım analizleri: kim neyi sordu, konu dağılımı, maliyet ve soru kayıtları.',
+    icon: 'fas fa-robot',
+    iconColor: 'primary',
+    link: '/it/neo',
+  },
+  {
+    title: 'Geri Bildirimler',
+    description: 'Kullanıcı geri bildirimlerini triyaj edin, durumlarını ve yanıtlarını yönetin.',
+    icon: 'fas fa-comment-dots',
+    iconColor: 'info',
+    link: '/it/feedback',
+  },
+];
+
+export function ItHubPage() {
+  return (
+    <MenuCards
+      title="Bilgi İşlem Departmanı"
+      subtitle="IT sistemlerini yönetin, teknik destek sağlayın ve güvenlik süreçlerini takip edin"
+      cards={CARDS}
+    />
+  );
+}

@@ -630,6 +630,7 @@ function exportCreatedTasks() {
             ...createdTasks.map(task => [
                 task.key || '',
                 task.name || '',
+                // job_no is the allocation label from the API ("254-01" / "254-01 +2")
                 task.job_no || '',
                 task.image_no || '',
                 task.position_no || '',

@@ -149,7 +149,8 @@ window.showTaskDetails = async function(taskKey) {
                 { id: 'nesting-id', label: 'Nesting ID', value: task.nesting_id, type: 'text', colSize: 4 },
                 { id: 'material', label: 'Malzeme', value: task.material, type: 'text', colSize: 4 },
                 { id: 'dimensions', label: 'Boyutlar', value: task.dimensions, type: 'text', colSize: 4 },
-                { id: 'thickness', label: 'Kalınlık (mm)', value: task.thickness_mm, type: 'number', colSize: 4 }
+                { id: 'thickness', label: 'Kalınlık (mm)', value: task.thickness_mm, type: 'number', colSize: 4 },
+                { id: 'quantity', label: 'Adet', value: task.quantity || '-', type: 'text', colSize: 4 }
             ]
         });
 

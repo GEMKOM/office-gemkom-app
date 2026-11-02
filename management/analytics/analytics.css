@@ -121,3 +121,75 @@
     0% { background-position: -200% 0; }
     100% { background-position: 200% 0; }
 }
+
+/* ---------- Durum / İmalat icon chips (house badge colours) ---------- */
+/* badges.css forces `display: inline-block` on badges in centred table cells
+   (`.table tbody td.text-center .status-badge`), which silently drops the
+   flex centring and leaves the icon riding high — hence the long selector. */
+.status-badge.icon-chip,
+.table tbody td.text-center .status-badge.icon-chip {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 0.72rem;
+    line-height: 1;
+    letter-spacing: 0;
+    vertical-align: middle;
+    cursor: default;
+}
+
+.status-badge.icon-chip > i {
+    display: block;
+    line-height: 1;
+}
+
+/* ---------- Katalog Kalemi cell ---------- */
+.catalog-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 180px;
+    font-size: 0.85rem;
+    cursor: default;
+}
+
+.catalog-cell .catalog-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.catalog-cell.from-children {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.catalog-more {
+    flex: 0 0 auto;
+    background: #eef0f3;
+    color: #6c757d;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-style: normal;
+    padding: 0 6px;
+}
+
+/* Tooltips list one catalog path per line */
+.tooltip.analytics-tip .tooltip-inner {
+    white-space: pre-line;
+    text-align: left;
+    max-width: 360px;
+}
+
+/* ---------- Labor detail: per-job breakdown ---------- */
+.labor-by-job td,
+.labor-by-job th {
+    padding: 0.35rem 0.6rem;
+    font-size: 0.85rem;
+}
