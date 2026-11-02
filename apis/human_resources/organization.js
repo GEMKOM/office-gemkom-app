@@ -45,11 +45,6 @@ export async function fetchPositions(filters = {}) {
     return parseJsonOrThrow(response, 'Pozisyonlar yüklenemedi.');
 }
 
-export async function fetchPositionTree() {
-    const response = await authedFetch(`${backendBase}/organization/positions/tree/`);
-    return parseJsonOrThrow(response, 'Organizasyon şeması yüklenemedi.');
-}
-
 export async function fetchPositionById(positionId) {
     const response = await authedFetch(`${backendBase}/organization/positions/${positionId}/`);
     return parseJsonOrThrow(response, 'Pozisyon detayı yüklenemedi.');
