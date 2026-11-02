@@ -9,7 +9,9 @@ export type {
   GanttView,
 } from './types';
 export {
+  localDateKey,
   machineCalendarWindows,
+  parseClock,
   weekendsOff,
   type MachineCalendar,
   type WorkWindow,

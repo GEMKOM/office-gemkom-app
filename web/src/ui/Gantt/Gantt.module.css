@@ -354,7 +354,8 @@
   border-bottom-right-radius: 0;
 }
 
-.bar[data-selected] {
+/* The selection (the chart's tab stop) is shown while the chart has focus. */
+.scroller:focus-within .bar[data-selected] {
   z-index: 2;
   box-shadow:
     0 0 0 2px var(--gk-surface),
