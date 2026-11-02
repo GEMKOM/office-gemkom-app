@@ -61,6 +61,7 @@ The pilot pages are the worked examples:
 | `new FileViewer().openFile(url, name, ext)` | `<FileViewer files index onIndexChange onClose>` | FileAttachments opens it itself. |
 | `renderRichText(text, opts)` into `innerHTML` | `<RichText content mentionedUsers mentionedGroups>` | Never set other HTML. |
 | `attachRichTextEditor(textarea)` | `<RichTextEditor value onChange>` | Works with `form.getInputProps(field)`. |
+| `mountTopicDiscussion(root, topicId)` | `<TopicDiscussion topicId>` from `@/pages/shared/topic-discussion/TopicDiscussion` | Topic text, files, comments, posting and editing. |
 | JSZip "Tümünü İndir (ZIP)" | `downloadFilesAsZip(files, name)` from `@/ui` | No library; stored zip. |
 
 ## Attachments, file preview and rich text

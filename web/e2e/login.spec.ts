@@ -15,7 +15,7 @@ import {
 // answered by the mock with the fake tokens from fixtures.ts.
 
 const CUSTOMERS = '/sales/customers/';
-const DISCUSSIONS = '/general/discussions/'; // a legacy page
+const LEGACY_PAGE = '/it/permissions/'; // still a legacy page (Yetki Yönetimi)
 
 // Chrome logs the 401 of a refused sign-in as a console error.
 const REFUSED_LOGIN = /status of 401/;
@@ -80,12 +80,12 @@ test.describe('login', () => {
     const session = buildSession({ admin: true });
     await mockBackend(page, tokenHandler([]), { session });
 
-    await page.goto(DISCUSSIONS);
+    await page.goto(LEGACY_PAGE);
     await expect(page).toHaveURL(/\/login\/$/);
     await expect(page.getByRole('heading', { name: 'Ofis Çalışanları' })).toBeVisible();
     await signIn(page);
 
-    await expect(page).toHaveURL(DISCUSSIONS);
+    await expect(page).toHaveURL(LEGACY_PAGE);
     await expect(page.locator('#navbar-container')).toHaveCount(1);
   });
 

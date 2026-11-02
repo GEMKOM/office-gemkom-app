@@ -125,5 +125,8 @@
   "/manufacturing/machining/tasks/create",
   "/manufacturing/subcontracting/labor-pricing",
   "/manufacturing/subcontracting/overview",
-  "/manufacturing/subcontracting/statements"
+  "/manufacturing/subcontracting/statements",
+  "/general/discussions",
+  "/isg/issues",
+  "/design/release-approvals"
 ]
