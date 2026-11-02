@@ -16,22 +16,6 @@ vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ user: { username: 'ali' } }) }));
 
-const gantt = vi.hoisted(() => ({
-  setTasks: vi.fn(),
-  options: null as null | Record<string, unknown>,
-}));
-vi.mock('@legacy/components/gantt/gantt.js', () => ({
-  GanttChart: class {
-    constructor(_id: string, options: Record<string, unknown>) {
-      gantt.options = options;
-    }
-    setTasks = gantt.setTasks;
-    updateTitle() {}
-    destroy() {}
-  },
-}));
-vi.mock('@legacy/components/gantt/gantt.css', () => ({}));
-
 const fetchMock = vi.mocked(authedFetch);
 
 const MAIN = {
@@ -382,7 +366,8 @@ it('Gantt view asks for the visible month, ordered by start date', async () => {
   await waitFor(() => expect(lastParams().date_range_start).toBeDefined());
   expect(lastParams().ordering).toBe('target_start_date');
   expect(lastParams().date_range_start).toMatch(/-01$/);
-  await waitFor(() => expect(gantt.setTasks).toHaveBeenCalled());
-  const bars = gantt.setTasks.mock.calls.at(-1)![0] as { id: number }[];
-  expect(bars.map((b) => b.id)).toEqual([1, 2]);
+  expect(await screen.findByText('Gantt Gorunumu')).toBeInTheDocument();
+  // The table is gone; the rows-by-user switch shows up.
+  expect(screen.queryByRole('columnheader', { name: 'Görev Başlığı' })).not.toBeInTheDocument();
+  expect(screen.getByText('Kullanıcılara Göre')).toBeInTheDocument();
 });

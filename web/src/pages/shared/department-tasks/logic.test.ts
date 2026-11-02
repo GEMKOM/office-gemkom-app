@@ -352,3 +352,32 @@ describe('legacyErrorText', () => {
     expect(legacyErrorText(new Error('net'), 'F')).toBe('F');
   });
 });
+
+describe('Gantt model', () => {
+  it('task rows get one bar, user rows a bar per segment', async () => {
+    const { toGanttModel } = await import('./GanttView');
+    const task = toGanttTask(
+      {
+        id: 3,
+        job_order: '254-01',
+        title: 'x',
+        status: 'in_progress',
+        target_start_date: '2026-11-01',
+      },
+      0,
+    );
+    const undated = toGanttTask({ id: 4, title: 'y' }, 1);
+    const model = toGanttModel([task, undated]);
+    expect(model.rows.map((r) => r.id)).toEqual(['3', '4']);
+    expect(model.bars).toHaveLength(1);
+    expect(model.bars[0]).toMatchObject({ rowId: '3', taskId: 3, tone: 'blue', label: '254-01' });
+
+    const users = toGanttUserRows(
+      [{ id: 5, assigned_to: 1, status: 'pending', target_start_date: '2026-11-02' }],
+      [{ id: 1, name: 'Ali' }],
+    );
+    const byUser = toGanttModel(users);
+    expect(byUser.rows.map((r) => r.label)).toEqual(['Ali']);
+    expect(byUser.bars[0]).toMatchObject({ rowId: 'user-1', taskId: 5 });
+  });
+});

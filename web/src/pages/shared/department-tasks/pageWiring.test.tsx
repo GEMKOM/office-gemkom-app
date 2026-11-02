@@ -12,8 +12,6 @@ import { renderWithProviders } from '@/test/render';
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ user: { username: 'ali' } }) }));
-vi.mock('@legacy/components/gantt/gantt.js', () => ({ GanttChart: class {} }));
-vi.mock('@legacy/components/gantt/gantt.css', () => ({}));
 
 const fetchMock = vi.mocked(authedFetch);
 

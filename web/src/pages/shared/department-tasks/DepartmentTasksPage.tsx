@@ -613,6 +613,8 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
           <GanttView
             tasks={ganttTasks}
             title={ganttRows === 'users' ? 'Gantt Gorunumu - Kullanicilar' : 'Gantt Gorunumu'}
+            period={ganttWindow.period}
+            anchor={ganttWindow.date}
             onPeriodChange={(period, date) => {
               setGanttWindow({ period, date });
               if (page !== 1) apply({ page: '1' });
