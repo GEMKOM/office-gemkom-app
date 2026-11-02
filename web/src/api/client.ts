@@ -198,7 +198,11 @@ function xhrSend(
  * through apiFetch, which refreshes the token and handles a refused portal
  * session the way every other request does; progress then jumps to the end.
  */
-export async function apiUpload<T>(path: string, body: FormData, options: ApiUploadOptions = {}): Promise<T> {
+export async function apiUpload<T>(
+  path: string,
+  body: FormData,
+  options: ApiUploadOptions = {},
+): Promise<T> {
   const { method = 'POST', params, signal, onProgress } = options;
   const token = typeof localStorage === 'undefined' ? null : localStorage.getItem('accessToken');
   if (token && typeof XMLHttpRequest !== 'undefined') {

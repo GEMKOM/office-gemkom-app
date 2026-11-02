@@ -22,7 +22,12 @@ function UserCount({ label }: { label: string }) {
 }
 
 it('two components using useUsers share one request', async () => {
-  fetchMock.mockImplementation(() => json([{ id: 1, username: 'ali' }, { id: 2, username: 'ayse' }]));
+  fetchMock.mockImplementation(() =>
+    json([
+      { id: 1, username: 'ali' },
+      { id: 2, username: 'ayse' },
+    ]),
+  );
   renderWithProviders(
     <>
       <UserCount label="a" />
@@ -38,7 +43,9 @@ it('two components using useUsers share one request', async () => {
 });
 
 it('useTeams fills value and label', async () => {
-  fetchMock.mockImplementation(() => json({ results: [{ id: 3, name: 'kaynak', display_name: 'Kaynak' }] }));
+  fetchMock.mockImplementation(() =>
+    json({ results: [{ id: 3, name: 'kaynak', display_name: 'Kaynak' }] }),
+  );
   function Teams() {
     const { data } = useTeams();
     return <div>{data?.map((t) => `${t.value}=${t.label}`).join(',') ?? 'loading'}</div>;
@@ -50,7 +57,9 @@ it('useTeams fills value and label', async () => {
 
 it('useMachines and useJobOrderOptions send the legacy params', async () => {
   fetchMock.mockImplementation((url) =>
-    String(url).includes('/machines/') ? json({ count: 1, next: null, previous: null, results: [{ id: 1, name: 'M1' }] }) : json([]),
+    String(url).includes('/machines/')
+      ? json({ count: 1, next: null, previous: null, results: [{ id: 1, name: 'M1' }] })
+      : json([]),
   );
   function Both() {
     const machines = useMachines({ used_in: 'machining' });
