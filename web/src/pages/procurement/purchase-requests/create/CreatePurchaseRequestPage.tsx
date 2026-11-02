@@ -329,7 +329,8 @@ export function CreatePurchaseRequestPage() {
         return;
       }
       const payload = buildSubmitPayload(state, rates);
-      const snapshot = JSON.stringify(payload);
+      // What the user entered (the EUR total also moves when the rates arrive).
+      const snapshot = JSON.stringify({ ...payload, total_amount_eur: null });
       let id: number;
       if (created.current && created.current.snapshot === snapshot) {
         id = created.current.id;
