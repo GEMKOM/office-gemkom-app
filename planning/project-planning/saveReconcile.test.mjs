@@ -13,6 +13,8 @@ import {
     adoptedBlockSnap,
     adoptStageIds,
     leftoverDeleted,
+    sentMoveToByAssignment,
+    shouldClearMoveTo,
     shouldPostNewBlock,
     shouldHydrateAfterSave,
     adoptExistingBlockStageIds,
@@ -341,6 +343,37 @@ check('existing-block stage adopt is a no-op when the server row is missing', ()
         }],
     }], { resources: [] });
     assert.equal(stages[0].id, null);
+});
+
+check('sentMoveToByAssignment indexes only items that carried move_to', () => {
+    const map = sentMoveToByAssignment([
+        { assignment_type: 'internal_team', assignment_id: 9, notes: 'x' },
+        { assignment_type: 'internal_team', assignment_id: 10, move_to: { resource_type: 'team', resource_id: 4 } },
+        { assignment_type: 'subcontracting', assignment_id: null, move_to: { resource_type: 'subcontractor', resource_id: 2 } },
+    ]);
+    assert.equal(map.size, 1);
+    assert.deepEqual(map.get('internal_team:10'), { resource_type: 'team', resource_id: 4 });
+    assert.equal(map.has('internal_team:9'), false);
+});
+
+check('a move typed during a notes/kg save is not cleared', () => {
+    const inFlight = { resource_type: 'team', resource_id: 8 };
+    assert.equal(shouldClearMoveTo(undefined, inFlight), false);
+    assert.equal(shouldClearMoveTo(null, inFlight), false);
+});
+
+check('the move this payload sent is cleared; a later destination is not', () => {
+    const sent = { resource_type: 'team', resource_id: 4 };
+    assert.equal(shouldClearMoveTo(sent, { resource_type: 'team', resource_id: 4 }), true);
+    assert.equal(shouldClearMoveTo(sent, { resource_type: 'team', resource_id: 8 }), false);
+    assert.equal(shouldClearMoveTo(sent, { resource_type: 'subcontractor', resource_id: 4, price_tier: 12 }), false);
+    assert.equal(shouldClearMoveTo(sent, undefined), true);
+});
+
+check('same destination with the sent price tier is treated as the sent move', () => {
+    const sent = { resource_type: 'subcontractor', resource_id: 2, price_tier: 12 };
+    assert.equal(shouldClearMoveTo(sent, { resource_type: 'subcontractor', resource_id: 2, price_tier: 12 }), true);
+    assert.equal(shouldClearMoveTo(sent, { resource_type: 'subcontractor', resource_id: 2, price_tier: 19 }), false);
 });
 
 if (failures) {
