@@ -106,5 +106,10 @@
   "/procurement/reports/staff",
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
-  "/procurement/suppliers/payment-terms"
+  "/procurement/suppliers/payment-terms",
+  "/manufacturing/cnc-cutting/capacity/planning",
+  "/manufacturing/linear-cutting/capacity/planning",
+  "/manufacturing/machining/capacity/planning",
+  "/manufacturing/machining/reports/history",
+  "/manufacturing/machining/reports/production-plan"
 ]
