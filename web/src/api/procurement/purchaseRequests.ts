@@ -1,7 +1,7 @@
 import { keepPreviousData, queryOptions, type QueryClient } from '@tanstack/react-query';
 import { apiFetch, isApiError, type QueryParams } from '../client';
 import { extractResults, toPaginated, type Paginated } from '../types';
-import { extractErrorMessage } from './suppliers';
+import { extractErrorMessage, type Supplier } from './suppliers';
 
 // Port of the purchase-request part of apis/procurement.js (plus the
 // currency rates of apis/formatters.js and the planning item calls the create
@@ -633,4 +633,33 @@ export function getPlanningRequest(
   signal?: AbortSignal,
 ): Promise<PlanningRequestDetail> {
   return apiFetch<PlanningRequestDetail>(`/planning/requests/${id}/`, { signal });
+}
+
+// ------------------------------------------- create page reference data
+
+/** suppliersManager.loadAvailableSuppliers: GET suppliers/?status=active&page_size=1000. */
+export function activeSuppliersQueryOptions() {
+  return queryOptions({
+    queryKey: ['purchaseRequests', 'activeSuppliers'] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<Supplier>(
+        await apiFetch<unknown>('/procurement/suppliers/', {
+          params: { status: 'active', page_size: 1000 },
+          signal,
+        }),
+      ),
+    staleTime: 60_000,
+  });
+}
+
+/** loadAvailablePaymentTerms: GET payment-terms/?status=active. */
+export function activePaymentTermsQueryOptions() {
+  return queryOptions({
+    queryKey: ['purchaseRequests', 'activePaymentTerms'] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<{ id: number; name: string }>(
+        await apiFetch<unknown>('/procurement/payment-terms/', { params: { status: 'active' }, signal }),
+      ),
+    staleTime: 5 * 60_000,
+  });
 }

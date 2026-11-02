@@ -810,6 +810,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/procurement/purchase-requests/create',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/purchase-requests/create/CreatePurchaseRequestPage'))
+        .CreatePurchaseRequestPage,
+    }),
+  },
+  {
     path: '/procurement/purchase-requests/pending',
     lazy: async () => ({
       Component: (await import('@/pages/procurement/purchase-requests/pending/PendingRequestsPage'))

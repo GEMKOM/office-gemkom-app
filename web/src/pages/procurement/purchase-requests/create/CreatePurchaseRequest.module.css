@@ -1,0 +1,19 @@
+.autosave {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 300;
+}
+.supplierCard {
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  padding: 12px;
+  background: var(--gk-surface);
+}
+.supplierCard[data-has-offer] {
+  border-color: #bde5c6;
+  background: #f6fff8;
+}
+.specsPreview {
+  white-space: pre-line;
+}
