@@ -45,6 +45,9 @@ export function TrendChart<Row extends object>({
 }: TrendChartProps<Row>) {
   const emptyText = empty ?? (data.length ? undefined : EMPTY_TEXT);
   const withDots = dots ?? data.length <= 13;
+  // Dashed series are references (averages, targets): a line, never dots.
+  const plainLine = (key: string) =>
+    series.find((s) => s.key === key)?.pattern === 'dashed' ? { dot: false as const } : {};
 
   const tooltipContent = ({ active, payload }: TooltipContentProps) => {
     const row = rowFromPayload<Row>(payload);
@@ -109,10 +112,13 @@ export function TrendChart<Row extends object>({
           {...common}
           fillOpacity={0.15}
           withGradient={false}
-          areaProps={{ isAnimationActive: false }}
+          areaProps={(s) => ({ isAnimationActive: false, ...plainLine(s.name) })}
         />
       ) : (
-        <LineChart {...common} lineProps={{ isAnimationActive: false }} />
+        <LineChart
+          {...common}
+          lineProps={(s) => ({ isAnimationActive: false, ...plainLine(s.name) })}
+        />
       )}
     </ChartFrame>
   );

@@ -107,7 +107,7 @@ export function BarsChart<Row extends object>({
   legend,
 }: BarsChartProps<Row>) {
   const phone = useMediaQuery('(max-width: 36em)') ?? false;
-  const axisWidth = phone ? Math.min(categoryWidth, 96) : categoryWidth;
+  const axisWidth = phone ? Math.min(categoryWidth, 120) : categoryWidth;
   const all = [...series, ...lines];
   const isLine = (s: ChartSeriesDef) => lines.includes(s);
   const emptyText = empty ?? (data.length ? undefined : EMPTY_TEXT);
