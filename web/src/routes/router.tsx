@@ -681,6 +681,10 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
         path: '/react-preview/ui',
         lazy: async () => ({ Component: (await import('@/pages/dev/UiPreview')).UiPreview }),
       },
+      {
+        path: '/react-preview/gantt',
+        lazy: async () => ({ Component: (await import('@/pages/dev/GanttPreview')).GanttPreview }),
+      },
     ]
   : [];
 
