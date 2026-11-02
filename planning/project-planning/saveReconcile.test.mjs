@@ -22,6 +22,10 @@ import {
     shouldDiscardNewBlockLocally,
     enqueueDeletedAssignment,
     adoptDeletedCreateIdentities,
+    newStageCidsFromBlock,
+    shouldDiscardNewStageLocally,
+    findBoardBlock,
+    adoptDeletedStageIds,
 } from './saveReconcile.js';
 
 let failures = 0;
@@ -374,6 +378,70 @@ check('same destination with the sent price tier is treated as the sent move', (
     const sent = { resource_type: 'subcontractor', resource_id: 2, price_tier: 12 };
     assert.equal(shouldClearMoveTo(sent, { resource_type: 'subcontractor', resource_id: 2, price_tier: 12 }), true);
     assert.equal(shouldClearMoveTo(sent, { resource_type: 'subcontractor', resource_id: 2, price_tier: 19 }), false);
+});
+
+check('unsaved new stages are discarded locally; inflight or created ones are not', () => {
+    const fresh = { cid: 'new-1', id: null };
+    assert.equal(shouldDiscardNewStageLocally(fresh, new Set()), true);
+    assert.equal(shouldDiscardNewStageLocally(fresh, new Set(['new-1'])), false);
+    assert.equal(shouldDiscardNewStageLocally({
+        cid: 'new-2', id: null, createdOnServer: true,
+    }, new Set()), false);
+    assert.equal(shouldDiscardNewStageLocally({
+        cid: 's80', id: 80,
+    }, new Set()), false);
+});
+
+check('newStageCidsFromBlock lists only live id-less stages', () => {
+    const cids = newStageCidsFromBlock({
+        stages: [
+            { cid: 'new-1', id: null, deleted: false },
+            { cid: 'new-2', id: null, deleted: true },
+            { cid: 's80', id: 80, deleted: false },
+        ],
+    });
+    assert.deepEqual(cids, ['new-1']);
+});
+
+check('deleted in-flight stages adopt leftover server ids by title', () => {
+    const client = [
+        { title: 'Montaj', id: null, cid: 'new-1', deleted: true },
+        { title: 'Kaynak ve Taşlama', id: null, cid: 'new-2' },
+    ];
+    adoptDeletedStageIds(client, [
+        { id: 80, title: 'Montaj' },
+        { id: 81, title: 'Kaynak ve Taşlama' },
+    ]);
+    assert.equal(client[0].id, 80);
+    assert.equal(client[0].cid, 's80');
+    assert.equal(client[1].id, null);
+});
+
+check('adoptDeletedStageIds does not steal an id already on a live sibling', () => {
+    const client = [
+        { title: 'Montaj', id: 80, cid: 's80' },
+        { title: 'Montaj', id: null, cid: 'new-9', deleted: true },
+    ];
+    adoptDeletedStageIds(client, [
+        { id: 80, title: 'Montaj' },
+        { id: 81, title: 'Kaynak ve Taşlama' },
+    ]);
+    assert.equal(client[1].id, null);
+});
+
+check('findBoardBlock locates an assignment on the saved board', () => {
+    const board = {
+        resources: [{
+            blocks: [
+                { assignment_type: 'internal_team', assignment_id: 9, stages: [] },
+                { assignment_type: 'internal_team', assignment_id: 22, stages: [{ id: 80, title: 'Montaj' }] },
+            ],
+        }],
+    };
+    const found = findBoardBlock(board, 'internal_team', 22);
+    assert.equal(found.assignment_id, 22);
+    assert.equal(found.stages[0].id, 80);
+    assert.equal(findBoardBlock(board, 'internal_team', 99), null);
 });
 
 if (failures) {

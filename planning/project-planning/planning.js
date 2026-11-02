@@ -46,6 +46,10 @@ import {
     enqueueDeletedAssignment,
     adoptDeletedCreateIdentities,
     adoptExistingBlockStageIds,
+    newStageCidsFromBlock,
+    shouldDiscardNewStageLocally,
+    findBoardBlock,
+    adoptDeletedStageIds,
 } from './saveReconcile.js';
 import { exportPlanningPdf } from './pdf.js';
 import { initCapacityPanel } from './capacityPanel.js';
@@ -96,6 +100,9 @@ let saveInFlight = false;
 // Keys of new_blocks in the in-flight save. Delete must not treat those as
 // local-only — the server is about to create them.
 let inflightNewKeys = new Set();
+// Cids of id-less stages in the in-flight save. Delete must not splice
+// those as local-only — the server is about to create them.
+let inflightNewStageCids = new Set();
 
 let liveForecastJobs = new Set(); // jobs edited this session -> live client projections
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
@@ -3709,12 +3716,19 @@ function onDeleteCustomStage(row) {
                 : ''),
         confirmText: 'Sil',
         onConfirm: () => {
-            if (stage.id == null) {
-                block.stages = block.stages.filter(s => s.cid !== stage.cid);
+            const liveBlock = findBlock(row.blockRef) || block;
+            const liveStage = (liveBlock.stages || []).find(s => s.cid === stage.cid)
+                || (stage.id != null
+                    ? (liveBlock.stages || []).find(s => s.id === stage.id)
+                    : null)
+                || stage;
+            if (shouldDiscardNewStageLocally(liveStage, inflightNewStageCids)) {
+                liveBlock.stages = (liveBlock.stages || []).filter(
+                    s => s.cid !== liveStage.cid);
             } else {
-                stage.deleted = true;
+                liveStage.deleted = true;
             }
-            markBlockDirty(block.key);
+            markBlockDirty(liveBlock.key);
             scheduleRefresh();
         },
     });
@@ -4592,10 +4606,18 @@ async function onSave() {
     const clockAtSend = mutationClock;
     const knownIds = knownAssignmentKeys(resources);
     const sentNewKeys = [];
+    const sentNewStageCids = [];
     resources.forEach(res => res.blocks.forEach(b => {
-        if (shouldPostNewBlock(b)) sentNewKeys.push(b.key);
+        if (b.deleted) return;
+        if (shouldPostNewBlock(b)) {
+            sentNewKeys.push(b.key);
+            sentNewStageCids.push(...newStageCidsFromBlock(b));
+        } else if (!b.isNew && dirtyBlocks.has(b.key)) {
+            sentNewStageCids.push(...newStageCidsFromBlock(b));
+        }
     }));
     inflightNewKeys = new Set(sentNewKeys);
+    inflightNewStageCids = new Set(sentNewStageCids);
     try {
         const resp = await bulkSaveWeldingPlanning(payload);
         showNotification('Plan kaydedildi.', 'success');
@@ -4609,7 +4631,7 @@ async function onSave() {
         // save (or a skipped hydrate) cannot recreate them. Cell-level dirty
         // stays until hydrate so an edit typed during this request is not
         // dropped.
-        finalizeSavedStructuralOps(payload, sentNewKeys);
+        finalizeSavedStructuralOps(payload, sentNewKeys, sentNewStageCids);
         const board = resp && resp.board;
         if (shouldHydrateAfterSave(clockAtSend, mutationClock)) {
             // This payload is fully committed and nobody typed during the
@@ -4637,19 +4659,25 @@ async function onSave() {
         // marked deleted with no assignment_id. Stitch the id from resp.board
         // now so Kaydet can send deleted_blocks without waiting on refresh.
         adoptIdentitiesForDeletedCreates(board, knownIds, sentNewKeys);
+        // A stage deleted during this request skipped hydrate and left an
+        // id-less deleted row. Stitch the id from resp.board now so Kaydet
+        // can send `{id, deleted: true}` without waiting on refresh.
+        stitchIdentitiesAfterSkippedHydrate(board, knownIds, sentNewKeys);
         refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys });
     } catch (e) {
         discardUnsentDeletedCreates();
+        discardUnsentDeletedStages();
         if (btn) btn.disabled = false;
         showNotification(e.message, 'error');
     } finally {
         inflightNewKeys = new Set();
+        inflightNewStageCids = new Set();
         saveInFlight = false;
         if (hasUnsavedChanges()) updateSaveState();
     }
 }
 
-function finalizeSavedStructuralOps(payload, sentNewKeys) {
+function finalizeSavedStructuralOps(payload, sentNewKeys, sentNewStageCids) {
     (sentNewKeys || []).forEach((key) => {
         const b = findBlock(key);
         if (!b) return;
@@ -4658,6 +4686,10 @@ function finalizeSavedStructuralOps(payload, sentNewKeys) {
         delete b.moveTo;
     });
     const sentMoves = sentMoveToByAssignment(payload.blocks);
+    (sentNewStageCids || []).forEach((cid) => {
+        const stage = findStageByCid(cid);
+        if (stage) stage.createdOnServer = true;
+    });
     const sentBlockIds = new Set(
         (payload.blocks || []).map((b) => assignmentKey(b.assignment_type, b.assignment_id)),
     );
@@ -4676,6 +4708,44 @@ function finalizeSavedStructuralOps(payload, sentNewKeys) {
         }
     }));
     deletedBlocks = leftoverDeleted(deletedBlocks, payload.deleted_blocks || []);
+}
+
+function findStageByCid(cid) {
+    if (!cid) return null;
+    for (const res of resources) {
+        for (const b of (res.blocks || [])) {
+            const stage = (b.stages || []).find(s => s.cid === cid);
+            if (stage) return stage;
+        }
+    }
+    return null;
+}
+
+function discardUnsentDeletedStages() {
+    resources.forEach((res) => {
+        (res.blocks || []).forEach((b) => {
+            b.stages = (b.stages || []).filter((s) => !(
+                s.deleted && s.id == null && !s.createdOnServer
+            ));
+        });
+    });
+}
+
+function adoptDeletedStageIdentities(board) {
+    if (!board) return;
+    resources.forEach((res) => {
+        (res.blocks || []).forEach((b) => {
+            if (!b || b.assignment_id == null) return;
+            const serverBlock = findBoardBlock(board, b.assignment_type, b.assignment_id);
+            if (serverBlock) adoptDeletedStageIds(b.stages, serverBlock.stages);
+        });
+    });
+}
+
+function stitchIdentitiesAfterSkippedHydrate(board, knownIds, sentNewKeys) {
+    if (!board) return;
+    adoptCreatedBlockIdentities(board, knownIds, sentNewKeys);
+    adoptDeletedStageIdentities(board);
 }
 
 function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
@@ -4714,6 +4784,7 @@ async function refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys } =
         adoptCreatedBlockIdentities(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
         adoptIdentitiesForDeletedCreates(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
         adoptExistingBlockStageIds(resources, data);
+        adoptDeletedStageIdentities(data);
         updateSaveState();
         scheduleRefresh();
     } catch (e) {
