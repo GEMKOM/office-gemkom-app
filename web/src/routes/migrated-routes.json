@@ -42,5 +42,9 @@
   "/general/crane-requests/pending",
   "/general/crane-requests/prices",
   "/general/department-requests/list",
-  "/general/department-requests/pending"
+  "/general/department-requests/pending",
+  "/general/overtime/pending",
+  "/general/overtime/registry",
+  "/general/overtime/users",
+  "/general/overtime/welding-report"
 ]

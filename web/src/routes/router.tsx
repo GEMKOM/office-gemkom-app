@@ -249,6 +249,34 @@ export const appRoutes: RouteObject[] = [
       ).PendingDepartmentRequestsPage,
     }),
   },
+  {
+    path: '/general/overtime/pending',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/pending/OvertimePendingPage'))
+        .OvertimePendingPage,
+    }),
+  },
+  {
+    path: '/general/overtime/registry',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/registry/OvertimeRegistryPage'))
+        .OvertimeRegistryPage,
+    }),
+  },
+  {
+    path: '/general/overtime/users',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/users/OvertimeUsersPage'))
+        .OvertimeUsersPage,
+    }),
+  },
+  {
+    path: '/general/overtime/welding-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/welding-report/WeldingReportPage'))
+        .WeldingReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
