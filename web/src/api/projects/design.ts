@@ -17,7 +17,10 @@ export function pendingReleaseCountQueryOptions() {
     queryKey: ['drawingReleases', 'pendingApprovals', params] as const,
     queryFn: async ({ signal }) =>
       toPaginated<unknown>(
-        await apiFetch<unknown>('/projects/drawing-releases/pending_approvals/', { params, signal }),
+        await apiFetch<unknown>('/projects/drawing-releases/pending_approvals/', {
+          params,
+          signal,
+        }),
       ),
     staleTime: DESIGN_STALE_TIME,
     select: (page) => page.count,
@@ -28,12 +31,17 @@ export function pendingReleaseCountQueryOptions() {
  * How many department tasks match (listDepartmentTasks), from a one-row page.
  * The revision requests page asks for { department: 'design', has_pending_revision: true }.
  */
-export function departmentTaskCountQueryOptions(filter: { department?: string; has_pending_revision?: boolean }) {
+export function departmentTaskCountQueryOptions(filter: {
+  department?: string;
+  has_pending_revision?: boolean;
+}) {
   const params = { ...filter, page_size: 1 };
   return queryOptions({
     queryKey: ['departmentTasks', 'list', cleanParams(params)] as const,
     queryFn: async ({ signal }) =>
-      toPaginated<unknown>(await apiFetch<unknown>('/projects/department-tasks/', { params, signal })),
+      toPaginated<unknown>(
+        await apiFetch<unknown>('/projects/department-tasks/', { params, signal }),
+      ),
     staleTime: DESIGN_STALE_TIME,
     select: (page) => page.count,
   });
@@ -87,7 +95,8 @@ export interface CompletedReviewParams {
 export const releaseKeys = {
   all: ['drawingReleases'] as const,
   pending: ['drawingReleases', 'pendingApprovals', 'all'] as const,
-  completed: (params: CompletedReviewParams) => ['drawingReleases', 'completedReviews', cleanParams({ ...params })] as const,
+  completed: (params: CompletedReviewParams) =>
+    ['drawingReleases', 'completedReviews', cleanParams({ ...params })] as const,
   detail: (id: number | string) => ['drawingReleases', 'detail', String(id)] as const,
 };
 
@@ -96,8 +105,9 @@ export function pendingReleasesQueryOptions() {
   return queryOptions({
     queryKey: releaseKeys.pending,
     queryFn: async ({ signal }) =>
-      toPaginated<DrawingRelease>(await apiFetch<unknown>('/projects/drawing-releases/pending_approvals/', { signal }))
-        .results,
+      toPaginated<DrawingRelease>(
+        await apiFetch<unknown>('/projects/drawing-releases/pending_approvals/', { signal }),
+      ).results,
     staleTime: 30_000,
   });
 }
@@ -108,7 +118,10 @@ export function completedReviewsQueryOptions(params: CompletedReviewParams) {
     queryKey: releaseKeys.completed(params),
     queryFn: async ({ signal }) =>
       toPaginated<DrawingRelease>(
-        await apiFetch<unknown>('/projects/drawing-releases/completed_reviews/', { params: { ...params }, signal }),
+        await apiFetch<unknown>('/projects/drawing-releases/completed_reviews/', {
+          params: { ...params },
+          signal,
+        }),
       ),
     staleTime: 30_000,
   });
@@ -118,7 +131,8 @@ export function completedReviewsQueryOptions(params: CompletedReviewParams) {
 export function drawingReleaseQueryOptions(id: number | string) {
   return queryOptions({
     queryKey: releaseKeys.detail(id),
-    queryFn: ({ signal }) => apiFetch<DrawingRelease>(`/projects/drawing-releases/${id}/`, { signal }),
+    queryFn: ({ signal }) =>
+      apiFetch<DrawingRelease>(`/projects/drawing-releases/${id}/`, { signal }),
     staleTime: 0,
   });
 }
@@ -128,10 +142,13 @@ export function useApproveRelease() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: number) =>
-      apiFetch<{ message?: string; published?: boolean }>(`/projects/drawing-releases/${id}/approve/`, {
-        method: 'POST',
-        body: {},
-      }),
+      apiFetch<{ message?: string; published?: boolean }>(
+        `/projects/drawing-releases/${id}/approve/`,
+        {
+          method: 'POST',
+          body: {},
+        },
+      ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: releaseKeys.all }),
   });
 }
@@ -141,7 +158,10 @@ export function useRejectRelease() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, reason }: { id: number; reason: string }) =>
-      apiFetch<unknown>(`/projects/drawing-releases/${id}/reject/`, { method: 'POST', body: { reason } }),
+      apiFetch<unknown>(`/projects/drawing-releases/${id}/reject/`, {
+        method: 'POST',
+        body: { reason },
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: releaseKeys.all }),
   });
 }
@@ -164,7 +184,10 @@ export function createRelease(data: ReleaseInput) {
 
 /** Port of resubmitRelease: edits a rejected release and sends it back to review. */
 export function resubmitRelease(id: number, data: ReleaseInput) {
-  return apiFetch<unknown>(`/projects/drawing-releases/${id}/resubmit/`, { method: 'POST', body: data });
+  return apiFetch<unknown>(`/projects/drawing-releases/${id}/resubmit/`, {
+    method: 'POST',
+    body: data,
+  });
 }
 
 export interface CompleteRevisionInput {

@@ -2,7 +2,11 @@ import { queryOptions, useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../client';
 import { qk } from '../keys';
 import { extractResults } from '../types';
-import { REFERENCE_STALE_TIME, SLOW_REFERENCE_STALE_TIME, type ReferenceQueryOptions } from './shared';
+import {
+  REFERENCE_STALE_TIME,
+  SLOW_REFERENCE_STALE_TIME,
+  type ReferenceQueryOptions,
+} from './shared';
 
 /** Light user row from `/users/dropdown/`. */
 export interface UserOption {
@@ -48,7 +52,13 @@ export interface Team {
   [key: string]: unknown;
 }
 
-type RawTeam = { name: string; display_name?: string; value?: string; label?: string; [key: string]: unknown };
+type RawTeam = {
+  name: string;
+  display_name?: string;
+  value?: string;
+  label?: string;
+  [key: string]: unknown;
+};
 
 /** Port of apis/users.js fetchTeams. */
 export function teamsQueryOptions() {
@@ -71,7 +81,9 @@ export function useTeams(options: ReferenceQueryOptions = {}) {
 }
 
 /** "Ad Soyad (kullanici)" the way legacy pickers label users. */
-export function userLabel(user: Pick<UserOption, 'username' | 'full_name' | 'first_name' | 'last_name'>): string {
+export function userLabel(
+  user: Pick<UserOption, 'username' | 'full_name' | 'first_name' | 'last_name'>,
+): string {
   const name = user.full_name || [user.first_name, user.last_name].filter(Boolean).join(' ');
   return name ? `${name} (${user.username})` : user.username;
 }
@@ -98,7 +110,8 @@ export interface MentionGroupMembers {
 export function groupMembersQueryOptions(groupId: number | string) {
   return queryOptions({
     queryKey: [...qk.teams.detail(groupId), 'members'] as const,
-    queryFn: ({ signal }) => apiFetch<MentionGroupMembers>(`/organization/groups/${groupId}/members/`, { signal }),
+    queryFn: ({ signal }) =>
+      apiFetch<MentionGroupMembers>(`/organization/groups/${groupId}/members/`, { signal }),
     // Memberships barely change within a visit, and one badge is often clicked twice.
     staleTime: SLOW_REFERENCE_STALE_TIME,
   });

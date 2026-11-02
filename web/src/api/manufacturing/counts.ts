@@ -13,7 +13,9 @@ function countQueryOptions(resource: string, path: string, params: QueryParams) 
   return queryOptions({
     queryKey: [resource, 'count', cleanParams(params)] as QueryKey,
     queryFn: async ({ signal }) =>
-      toPaginated<unknown>(await apiFetch<unknown>(path, { params: { ...params, page_size: 1 }, signal })).count,
+      toPaginated<unknown>(
+        await apiFetch<unknown>(path, { params: { ...params, page_size: 1 }, signal }),
+      ).count,
     staleTime: SHOP_FLOOR_STALE_TIME,
   });
 }

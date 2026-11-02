@@ -159,9 +159,16 @@ export interface DeliveryReceiptResult {
  * Port of markPlanningRequestItemDelivered: each call appends a receipt
  * (quantity as a string; everything outstanding when omitted).
  */
-export function markPlanningRequestItemDelivered(itemId: number, receipt: { quantity?: number; note?: string } = {}) {
+export function markPlanningRequestItemDelivered(
+  itemId: number,
+  receipt: { quantity?: number; note?: string } = {},
+) {
   const body: Record<string, string> = {};
-  if (receipt.quantity !== undefined && receipt.quantity !== null) body.quantity = String(receipt.quantity);
+  if (receipt.quantity !== undefined && receipt.quantity !== null)
+    body.quantity = String(receipt.quantity);
   if (receipt.note) body.note = receipt.note;
-  return apiFetch<DeliveryReceiptResult>(`/planning/items/${itemId}/mark_delivered/`, { method: 'POST', body });
+  return apiFetch<DeliveryReceiptResult>(`/planning/items/${itemId}/mark_delivered/`, {
+    method: 'POST',
+    body,
+  });
 }

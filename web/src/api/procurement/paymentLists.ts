@@ -1,5 +1,12 @@
 import { keepPreviousData, queryOptions } from '@tanstack/react-query';
-import { ApiError, apiFetch, cleanParams, isApiError, type ApiFetchOptions, type QueryParams } from '../client';
+import {
+  ApiError,
+  apiFetch,
+  cleanParams,
+  isApiError,
+  type ApiFetchOptions,
+  type QueryParams,
+} from '../client';
 import { toPaginated, type Paginated } from '../types';
 import { extractErrorMessage } from './suppliers';
 
@@ -41,7 +48,13 @@ export interface PoolRow {
   gs_numbers?: string[] | null;
   jobs?: PaymentJobRef[] | null;
   supplier?: { id?: number; name?: string | null; has_dbs?: boolean } | null;
-  po: { id: number; gross_total?: Decimal; currency?: string | null; created_at?: string | null; proforma_count?: number | null };
+  po: {
+    id: number;
+    gross_total?: Decimal;
+    currency?: string | null;
+    created_at?: string | null;
+    proforma_count?: number | null;
+  };
   pr?: { id?: number; request_number?: string | null } | null;
   terms?: { name?: string | null } | null;
   open_list?: { id: number; title: string; status: string; status_label?: string | null } | null;
@@ -125,7 +138,12 @@ export interface PaymentList {
   can_decide?: boolean;
   /** What the current user may do; combines status, permission and approver membership. */
   allowed_actions?: string[] | null;
-  fx?: { source?: string | null; eur_try?: Decimal; usd_try?: Decimal; date?: string | null } | null;
+  fx?: {
+    source?: string | null;
+    eur_try?: Decimal;
+    usd_try?: Decimal;
+    date?: string | null;
+  } | null;
   approval?: {
     current_stage_order?: number | null;
     is_complete?: boolean;
@@ -202,7 +220,11 @@ async function call<T>(path: string, fallback: string, options: ApiFetchOptions 
     return await apiFetch<T>(path, options);
   } catch (error) {
     if (isApiError(error)) {
-      throw new ApiError(error.status, error.data, extractErrorMessage(error.data ?? null, fallback));
+      throw new ApiError(
+        error.status,
+        error.data,
+        extractErrorMessage(error.data ?? null, fallback),
+      );
     }
     throw error;
   }
@@ -219,9 +241,11 @@ export function isApiErrorStatus(error: unknown, statuses: readonly number[]): b
 
 export const paymentListKeys = {
   all: ['paymentLists'] as const,
-  lists: (params: PaymentListsParams) => ['paymentLists', 'list', cleanParams(params as QueryParams)] as const,
+  lists: (params: PaymentListsParams) =>
+    ['paymentLists', 'list', cleanParams(params as QueryParams)] as const,
   detail: (id: number) => ['paymentLists', 'detail', id] as const,
-  pool: (params: PaymentPoolParams) => ['paymentPool', 'list', cleanParams(params as QueryParams)] as const,
+  pool: (params: PaymentPoolParams) =>
+    ['paymentPool', 'list', cleanParams(params as QueryParams)] as const,
   poolAll: ['paymentPool'] as const,
   facets: ['paymentPool', 'facets'] as const,
   attachments: (poId: number) => ['poAttachments', poId] as const,
@@ -229,7 +253,10 @@ export const paymentListKeys = {
 
 // ---- pool + schedule tools ---------------------------------------------------------
 
-export function getPaymentPool(params: PaymentPoolParams = {}, signal?: AbortSignal): Promise<Paginated<PoolRow>> {
+export function getPaymentPool(
+  params: PaymentPoolParams = {},
+  signal?: AbortSignal,
+): Promise<Paginated<PoolRow>> {
   return call<unknown>('/procurement/payment-pool/', 'Ödeme havuzu yüklenemedi', {
     params: params as QueryParams,
     signal,
@@ -246,7 +273,11 @@ export function paymentPoolQueryOptions(params: PaymentPoolParams) {
 
 /** {job_nos, suppliers, gs_numbers}: options for the pool filters. */
 export function getPaymentPoolFacets(signal?: AbortSignal): Promise<PaymentPoolFacets> {
-  return call<PaymentPoolFacets>('/procurement/payment-pool/facets/', 'Filtre seçenekleri yüklenemedi', { signal });
+  return call<PaymentPoolFacets>(
+    '/procurement/payment-pool/facets/',
+    'Filtre seçenekleri yüklenemedi',
+    { signal },
+  );
 }
 
 /** Legacy fetched the facets once per page load. */
@@ -262,7 +293,11 @@ export function splitSchedule(
   poId: number,
   payload: { schedule_id: number; amount?: string; percentage?: string },
 ): Promise<unknown> {
-  return call(`/procurement/purchase-orders/${poId}/split_schedule/`, 'Taksit bölünemedi', POST(payload));
+  return call(
+    `/procurement/purchase-orders/${poId}/split_schedule/`,
+    'Taksit bölünemedi',
+    POST(payload),
+  );
 }
 
 export function bulkMarkSchedulesPaid(payload: {
@@ -271,18 +306,30 @@ export function bulkMarkSchedulesPaid(payload: {
   paid_with_tax: boolean;
   dry_run?: boolean;
 }): Promise<BulkPaidResult> {
-  return call('/procurement/payment-schedules/bulk_mark_paid/', 'Toplu işaretleme başarısız', POST(payload));
+  return call(
+    '/procurement/payment-schedules/bulk_mark_paid/',
+    'Toplu işaretleme başarısız',
+    POST(payload),
+  );
 }
 
 // ---- proformas (order attachments) --------------------------------------------------
 
 export function listPoAttachments(poId: number, signal?: AbortSignal): Promise<PoAttachment[]> {
-  return call<PoAttachment[]>(`/procurement/purchase-orders/${poId}/attachments/`, 'Dosyalar yüklenemedi', {
-    signal,
-  }).then((data) => (Array.isArray(data) ? data : []));
+  return call<PoAttachment[]>(
+    `/procurement/purchase-orders/${poId}/attachments/`,
+    'Dosyalar yüklenemedi',
+    {
+      signal,
+    },
+  ).then((data) => (Array.isArray(data) ? data : []));
 }
 
-export function uploadPoAttachment(poId: number, file: File, description = 'proforma'): Promise<unknown> {
+export function uploadPoAttachment(
+  poId: number,
+  file: File,
+  description = 'proforma',
+): Promise<unknown> {
   const fd = new FormData();
   fd.append('file', file);
   fd.append('description', description || 'proforma');
@@ -297,10 +344,14 @@ export function deleteAttachment(attachmentId: number): Promise<void> {
 
 const LISTS = '/procurement/payment-lists/';
 
-export function getPaymentLists(params: PaymentListsParams = {}, signal?: AbortSignal): Promise<Paginated<PaymentList>> {
-  return call<unknown>(LISTS, 'Ödeme listeleri yüklenemedi', { params: params as QueryParams, signal }).then(
-    (data) => toPaginated<PaymentList>(data),
-  );
+export function getPaymentLists(
+  params: PaymentListsParams = {},
+  signal?: AbortSignal,
+): Promise<Paginated<PaymentList>> {
+  return call<unknown>(LISTS, 'Ödeme listeleri yüklenemedi', {
+    params: params as QueryParams,
+    signal,
+  }).then((data) => toPaginated<PaymentList>(data));
 }
 
 export function paymentListsQueryOptions(params: PaymentListsParams) {
@@ -342,7 +393,10 @@ export function updatePaymentListItem(
   itemId: number,
   patch: { note?: string; is_urgent?: boolean },
 ): Promise<unknown> {
-  return call(`${LISTS}${id}/items/${itemId}/`, 'Kalem güncellenemedi', { method: 'PATCH', body: patch });
+  return call(`${LISTS}${id}/items/${itemId}/`, 'Kalem güncellenemedi', {
+    method: 'PATCH',
+    body: patch,
+  });
 }
 
 export function removePaymentListItem(id: number, itemId: number): Promise<void> {
@@ -373,7 +427,10 @@ export function submitPaymentList(id: number): Promise<unknown> {
   return call(`${LISTS}${id}/submit/`, 'Liste onaya gönderilemedi', POST());
 }
 
-export function decidePaymentList(id: number, { approve, comment = '' }: { approve: boolean; comment?: string }) {
+export function decidePaymentList(
+  id: number,
+  { approve, comment = '' }: { approve: boolean; comment?: string },
+) {
   return call<unknown>(`${LISTS}${id}/decide/`, 'Karar kaydedilemedi', POST({ approve, comment }));
 }
 

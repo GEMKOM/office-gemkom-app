@@ -25,8 +25,12 @@ export const passwordResetKeys = {
 };
 
 /** Port of apis/users.js listPasswordResetRequests (bare array or envelope). */
-export async function listPasswordResetRequests(signal?: AbortSignal): Promise<PasswordResetRequest[]> {
-  return extractResults<PasswordResetRequest>(await apiFetch<unknown>('/users/forgot-password/list/', { signal }));
+export async function listPasswordResetRequests(
+  signal?: AbortSignal,
+): Promise<PasswordResetRequest[]> {
+  return extractResults<PasswordResetRequest>(
+    await apiFetch<unknown>('/users/forgot-password/list/', { signal }),
+  );
 }
 
 export function passwordResetsQueryOptions() {

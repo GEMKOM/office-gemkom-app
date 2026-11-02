@@ -92,7 +92,10 @@ export const OFFERS_STALE_TIME = 60_000;
 const BASE = '/sales/offers/';
 
 /** Port of listOffers. */
-export async function listOffers(params: OffersParams = {}, signal?: AbortSignal): Promise<Paginated<Offer>> {
+export async function listOffers(
+  params: OffersParams = {},
+  signal?: AbortSignal,
+): Promise<Paginated<Offer>> {
   return toPaginated<Offer>(await apiFetch<unknown>(BASE, { params, signal }));
 }
 
@@ -107,7 +110,9 @@ export function offersQueryOptions(params: OffersParams = {}) {
 }
 
 /** How many offers match, from a one-row page. */
-export function offerCountQueryOptions(filter: Pick<OffersParams, 'status' | 'status__in' | 'customer'>) {
+export function offerCountQueryOptions(
+  filter: Pick<OffersParams, 'status' | 'status__in' | 'customer'>,
+) {
   const params: OffersParams = { ...filter, page_size: 1 };
   return queryOptions({
     queryKey: offersKey(params),
