@@ -86,6 +86,28 @@ export function positionsQueryOptions(params: PositionsParams = {}) {
   });
 }
 
+/** A node of GET /organization/positions/tree/ (the org chart). */
+export interface PositionTreeNode {
+  id: number;
+  title?: string;
+  level?: number | null;
+  department_code?: string | null;
+  holder_count?: number;
+  children?: PositionTreeNode[];
+  [key: string]: unknown;
+}
+
+/** fetchPositionTree: the root positions with their children nested. */
+export function positionTreeQueryOptions() {
+  return queryOptions({
+    queryKey: [...positionKeys.all, 'tree'] as const,
+    queryFn: async ({ signal }) => {
+      const nodes = await apiFetch<unknown>(`${BASE}tree/`, { signal });
+      return Array.isArray(nodes) ? (nodes as PositionTreeNode[]) : [];
+    },
+  });
+}
+
 export function usePositions(params: PositionsParams = {}) {
   return useQuery(positionsQueryOptions(params));
 }

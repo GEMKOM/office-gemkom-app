@@ -285,6 +285,10 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/human_resources/org',
+    lazy: async () => ({ Component: (await import('@/pages/human_resources/org/OrgChartPage')).OrgChartPage }),
+  },
+  {
     path: '/human_resources/attendance/pending-overrides',
     lazy: async () => ({
       Component: (
@@ -766,6 +770,12 @@ export const appRoutes: RouteObject[] = [
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/welding/time-entries/TimeEntriesPage'))
         .TimeEntriesPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/timesheets',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/welding/timesheets/TimesheetsPage')).TimesheetsPage,
     }),
   },
   {
