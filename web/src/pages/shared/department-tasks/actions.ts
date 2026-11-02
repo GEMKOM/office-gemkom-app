@@ -30,7 +30,12 @@ export function taskActions(ctx: DepartmentTasksContextValue) {
   const { config, applyTask, refreshRow, reloadList, closeTask, openDialog } = ctx;
 
   async function start(id: number): Promise<boolean> {
-    if (!(await confirm({ message: 'Bu görevi başlatmak istediğinize emin misiniz?', confirmLabel: 'Evet, Başlat' }))) {
+    if (
+      !(await confirm({
+        message: 'Bu görevi başlatmak istediğinize emin misiniz?',
+        confirmLabel: 'Evet, Başlat',
+      }))
+    ) {
       return false;
     }
     try {
@@ -47,7 +52,12 @@ export function taskActions(ctx: DepartmentTasksContextValue) {
   }
 
   async function standardComplete(id: number): Promise<boolean> {
-    if (!(await confirm({ message: 'Bu görevi tamamlamak istediğinize emin misiniz?', confirmLabel: 'Evet, Tamamla' }))) {
+    if (
+      !(await confirm({
+        message: 'Bu görevi tamamlamak istediğinize emin misiniz?',
+        confirmLabel: 'Evet, Tamamla',
+      }))
+    ) {
       return false;
     }
     try {
@@ -102,7 +112,9 @@ export function taskActions(ctx: DepartmentTasksContextValue) {
       }
       return;
     }
-    const isMfgMain = Boolean(row.is_manufacturing_main || (row.department === 'manufacturing' && !row.parent));
+    const isMfgMain = Boolean(
+      row.is_manufacturing_main || (row.department === 'manufacturing' && !row.parent),
+    );
     if (isMfgMain) {
       let codes = row.erp_product_codes;
       if (codes === undefined) {
@@ -147,7 +159,11 @@ export function taskActions(ctx: DepartmentTasksContextValue) {
         notify.error('İş emri bulunamadı');
         return;
       }
-      openDialog({ kind: 'release', task, resubmit: { releaseId: row.rejected_release_id, release } });
+      openDialog({
+        kind: 'release',
+        task,
+        resubmit: { releaseId: row.rejected_release_id, release },
+      });
     } catch {
       notify.error('Yeniden gönderme formu açılırken hata oluştu');
     }
@@ -158,7 +174,8 @@ export function taskActions(ctx: DepartmentTasksContextValue) {
       const task = await getDepartmentTask(id);
       if (!task.job_order) return void notify.error('İş emri bulunamadı');
       if (!task.is_under_revision) return void notify.error('Bu görev revizyonda değil');
-      if (!task.active_revision_release_id) return void notify.error('Aktif revizyon yayını bulunamadı');
+      if (!task.active_revision_release_id)
+        return void notify.error('Aktif revizyon yayını bulunamadı');
       openDialog({ kind: 'complete-revision', task });
     } catch {
       notify.error('Revizyon tamamlama modalı açılırken hata oluştu');
@@ -186,7 +203,12 @@ export function taskActions(ctx: DepartmentTasksContextValue) {
   }
 
   async function skip(id: number): Promise<boolean> {
-    if (!(await confirm({ message: 'Bu görevi atlamak istediğinize emin misiniz?', confirmLabel: 'Evet, Atla' }))) {
+    if (
+      !(await confirm({
+        message: 'Bu görevi atlamak istediğinize emin misiniz?',
+        confirmLabel: 'Evet, Atla',
+      }))
+    ) {
       return false;
     }
     try {

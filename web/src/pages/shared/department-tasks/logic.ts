@@ -1,5 +1,9 @@
 import { isApiError } from '@/api/client';
-import type { DepartmentTask, DepartmentTaskListParams, StatusChoice } from '@/api/projects/departmentTasks';
+import type {
+  DepartmentTask,
+  DepartmentTaskListParams,
+  StatusChoice,
+} from '@/api/projects/departmentTasks';
 import type { StatusFamily } from '@/ui';
 import type { DepartmentTasksConfig } from './config';
 
@@ -25,12 +29,18 @@ export function isTitleEditable(task: DepartmentTask): boolean {
 
 // ---- design release rules -----------------------------------------------------
 
-export function canSubmitNewDesignRelease(config: DepartmentTasksConfig, task: DepartmentTask): boolean {
+export function canSubmitNewDesignRelease(
+  config: DepartmentTasksConfig,
+  task: DepartmentTask,
+): boolean {
   if (!config.releaseFlow) return true;
   return !task.pending_approval_release_id && !task.rejected_release_id;
 }
 
-export function shouldHideDesignCompleteButton(config: DepartmentTasksConfig, task: DepartmentTask): boolean {
+export function shouldHideDesignCompleteButton(
+  config: DepartmentTasksConfig,
+  task: DepartmentTask,
+): boolean {
   return config.releaseFlow && Boolean(task.pending_approval_release_id) && !task.parent;
 }
 
@@ -42,7 +52,10 @@ export function approvalProgress(task: DepartmentTask): string {
 
 export type ReviewBadge = { kind: 'pending'; progress: string } | { kind: 'rejected' } | null;
 
-export function designReviewBadge(config: DepartmentTasksConfig, task: DepartmentTask): ReviewBadge {
+export function designReviewBadge(
+  config: DepartmentTasksConfig,
+  task: DepartmentTask,
+): ReviewBadge {
   if (!config.releaseFlow) return null;
   if (task.pending_approval_release_id) {
     const progress = approvalProgress(task);
@@ -125,7 +138,11 @@ const TAB: Record<TaskTabKey, TaskTab> = {
   unskip: { key: 'unskip', label: 'Atlamayı Geri Al', icon: 'fas fa-undo' },
   'add-subtask': { key: 'add-subtask', label: 'Alt Görev Ekle', icon: 'fas fa-plus-circle' },
   delete: { key: 'delete', label: 'Sil', icon: 'fas fa-trash' },
-  'bulk-subtask': { key: 'bulk-subtask', label: 'Toplu Alt Görev Ekle', icon: 'fas fa-layer-group' },
+  'bulk-subtask': {
+    key: 'bulk-subtask',
+    label: 'Toplu Alt Görev Ekle',
+    icon: 'fas fa-layer-group',
+  },
   subcontractor: { key: 'subcontractor', label: 'Taşeron Ataması', icon: 'fas fa-handshake' },
   'internal-team': { key: 'internal-team', label: 'Takım Ataması', icon: 'fas fa-users' },
   'self-start-revision': {
@@ -155,8 +172,10 @@ export function availableTabs(config: DepartmentTasksConfig, task: DepartmentTas
   if (config.weldingAssignments && task.task_type === 'welding') {
     tabs.push(TAB.subcontractor, TAB['internal-team']);
   }
-  if (config.weldingAssignments && task.task_type === 'subcontracting') tabs.push(TAB.subcontractor);
-  if (config.weldingAssignments && task.task_type === 'internal_team') tabs.push(TAB['internal-team']);
+  if (config.weldingAssignments && task.task_type === 'subcontracting')
+    tabs.push(TAB.subcontractor);
+  if (config.weldingAssignments && task.task_type === 'internal_team')
+    tabs.push(TAB['internal-team']);
   // Painting tasks get the tab on every page (legacy did not check the department).
   if (task.task_type === 'painting') tabs.push(TAB.subcontractor);
   if (canSelfStartRevision(config, task)) tabs.push(TAB['self-start-revision']);
@@ -223,7 +242,11 @@ export function filterParams(values: TaskFilterValues): DepartmentTaskListParams
 }
 
 /** Legacy loadTasks ordering: the sorted column, else target_start_date in the Gantt. */
-export function listOrdering(sortBy: string | null, sortDir: 'asc' | 'desc', gantt: boolean): string {
+export function listOrdering(
+  sortBy: string | null,
+  sortDir: 'asc' | 'desc',
+  gantt: boolean,
+): string {
   if (sortBy) return `${sortDir === 'desc' ? '-' : ''}${sortBy}`;
   return gantt ? 'target_start_date' : '';
 }
@@ -337,7 +360,10 @@ export function trNumber(value: unknown, decimals?: number): string {
   if (!Number.isFinite(n)) return '';
   return decimals === undefined
     ? n.toLocaleString('tr-TR')
-    : n.toLocaleString('tr-TR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+    : n.toLocaleString('tr-TR', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      });
 }
 
 /** utils/deliveryState.js fmtQty. */
@@ -360,7 +386,12 @@ export function isDerivedDuration(task: DepartmentTask): boolean {
  * anything unreadable fell back to the page's own message.
  */
 export function legacyErrorText(error: unknown, fallback: string, preferMessage = false): string {
-  if (isApiError(error) && error.data && typeof error.data === 'object' && !Array.isArray(error.data)) {
+  if (
+    isApiError(error) &&
+    error.data &&
+    typeof error.data === 'object' &&
+    !Array.isArray(error.data)
+  ) {
     const body = error.data as Record<string, unknown>;
     if (preferMessage && typeof body.message === 'string' && body.message) return body.message;
     const text = Object.values(body)
@@ -461,7 +492,8 @@ export function toGanttTask(task: DepartmentTask, index: number): GanttTask {
     planned_start_ms: startMs || undefined,
     planned_end_ms: endMs || undefined,
     plan_order: typeof task.sequence === 'number' ? task.sequence : index + 1,
-    progress_percentage: typeof task.completion_percentage === 'number' ? task.completion_percentage : undefined,
+    progress_percentage:
+      typeof task.completion_percentage === 'number' ? task.completion_percentage : undefined,
     status: task.status,
     is_overdue: isTaskOverdue(task),
   };
@@ -490,11 +522,14 @@ export function toGanttUserRows(
   };
   const time = (t: DepartmentTask) =>
     t.target_start_date ? new Date(t.target_start_date).getTime() : Number.MAX_SAFE_INTEGER;
-  const sorted = [...tasks].sort((a, b) => time(a) - time(b) || (a.sequence || 0) - (b.sequence || 0));
+  const sorted = [...tasks].sort(
+    (a, b) => time(a) - time(b) || (a.sequence || 0) - (b.sequence || 0),
+  );
   for (const task of sorted) {
     const { startMs, endMs } = taskRange(task);
     if (!startMs || !endMs) continue;
-    const assigned = task.assigned_to !== undefined && task.assigned_to !== null ? Number(task.assigned_to) : null;
+    const assigned =
+      task.assigned_to !== undefined && task.assigned_to !== null ? Number(task.assigned_to) : null;
     const row = (assigned !== null && byUser.get(assigned)) || unassigned;
     row.segments!.push({
       id: task.id,
@@ -572,8 +607,11 @@ function matchesWelding(
   cachedSubtasks: readonly DepartmentTask[] | undefined,
 ): boolean {
   if (parentId === taskId) return true;
-  if (toNumericId(record.kaynak_task_id) === taskId || toNumericId(record.kaynak_task) === taskId) return true;
-  return Boolean(assignmentTaskId && cachedSubtasks?.some((st) => toNumericId(st.id) === assignmentTaskId));
+  if (toNumericId(record.kaynak_task_id) === taskId || toNumericId(record.kaynak_task) === taskId)
+    return true;
+  return Boolean(
+    assignmentTaskId && cachedSubtasks?.some((st) => toNumericId(st.id) === assignmentTaskId),
+  );
 }
 
 /**
@@ -589,9 +627,16 @@ export function isSubcontractingAssignmentForTask(
   if (!taskId) return false;
   const record = assignment as Loose;
   const assignmentTaskId = firstId(record, SUB_TASK_PATHS);
-  if (task.task_type === 'subcontracting' || task.task_type === 'painting') return assignmentTaskId === taskId;
+  if (task.task_type === 'subcontracting' || task.task_type === 'painting')
+    return assignmentTaskId === taskId;
   if (task.task_type === 'welding') {
-    return matchesWelding(record, taskId, assignmentTaskId, firstId(record, SUB_PARENT_PATHS), cachedSubtasks);
+    return matchesWelding(
+      record,
+      taskId,
+      assignmentTaskId,
+      firstId(record, SUB_PARENT_PATHS),
+      cachedSubtasks,
+    );
   }
   return false;
 }
@@ -608,7 +653,13 @@ export function isInternalTeamAssignmentForTask(
   const assignmentTaskId = firstId(record, TEAM_TASK_PATHS);
   if (task.task_type === 'internal_team') return assignmentTaskId === taskId;
   if (task.task_type === 'welding') {
-    return matchesWelding(record, taskId, assignmentTaskId, firstId(record, TEAM_PARENT_PATHS), cachedSubtasks);
+    return matchesWelding(
+      record,
+      taskId,
+      assignmentTaskId,
+      firstId(record, TEAM_PARENT_PATHS),
+      cachedSubtasks,
+    );
   }
   return false;
 }
@@ -683,7 +734,10 @@ export function detectQcColumns(headers: readonly unknown[]): Record<keyof QcRev
   headers.forEach((header, index) => {
     if (!header) return;
     const normalized = normalizeTurkish(String(header).trim().toLowerCase());
-    for (const [field, keywords] of Object.entries(QC_KEYWORDS) as [keyof QcReviewDraft, string[]][]) {
+    for (const [field, keywords] of Object.entries(QC_KEYWORDS) as [
+      keyof QcReviewDraft,
+      string[],
+    ][]) {
       if (mapping[field] !== -1) continue;
       if (keywords.some((k) => normalized.includes(normalizeTurkish(k)))) mapping[field] = index;
     }

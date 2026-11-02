@@ -6,7 +6,17 @@ import { extractResults } from '../types';
 
 export interface InternalTeamAssignment {
   id: number;
-  team?: number | { id?: number; name?: string; foreman_name?: string; foreman_full_name?: string; foreman?: { full_name?: string; username?: string }; members?: unknown[] } | null;
+  team?:
+    | number
+    | {
+        id?: number;
+        name?: string;
+        foreman_name?: string;
+        foreman_full_name?: string;
+        foreman?: { full_name?: string; username?: string };
+        members?: unknown[];
+      }
+    | null;
   team_name?: string | null;
   team_display?: string | null;
   team_foreman_name?: string | null;
@@ -62,10 +72,16 @@ export function weightSummaryQueryOptions(weldingTaskId: number) {
 }
 
 export function createInternalTeamAssignmentWithSubtask(data: Record<string, unknown>) {
-  return apiFetch<unknown>('/welding/internal-team-assignments/create-with-subtask/', { method: 'POST', body: data });
+  return apiFetch<unknown>('/welding/internal-team-assignments/create-with-subtask/', {
+    method: 'POST',
+    body: data,
+  });
 }
 
-export function updateInternalTeamAssignmentWithEndpoint(id: number, data: Record<string, unknown>) {
+export function updateInternalTeamAssignmentWithEndpoint(
+  id: number,
+  data: Record<string, unknown>,
+) {
   return apiFetch<unknown>(`/welding/internal-team-assignments/${id}/update-assignment/`, {
     method: 'PATCH',
     body: data,
@@ -73,5 +89,7 @@ export function updateInternalTeamAssignmentWithEndpoint(id: number, data: Recor
 }
 
 export function deleteInternalTeamAssignmentWithSubtask(id: number) {
-  return apiFetch<void>(`/welding/internal-team-assignments/${id}/delete-with-subtask/`, { method: 'DELETE' });
+  return apiFetch<void>(`/welding/internal-team-assignments/${id}/delete-with-subtask/`, {
+    method: 'DELETE',
+  });
 }

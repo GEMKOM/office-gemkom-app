@@ -16,7 +16,11 @@ export interface TaskUser {
 /** The dialogs that open over the page (legacy kept one modal instance each). */
 export type TaskDialog =
   | { kind: 'create-task' }
-  | { kind: 'release'; task: DepartmentTask; resubmit?: { releaseId: number; release: DrawingRelease } }
+  | {
+      kind: 'release';
+      task: DepartmentTask;
+      resubmit?: { releaseId: number; release: DrawingRelease };
+    }
   | { kind: 'subtask-complete'; task: DepartmentTask }
   | { kind: 'complete-revision'; task: DepartmentTask }
   | { kind: 'reject-release'; releaseId: number; taskId: number }

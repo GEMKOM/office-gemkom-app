@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import { createContext, useContext } from 'react';
 import type { DepartmentTask, StatusChoice } from '@/api/projects/departmentTasks';
 import { AppLink } from '@/shell/AppLink';
 import { FaIcon, notify, StatusBadge, type DataTableColumn, type EditOption } from '@/ui';
@@ -19,7 +19,10 @@ import {
   trNumber,
 } from './logic';
 
-/** Tree state the first column reads; kept in a ref so the columns stay memoized. */
+/**
+ * Tree state the first column reads. A context, not a column dependency, so
+ * the columns stay memoized and only the tree cells re-render on a toggle.
+ */
 export interface TreeState {
   levels: Map<number, number>;
   expanded: ReadonlySet<number>;
@@ -27,9 +30,17 @@ export interface TreeState {
   toggle: (task: DepartmentTask) => void;
 }
 
+export const TreeContext = createContext<TreeState>({
+  levels: new Map(),
+  expanded: new Set(),
+  loading: new Set(),
+  toggle: () => undefined,
+});
+
 const LEVEL_WIDTH = 20;
 
-function TreeCell({ task, tree }: { task: DepartmentTask; tree: TreeState }) {
+function TreeCell({ task }: { task: DepartmentTask }) {
+  const tree = useContext(TreeContext);
   const level = tree.levels.get(task.id) ?? (task.parent ? 1 : 0);
   const hasChildren = (task.subtasks_count || 0) > 0;
   const expanded = tree.expanded.has(task.id);
@@ -38,12 +49,24 @@ function TreeCell({ task, tree }: { task: DepartmentTask; tree: TreeState }) {
     const center = l * LEVEL_WIDTH + LEVEL_WIDTH / 2;
     lines.push(<div key={`v${l}`} className={classes.treeLineV} style={{ left: center - 1 }} />);
     if (l < level - 1) {
-      lines.push(<div key={`h${l}`} className={classes.treeLineH} style={{ left: center, width: LEVEL_WIDTH }} />);
+      lines.push(
+        <div
+          key={`h${l}`}
+          className={classes.treeLineH}
+          style={{ left: center, width: LEVEL_WIDTH }}
+        />,
+      );
     }
   }
   if (level > 0) {
     const last = (level - 1) * LEVEL_WIDTH + LEVEL_WIDTH / 2;
-    lines.push(<div key="hl" className={classes.treeLineH} style={{ left: last, width: level * LEVEL_WIDTH - last }} />);
+    lines.push(
+      <div
+        key="hl"
+        className={classes.treeLineH}
+        style={{ left: last, width: level * LEVEL_WIDTH - last }}
+      />,
+    );
   }
   return (
     <div className={classes.tree}>
@@ -61,7 +84,15 @@ function TreeCell({ task, tree }: { task: DepartmentTask; tree: TreeState }) {
             tree.toggle(task);
           }}
         >
-          <FaIcon icon={tree.loading.has(task.id) ? 'fas fa-spinner fa-spin' : expanded ? 'fas fa-minus' : 'fas fa-plus'} />
+          <FaIcon
+            icon={
+              tree.loading.has(task.id)
+                ? 'fas fa-spinner fa-spin'
+                : expanded
+                  ? 'fas fa-minus'
+                  : 'fas fa-plus'
+            }
+          />
         </button>
       ) : null}
     </div>
@@ -69,7 +100,9 @@ function TreeCell({ task, tree }: { task: DepartmentTask; tree: TreeState }) {
 }
 
 function SubtaskPrefix({ task }: { task: DepartmentTask }) {
-  return task.parent ? <FaIcon icon="fas fa-level-down-alt" className={classes.muted} style={{ marginRight: 4 }} /> : null;
+  return task.parent ? (
+    <FaIcon icon="fas fa-level-down-alt" className={classes.muted} style={{ marginRight: 4 }} />
+  ) : null;
 }
 
 function KeyLink({ href, children }: { href: string; children: string }) {
@@ -105,10 +138,17 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
       return (
         <div className={indent}>
           <SubtaskPrefix task={task} />
-          <KeyLink href={`/manufacturing/machining/tasks/list/?key=${encodeURIComponent(key)}`}>{key}</KeyLink>
+          <KeyLink href={`/manufacturing/machining/tasks/list/?key=${encodeURIComponent(key)}`}>
+            {key}
+          </KeyLink>
           {others.length ? (
-            <small className={classes.muted} style={{ display: 'block' }} title="Birden fazla iş emrine bölünmüş parça">
-              {md.allocated_quantity ?? '-'} / {md.quantity ?? '-'} adet · ortak: {others.join(', ')}
+            <small
+              className={classes.muted}
+              style={{ display: 'block' }}
+              title="Birden fazla iş emrine bölünmüş parça"
+            >
+              {md.allocated_quantity ?? '-'} / {md.quantity ?? '-'} adet · ortak:{' '}
+              {others.join(', ')}
             </small>
           ) : null}
         </div>
@@ -121,7 +161,9 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
       return (
         <div className={indent}>
           <SubtaskPrefix task={task} />
-          <KeyLink href={`/manufacturing/cnc-cutting/cuts/?cut=${encodeURIComponent(key)}`}>{key}</KeyLink>
+          <KeyLink href={`/manufacturing/cnc-cutting/cuts/?cut=${encodeURIComponent(key)}`}>
+            {key}
+          </KeyLink>
         </div>
       );
     }
@@ -160,7 +202,11 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
 function TitleCell({ task }: { task: DepartmentTask }) {
   const { full, short } = displayTitle(task);
   return (
-    <div className={task.parent ? classes.indent : undefined} title={full} style={isTitleEditable(task) ? { cursor: 'pointer' } : undefined}>
+    <div
+      className={task.parent ? classes.indent : undefined}
+      title={full}
+      style={isTitleEditable(task) ? { cursor: 'pointer' } : undefined}
+    >
       {short}
       {task.is_consultation ? (
         <span title="Teklif Danışma" style={{ marginLeft: 4 }}>
@@ -188,7 +234,10 @@ function StatusCell({
   statuses: StatusChoice[];
   config: DepartmentTasksConfig;
 }) {
-  const status = statuses.find((s) => s.value === task.status) ?? { label: task.status ?? '', color: 'grey' };
+  const status = statuses.find((s) => s.value === task.status) ?? {
+    label: task.status ?? '',
+    color: 'grey',
+  };
   const isItem = task.task_type === 'procurement_item';
   const family = isItem && task.is_partially_delivered ? 'orange' : statusFamily(status.color);
   const label = isItem && task.status_display ? task.status_display : status.label;
@@ -232,9 +281,9 @@ function kg(value: unknown) {
 
 function AllocationsCell({ task }: { task: DepartmentTask }) {
   // Subcontractor 9 is the fixed paint subcontractor: on every painted job, so noise here.
-  const subs = (Array.isArray(task.assigned_subcontractors) ? task.assigned_subcontractors : []).filter(
-    (item) => Number(item?.subcontractor_id) !== 9,
-  );
+  const subs = (
+    Array.isArray(task.assigned_subcontractors) ? task.assigned_subcontractors : []
+  ).filter((item) => Number(item?.subcontractor_id) !== 9);
   const teams = Array.isArray(task.assigned_teams) ? task.assigned_teams : [];
   if (subs.length + teams.length === 0) return <>-</>;
   return (
@@ -269,7 +318,10 @@ function ProgressCell({ value }: { value: DepartmentTask['completion_percentage'
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
-        style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color} 0%, ${color}dd 100%)` }}
+        style={{
+          width: `${pct}%`,
+          background: `linear-gradient(90deg, ${color} 0%, ${color}dd 100%)`,
+        }}
       />
       <div className={classes.progressText}>{pct.toFixed(1)}%</div>
     </div>
@@ -309,11 +361,14 @@ export interface ColumnDeps {
   config: DepartmentTasksConfig;
   statuses: StatusChoice[];
   userOptions: EditOption[];
-  tree: RefObject<TreeState>;
 }
 
 /** The legacy table's columns. Build once per config/statuses/users (useMemo). */
-export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps): DataTableColumn<DepartmentTask>[] {
+export function buildColumns({
+  config,
+  statuses,
+  userOptions,
+}: ColumnDeps): DataTableColumn<DepartmentTask>[] {
   const extra: DataTableColumn<DepartmentTask>[] = [];
   if (config.extraColumn === 'allocations') {
     extra.push({
@@ -339,7 +394,8 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
       // Only on the top task: children share the job order.
       render: (row) => {
         const v = row.job_order_total_weight_kg;
-        if (row.parent || v === null || v === undefined || v === '') return <span className={classes.muted}>-</span>;
+        if (row.parent || v === null || v === undefined || v === '')
+          return <span className={classes.muted}>-</span>;
         return <>{trNumber(v, 2)} kg</>;
       },
     });
@@ -352,7 +408,7 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
       sortable: false,
       width: 80,
       exportable: false,
-      render: (row) => <TreeCell task={row} tree={tree.current!} />,
+      render: (row) => <TreeCell task={row} />,
     },
     {
       key: 'job_order',
@@ -373,7 +429,14 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
         apply: (row, value) => ({ ...row, title: String(value ?? '').trim() }),
       },
     },
-    { key: 'customer_name', header: 'Müşteri', sortable: true, render: (row) => <div className={row.parent ? classes.indent : undefined}>{row.customer_name || '-'}</div> },
+    {
+      key: 'customer_name',
+      header: 'Müşteri',
+      sortable: true,
+      render: (row) => (
+        <div className={row.parent ? classes.indent : undefined}>{row.customer_name || '-'}</div>
+      ),
+    },
     {
       key: 'status',
       header: 'Durum',
@@ -385,7 +448,11 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
       key: 'assigned_to_name',
       header: 'Atanan',
       sortable: false,
-      render: (row) => <div title={editableTitle(row, 'Atanan kişiyi değiştirmek için tıklayın')}>{row.assigned_to_name || '-'}</div>,
+      render: (row) => (
+        <div title={editableTitle(row, 'Atanan kişiyi değiştirmek için tıklayın')}>
+          {row.assigned_to_name || '-'}
+        </div>
+      ),
       editable: {
         type: 'select',
         options: [{ value: '', label: 'Atanmamış' }, ...userOptions],
@@ -393,7 +460,9 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
         apply: (row, value) => ({
           ...row,
           assigned_to: value ? Number(value) : null,
-          assigned_to_name: value ? (userOptions.find((u) => u.value === value)?.label ?? null) : null,
+          assigned_to_name: value
+            ? (userOptions.find((u) => u.value === value)?.label ?? null)
+            : null,
         }),
       },
     },
@@ -403,7 +472,11 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
       header: 'Hedef Başlangıç',
       sortable: true,
       accessor: (row) => (row.target_start_date ? new Date(row.target_start_date) : null),
-      render: (row) => <div title={editableTitle(row, 'Hedef başlangıç tarihini değiştirmek için tıklayın')}>{shortDate(row.target_start_date)}</div>,
+      render: (row) => (
+        <div title={editableTitle(row, 'Hedef başlangıç tarihini değiştirmek için tıklayın')}>
+          {shortDate(row.target_start_date)}
+        </div>
+      ),
       editable: {
         type: 'date',
         value: (row) => dateOnly(row.target_start_date),
@@ -415,18 +488,30 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
       header: 'Hedef Bitiş',
       sortable: true,
       accessor: (row) => (row.target_completion_date ? new Date(row.target_completion_date) : null),
-      render: (row) => <div title={editableTitle(row, 'Hedef bitiş tarihini değiştirmek için tıklayın')}>{shortDate(row.target_completion_date)}</div>,
+      render: (row) => (
+        <div title={editableTitle(row, 'Hedef bitiş tarihini değiştirmek için tıklayın')}>
+          {shortDate(row.target_completion_date)}
+        </div>
+      ),
       editable: {
         type: 'date',
         value: (row) => dateOnly(row.target_completion_date),
-        apply: (row, value) => ({ ...row, target_completion_date: (value as string | null) || null }),
+        apply: (row, value) => ({
+          ...row,
+          target_completion_date: (value as string | null) || null,
+        }),
       },
     },
     {
       key: 'estimated_duration_wd',
       header: 'Süre (iş g.)',
       sortable: true,
-      accessor: (row) => (row.estimated_duration_wd === null || row.estimated_duration_wd === undefined || row.estimated_duration_wd === '' ? null : Number(row.estimated_duration_wd)),
+      accessor: (row) =>
+        row.estimated_duration_wd === null ||
+        row.estimated_duration_wd === undefined ||
+        row.estimated_duration_wd === ''
+          ? null
+          : Number(row.estimated_duration_wd),
       render: (row) => <DurationCell task={row} />,
       editable: {
         type: 'number',
@@ -440,7 +525,10 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
       key: 'completion_percentage',
       header: 'Tamamlanma',
       sortable: false,
-      accessor: (row) => (row.completion_percentage === null || row.completion_percentage === undefined ? null : clampPercent(row.completion_percentage)),
+      accessor: (row) =>
+        row.completion_percentage === null || row.completion_percentage === undefined
+          ? null
+          : clampPercent(row.completion_percentage),
       render: (row) => <ProgressCell value={row.completion_percentage} />,
       editable: {
         type: 'number',
@@ -449,7 +537,11 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
         enabled: (row) => !(!row.completion_percentage && row.completion_percentage !== 0),
         value: (row) => clampPercent(row.completion_percentage).toFixed(1),
         validate: (value) =>
-          value === null || typeof value !== 'number' || Number.isNaN(value) || value < 0 || value > 99
+          value === null ||
+          typeof value !== 'number' ||
+          Number.isNaN(value) ||
+          value < 0 ||
+          value > 99
             ? 'Geçerli bir değer girin (0-99)'
             : null,
       },
@@ -459,16 +551,24 @@ export function buildColumns({ config, statuses, userOptions, tree }: ColumnDeps
       header: 'Ağırlık',
       sortable: true,
       align: 'center',
-      accessor: (row) => (row.weight === null || row.weight === undefined || row.weight === '' ? null : Number(row.weight)),
+      accessor: (row) =>
+        row.weight === null || row.weight === undefined || row.weight === ''
+          ? null
+          : Number(row.weight),
       render: (row) => (
         <div title={editableTitle(row, 'Ağırlığı düzenlemek için tıklayın')}>
-          {row.weight !== null && row.weight !== undefined && row.weight !== '' ? Number.parseFloat(String(row.weight)).toFixed(2) : '-'}
+          {row.weight !== null && row.weight !== undefined && row.weight !== ''
+            ? Number.parseFloat(String(row.weight)).toFixed(2)
+            : '-'}
         </div>
       ),
       editable: {
         type: 'number',
         step: 0.01,
-        value: (row) => (row.weight !== null && row.weight !== undefined && row.weight !== '' ? Number.parseFloat(String(row.weight)).toFixed(2) : ''),
+        value: (row) =>
+          row.weight !== null && row.weight !== undefined && row.weight !== ''
+            ? Number.parseFloat(String(row.weight)).toFixed(2)
+            : '',
         validate: (value) =>
           value !== null && typeof value === 'number' && value < 0
             ? 'Geçerli bir ağırlık değeri girin (0 veya pozitif sayı)'

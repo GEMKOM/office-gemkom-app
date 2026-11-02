@@ -21,7 +21,8 @@ export interface SubcontractingAssignment {
   unbilled_cost?: number | string | null;
   subtask_title?: string | null;
   subtask_weight?: number | string | null;
-  subtask?: { id?: number; title?: string; weight?: number | string; parent?: number } | number | null;
+  subtask?:
+    { id?: number; title?: string; weight?: number | string; parent?: number } | number | null;
   [key: string]: unknown;
 }
 
@@ -36,8 +37,10 @@ export interface PriceTier {
 
 export const assignmentKeys = {
   all: ['subcontractingAssignments'] as const,
-  list: (params: QueryParams) => ['subcontractingAssignments', 'list', cleanParams(params)] as const,
-  priceTiers: (params: QueryParams) => ['subcontractingPriceTiers', 'list', cleanParams(params)] as const,
+  list: (params: QueryParams) =>
+    ['subcontractingAssignments', 'list', cleanParams(params)] as const,
+  priceTiers: (params: QueryParams) =>
+    ['subcontractingPriceTiers', 'list', cleanParams(params)] as const,
 };
 
 /** Legacy fetchAssignments: the filters as-is; a bare array or a page. */
@@ -61,13 +64,18 @@ export function priceTiersQueryOptions(params: QueryParams) {
   return queryOptions({
     queryKey: assignmentKeys.priceTiers(params),
     queryFn: async ({ signal }) =>
-      extractResults<PriceTier>(await apiFetch<unknown>('/subcontracting/price-tiers/', { params, signal })),
+      extractResults<PriceTier>(
+        await apiFetch<unknown>('/subcontracting/price-tiers/', { params, signal }),
+      ),
     staleTime: 0,
   });
 }
 
 export function createAssignmentWithSubtask(data: Record<string, unknown>) {
-  return apiFetch<unknown>('/subcontracting/assignments/create-with-subtask/', { method: 'POST', body: data });
+  return apiFetch<unknown>('/subcontracting/assignments/create-with-subtask/', {
+    method: 'POST',
+    body: data,
+  });
 }
 
 export function updateAssignmentWithEndpoint(id: number, data: Record<string, unknown>) {

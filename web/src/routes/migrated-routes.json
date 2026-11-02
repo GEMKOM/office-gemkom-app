@@ -128,5 +128,10 @@
   "/manufacturing/subcontracting/statements",
   "/general/discussions",
   "/isg/issues",
-  "/design/release-approvals"
+  "/design/release-approvals",
+  "/design/projects",
+  "/logistics/projects",
+  "/manufacturing/projects",
+  "/planning/projects",
+  "/procurement/projects"
 ]

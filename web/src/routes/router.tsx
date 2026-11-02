@@ -306,6 +306,37 @@ export const appRoutes: RouteObject[] = [
       ).SubcontractingStatementsPage,
     }),
   },
+  // ---- department task pages (components/department-tasks) ----
+  {
+    path: '/design/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/design/projects/DesignProjectsPage')).DesignProjectsPage,
+    }),
+  },
+  {
+    path: '/logistics/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/logistics/projects/LogisticsProjectsPage')).LogisticsProjectsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/projects/ManufacturingProjectsPage')).ManufacturingProjectsPage,
+    }),
+  },
+  {
+    path: '/planning/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/projects/PlanningProjectsPage')).PlanningProjectsPage,
+    }),
+  },
+  {
+    path: '/procurement/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/projects/ProcurementProjectsPage')).ProcurementProjectsPage,
+    }),
+  },
   {
     path: '/design/revision-requests',
     lazy: async () => ({

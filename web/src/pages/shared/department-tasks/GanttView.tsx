@@ -1,6 +1,6 @@
 import '@legacy/components/gantt/gantt.css';
 import { GanttChart } from '@legacy/components/gantt/gantt.js';
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef } from 'react';
 import classes from './DepartmentTasks.module.css';
 import type { GanttPeriod, GanttTask } from './logic';
 
@@ -19,7 +19,9 @@ export function GanttView({ tasks, title, onPeriodChange, onTaskClick }: GanttVi
   const id = `dt-gantt-${useId().replace(/:/g, '')}`;
   const chart = useRef<GanttChart | null>(null);
   const callbacks = useRef({ onPeriodChange, onTaskClick });
-  callbacks.current = { onPeriodChange, onTaskClick };
+  useLayoutEffect(() => {
+    callbacks.current = { onPeriodChange, onTaskClick };
+  });
 
   useEffect(() => {
     const instance = new GanttChart(id, {
@@ -27,7 +29,10 @@ export function GanttView({ tasks, title, onPeriodChange, onTaskClick }: GanttVi
       defaultPeriod: 'month',
       filterByWorkingDays: false,
       onPeriodChange: (period, date) =>
-        callbacks.current.onPeriodChange((period || 'month') as GanttPeriod, date ? new Date(date) : new Date()),
+        callbacks.current.onPeriodChange(
+          (period || 'month') as GanttPeriod,
+          date ? new Date(date) : new Date(),
+        ),
       onTaskClick: (task) => {
         const taskId = Number(task?.id);
         if (Number.isFinite(taskId) && taskId > 0) callbacks.current.onTaskClick(taskId);

@@ -1,6 +1,6 @@
 import { Button, Group, SegmentedControl } from '@mantine/core';
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router';
 import { apiFetch } from '@/api/client';
 import {
@@ -35,9 +35,14 @@ import {
   type SortDir,
 } from '@/ui';
 import { taskActions } from './actions';
-import { buildColumns, type TreeState } from './columns';
+import { buildColumns, TreeContext, type TreeState } from './columns';
 import type { DepartmentTasksConfig } from './config';
-import { DepartmentTasksContext, type DepartmentTasksContextValue, type TaskDialog, type TaskUser } from './context';
+import {
+  DepartmentTasksContext,
+  type DepartmentTasksContextValue,
+  type TaskDialog,
+  type TaskUser,
+} from './context';
 import { TaskDialogs } from './dialogs/TaskDialogs';
 import { GanttView } from './GanttView';
 import {
@@ -67,7 +72,12 @@ const NO_IDS: ReadonlySet<number> = new Set();
 
 async function searchJobOrders(term: string, signal: AbortSignal): Promise<RemoteOption[]> {
   const data = await apiFetch<unknown>('/projects/job-orders/', {
-    params: { search: term.trim(), page_size: 30, ordering: '-created_at', status__in: 'active,draft,on_hold' },
+    params: {
+      search: term.trim(),
+      page_size: 30,
+      ordering: '-created_at',
+      status__in: 'active,draft,on_hold',
+    },
     signal,
   });
   return extractResults<{ job_no: string; title?: string }>(data).map((job) => ({
@@ -94,7 +104,10 @@ function exportFileName() {
 
 const EDIT_MESSAGES: Record<string, { ok: string; fail: string }> = {
   title: { ok: 'Başlık güncellendi', fail: 'Başlık güncellenirken hata oluştu' },
-  assigned_to_name: { ok: 'Atanan kişi güncellendi', fail: 'Atanan kişi güncellenirken hata oluştu' },
+  assigned_to_name: {
+    ok: 'Atanan kişi güncellendi',
+    fail: 'Atanan kişi güncellenirken hata oluştu',
+  },
   target_start_date: {
     ok: 'Hedef başlangıç tarihi güncellendi',
     fail: 'Hedef başlangıç tarihi güncellenirken hata oluştu',
@@ -103,8 +116,14 @@ const EDIT_MESSAGES: Record<string, { ok: string; fail: string }> = {
     ok: 'Hedef bitiş tarihi güncellendi',
     fail: 'Hedef bitiş tarihi güncellenirken hata oluştu',
   },
-  estimated_duration_wd: { ok: 'Tahmini süre güncellendi', fail: 'Tahmini süre güncellenirken hata oluştu' },
-  completion_percentage: { ok: 'İlerleme güncellendi', fail: 'İlerleme güncellenirken hata oluştu' },
+  estimated_duration_wd: {
+    ok: 'Tahmini süre güncellendi',
+    fail: 'Tahmini süre güncellenirken hata oluştu',
+  },
+  completion_percentage: {
+    ok: 'İlerleme güncellendi',
+    fail: 'İlerleme güncellenirken hata oluştu',
+  },
   weight: { ok: 'Ağırlık güncellendi', fail: 'Ağırlık güncellenirken hata oluştu' },
 };
 
@@ -129,11 +148,20 @@ function editPayload(
     }
     case 'target_start_date':
     case 'target_completion_date':
-      return { body: { [columnKey]: value || null }, patch: { [columnKey]: (value as string) || null } };
+      return {
+        body: { [columnKey]: value || null },
+        patch: { [columnKey]: (value as string) || null },
+      };
     case 'estimated_duration_wd':
-      return { body: { estimated_duration_wd: value }, patch: { estimated_duration_wd: value as number | null } };
+      return {
+        body: { estimated_duration_wd: value },
+        patch: { estimated_duration_wd: value as number | null },
+      };
     case 'completion_percentage':
-      return { body: { manual_progress: value }, patch: { completion_percentage: value as number } };
+      return {
+        body: { manual_progress: value },
+        patch: { completion_percentage: value as number },
+      };
     case 'weight':
       return { body: { weight: value }, patch: { weight: value as number | null } };
     default:
@@ -158,7 +186,11 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
   const usersQuery = useUsers({ is_active: true, department_code: config.department });
   const users = useMemo<TaskUser[]>(
     () =>
-      (usersQuery.data ?? []).map((u) => ({ id: u.id, username: u.username, name: u.full_name || '' })),
+      (usersQuery.data ?? []).map((u) => ({
+        id: u.id,
+        username: u.username,
+        name: u.full_name || '',
+      })),
     [usersQuery.data],
   );
   const statusesQuery = useQuery(statusChoicesQueryOptions());
@@ -174,7 +206,10 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
     period: 'month',
     date: new Date(),
   }));
-  const [sort, setSort] = useState<{ sortBy: string | null; sortDir: SortDir }>({ sortBy: null, sortDir: 'asc' });
+  const [sort, setSort] = useState<{ sortBy: string | null; sortDir: SortDir }>({
+    sortBy: null,
+    sortDir: 'asc',
+  });
 
   const params = useMemo<DepartmentTaskListParams>(() => {
     const p: DepartmentTaskListParams = {
@@ -193,7 +228,10 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
     return p;
   }, [page, pageSize, config.department, sort, view, values, ganttWindow]);
 
-  const list = useQuery({ ...departmentTasksQueryOptions(params), placeholderData: keepPreviousData });
+  const list = useQuery({
+    ...departmentTasksQueryOptions(params),
+    placeholderData: keepPreviousData,
+  });
   const mainTasks = list.data?.results ?? EMPTY;
   const total = list.data?.count ?? 0;
 
@@ -203,7 +241,10 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
 
   // ---- expanded rows: reset by every new list (legacy loadTasks cleared them) ----
   const listKey = JSON.stringify(departmentTaskKeys.list(params));
-  const [expansion, setExpansion] = useState<{ key: string; ids: ReadonlySet<number> }>({ key: listKey, ids: NO_IDS });
+  const [expansion, setExpansion] = useState<{ key: string; ids: ReadonlySet<number> }>({
+    key: listKey,
+    ids: NO_IDS,
+  });
   const expanded = expansion.key === listKey ? expansion.ids : NO_IDS;
   const [loadingIds, setLoadingIds] = useState<ReadonlySet<number>>(NO_IDS);
   const expandedIds = useMemo(() => [...expanded], [expanded]);
@@ -244,7 +285,10 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
       setLoadingIds((prev) => new Set(prev).add(task.id));
       try {
         // Always fresh on expand, like legacy.
-        await queryClient.fetchQuery({ ...subtasksQueryOptions(config.department, task.id), staleTime: 0 });
+        await queryClient.fetchQuery({
+          ...subtasksQueryOptions(config.department, task.id),
+          staleTime: 0,
+        });
         setExpansion((prev) => {
           const base = prev.key === listKey ? prev.ids : NO_IDS;
           return { key: listKey, ids: new Set(base).add(task.id) };
@@ -262,8 +306,10 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
     [expanded, listKey, queryClient, config.department],
   );
 
-  const tree = useRef<TreeState>({ levels: flat.levels, expanded, loading: loadingIds, toggle });
-  tree.current = { levels: flat.levels, expanded, loading: loadingIds, toggle };
+  const tree = useMemo<TreeState>(
+    () => ({ levels: flat.levels, expanded, loading: loadingIds, toggle }),
+    [flat.levels, expanded, loadingIds, toggle],
+  );
 
   // ---- shared context for the modal, tabs and dialogs ----
   const [dialog, setDialog] = useState<TaskDialog | null>(null);
@@ -296,7 +342,9 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
   const subtasksChanged = useCallback(
     async (parentId: number) => {
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: departmentTaskKeys.subtasksOf(config.department, parentId) }),
+        queryClient.invalidateQueries({
+          queryKey: departmentTaskKeys.subtasksOf(config.department, parentId),
+        }),
         refreshTaskRow(queryClient, parentId),
       ]);
     },
@@ -320,7 +368,18 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
       cachedSubtasks: (id) => subtasksById.get(id),
       subtasksChanged,
     }),
-    [config, users, statuses, openTask, closeTask, reloadList, queryClient, subtasksById, subtasksChanged],
+    [
+      config,
+      users,
+      statuses,
+      openTask,
+      closeTask,
+      setDialog,
+      reloadList,
+      queryClient,
+      subtasksById,
+      subtasksChanged,
+    ],
   );
 
   const actions = useMemo(() => taskActions(ctx), [ctx]);
@@ -331,7 +390,7 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
     [users],
   );
   const columns = useMemo(
-    () => buildColumns({ config, statuses, userOptions, tree }),
+    () => buildColumns({ config, statuses, userOptions }),
     [config, statuses, userOptions],
   );
 
@@ -344,7 +403,7 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
         await patchDepartmentTask(edit.row.id, payload.body);
       } catch (error) {
         // The table rolls the cell back and shows this.
-        throw new Error(legacyErrorText(error, messages.fail));
+        throw new Error(legacyErrorText(error, messages.fail), { cause: error });
       }
       patchTaskInCache(queryClient, edit.row.id, payload.patch);
       notify.success(messages.ok);
@@ -398,7 +457,7 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
         onClick: (r) => void actions.skip(r.id),
       },
     ],
-    [actions, config, openTask],
+    [actions, config, openTask, setDialog],
   );
 
   const rowStyle = useCallback((row: DepartmentTask): CSSProperties | undefined => {
@@ -410,7 +469,12 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
   // ---- filters ----
   const filters = useMemo<FilterConfig<keyof TaskFilterValues>[]>(
     () => [
-      { key: 'search', type: 'text', label: 'Arama', placeholder: 'Görev başlığı, açıklama, iş emri...' },
+      {
+        key: 'search',
+        type: 'text',
+        label: 'Arama',
+        placeholder: 'Görev başlığı, açıklama, iş emri...',
+      },
       { key: 'status', type: 'select', label: 'Durum', options: statusFilterOptions(statuses) },
       {
         key: 'assigned_to',
@@ -493,138 +557,154 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
 
   return (
     <DepartmentTasksContext.Provider value={ctx}>
-      <PageHeader
-        title={config.title}
-        subtitle={config.subtitle}
-        icon="project-diagram"
-        backTo={config.backTo}
-        actions={
-          <>
-            {config.canCreateTasks ? (
-              <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setDialog({ kind: 'create-task' })}>
-                Yeni Görev
+      <TreeContext.Provider value={tree}>
+        <PageHeader
+          title={config.title}
+          subtitle={config.subtitle}
+          icon="project-diagram"
+          backTo={config.backTo}
+          actions={
+            <>
+              {config.canCreateTasks ? (
+                <Button
+                  leftSection={<FaIcon icon="fas fa-plus" />}
+                  onClick={() => setDialog({ kind: 'create-task' })}
+                >
+                  Yeni Görev
+                </Button>
+              ) : null}
+              <Button
+                variant="default"
+                leftSection={<FaIcon icon="fas fa-sync-alt" />}
+                onClick={refresh}
+              >
+                Yenile
               </Button>
-            ) : null}
-            <Button variant="default" leftSection={<FaIcon icon="fas fa-sync-alt" />} onClick={refresh}>
-              Yenile
-            </Button>
-          </>
-        }
-      />
-
-      <Group gap="sm" mb="sm">
-        <SegmentedControl
-          size="xs"
-          aria-label="Görünüm seçimi"
-          value={view}
-          onChange={(v) => switchView(v as 'table' | 'gantt')}
-          data={[
-            { value: 'table', label: 'Tablo' },
-            { value: 'gantt', label: 'Gantt' },
-          ]}
+            </>
+          }
         />
-        {view === 'gantt' ? (
+
+        <Group gap="sm" mb="sm">
           <SegmentedControl
             size="xs"
-            aria-label="Gantt satır modu"
-            value={ganttRows}
-            onChange={(v) => setGanttRows(v as 'tasks' | 'users')}
+            aria-label="Görünüm seçimi"
+            value={view}
+            onChange={(v) => switchView(v as 'table' | 'gantt')}
             data={[
-              { value: 'tasks', label: 'Görevlere Göre' },
-              { value: 'users', label: 'Kullanıcılara Göre' },
+              { value: 'table', label: 'Tablo' },
+              { value: 'gantt', label: 'Gantt' },
             ]}
           />
-        ) : null}
-      </Group>
-
-      {view === 'gantt' ? (
-        <GanttView
-          tasks={ganttTasks}
-          title={ganttRows === 'users' ? 'Gantt Gorunumu - Kullanicilar' : 'Gantt Gorunumu'}
-          onPeriodChange={(period, date) => {
-            setGanttWindow({ period, date });
-            if (page !== 1) apply({ page: '1' });
-          }}
-          onTaskClick={openTask}
-        />
-      ) : (
-        <DataTable
-          title="Görev Listesi"
-          filters={
-            <FilterBar
-              inline
-              filters={filters}
-              values={values}
-              onApply={(next) => applyFilters(next)}
-              onClear={clearFilters}
-              extra={
-                <>
-                  <SelectRemote
-                    aria-label="İş Emri"
-                    placeholder="İş emri ara (en az 2 karakter)"
-                    minSearchLength={2}
-                    queryKey={['departmentTasks', 'jobOrderSearch']}
-                    search={searchJobOrders}
-                    initialOptions={values.job_order ? [{ value: values.job_order, label: values.job_order }] : []}
-                    value={values.job_order || null}
-                    onChange={(value) => applyFilters({ job_order: value ?? '' })}
-                  />
-                  <SelectRemote
-                    aria-label="Müşteri"
-                    placeholder="Müşteri ara (en az 3 karakter)"
-                    minSearchLength={3}
-                    queryKey={['departmentTasks', 'customerSearch']}
-                    search={searchCustomers}
-                    initialOptions={values.customer ? [{ value: values.customer, label: `#${values.customer}` }] : []}
-                    value={values.customer || null}
-                    onChange={(value) => applyFilters({ customer: value ?? '' })}
-                  />
-                </>
-              }
-            />
-          }
-          data={flat.rows}
-          columns={columns}
-          getRowId={(row) => String(row.id)}
-          loading={list.isFetching}
-          sortable
-          sort={{
-            sortBy: sort.sortBy,
-            sortDir: sort.sortDir,
-            onSortChange: (sortBy, sortDir) => {
-              setSort({ sortBy, sortDir });
-              if (page !== 1) apply({ page: '1' });
-            },
-          }}
-          pagination={{
-            page,
-            pageSize,
-            total,
-            onPageChange: (next) => apply({ page: String(next) }),
-            onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
-          }}
-          rowActions={rowActions}
-          rowStyle={rowStyle}
-          extraData={`${[...expanded].join(',')}|${[...loadingIds].join(',')}`}
-          onCellEdit={onCellEdit}
-          emptyMessage="Görev bulunamadı"
-          onRefresh={refresh}
-          toolbar={
-            <Button
+          {view === 'gantt' ? (
+            <SegmentedControl
               size="xs"
-              variant="default"
-              loading={exporting}
-              leftSection={<FaIcon icon="fas fa-file-excel" />}
-              onClick={() => void exportTasks()}
-            >
-              Dışa Aktar
-            </Button>
-          }
-        />
-      )}
+              aria-label="Gantt satır modu"
+              value={ganttRows}
+              onChange={(v) => setGanttRows(v as 'tasks' | 'users')}
+              data={[
+                { value: 'tasks', label: 'Görevlere Göre' },
+                { value: 'users', label: 'Kullanıcılara Göre' },
+              ]}
+            />
+          ) : null}
+        </Group>
 
-      {taskId ? <TaskModal key={taskId} taskId={taskId} /> : null}
-      <TaskDialogs dialog={dialog} />
+        {view === 'gantt' ? (
+          <GanttView
+            tasks={ganttTasks}
+            title={ganttRows === 'users' ? 'Gantt Gorunumu - Kullanicilar' : 'Gantt Gorunumu'}
+            onPeriodChange={(period, date) => {
+              setGanttWindow({ period, date });
+              if (page !== 1) apply({ page: '1' });
+            }}
+            onTaskClick={openTask}
+          />
+        ) : (
+          <DataTable
+            title="Görev Listesi"
+            filters={
+              <FilterBar
+                inline
+                filters={filters}
+                values={values}
+                onApply={(next) => applyFilters(next)}
+                onClear={clearFilters}
+                extra={
+                  <>
+                    <SelectRemote
+                      aria-label="İş Emri"
+                      placeholder="İş emri ara (en az 2 karakter)"
+                      minSearchLength={2}
+                      queryKey={['departmentTasks', 'jobOrderSearch']}
+                      search={searchJobOrders}
+                      initialOptions={
+                        values.job_order
+                          ? [{ value: values.job_order, label: values.job_order }]
+                          : []
+                      }
+                      value={values.job_order || null}
+                      onChange={(value) => applyFilters({ job_order: value ?? '' })}
+                    />
+                    <SelectRemote
+                      aria-label="Müşteri"
+                      placeholder="Müşteri ara (en az 3 karakter)"
+                      minSearchLength={3}
+                      queryKey={['departmentTasks', 'customerSearch']}
+                      search={searchCustomers}
+                      initialOptions={
+                        values.customer
+                          ? [{ value: values.customer, label: `#${values.customer}` }]
+                          : []
+                      }
+                      value={values.customer || null}
+                      onChange={(value) => applyFilters({ customer: value ?? '' })}
+                    />
+                  </>
+                }
+              />
+            }
+            data={flat.rows}
+            columns={columns}
+            getRowId={(row) => String(row.id)}
+            loading={list.isFetching}
+            sortable
+            sort={{
+              sortBy: sort.sortBy,
+              sortDir: sort.sortDir,
+              onSortChange: (sortBy, sortDir) => {
+                setSort({ sortBy, sortDir });
+                if (page !== 1) apply({ page: '1' });
+              },
+            }}
+            pagination={{
+              page,
+              pageSize,
+              total,
+              onPageChange: (next) => apply({ page: String(next) }),
+              onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
+            }}
+            rowActions={rowActions}
+            rowStyle={rowStyle}
+            onCellEdit={onCellEdit}
+            emptyMessage="Görev bulunamadı"
+            onRefresh={refresh}
+            toolbar={
+              <Button
+                size="xs"
+                variant="default"
+                loading={exporting}
+                leftSection={<FaIcon icon="fas fa-file-excel" />}
+                onClick={() => void exportTasks()}
+              >
+                Dışa Aktar
+              </Button>
+            }
+          />
+        )}
+
+        {taskId ? <TaskModal key={taskId} taskId={taskId} /> : null}
+        <TaskDialogs dialog={dialog} />
+      </TreeContext.Provider>
     </DepartmentTasksContext.Provider>
   );
 }

@@ -262,13 +262,17 @@ export function subtasksQueryOptions(department: string, parentId: number) {
   return queryOptions({
     queryKey: departmentTaskKeys.subtasksOf(department, parentId),
     queryFn: async ({ signal }) =>
-      (await fetchDepartmentTasks({ department, parent: parentId, ordering: 'sequence' }, signal)).results,
+      (await fetchDepartmentTasks({ department, parent: parentId, ordering: 'sequence' }, signal))
+        .results,
     // Legacy always refetched on expand.
     staleTime: 0,
   });
 }
 
-export function getDepartmentTask(id: number | string, signal?: AbortSignal): Promise<DepartmentTask> {
+export function getDepartmentTask(
+  id: number | string,
+  signal?: AbortSignal,
+): Promise<DepartmentTask> {
   return apiFetch<DepartmentTask>(`${BASE}/${id}/`, { signal });
 }
 
@@ -354,7 +358,10 @@ export function startDepartmentTask(id: number) {
 }
 
 /** Legacy completeDepartmentTask: only erp_acknowledged / notes when given. */
-export function completeDepartmentTask(id: number, options: { erp_acknowledged?: boolean; notes?: string } = {}) {
+export function completeDepartmentTask(
+  id: number,
+  options: { erp_acknowledged?: boolean; notes?: string } = {},
+) {
   const body: Record<string, unknown> = {};
   if (options.erp_acknowledged !== undefined) body.erp_acknowledged = options.erp_acknowledged;
   if (options.notes !== undefined && options.notes !== null) body.notes = options.notes;
@@ -382,10 +389,13 @@ export interface BulkSubtaskNode {
 }
 
 export function bulkCreateSubtasks(parentId: number, tasks: BulkSubtaskNode[]) {
-  return apiFetch<{ message?: string; tasks?: unknown[] }>(`${BASE}/${parentId}/bulk_create_subtasks/`, {
-    method: 'POST',
-    body: { tasks },
-  });
+  return apiFetch<{ message?: string; tasks?: unknown[] }>(
+    `${BASE}/${parentId}/bulk_create_subtasks/`,
+    {
+      method: 'POST',
+      body: { tasks },
+    },
+  );
 }
 
 // Consultation (sales_consult) tasks: apis/sales/departmentTasks.js.
@@ -410,7 +420,9 @@ export function deleteConsultTaskFile(taskId: number, fileId: number) {
 }
 
 /** Every page of the list for the export (legacy exportTasks). */
-export async function fetchAllDepartmentTasks(params: DepartmentTaskListParams): Promise<DepartmentTask[]> {
+export async function fetchAllDepartmentTasks(
+  params: DepartmentTaskListParams,
+): Promise<DepartmentTask[]> {
   const all: DepartmentTask[] = [];
   for (let page = 1; ; page++) {
     const response = await fetchDepartmentTasks({ ...params, page });
@@ -429,24 +441,38 @@ export async function fetchAllDepartmentTasks(params: DepartmentTaskListParams):
  */
 export function replaceTaskInCache(queryClient: QueryClient, task: DepartmentTask): boolean {
   let found = false;
-  queryClient.setQueriesData<Paginated<DepartmentTask>>({ queryKey: departmentTaskKeys.lists }, (page) => {
-    if (!page || !page.results.some((t) => t.id === task.id)) return page;
-    found = true;
-    return { ...page, results: page.results.map((t) => (t.id === task.id ? task : t)) };
-  });
-  queryClient.setQueriesData<DepartmentTask[]>({ queryKey: departmentTaskKeys.subtasks }, (rows) => {
-    if (!rows || !rows.some((t) => t.id === task.id)) return rows;
-    found = true;
-    return rows.map((t) => (t.id === task.id ? task : t));
-  });
+  queryClient.setQueriesData<Paginated<DepartmentTask>>(
+    { queryKey: departmentTaskKeys.lists },
+    (page) => {
+      if (!page || !page.results.some((t) => t.id === task.id)) return page;
+      found = true;
+      return { ...page, results: page.results.map((t) => (t.id === task.id ? task : t)) };
+    },
+  );
+  queryClient.setQueriesData<DepartmentTask[]>(
+    { queryKey: departmentTaskKeys.subtasks },
+    (rows) => {
+      if (!rows || !rows.some((t) => t.id === task.id)) return rows;
+      found = true;
+      return rows.map((t) => (t.id === task.id ? task : t));
+    },
+  );
   return found;
 }
 
 /** Merges a few fields into a cached task (after an inline edit). */
-export function patchTaskInCache(queryClient: QueryClient, id: number, patch: Partial<DepartmentTask>): void {
+export function patchTaskInCache(
+  queryClient: QueryClient,
+  id: number,
+  patch: Partial<DepartmentTask>,
+): void {
   const merge = (t: DepartmentTask) => (t.id === id ? { ...t, ...patch } : t);
-  queryClient.setQueriesData<Paginated<DepartmentTask>>({ queryKey: departmentTaskKeys.lists }, (page) =>
-    page && page.results.some((t) => t.id === id) ? { ...page, results: page.results.map(merge) } : page,
+  queryClient.setQueriesData<Paginated<DepartmentTask>>(
+    { queryKey: departmentTaskKeys.lists },
+    (page) =>
+      page && page.results.some((t) => t.id === id)
+        ? { ...page, results: page.results.map(merge) }
+        : page,
   );
   queryClient.setQueriesData<DepartmentTask[]>({ queryKey: departmentTaskKeys.subtasks }, (rows) =>
     rows && rows.some((t) => t.id === id) ? rows.map(merge) : rows,
@@ -454,7 +480,10 @@ export function patchTaskInCache(queryClient: QueryClient, id: number, patch: Pa
 }
 
 /** Refetches one task and swaps it into the cached rows. */
-export async function refreshTaskRow(queryClient: QueryClient, id: number): Promise<DepartmentTask | null> {
+export async function refreshTaskRow(
+  queryClient: QueryClient,
+  id: number,
+): Promise<DepartmentTask | null> {
   try {
     const task = await queryClient.fetchQuery(departmentTaskQueryOptions(id));
     replaceTaskInCache(queryClient, task);
@@ -477,10 +506,14 @@ function countOf(data: unknown): number {
 
 /** CNC parts of a job (getCncParts({ job_no, page_size: 1 })). */
 export async function countCncParts(jobNo: string | null | undefined): Promise<number> {
-  return countOf(await apiFetch<unknown>('/cnc_cutting/parts/', { params: { job_no: jobNo, page_size: 1 } }));
+  return countOf(
+    await apiFetch<unknown>('/cnc_cutting/parts/', { params: { job_no: jobNo, page_size: 1 } }),
+  );
 }
 
 /** Machining parts of a job (machining getParts({ job_no, page_size: 1 })). */
 export async function countMachiningParts(jobNo: string | null | undefined): Promise<number> {
-  return countOf(await apiFetch<unknown>('/tasks/parts/', { params: { job_no: jobNo, page_size: 1 } }));
+  return countOf(
+    await apiFetch<unknown>('/tasks/parts/', { params: { job_no: jobNo, page_size: 1 } }),
+  );
 }
