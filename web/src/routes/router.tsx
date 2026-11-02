@@ -669,6 +669,13 @@ export const appRoutes: RouteObject[] = [
         .PaymentTermsPage,
     }),
   },
+  // Phase 4: payment lists and task templates (inline editing).
+  {
+    path: '/procurement/payment-lists',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/payment-lists/PaymentListsPage')).PaymentListsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
