@@ -109,5 +109,8 @@
   "/procurement/suppliers/payment-terms",
   "/planning/procurement-lines",
   "/general/overtime/cost-report",
-  "/general/overtime/machining-report"
+  "/general/overtime/machining-report",
+  "/manufacturing/machining/reports/daily-efficiency",
+  "/manufacturing/machining/reports/performance",
+  "/manufacturing/machining/reports/sum-report"
 ]

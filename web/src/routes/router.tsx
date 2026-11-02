@@ -690,6 +690,29 @@ export const appRoutes: RouteObject[] = [
         .MachiningReportPage,
     }),
   },
+  {
+    path: '/manufacturing/machining/reports/daily-efficiency',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/daily-efficiency/DailyEfficiencyPage')
+      ).DailyEfficiencyPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/performance',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/performance/PerformanceReportPage')
+      ).PerformanceReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/sum-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/machining/reports/sum-report/SumReportPage'))
+        .SumReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
