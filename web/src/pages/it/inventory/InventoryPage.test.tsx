@@ -168,8 +168,9 @@ it('sorting a column sends the field as ordering', async () => {
   renderPage();
   await screen.findByText('Muhasebe PC');
   fireEvent.click(screen.getByText('Cihaz Tipi', { selector: 'th *' }));
-  await waitFor(() => expect(location().get('ordering')).toBe('machine_type_label'));
-  await waitFor(() => expect(lastListParams().ordering).toBe('machine_type_label'));
+  // The backend orders by machine_type; machine_type_label would be ignored.
+  await waitFor(() => expect(location().get('ordering')).toBe('machine_type'));
+  await waitFor(() => expect(lastListParams().ordering).toBe('machine_type'));
 });
 
 it('shows the properties of a device', async () => {

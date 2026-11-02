@@ -17,7 +17,9 @@ function statusLabel(value: boolean | undefined): string {
 
 const CREATED_FORMAT: Intl.DateTimeFormatOptions = { year: 'numeric', month: 'short', day: 'numeric' };
 
-// Module scope so DataTable rows stay memoized. Sortable set = legacy table.
+// Module scope so DataTable rows stay memoized. Sortable = what CustomerViewSet
+// orders by (code, name, created_at); legacy also offered short_name, currency
+// and status, which the backend silently ignores.
 export const customerColumns: DataTableColumn<Customer>[] = [
   {
     key: 'code',
@@ -26,7 +28,7 @@ export const customerColumns: DataTableColumn<Customer>[] = [
     render: (row) => <span className={uiClasses.code}>{row.code || '-'}</span>,
   },
   { key: 'name', header: 'Firma Adı', sortable: true },
-  { key: 'short_name', header: 'Kısa Ad', sortable: true },
+  { key: 'short_name', header: 'Kısa Ad', sortable: false },
   { key: 'contact_person', header: 'İletişim Kişisi', sortable: false },
   {
     key: 'email',
@@ -45,14 +47,14 @@ export const customerColumns: DataTableColumn<Customer>[] = [
   {
     key: 'default_currency',
     header: 'Para Birimi',
-    sortable: true,
+    sortable: false,
     render: (row) => currencyLabel(row.default_currency),
     exportValue: (row) => currencyLabel(row.default_currency),
   },
   {
     key: 'is_active',
     header: 'Durum',
-    sortable: true,
+    sortable: false,
     render: (row) =>
       row.is_active === true ? (
 <StatusBadge color="green">Aktif</StatusBadge>

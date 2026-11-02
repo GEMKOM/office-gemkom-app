@@ -199,8 +199,9 @@ export function MachinesPage() {
         render: (row) => <strong>{row.name || '-'}</strong>,
       },
       { key: 'code', header: 'Kod', sortable: true },
-      { key: 'used_in_label', header: 'Kullanım Alanı', sortable: true },
-      { key: 'machine_type_label', header: 'Makine Tipi', sortable: true },
+      // MachineListCreateView orders by id, name, machine_type and code only.
+      { key: 'used_in_label', header: 'Kullanım Alanı', sortable: false },
+      { key: 'machine_type_label', header: 'Makine Tipi', sortable: true, sortKey: 'machine_type' },
       {
         key: 'assigned_users',
         header: 'Atanan Kullanıcılar',
@@ -227,7 +228,7 @@ export function MachinesPage() {
       {
         key: 'is_active',
         header: 'Aktif',
-        sortable: true,
+        sortable: false,
         align: 'center',
         render: (row) => <Bool value={row.is_active} />,
         exportValue: (row) => (row.is_active ? 'Evet' : 'Hayır'),
@@ -235,7 +236,7 @@ export function MachinesPage() {
       {
         key: 'is_under_maintenance',
         header: 'Bakımda',
-        sortable: true,
+        sortable: false,
         align: 'center',
         render: (row) => <Bool value={row.is_under_maintenance} />,
         exportValue: (row) => (row.is_under_maintenance ? 'Evet' : 'Hayır'),

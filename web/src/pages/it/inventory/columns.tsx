@@ -32,8 +32,9 @@ function dash() {
 }
 
 /**
- * The legacy table's columns (same fields, labels and sortable set). The sort
- * key is the field itself, which legacy sent as `ordering`.
+ * The legacy table's columns (same fields and labels). The sort key is the
+ * field itself, which legacy sent as `ordering`, except where the backend
+ * cannot order by it: the type sorts by machine_type, Aktif/Bakımda not at all.
  */
 export function inventoryColumns(onShowProperties: (device: ItDevice) => void): DataTableColumn<ItDevice>[] {
   return [
@@ -54,7 +55,14 @@ export function inventoryColumns(onShowProperties: (device: ItDevice) => void): 
       sortable: true,
       render: (row) => (row.code ? <span className={uiClasses.code}>{row.code}</span> : dash()),
     },
-    { key: 'machine_type_label', header: 'Cihaz Tipi', sortable: true, render: (row) => row.machine_type_label || '-' },
+    // MachineListCreateView orders by id, name, machine_type and code only.
+    {
+      key: 'machine_type_label',
+      header: 'Cihaz Tipi',
+      sortable: true,
+      sortKey: 'machine_type',
+      render: (row) => row.machine_type_label || '-',
+    },
     {
       key: 'assigned_users',
       header: 'Atanan Kullanıcılar',
@@ -65,7 +73,7 @@ export function inventoryColumns(onShowProperties: (device: ItDevice) => void): 
     {
       key: 'is_active',
       header: 'Aktif',
-      sortable: true,
+      sortable: false,
       render: (row) =>
         row.is_active ? <StatusBadge color="green">Aktif</StatusBadge> : <StatusBadge color="grey">Pasif</StatusBadge>,
       exportValue: (row) => yesNo(row.is_active),
@@ -73,7 +81,7 @@ export function inventoryColumns(onShowProperties: (device: ItDevice) => void): 
     {
       key: 'is_under_maintenance',
       header: 'Bakımda',
-      sortable: true,
+      sortable: false,
       render: (row) =>
         row.is_under_maintenance ? <StatusBadge color="orange">Bakımda</StatusBadge> : dash(),
       exportValue: (row) => yesNo(row.is_under_maintenance),

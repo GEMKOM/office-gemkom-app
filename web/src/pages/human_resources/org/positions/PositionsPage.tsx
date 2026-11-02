@@ -119,7 +119,7 @@ const EMPTY_POSITIONS: Position[] = [];
 export function PositionsPage() {
   const { values, apply, reset } = useUrlFilters(URL_DEFAULTS);
   const params: PositionsParams = {};
-  if (values.department) params.department = values.department;
+  if (values.department) params.department_code = values.department;
   if (values.level) params.level = values.level;
 
   const list = useQuery({ ...positionsQueryOptions(params), placeholderData: keepPreviousData });
