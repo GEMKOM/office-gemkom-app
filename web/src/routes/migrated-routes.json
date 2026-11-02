@@ -11,6 +11,7 @@
   "/isg",
   "/sales",
   "/sales/customers",
+  "/sales/catalog",
   "/manufacturing",
   "/manufacturing/cnc-cutting",
   "/manufacturing/cnc-cutting/capacity",
