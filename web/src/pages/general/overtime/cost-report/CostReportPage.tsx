@@ -339,6 +339,8 @@ function JobTreeTable({
     return {
       by: 'parentKey',
       sort: false,
+      // Legacy: a parent whose only sub-job is itself has no toggle and stays closed.
+      collapsible: (group) => Boolean(parentOf(group.value)?.expandable),
       defaultExpanded: (group) => small && Boolean(parentOf(group.value)?.expandable),
       header: (group) => {
         const p = parentOf(group.value);

@@ -168,6 +168,28 @@ describe('DataTable grouping', () => {
     ).toEqual(['Ali', '9', 'x']);
   });
 
+  it('decides per group whether it can collapse; a fixed group keeps its start state', () => {
+    renderWithProviders(
+      <DataTable
+        data={entries}
+        columns={columns}
+        getRowId={getRowId}
+        grouping={{
+          by: 'user',
+          collapsible: (group) => group.value !== 'Ali',
+          defaultExpanded: (group) => group.value !== 'Ali',
+        }}
+      />,
+    );
+    // Ali: no toggle, stays collapsed; Zeynep: toggles as usual.
+    expect(screen.getAllByRole('button', { name: /Grubu/ })).toHaveLength(1);
+    expect(bodyRowKinds()).toEqual(['header:Ali', 'header:Zeynep', 'row:1', 'row:3']);
+    fireEvent.click(document.querySelector('tr[data-group-id="Ali"]')!);
+    expect(bodyRowKinds()).toHaveLength(4);
+    fireEvent.click(screen.getByRole('button', { name: 'Grubu daralt' }));
+    expect(bodyRowKinds()).toEqual(['header:Ali', 'header:Zeynep']);
+  });
+
   it('nests groups for several keys and sorts rows inside groups', () => {
     renderWithProviders(
       <DataTable

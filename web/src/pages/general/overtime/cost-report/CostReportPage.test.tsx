@@ -259,13 +259,11 @@ it('groups the job tree under its parents with the parent sums; links open the d
   // The single-line parent has no badge.
   expect(within(headers[1] as HTMLElement).queryByText(/alt iş/)).not.toBeInTheDocument();
 
-  // Two parents (≤ 5): the expandable one starts open, the lone one closed.
+  // Two parents (≤ 5): the expandable one starts open; the lone one has no
+  // toggle and stays closed, as legacy.
   expect(screen.getByText('272-01-02')).toBeInTheDocument();
   expect(first.querySelector('[aria-expanded]')).toHaveAttribute('aria-expanded', 'true');
-  expect((headers[1] as HTMLElement).querySelector('[aria-expanded]')).toHaveAttribute(
-    'aria-expanded',
-    'false',
-  );
+  expect((headers[1] as HTMLElement).querySelector('[aria-expanded]')).toBeNull();
 
   // Collapsing hides the sub-jobs.
   fireEvent.click(within(first).getByRole('button', { name: 'Grubu daralt' }));

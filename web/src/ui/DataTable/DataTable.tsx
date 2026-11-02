@@ -713,7 +713,9 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
 
   // ---- grouping ----
   const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>({});
-  const collapsible = grouping?.collapsible ?? true;
+  const collapsibleOption = grouping?.collapsible ?? true;
+  const canCollapse = (group: RowGroup<T>) =>
+    typeof collapsibleOption === 'function' ? collapsibleOption(group) : collapsibleOption;
   const hasGroupFooter = Boolean(grouping?.footer);
   const groupTree = useMemo<GroupNode<T>[] | null>(
     () => (grouping ? buildGroupTree(rows, groupKeys(grouping), grouping.sort ?? 'asc') : null),
@@ -733,24 +735,23 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
     }
     const { defaultExpanded = true } = grouping;
     const isExpanded = (node: GroupNode<T>) => {
-      if (!collapsible) return true;
-      const set = groupOpen[node.id];
-      if (set !== undefined) return set;
-      if (typeof defaultExpanded === 'function') {
-        return defaultExpanded({
-          id: node.id,
-          value: node.value,
-          depth: node.depth,
-          rows: node.rows.map((r) => r.original),
-          expanded: true,
-        });
-      }
-      return defaultExpanded;
+      const info: RowGroup<T> = {
+        id: node.id,
+        value: node.value,
+        depth: node.depth,
+        rows: node.rows.map((r) => r.original),
+        expanded: true,
+      };
+      const initial =
+        typeof defaultExpanded === 'function' ? defaultExpanded(info) : defaultExpanded;
+      // Like legacy, a group without a toggle stays as it started.
+      if (!canCollapse({ ...info, expanded: initial })) return initial;
+      return groupOpen[node.id] ?? initial;
     };
     return flattenGroups(groupTree, isExpanded, hasGroupFooter);
     // The items depend on these options, not on the header/footer functions' identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupTree, rows, groupOpen, collapsible, grouping?.defaultExpanded, hasGroupFooter]);
+  }, [groupTree, rows, groupOpen, collapsibleOption, grouping?.defaultExpanded, hasGroupFooter]);
   const bodyRows = useMemo(
     () =>
       items.filter((item): item is Extract<DisplayItem<T>, { kind: 'row' }> => item.kind === 'row'),
@@ -1338,7 +1339,7 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
         columns={visibleColumns}
         leading={leading}
         hasActions={hasActions}
-        collapsible={collapsible}
+        collapsible={isHeader && canCollapse(item.group)}
         onToggle={toggleGroup}
         measureRef={virtualIndex === undefined ? undefined : virtualizer.measureElement}
         virtualIndex={virtualIndex}

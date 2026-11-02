@@ -129,8 +129,12 @@ export interface DataTableGrouping<T> {
   header?: (group: RowGroup<T>) => ReactNode | { cells: GroupCells };
   /** A row after each group, e.g. sums. Same forms as `header`. */
   footer?: (group: RowGroup<T>) => ReactNode | { cells: GroupCells };
-  /** Legacy groupCollapsible. Default true. */
-  collapsible?: boolean;
+  /**
+   * Legacy groupCollapsible. Default true. A function decides per group. A
+   * group that cannot collapse has no toggle and stays as `defaultExpanded`
+   * set it (legacy did the same).
+   */
+  collapsible?: boolean | ((group: RowGroup<T>) => boolean);
   /** Legacy defaultGroupExpanded. Default true. */
   defaultExpanded?: boolean | ((group: RowGroup<T>) => boolean);
   /**

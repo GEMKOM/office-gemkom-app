@@ -135,7 +135,7 @@ const columns = useMemo<DataTableColumn<Item>[]>(() => [
 | `groupBy: 'user_id'` | `grouping={{ by: 'user_id' }}`, or a function, or several keys `by: ['month', 'user']` (nested) |
 | `groupHeaderFormatter(value, rows)` returning HTML | `header: (group) => <node />` (`group.value`, `group.rows`, `group.depth`) |
 | `groupHeaderFormatter` returning `{ field: html, _actions }` | `header: (group) => ({ cells: { field: node, _actions: node } })` |
-| `groupCollapsible` | `collapsible` (default **true**) |
+| `groupCollapsible` | `collapsible` (default **true**; or `(group) => boolean`: a group without a toggle stays as `defaultExpanded` set it, like legacy) |
 | `defaultGroupExpanded` | `defaultExpanded` (boolean or `(group) => boolean`) |
 | `groupSortDirection` | `sort: 'asc' \| 'desc' \| false \| (a, b) => n` (natural order, empties last) |
 | (none) | `footer: (group) => ({ cells: { hours: sum(group.rows) } })`: a totals row after each group |

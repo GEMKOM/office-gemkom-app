@@ -98,10 +98,10 @@
 }
 
 .groupLabel {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
-  max-width: 100%;
+  width: 100%;
 }
 
 .groupContent {
