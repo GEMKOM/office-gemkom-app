@@ -236,6 +236,41 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/quality-control/qc-reviews/QcReviewsPage')).QcReviewsPage,
     }),
   },
+  {
+    path: '/human_resources/users',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/users/UsersPage')).UsersPage,
+    }),
+  },
+  {
+    path: '/human_resources/org/positions',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/org/positions/PositionsPage'))
+        .PositionsPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/pending-overrides',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/human_resources/attendance/pending-overrides/PendingOverridesPage')
+      ).PendingOverridesPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/shift-rules',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/shift-rules/ShiftRulesPage'))
+        .ShiftRulesPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/summary',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/summary/AttendanceSummaryPage'))
+        .AttendanceSummaryPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

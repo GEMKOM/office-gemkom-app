@@ -41,5 +41,10 @@
   "/quality-control/cost-lines",
   "/quality-control/documents",
   "/quality-control/ncrs",
-  "/quality-control/qc-reviews"
+  "/quality-control/qc-reviews",
+  "/human_resources/users",
+  "/human_resources/org/positions",
+  "/human_resources/attendance/pending-overrides",
+  "/human_resources/attendance/shift-rules",
+  "/human_resources/attendance/summary"
 ]
