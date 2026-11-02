@@ -596,31 +596,74 @@ a.figureTile:focus-visible {
   border-top: 1px solid var(--hub-line, var(--gk-line));
 }
 
+.hubLinks li + li {
+  border-top: 1px solid var(--hub-line, var(--gk-line));
+}
+
+/* Each feature row is its own target: it reaches a little past the text on
+   both sides so the fill reads as a row, not as a word. */
 .hubLinks a,
 .hubLinks span {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 9px 0;
-  border-bottom: 1px solid var(--hub-line, var(--gk-line));
+  margin: 2px -10px;
+  padding: 7px 10px;
+  border-radius: var(--gk-radius-md);
   font-size: 14px;
   color: var(--gk-ink-2);
   text-decoration: none;
 }
 
-.hubLinks li:last-child a,
-.hubLinks li:last-child span {
-  border-bottom: 0;
+.hubLinks a {
+  cursor: pointer;
+  transition:
+    background 120ms ease-out,
+    color 120ms ease-out;
 }
 
+/* Links are red in the system: the row takes the red tint, the label and
+   chevron go red-700, and the chevron steps forward. */
 .hubLinks a:hover {
-  color: var(--fam-fg);
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+}
+
+.hubLinks a:active {
+  background: var(--gk-red-100);
+}
+
+.hubLinks a:focus-visible {
+  outline: none;
+  color: var(--gk-red-700);
+  box-shadow: var(--gk-focus-ring);
 }
 
 .hubLinks .hubLinkChevron {
   margin-left: auto;
   font-size: 11px;
   opacity: 0.5;
+  transition:
+    transform 120ms ease-out,
+    opacity 120ms ease-out;
+}
+
+.hubLinks a:hover .hubLinkChevron,
+.hubLinks a:focus-visible .hubLinkChevron {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hubLinks a,
+  .hubLinks .hubLinkChevron {
+    transition: none;
+  }
+
+  .hubLinks a:hover .hubLinkChevron,
+  .hubLinks a:focus-visible .hubLinkChevron {
+    transform: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

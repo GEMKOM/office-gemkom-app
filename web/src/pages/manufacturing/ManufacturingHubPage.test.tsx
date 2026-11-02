@@ -2,7 +2,6 @@ import { authedFetch } from '@legacy/authService.js';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
-import { normalizeRoute } from '@/routes/migrated';
 import { appRoutes } from '@/routes/router';
 import { MANUFACTURING_HUBS } from './hubs';
 import { ManufacturingHubPage } from './ManufacturingHubPage';
@@ -44,11 +43,10 @@ beforeEach(() => {
 });
 
 it('has a hub for every manufacturing hub route', () => {
-  // Manufacturing list pages are routes too; only the hub-handled ones need cards.
+  // List pages under /manufacturing are their own routes, without the hub handle.
   const routes = appRoutes
-    .filter((route) => (route.handle as { access?: string } | undefined)?.access === 'hub')
-    .map((route) => normalizeRoute(route.path ?? ''))
-    .filter((route) => route.startsWith('/manufacturing'));
+    .filter((route) => route.path?.startsWith('/manufacturing') && route.handle?.access === 'hub')
+    .map((route) => route.path!);
   expect(Object.keys(MANUFACTURING_HUBS).sort()).toEqual(routes.sort());
 });
 
@@ -120,6 +118,29 @@ it('renders a hub without figures from its path', () => {
     'href',
     '/manufacturing/welding/reports/cost-analysis',
   );
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('renders the CNC and machining report hubs (inline MenuComponent in legacy)', () => {
+  const { unmount } = renderWithProviders(<ManufacturingHubPage />, {
+    route: '/manufacturing/cnc-cutting/reports/',
+  });
+  expect(screen.getByRole('heading', { name: 'CNC Kesim Raporlar' })).toBeInTheDocument();
+  expect(cardTitles()).toEqual(['Biten Zamanlayıcılar', 'Kullanıcı Raporu', 'Parça Arama']);
+  unmount();
+
+  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/machining/reports' });
+  expect(screen.getByRole('heading', { name: 'Raporlar', level: 1 })).toBeInTheDocument();
+  expect(cardTitles()).toEqual([
+    'Kullanıcı Raporu',
+    'Günlük Verimlilik Raporu',
+    'Performans Raporu',
+    'Biten Zamanlayıcılar',
+    'Toplam Raporu',
+    'Maliyet Analizi',
+    'Makine Çalışma Geçmişi',
+    'Üretim Planı',
+  ]);
   expect(fetchMock).not.toHaveBeenCalled();
 });
 
