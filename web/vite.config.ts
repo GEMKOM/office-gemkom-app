@@ -43,6 +43,12 @@ export default defineConfig(({ command }) => ({
               name: 'react',
               test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/,
             },
+            // Charts (Recharts and its deps) only load with the dashboards that
+            // draw them, never with the shared vendor chunks.
+            {
+              name: 'charts',
+              test: /node_modules[\\/](@mantine[\\/]charts|recharts|@reduxjs|immer|react-redux|reselect|redux|redux-thunk|decimal\.js-light|es-toolkit|eventemitter3|tiny-invariant|victory-vendor|d3-[^\\/]+|internmap)[\\/]/,
+            },
             { name: 'mantine', test: /node_modules[\\/]@mantine[\\/]/ },
             { name: 'vendor', test: /node_modules[\\/]/ },
           ],
