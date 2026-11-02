@@ -677,6 +677,13 @@ export const appRoutes: RouteObject[] = [
         .TimeEntriesPage,
     }),
   },
+  {
+    path: '/it/notifications',
+    lazy: async () => ({
+      Component: (await import('@/pages/it/notifications/NotificationConfigsPage'))
+        .NotificationConfigsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

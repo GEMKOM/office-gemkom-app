@@ -107,5 +107,6 @@
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
   "/procurement/suppliers/payment-terms",
-  "/manufacturing/welding/time-entries"
+  "/manufacturing/welding/time-entries",
+  "/it/notifications"
 ]
