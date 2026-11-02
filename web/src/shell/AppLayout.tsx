@@ -1,7 +1,9 @@
 import { AppShell, Burger, Group } from '@mantine/core';
-import { useDisclosure } from '@mantine/hooks';
+import { useDisclosure, useReducedMotion } from '@mantine/hooks';
 import { Outlet } from 'react-router';
+import { useAuth } from '@/auth/AuthProvider';
 import { RequireRoute } from '@/auth/RequireRoute';
+import { bindNeoUser, NeoAside, NeoEntry, useNeo } from '@/neo';
 import { AppLink } from './AppLink';
 import { AttendanceButton } from './AttendanceButton';
 import { NotificationBell } from './NotificationBell';
@@ -15,16 +17,23 @@ import { ImpersonationBadge, UserMenu } from './UserMenu';
 /**
  * Chrome around every React page: the rail on the left (icons, or labels when
  * the user expands it); on small screens a top bar whose burger opens the
- * whole menu in a drawer.
+ * whole menu in a drawer. Neo docks on the right and narrows the page; it
+ * lives here, so it keeps its conversation from page to page.
  */
 export function AppLayout() {
   const [drawerOpened, drawer] = useDisclosure(false);
   const rail = useRailExpanded();
+  const { user } = useAuth();
+  bindNeoUser(user.id);
+  const neoOpen = useNeo((s) => s.open);
+  const reduceMotion = useReducedMotion();
 
   return (
     <AppShell
       header={{ height: { base: 56, sm: 0 } }}
       navbar={{ width: { base: 280, sm: rail.expanded ? 248 : 72 }, breakpoint: 'sm', collapsed: { mobile: !drawerOpened } }}
+      aside={{ width: { base: '100%', sm: 380 }, breakpoint: 'sm', collapsed: { desktop: !neoOpen, mobile: !neoOpen } }}
+      transitionDuration={reduceMotion ? 0 : 180}
       padding={0}
     >
       <AppShell.Header className={classes.topbar} hiddenFrom="sm">
@@ -39,6 +48,7 @@ export function AppLayout() {
             </AppLink>
           </Group>
           <Group gap={4} wrap="nowrap">
+            <NeoEntry variant="bar" />
             <AttendanceButton />
             <NotificationBell />
             <UserMenu />
@@ -56,6 +66,8 @@ export function AppLayout() {
           </AppShell.Section>
         </div>
       </AppShell.Navbar>
+
+      <NeoAside />
 
       <AppShell.Main>
         <ImpersonationBadge />

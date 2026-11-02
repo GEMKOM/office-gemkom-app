@@ -48,6 +48,8 @@ export interface SessionOptions {
   grants?: string[];
   /** Extra fields merged into the user object. */
   user?: Record<string, unknown>;
+  /** Show Neo's one-time hint by the rail entry. Default false: marked as seen. */
+  neoHint?: boolean;
 }
 
 export interface SeededSession {
@@ -96,16 +98,18 @@ export async function seedSession(
   options: SessionOptions = {},
 ): Promise<SeededSession> {
   const session = buildSession(options);
-  await page.addInitScript((s) => {
+  const neoHintSeen = !options.neoHint;
+  await page.addInitScript(({ s, neoHintSeen }) => {
     if (!/^https?:$/.test(location.protocol)) return;
     if (sessionStorage.getItem('__e2eSessionSeeded')) return;
+    if (neoHintSeen) localStorage.setItem(`gk.neoHintSeen.${String(s.user.id)}`, '1');
     localStorage.setItem('accessToken', s.accessToken);
     localStorage.setItem('refreshToken', s.refreshToken);
     localStorage.setItem('user', JSON.stringify(s.user));
     localStorage.setItem('permissions', JSON.stringify(s.permissions));
     localStorage.setItem('permissionsFetchedAt', String(Date.now()));
     sessionStorage.setItem('__e2eSessionSeeded', '1');
-  }, session);
+  }, { s: session, neoHintSeen });
   return session;
 }
 

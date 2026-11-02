@@ -1,0 +1,34 @@
+// Legacy modules the Neo panel reuses as they are: the escaped markdown-lite
+// renderer every rich-text surface uses, and the daily-summary renderer the
+// legacy modal and widget pane share.
+
+declare module '@legacy/utils/richText.js' {
+  /** User or model text as safe HTML: escaped first, then a few markers. */
+  export function renderRichText(content: string, options?: Record<string, unknown>): string;
+}
+
+declare module '@legacy/components/daily-summary/render.js' {
+  export interface RenderOptions {
+    layer?: 'full' | 'brief';
+    areaOrder?: string[] | null;
+    compact?: boolean;
+  }
+  /** The summary body as an HTML string; every payload string is escaped. */
+  export function renderDailySummary(summary: unknown, options?: RenderOptions): string;
+  /** Wires the folds, the "Tümünü gör" reveal and the area accordion (idempotent). */
+  export function bindDailySummaryInteractions(
+    container: HTMLElement,
+    options?: { onReveal?: (() => void) | null },
+  ): void;
+  /** Adds components/daily-summary/daily-summary.css to the page once. */
+  export function ensureDailySummaryStyles(): void;
+  export function areaOrderFor(departmentCode: string | null | undefined): string[];
+  export function currentDepartmentCode(): string | null;
+  /** 'Bugün' / 'Dün' / '22 Eyl Sal'. */
+  export function relativeDayLabel(dateStr: string): string;
+  /** '22 Eylül 2026 Salı'. */
+  export function formatSummaryDate(dateStr: string): string;
+  export function formatWindowLabel(summary: unknown): string;
+  export function seenValue(summary: unknown): string;
+  export function setSeen(uid: number | string, value: string): void;
+}
