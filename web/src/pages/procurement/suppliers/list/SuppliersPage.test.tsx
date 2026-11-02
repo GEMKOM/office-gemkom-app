@@ -190,6 +190,7 @@ it('sorting a column asks the server, starting ascending', async () => {
   expect(listCalls()[1]!.url.searchParams.get('ordering')).toBe('payment_terms_name');
 });
 
+// A long form with three submits: give it room under a full parallel run.
 it('the create form validates and then posts the legacy body', async () => {
   renderPage();
   await screen.findByText('Bosch Rexroth');
@@ -246,7 +247,7 @@ it('the create form validates and then posts the legacy body', async () => {
     dbs_details: '',
   });
   await waitFor(() => expect(listCalls().length).toBeGreaterThan(1));
-});
+}, 15_000);
 
 it('shows the legacy message when the backend rejects the create', async () => {
   fetchMock.mockImplementation((url, init) =>

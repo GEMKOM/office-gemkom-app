@@ -37,5 +37,14 @@
   "/human_resources/attendance",
   "/quality-control",
   "/projects",
-  "/design"
+  "/design",
+  "/planning/inventory/cards",
+  "/planning/inventory/equipment",
+  "/planning/items",
+  "/procurement/critical-items",
+  "/procurement/reports/items",
+  "/procurement/reports/staff",
+  "/procurement/reports/suppliers",
+  "/procurement/suppliers/list",
+  "/procurement/suppliers/payment-terms"
 ]
