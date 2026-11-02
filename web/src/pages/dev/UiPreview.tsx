@@ -20,6 +20,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { useMemo, useState, type ReactNode } from 'react';
 import { z } from 'zod';
+import { FileAttachmentsDemo, RichTextDemo } from './FilesAndTextPreview';
 import {
   formatCurrency,
   formatDate,
@@ -717,6 +718,14 @@ export function UiPreview() {
 
         <Section title="SelectRemote">
           <SelectRemoteDemo />
+        </Section>
+
+        <Section title="RichText / RichTextEditor">
+          <RichTextDemo />
+        </Section>
+
+        <Section title="FileAttachments + FileViewer (adı “hata” ile başlayan dosya yüklenemez)">
+          <FileAttachmentsDemo />
         </Section>
 
         <Section title="confirm / notify">

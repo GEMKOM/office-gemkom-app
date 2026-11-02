@@ -136,3 +136,82 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   }
   return data as T;
 }
+
+export interface ApiUploadOptions {
+  method?: 'POST' | 'PUT' | 'PATCH';
+  params?: QueryParams;
+  signal?: AbortSignal;
+  /** 0..1 as the request body goes out. */
+  onProgress?: (fraction: number) => void;
+}
+
+interface XhrResult {
+  status: number;
+  data: unknown;
+}
+
+function xhrSend(
+  url: string,
+  method: string,
+  body: FormData,
+  token: string,
+  { signal, onProgress }: ApiUploadOptions,
+): Promise<XhrResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    // The same headers authedFetch adds.
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.setRequestHeader('X-Subdomain', 'ofis.gemcore.com.tr');
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable && event.total > 0) onProgress?.(event.loaded / event.total);
+    };
+    xhr.onload = () => {
+      let data: unknown = undefined;
+      if (xhr.status !== 204 && xhr.responseText) {
+        try {
+          data = JSON.parse(xhr.responseText) as unknown;
+        } catch {
+          data = xhr.responseText;
+        }
+      }
+      resolve({ status: xhr.status, data });
+    };
+    xhr.onerror = () => reject(new TypeError('Failed to fetch'));
+    xhr.onabort = () => reject(new DOMException('The upload was aborted.', 'AbortError'));
+    if (signal) {
+      if (signal.aborted) {
+        reject(new DOMException('The upload was aborted.', 'AbortError'));
+        return;
+      }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+    }
+    xhr.send(body);
+  });
+}
+
+/**
+ * Send a FormData with upload progress. fetch cannot report how much of a
+ * request body has gone out, so this uses XMLHttpRequest with the session's
+ * access token (localStorage is the one copy of it, see authService.js).
+ * When there is no token, or the server answers 401/403, it goes once more
+ * through apiFetch, which refreshes the token and handles a refused portal
+ * session the way every other request does; progress then jumps to the end.
+ */
+export async function apiUpload<T>(path: string, body: FormData, options: ApiUploadOptions = {}): Promise<T> {
+  const { method = 'POST', params, signal, onProgress } = options;
+  const token = typeof localStorage === 'undefined' ? null : localStorage.getItem('accessToken');
+  if (token && typeof XMLHttpRequest !== 'undefined') {
+    const result = await xhrSend(buildUrl(path, params), method, body, token, options);
+    if (result.status !== 401 && result.status !== 403) {
+      if (result.status < 200 || result.status >= 300) {
+        throw new ApiError(result.status, result.data, errorMessage(result.status, result.data));
+      }
+      onProgress?.(1);
+      return result.data as T;
+    }
+  }
+  const data = await apiFetch<T>(path, { method, params, body, signal });
+  onProgress?.(1);
+  return data;
+}

@@ -57,6 +57,61 @@ The pilot pages are the worked examples:
 | `Promise` chains in `DOMContentLoaded` | independent `useQuery` hooks | They run in parallel; no waterfalls. |
 | `setInterval` polling | `refetchInterval` | Pause it while the tab is hidden. |
 | `toLocaleString('tr-TR')` | `formatDate`, `formatNumber`, `formatCurrency` from `@/lib/format` | |
+| `new FileAttachments(...)` + `setFiles()` | `<FileAttachments files onUpload onDelete>` | Map API rows to `AttachmentFile`; see below. |
+| `new FileViewer().openFile(url, name, ext)` | `<FileViewer files index onIndexChange onClose>` | FileAttachments opens it itself. |
+| `renderRichText(text, opts)` into `innerHTML` | `<RichText content mentionedUsers mentionedGroups>` | Never set other HTML. |
+| `attachRichTextEditor(textarea)` | `<RichTextEditor value onChange>` | Works with `form.getInputProps(field)`. |
+| JSZip "Tümünü İndir (ZIP)" | `downloadFilesAsZip(files, name)` from `@/ui` | No library; stored zip. |
+
+## Attachments, file preview and rich text
+
+Three shared blocks replace `components/file-attachments`, `components/file-viewer`
+and `utils/richText.js` + `utils/richTextEditor.js`. The legacy files stay until
+their last legacy page is gone.
+
+**FileAttachments** shows a record's files and takes the page's own endpoints:
+
+```tsx
+const files = useQuery(issueFilesQueryOptions(issue.id));
+<FileAttachments
+  title="Dosyalar"
+  files={(files.data ?? []).map(toAttachmentFile)} // AttachmentFile: url, name, size, uploadedBy, ...
+  loading={files.isPending}
+  error={files.error}
+  readOnly={!canEdit}
+  onUpload={(file, { onProgress, signal }) => uploadIssueFile(issue.id, file, { onProgress, signal })}
+  onUploaded={({ uploaded, failed }) => { /* notify, then */ void files.refetch(); }}
+  onDelete={(file) => deleteIssueFile.mutateAsync(file.id)}  // the confirm is built in
+/>
+```
+
+- Write the upload call with `apiUpload(path, formData, { onProgress, signal })`
+  from `@/api/client`: it reports progress (XMLHttpRequest) and falls back to
+  `apiFetch` for a token refresh.
+- Files upload one at a time; a failed one stays in the queue with its error,
+  **Tekrar dene** and **Kaldır**. `maxSize` refuses big files before upload.
+- When a page uploads with extra fields (İSG's file type and title), keep its
+  form and use `FileDropzone` + `useUploadQueue` + `UploadQueueList` in it.
+- `downloadFile(url, name)` and `downloadFilesAsZip(files, name)` replace the
+  per-page download and JSZip code.
+
+**FileViewer** previews images (zoom: buttons, `+` `-` `0`), PDFs, video and
+plain text in a modal; other types get a download card. `←` `→` move between
+files, Escape closes. Use it directly only for files that are not in a
+FileAttachments list.
+
+**RichText** renders stored comment text: `**kalın**`, `*italik*`, `~~çizili~~`,
+`` `kod` ``, `!!kritik!!`, `++olumlu++`, lists, links and `@mention` badges, the
+same HTML the legacy renderer makes (its tests are ported). Pass the API's
+`mentioned_users_data` and `mentioned_groups_data`; a group badge opens its
+member list. `renderRichText()` escapes everything first and only adds its own
+tags: it is the one string the app may give `dangerouslySetInnerHTML`, and
+`richTextToPlain()` makes a one-line excerpt.
+
+**RichTextEditor** is the WYSIWYG box: toolbar, typed markers, `@` suggestions
+for people and groups, a raw-text view. Its value is the stored markdown-lite,
+so it drops into a form like a textarea. Pasted HTML goes through the
+serializer and the renderer, so nothing pasted survives as markup.
 
 ## Rules
 

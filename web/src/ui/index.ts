@@ -65,3 +65,49 @@ export { confirm, type ConfirmOptions } from './confirm';
 export { notify, errorMessage, type NotifyOptions, type NotifyType } from './notify';
 export { SelectRemote, type RemoteOption, type SelectRemoteProps } from './SelectRemote';
 export { FaIcon, faClass, type FaIconProps } from './FaIcon';
+
+export {
+  RichText,
+  RichTextEditor,
+  GroupMembersPopover,
+  escapeHtml,
+  renderRichText,
+  richTextToPlain,
+  serializeToMarkdown,
+  RICH_TEXT_HINT,
+  type MentionedGroup,
+  type MentionedUser,
+  type RichTextEditorProps,
+  type RichTextOptions,
+  type RichTextProps,
+} from './RichText';
+
+export {
+  FileAttachments,
+  FileDropzone,
+  UploadQueueList,
+  useUploadQueue,
+  type FileAttachmentsProps,
+  type FileDropzoneProps,
+  type UploadFn,
+  type UploadItem,
+  type UploadQueueListProps,
+  type UploadResult,
+} from './FileAttachments';
+export { FileViewer, type FileViewerProps } from './FileViewer/FileViewer';
+export {
+  buildZip,
+  downloadFile,
+  downloadFilesAsZip,
+  extensionOf,
+  fileExtension,
+  fileIcon,
+  fileKind,
+  fileNameFromUrl,
+  formatFileSize,
+  isPreviewable,
+  sanitizeZipSegment,
+  type AttachmentFile,
+  type FileKind,
+  type ZipResult,
+} from './files';
