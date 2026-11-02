@@ -767,6 +767,28 @@ export const appRoutes: RouteObject[] = [
         .NotificationConfigsPage,
     }),
   },
+  {
+    path: '/manufacturing/subcontracting/labor-pricing',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/subcontracting/labor-pricing/LaborPricingPage')
+      ).LaborPricingPage,
+    }),
+  },
+  {
+    path: '/manufacturing/subcontracting/overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/subcontracting/overview/OverviewPage'))
+        .OverviewPage,
+    }),
+  },
+  {
+    path: '/manufacturing/subcontracting/statements',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/subcontracting/statements/StatementsPage'))
+        .StatementsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
