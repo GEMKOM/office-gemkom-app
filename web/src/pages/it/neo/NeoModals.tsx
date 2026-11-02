@@ -1,4 +1,4 @@
-import { renderRichText } from '@legacy/utils/richText.js';
+import { renderRichText } from '@/ui/RichText/renderRichText';
 import { Text } from '@mantine/core';
 import type { DailySummaryDetail, NeoConversation, NeoMessage } from '@/api/it/neo';
 import { DetailModal, FaIcon, type DetailSection } from '@/ui';

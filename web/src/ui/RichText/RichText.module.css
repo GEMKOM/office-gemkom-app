@@ -1,0 +1,405 @@
+/* Rich text: the read view, the editor and the group member list. The class
+   names inside rendered text (rt-*, mention-badge) are written by
+   renderRichText, so they are global; everything else is local. Colours come
+   from the status families: red = critical, green = positive. */
+
+/* ---- read view and editor surface share the marks ---- */
+
+.richText,
+.surface {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--gk-ink);
+  overflow-wrap: anywhere;
+}
+
+.richText strong,
+.surface strong,
+.surface b {
+  font-weight: 600;
+}
+
+.richText s,
+.surface s {
+  color: var(--gk-muted);
+}
+
+.richText code,
+.surface code {
+  padding: 0.05em 0.35em;
+  border: 1px solid var(--gk-line);
+  border-radius: 4px;
+  background: var(--gk-surface-subtle);
+  font-family: var(--gk-font-mono);
+  font-size: 0.88em;
+}
+
+.richText :global(.rt-critical),
+.richText :global(.rt-positive),
+.surface :global(.rt-critical),
+.surface :global(.rt-positive) {
+  padding: 0.05em 0.3em;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.richText :global(.rt-critical),
+.surface :global(.rt-critical) {
+  background: #fde8e8;
+  color: #a31d1d;
+}
+
+.richText :global(.rt-positive),
+.surface :global(.rt-positive) {
+  background: #e7f6ee;
+  color: #11633d;
+}
+
+.richText ul,
+.richText ol,
+.surface ul,
+.surface ol {
+  margin: 0.35rem 0;
+  padding-left: 1.35rem;
+}
+
+.richText li {
+  margin-bottom: 0.15rem;
+}
+
+.richText a {
+  color: var(--gk-red-700);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.richText a:hover {
+  color: var(--gk-red-800);
+}
+
+/* A person: green. A group reaches several people, so it is blue and opens
+   its member list. */
+.richText :global(.mention-badge),
+.surface :global(.mention-badge) {
+  display: inline-block;
+  margin: 0 1px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #e7f6ee;
+  color: #11633d;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.55;
+  white-space: nowrap;
+}
+
+.richText :global(.mention-badge-group),
+.surface :global(.mention-badge-group) {
+  background: #e6effd;
+  color: #1a4fa0;
+}
+
+.richText :global(.mention-badge-group) {
+  cursor: pointer;
+  user-select: none;
+  transition: background 150ms ease-out;
+}
+
+.richText :global(.mention-badge-group:hover) {
+  background: #d3e2fb;
+}
+
+.richText :global(.mention-badge-group:focus-visible) {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.richText :global(.mention-badge-group i),
+.surface :global(.mention-badge-group svg),
+.surface :global(.mention-badge-group i) {
+  font-size: 11px;
+  margin-right: 1px;
+}
+
+/* ---- editor ---- */
+
+.editor {
+  position: relative;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 4px 6px;
+  border: 1px solid var(--gk-line-strong);
+  border-bottom-color: var(--gk-line);
+  border-radius: var(--gk-radius-md) var(--gk-radius-md) 0 0;
+  background: var(--gk-surface-subtle);
+}
+
+.tool {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--gk-radius-sm);
+  background: transparent;
+  color: var(--gk-ink-2);
+  font-size: 12px;
+  cursor: pointer;
+  transition:
+    background 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.tool:hover:not(:disabled) {
+  background: var(--gk-line);
+  color: var(--gk-ink);
+}
+
+.tool:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.tool[data-active] {
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+}
+
+.tool:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* The two colour marks preview their own colour on the button. */
+.tool[data-tone='critical'] {
+  color: #a31d1d;
+}
+
+.tool[data-tone='positive'] {
+  color: #11633d;
+}
+
+.sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--gk-line);
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.surface,
+.source {
+  display: block;
+  width: 100%;
+  max-height: 60vh;
+  padding: 8px 12px;
+  border: 1px solid var(--gk-line-strong);
+  border-top: 0;
+  border-radius: 0 0 var(--gk-radius-md) var(--gk-radius-md);
+  background: var(--gk-surface);
+  overflow-y: auto;
+  transition:
+    border-color 120ms ease-out,
+    box-shadow 120ms ease-out;
+}
+
+.surface {
+  white-space: pre-wrap;
+  cursor: text;
+}
+
+.source {
+  resize: vertical;
+  font-family: var(--gk-font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gk-ink);
+}
+
+.surface:focus,
+.source:focus {
+  outline: none;
+  border-color: var(--gk-red-700);
+  box-shadow: var(--gk-focus-ring);
+}
+
+.editor[data-error] .toolbar,
+.editor[data-error] .surface,
+.editor[data-error] .source {
+  border-color: var(--gk-danger);
+}
+
+.editor[data-disabled] .surface {
+  background: var(--gk-surface-subtle);
+  color: var(--gk-muted);
+  cursor: not-allowed;
+}
+
+/* contenteditable keeps a stray <br>, so :empty never matches: the editor
+   marks itself empty from the value instead. */
+.editor[data-empty] .surface::before {
+  content: attr(data-placeholder);
+  color: var(--gk-muted);
+  pointer-events: none;
+}
+
+/* A mention is one object: selected and deleted whole, never half-edited. */
+.surface :global(.mention-badge) {
+  user-select: all;
+}
+
+.surface[hidden] {
+  display: none;
+}
+
+/* ---- @ suggestions ---- */
+
+.suggestions {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 300px;
+  margin-top: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface);
+  box-shadow: var(--gk-shadow-popover);
+}
+
+.suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--gk-line);
+  cursor: pointer;
+}
+
+.suggestion:last-child {
+  border-bottom: 0;
+}
+
+.suggestion[data-selected] {
+  background: var(--gk-red-050);
+}
+
+.suggestionText {
+  min-width: 0;
+}
+
+.suggestionName {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gk-ink);
+}
+
+.suggestionToken {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.groupTag {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #e6effd;
+  color: #1a4fa0;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* ---- group members popover ---- */
+
+.popover {
+  position: fixed;
+  z-index: 400;
+  min-width: 220px;
+  max-width: 320px;
+  max-height: 340px;
+  padding: 8px 0;
+  overflow-y: auto;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-lg);
+  background: var(--gk-surface);
+  box-shadow: var(--gk-shadow-popover);
+  font-size: 13px;
+  color: var(--gk-ink);
+}
+
+/* Beside the @ list while a group is highlighted. Display only: it never
+   comes between the pointer and the row being clicked. */
+.popover[data-preview] {
+  max-height: none;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.popoverHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+  padding: 2px 12px 8px;
+  border-bottom: 1px solid var(--gk-line);
+  font-weight: 600;
+}
+
+.popoverHead > :first-child {
+  color: #1a4fa0;
+}
+
+.popoverList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.popoverList li {
+  display: flex;
+  flex-direction: column;
+  padding: 4px 12px;
+}
+
+.popoverName {
+  color: var(--gk-ink);
+}
+
+.popoverPosition {
+  font-size: 11px;
+  color: var(--gk-muted);
+}
+
+.popoverNote {
+  padding: 4px 12px;
+  color: var(--gk-muted);
+}
+
+.popoverFoot {
+  margin-top: 6px;
+  padding: 6px 12px 0;
+  border-top: 1px solid var(--gk-line);
+  font-size: 11px;
+  color: var(--gk-muted);
+}
+
+@media (max-width: 48em) {
+  .tool {
+    width: 34px;
+    height: 32px;
+    font-size: 13px;
+  }
+}

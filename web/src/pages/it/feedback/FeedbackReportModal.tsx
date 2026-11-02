@@ -1,4 +1,4 @@
-import { renderRichText } from '@legacy/utils/richText.js';
+import { renderRichText } from '@/ui/RichText/renderRichText';
 import { Anchor, Button, Center, Loader, Modal, Text, Textarea } from '@mantine/core';
 import { useEffect, useState, type ReactNode } from 'react';
 import {

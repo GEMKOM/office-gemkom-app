@@ -1,5 +1,5 @@
 import { authedFetch } from '@legacy/authService.js';
-import { apiFetch, ApiError, isApiError } from './client';
+import { apiFetch, ApiError, apiUpload, isApiError } from './client';
 import { shouldRetry } from './queryClient';
 import { extractResults, toPaginated } from './types';
 
@@ -196,5 +196,91 @@ describe('pagination helpers', () => {
     expect(toPaginated([1, 2])).toEqual({ count: 2, next: null, previous: null, results: [1, 2] });
     const page = { count: 10, next: 'n', previous: null, results: [1] };
     expect(toPaginated(page)).toEqual(page);
+  });
+});
+
+describe('apiUpload', () => {
+  type Listener = ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null;
+  const sent: { method: string; url: string; headers: Record<string, string>; body: unknown }[] = [];
+  let respond: { status: number; body: string } = { status: 201, body: '{"id":5}' };
+
+  class FakeXhr {
+    status = 0;
+    responseText = '';
+    upload: { onprogress: Listener } = { onprogress: null };
+    onload: (() => void) | null = null;
+    onerror: (() => void) | null = null;
+    onabort: (() => void) | null = null;
+    private request = { method: '', url: '', headers: {} as Record<string, string>, body: undefined as unknown };
+    open(method: string, url: string) {
+      this.request.method = method;
+      this.request.url = url;
+    }
+    setRequestHeader(name: string, value: string) {
+      this.request.headers[name] = value;
+    }
+    send(body: unknown) {
+      this.request.body = body;
+      sent.push(this.request);
+      this.upload.onprogress?.({ lengthComputable: true, loaded: 50, total: 100 });
+      this.status = respond.status;
+      this.responseText = respond.body;
+      this.onload?.();
+    }
+    abort() {
+      this.onabort?.();
+    }
+  }
+
+  beforeEach(() => {
+    sent.length = 0;
+    respond = { status: 201, body: '{"id":5}' };
+    vi.stubGlobal('XMLHttpRequest', FakeXhr);
+    localStorage.setItem('accessToken', 'token-1');
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    localStorage.removeItem('accessToken');
+  });
+
+  it('posts the form with the session headers and reports progress', async () => {
+    const progress: number[] = [];
+    const form = new FormData();
+    form.append('file', new Blob(['x']), 'a.txt');
+    const data = await apiUpload<{ id: number }>('/isg/issues/1/files/upload/', form, {
+      onProgress: (fraction) => progress.push(fraction),
+    });
+    expect(data).toEqual({ id: 5 });
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      url: 'https://api.test/isg/issues/1/files/upload/',
+      headers: { Authorization: 'Bearer token-1', 'X-Subdomain': 'ofis.gemcore.com.tr' },
+    });
+    expect(sent[0]!.body).toBe(form);
+    expect(progress).toEqual([0.5, 1]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('throws an ApiError with the server message', async () => {
+    respond = { status: 400, body: '{"detail":"Dosya çok büyük"}' };
+    const error = await errorOf(apiUpload('/x/', new FormData()));
+    expect(error.status).toBe(400);
+    expect(error.message).toBe('Dosya çok büyük');
+  });
+
+  it('goes through apiFetch (token refresh) on a 401', async () => {
+    respond = { status: 401, body: '' };
+    fetchMock.mockResolvedValueOnce(json(201, { id: 6 }));
+    const form = new FormData();
+    await expect(apiUpload('/x/', form)).resolves.toEqual({ id: 6 });
+    expect(lastCall().init.body).toBe(form);
+    expect(lastCall().init.method).toBe('POST');
+  });
+
+  it('without a token it uses apiFetch straight away', async () => {
+    localStorage.removeItem('accessToken');
+    fetchMock.mockResolvedValueOnce(json(201, { id: 7 }));
+    await expect(apiUpload('/x/', new FormData())).resolves.toEqual({ id: 7 });
+    expect(sent).toHaveLength(0);
   });
 });
