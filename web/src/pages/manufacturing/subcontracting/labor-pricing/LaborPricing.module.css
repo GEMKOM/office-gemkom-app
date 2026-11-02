@@ -1,0 +1,75 @@
+/* Taşeron işçilik fiyatı: the cost-composition bar and the threshold swatches. */
+
+.bar {
+  display: flex;
+  height: 34px;
+  border-radius: var(--gk-radius-sm);
+  overflow: hidden;
+  border: 1px solid var(--gk-line);
+}
+
+.bar > span {
+  display: block;
+  min-width: 2px;
+}
+
+.barKey {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 10px;
+  font-size: 13px;
+  color: var(--gk-ink-2);
+}
+
+.barKey > div {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.barKey i {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: none;
+  transform: translateY(1px);
+}
+
+.barKey b {
+  font-weight: 600;
+  color: var(--gk-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border-radius: 3px;
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  flex: none;
+}
+
+.swatchGreen {
+  background: rgba(39, 107, 76, 0.22);
+}
+
+.swatchRed {
+  background: rgba(176, 46, 46, 0.22);
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.rate {
+  font-weight: 600;
+  color: #c4470f;
+  font-variant-numeric: tabular-nums;
+}
+
+.difficulty {
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+}

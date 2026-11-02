@@ -669,6 +669,126 @@ export const appRoutes: RouteObject[] = [
         .PaymentTermsPage,
     }),
   },
+  // Talaşlı İmalat tasks
+  {
+    path: '/manufacturing/machining/tasks/list',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/machining/tasks/list/MachiningPartsPage'))
+        .MachiningPartsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/tasks/create',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/machining/tasks/create/MachiningCreateTasksPage'))
+        .MachiningCreateTasksPage,
+    }),
+  },
+  {
+    path: '/planning/procurement-lines',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/procurement-lines/ProcurementLinesPage'))
+        .ProcurementLinesPage,
+    }),
+  },
+  {
+    path: '/general/overtime/cost-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/cost-report/CostReportPage'))
+        .CostReportPage,
+    }),
+  },
+  {
+    path: '/general/overtime/machining-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/machining-report/MachiningReportPage'))
+        .MachiningReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/daily-efficiency',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/daily-efficiency/DailyEfficiencyPage')
+      ).DailyEfficiencyPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/performance',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/performance/PerformanceReportPage')
+      ).PerformanceReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/sum-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/machining/reports/sum-report/SumReportPage'))
+        .SumReportPage,
+    }),
+  },
+  {
+    path: '/human_resources/vacation',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/vacation/HrVacationPage')).HrVacationPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/records',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/records/AttendanceRecordsPage'))
+        .AttendanceRecordsPage,
+    }),
+  },
+  {
+    path: '/procurement/payment-lists',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/payment-lists/PaymentListsPage')).PaymentListsPage,
+    }),
+  },
+  {
+    path: '/planning/task-templates',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/task-templates/TaskTemplatesPage')).TaskTemplatesPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/time-entries',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/welding/time-entries/TimeEntriesPage'))
+        .TimeEntriesPage,
+    }),
+  },
+  {
+    path: '/it/notifications',
+    lazy: async () => ({
+      Component: (await import('@/pages/it/notifications/NotificationConfigsPage'))
+        .NotificationConfigsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/subcontracting/labor-pricing',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/subcontracting/labor-pricing/LaborPricingPage')
+      ).LaborPricingPage,
+    }),
+  },
+  {
+    path: '/manufacturing/subcontracting/overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/subcontracting/overview/OverviewPage'))
+        .OverviewPage,
+    }),
+  },
+  {
+    path: '/manufacturing/subcontracting/statements',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/subcontracting/statements/StatementsPage'))
+        .StatementsPage,
+    }),
+  },
   // Attachments, file preview and rich text (discussions)
   {
     path: '/general/discussions',
@@ -704,7 +824,23 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
     ]
   : [];
 
+// Signed-out pages: outside RootLayout, so no session check, rail or band.
+// They are listed in migrated-routes.json like the app routes.
+export const publicRoutes: RouteObject[] = [
+  {
+    path: '/login',
+    lazy: async () => ({ Component: (await import('@/pages/auth/LoginPage')).LoginPage }),
+  },
+  {
+    path: '/login/reset-password',
+    lazy: async () => ({
+      Component: (await import('@/pages/auth/ResetPasswordPage')).ResetPasswordPage,
+    }),
+  },
+];
+
 export const routeTree: RouteObject[] = [
+  ...publicRoutes,
   {
     Component: RootLayout,
     children: [...appRoutes, ...devRoutes, { path: '*', Component: NotFound }],

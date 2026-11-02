@@ -1,0 +1,31 @@
+/* Clickable {variable} chips under the template fields (legacy addVariableChips). */
+.chips {
+  margin-top: 6px;
+}
+
+.chip {
+  font-family: var(--gk-font-mono);
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 1px 8px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-sm);
+  background: var(--gk-surface-subtle);
+  color: var(--gk-ink);
+}
+
+.chip:hover {
+  background: var(--gk-line);
+}
+
+.chip:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+/* The category group header (legacy groupHeaderFormatter). */
+.groupHeader {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}

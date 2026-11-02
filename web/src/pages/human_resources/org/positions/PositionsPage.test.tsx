@@ -138,11 +138,13 @@ it('sends the legacy URL filters and writes a picked department to the URL', asy
     expect(search.get('department')).toBe('welding');
     expect(search.get('level')).toBe('4');
   });
+  // The URL keeps legacy's `department`; the request uses the backend's department_code.
   await waitFor(() =>
     expect(
       listCalls().some(
         (c) =>
-          c.url.searchParams.get('department') === 'welding' &&
+          c.url.searchParams.get('department_code') === 'welding' &&
+          !c.url.searchParams.has('department') &&
           c.url.searchParams.get('level') === '4',
       ),
     ).toBe(true),

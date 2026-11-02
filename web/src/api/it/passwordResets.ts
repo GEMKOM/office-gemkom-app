@@ -9,7 +9,8 @@ export interface PasswordResetRequest {
   first_name?: string;
   last_name?: string;
   email?: string;
-  team?: string | null;
+  department_code?: string | null;
+  must_reset_password?: boolean;
   user_groups?: string[];
   [key: string]: unknown;
 }
