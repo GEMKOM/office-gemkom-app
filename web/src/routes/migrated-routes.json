@@ -107,5 +107,6 @@
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
   "/procurement/suppliers/payment-terms",
-  "/management/reports/overview"
+  "/management/reports/overview",
+  "/finance/reports/executive-overview"
 ]
