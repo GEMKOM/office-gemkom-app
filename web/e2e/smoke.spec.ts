@@ -44,14 +44,20 @@ async function expectSpa(page: import('@playwright/test').Page) {
 }
 
 test.describe('session guard', () => {
-  test('signed out: a migrated page redirects to /login/ and remembers where it was', async ({
+  test('signed out: a migrated page redirects to the React login page and remembers where it was', async ({
     page,
+    consoleErrors,
   }) => {
     await mockBackend(page);
     await page.goto(CUSTOMERS);
     await expect(page).toHaveURL(/\/login\/$/);
+    await expect(page.getByRole('heading', { name: 'Ofis Çalışanları' })).toBeVisible();
+    await expectSpa(page);
+    // Outside the signed-in shell: no rail.
+    await expect(page.getByRole('navigation', { name: 'Ana menü' })).toHaveCount(0);
     const returnUrl = await page.evaluate(() => sessionStorage.getItem('postLoginReturnUrl'));
     expect(returnUrl).toBe(CUSTOMERS);
+    consoleErrors.expectNone();
   });
 });
 
@@ -88,20 +94,20 @@ test.describe('navigation', () => {
     const session = await seedSession(page, { admin: true });
     await mockBackend(page, {}, { session });
 
-    await page.goto(CUSTOMERS);
-    await expectCustomersTable(page);
+    await page.goto('/it/');
+    await expectSpa(page);
 
-    // React rail: user menu -> Tartışmalarım is a legacy page, so a full load.
+    // A hub card to a page that is still legacy (Yetki Yönetimi): a full load.
     await page.evaluate(() => {
       window.__spaMarker = 'spa';
     });
     await page
-      .getByRole('navigation', { name: 'Ana menü' })
-      .getByRole('button', { name: 'E2E Admin' })
+      .getByRole('main')
+      .getByRole('link', { name: /Yetki Yönetimi/ })
+      .first()
       .click();
-    await page.getByRole('menuitem', { name: 'Tartışmalarım' }).click();
 
-    await expect(page).toHaveURL(/\/general\/discussions\/$/);
+    await expect(page).toHaveURL(/\/it\/permissions\/?$/);
     await expect(page.locator('#navbar-container')).toHaveCount(1);
     await expect(page.locator('#root')).toHaveCount(0);
     expect(await page.evaluate(() => window.__spaMarker)).toBeUndefined();
@@ -206,8 +212,11 @@ test.describe('route permissions', () => {
   });
 });
 
+// The signed-out pages send a signed-in visitor on; e2e/login.spec.ts covers them.
+const PUBLIC_ROUTES = new Set(['/login', '/login/reset-password']);
+
 test.describe('every migrated route loads as admin', () => {
-  const routes = migratedRoutes();
+  const routes = migratedRoutes().filter((route) => !PUBLIC_ROUTES.has(route));
   test('migrated-routes.json is not empty', () => {
     expect(routes.length).toBeGreaterThan(0);
   });
@@ -313,7 +322,10 @@ test.describe('rail', () => {
     consoleErrors.expectNone();
   });
 
-  test('the bell lists unread first and marks a notification read', async ({ page, consoleErrors }) => {
+  test('the bell lists unread first and marks a notification read', async ({
+    page,
+    consoleErrors,
+  }) => {
     const session = await seedSession(page, { admin: true });
     let unread = 1;
     const backend = await mockBackend(
@@ -322,8 +334,22 @@ test.describe('rail', () => {
         'GET /notifications/unread_count/': () => ({ json: { count: unread } }),
         'GET /notifications/': {
           json: paginated([
-            { id: 71, title: 'Okunmuş bildirim', is_read: true, created_at: '2026-01-02T10:00:00Z', link: null },
-            { id: 72, title: 'Yeni bildirim', body: 'Onay bekliyor', category: 'sales', is_read: false, created_at: '2026-01-01T10:00:00Z', link: null },
+            {
+              id: 71,
+              title: 'Okunmuş bildirim',
+              is_read: true,
+              created_at: '2026-01-02T10:00:00Z',
+              link: null,
+            },
+            {
+              id: 72,
+              title: 'Yeni bildirim',
+              body: 'Onay bekliyor',
+              category: 'sales',
+              is_read: false,
+              created_at: '2026-01-01T10:00:00Z',
+              link: null,
+            },
           ]),
         },
         'POST /notifications/72/mark_read/': () => {
@@ -342,7 +368,10 @@ test.describe('rail', () => {
     const rows = panel.getByRole('listitem');
     await expect(rows).toHaveCount(2);
     await expect(rows.first()).toContainText('Yeni bildirim');
-    await expect(panel.getByRole('link', { name: 'Tümünü Gör' })).toHaveAttribute('href', '/general/notifications');
+    await expect(panel.getByRole('link', { name: 'Tümünü Gör' })).toHaveAttribute(
+      'href',
+      '/general/notifications',
+    );
 
     await rows.first().getByRole('button').click();
     await expect.poll(() => backend.callsTo('/notifications/72/mark_read/', 'POST').length).toBe(1);
@@ -354,7 +383,10 @@ test.describe('rail', () => {
     consoleErrors.expectNone();
   });
 
-  test('PDKS: off the office network, check-in asks for a reason', async ({ page, consoleErrors }) => {
+  test('PDKS: off the office network, check-in asks for a reason', async ({
+    page,
+    consoleErrors,
+  }) => {
     // The browser logs the refused check-in as a failed resource load.
     consoleErrors.allow(/status of 403/);
     const session = await seedSession(page, { admin: true });

@@ -1,0 +1,561 @@
+/* Gantt (direction B "Kırmızı bant"): white panel, graphite ink, GEMKOM red for
+   planned work and the today line, soft status-family fills for bars. */
+
+.panel {
+  overflow: hidden;
+}
+
+.root {
+  position: relative;
+}
+
+.scroller {
+  position: relative;
+  overflow: auto;
+  background: var(--gk-surface);
+  font-family: var(--gk-font-sans);
+  overscroll-behavior: contain;
+}
+
+.canvas {
+  position: relative;
+}
+
+/* ---- header (sticky top) ---- */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  background: var(--gk-surface-subtle);
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.corner {
+  position: sticky;
+  left: 0;
+  z-index: 7;
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--gk-surface-subtle);
+  border-right: 1px solid var(--gk-line);
+}
+
+.axis {
+  position: relative;
+  flex: none;
+  height: 100%;
+}
+
+.tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-left: 1px solid var(--gk-line);
+  color: var(--gk-ink);
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.tick[data-weekend] {
+  color: var(--gk-muted);
+}
+
+.tick[data-month-start] {
+  border-left: 2px solid var(--gk-line-strong);
+}
+
+.tickLabel {
+  font-family: var(--gk-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.tickSub {
+  font-size: 10px;
+  color: var(--gk-muted);
+}
+
+.todayLabel {
+  position: absolute;
+  bottom: 2px;
+  z-index: 2;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--gk-red-700);
+  color: var(--gk-on-dark);
+  font-family: var(--gk-font-mono);
+  font-size: 10px;
+  line-height: 15px;
+  pointer-events: none;
+}
+
+/* ---- background: time off, grid lines, today ---- */
+
+.background {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.off {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  /* Light red like legacy, hatched so it also reads without colour. */
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(139, 0, 0, 0.06) 0 6px,
+    rgba(139, 0, 0, 0.025) 6px 12px
+  );
+}
+
+.off[data-kind='hours'] {
+  background: rgba(31, 41, 51, 0.045);
+}
+
+.gridLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--gk-line);
+}
+
+.gridLine[data-month-start] {
+  width: 2px;
+  background: var(--gk-line-strong);
+  opacity: 0.6;
+}
+
+.today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--gk-red-700);
+}
+
+/* ---- rows ---- */
+
+.row {
+  position: absolute;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.row[data-group] {
+  background: var(--gk-surface-subtle);
+}
+
+.label {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 100%;
+  padding: 0 10px;
+  overflow: hidden;
+  background: var(--gk-surface);
+  border-right: 1px solid var(--gk-line);
+  cursor: pointer;
+}
+
+.row[data-group] .label {
+  background: var(--gk-surface-subtle);
+  cursor: default;
+}
+
+.label:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.labelText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.labelKey {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  font-family: var(--gk-font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-ink);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.row[data-group] .labelKey {
+  font-family: var(--gk-font-sans);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gk-ink-2);
+}
+
+.labelSub {
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--gk-muted);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.label[data-muted] .labelKey,
+.label[data-muted] .labelSub {
+  color: var(--gk-muted);
+  font-style: italic;
+}
+
+.labelLock {
+  font-size: 10px;
+  color: #8a5a00;
+}
+
+.grip {
+  flex: none;
+  padding: 6px 2px;
+  color: var(--gk-line-strong);
+  cursor: grab;
+  touch-action: none;
+}
+
+.grip:hover {
+  color: var(--gk-ink);
+}
+
+.lane {
+  position: relative;
+  flex: none;
+  height: 100%;
+}
+
+/* ---- bars ---- */
+
+[data-tone='brand'] {
+  --tone-bg: #fff0f0;
+  --tone-fg: #8b0000;
+  --tone-solid: #8b0000;
+  --tone-line: #efc2c2;
+  --tone-fill: rgba(139, 0, 0, 0.2);
+}
+[data-tone='green'] {
+  --tone-bg: #e7f6ee;
+  --tone-fg: #11633d;
+  --tone-solid: #1f8a52;
+  --tone-line: #b9e2cb;
+  --tone-fill: rgba(31, 138, 82, 0.28);
+}
+[data-tone='blue'] {
+  --tone-bg: #e6effd;
+  --tone-fg: #1a4fa0;
+  --tone-solid: #2f6fd6;
+  --tone-line: #bfd3f6;
+  --tone-fill: rgba(47, 111, 214, 0.25);
+}
+[data-tone='yellow'] {
+  --tone-bg: #fdf3d8;
+  --tone-fg: #8a5a00;
+  --tone-solid: #d99a00;
+  --tone-line: #efd892;
+  --tone-fill: rgba(217, 154, 0, 0.3);
+}
+[data-tone='orange'] {
+  --tone-bg: #ffeddc;
+  --tone-fg: #9a3d0b;
+  --tone-solid: #e06a1b;
+  --tone-line: #f6caa4;
+  --tone-fill: rgba(224, 106, 27, 0.25);
+}
+[data-tone='red'] {
+  --tone-bg: #fde8e8;
+  --tone-fg: #a31d1d;
+  --tone-solid: #c92a2a;
+  --tone-line: #f1bdbd;
+  --tone-fill: rgba(201, 42, 42, 0.22);
+}
+[data-tone='purple'] {
+  --tone-bg: #efeafd;
+  --tone-fg: #5530a8;
+  --tone-solid: #7a52d1;
+  --tone-line: #d3c7f4;
+  --tone-fill: rgba(122, 82, 209, 0.25);
+}
+[data-tone='grey'] {
+  --tone-bg: #eef0f2;
+  --tone-fg: #4a525b;
+  --tone-solid: #8a929b;
+  --tone-line: #d3d7dc;
+  --tone-fill: rgba(138, 146, 155, 0.3);
+}
+
+.bar {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid var(--tone-line);
+  border-left: 3px solid var(--tone-solid);
+  border-radius: var(--gk-radius-sm);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.bar[data-draggable] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.bar[data-dashed] {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.bar[data-clipped-start] {
+  border-left-style: dotted;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+
+.bar[data-clipped-end] {
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+/* The selection (the chart's tab stop) is shown while the chart has focus. */
+.scroller:focus-within .bar[data-selected] {
+  z-index: 2;
+  box-shadow:
+    0 0 0 2px var(--gk-surface),
+    0 0 0 4px var(--tone-solid);
+}
+
+.bar:focus-visible {
+  z-index: 2;
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--gk-surface),
+    0 0 0 4px var(--gk-ink);
+}
+
+.bar[data-dragging] {
+  opacity: 0.35;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .bar {
+    transition:
+      box-shadow 120ms ease,
+      transform 120ms ease;
+  }
+
+  .bar:hover:not([data-dragging]) {
+    transform: translateY(-1px);
+    box-shadow: var(--gk-shadow-card-hover);
+  }
+}
+
+.progress {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: var(--tone-fill);
+}
+
+.gap {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.85) 0 3px,
+    rgba(255, 255, 255, 0.55) 3px 6px
+  );
+}
+
+.barText {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  padding: 0 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.barLock {
+  flex: none;
+  font-size: 10px;
+}
+
+.barPct {
+  margin-left: auto;
+  font-family: var(--gk-font-mono);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.handle[data-side='start'] {
+  left: -1px;
+}
+
+.handle[data-side='end'] {
+  right: -1px;
+}
+
+.handle::after {
+  content: '';
+  position: absolute;
+  top: 25%;
+  bottom: 25%;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--tone-solid);
+  opacity: 0;
+}
+
+.bar:hover .handle::after {
+  opacity: 0.6;
+}
+
+/* ---- drag feedback ---- */
+
+.ghost {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.ghostBar {
+  position: absolute;
+  inset: 6px 0;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  overflow: hidden;
+  border: 1px dashed var(--tone-solid);
+  border-left: 3px solid var(--tone-solid);
+  border-radius: var(--gk-radius-sm);
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: var(--gk-shadow-popover);
+}
+
+.ghostTime {
+  position: absolute;
+  top: calc(100% - 4px);
+  left: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--gk-ink);
+  color: var(--gk-on-dark);
+  font-family: var(--gk-font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.reorderLine {
+  position: absolute;
+  left: 0;
+  z-index: 9;
+  height: 2px;
+  background: var(--gk-red-700);
+  pointer-events: none;
+}
+
+/* ---- misc ---- */
+
+.tooltip {
+  position: fixed;
+  z-index: 400;
+  max-width: 300px;
+  padding: 6px 10px;
+  border-radius: var(--gk-radius-sm);
+  background: var(--gk-ink);
+  color: var(--gk-on-dark);
+  font-size: 12px;
+  line-height: 1.45;
+  box-shadow: var(--gk-shadow-popover);
+  pointer-events: none;
+}
+
+.tooltipTitle {
+  font-weight: 600;
+}
+
+.empty {
+  position: sticky;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0;
+  color: var(--gk-muted);
+  font-size: 13px;
+}
+
+.period {
+  min-width: 120px;
+  text-align: center;
+  color: var(--gk-ink);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

@@ -1,0 +1,172 @@
+/* FileViewer: the file sits on a graphite stage between the modal's header
+   and footer, so a white page or a pale photo still has an edge. */
+
+.stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  height: min(70vh, 760px);
+  overflow: hidden;
+  background: var(--gk-rail);
+}
+
+/* Fullscreen on a phone: the stage takes what the header and footer leave. */
+:global(.mantine-Modal-content[data-full-screen]) .stage {
+  height: calc(100dvh - 68px - 61px);
+}
+
+.stage[data-kind='pdf'],
+.stage[data-kind='text'] {
+  place-items: stretch;
+}
+
+.imageScroller {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.imageScroller[data-zoomed] {
+  overflow: auto;
+  place-items: start center;
+}
+
+.image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: center top;
+  opacity: 0;
+  transition:
+    transform 150ms ease-out,
+    opacity 150ms ease-out;
+}
+
+.imageScroller:not([data-zoomed]) .image {
+  transform-origin: center;
+}
+
+.image[data-ready] {
+  opacity: 1;
+}
+
+.loader {
+  position: absolute;
+}
+
+.frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--gk-surface);
+}
+
+.video {
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+
+.text {
+  margin: 0;
+  padding: 20px;
+  overflow: auto;
+  background: var(--gk-surface);
+  color: var(--gk-ink);
+  font-family: var(--gk-font-mono);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Previous / next: round translucent buttons on the stage's edges. */
+.nav {
+  position: absolute;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--gk-on-dark);
+  font-size: 15px;
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition: background 150ms ease-out;
+}
+
+.nav:hover {
+  background: rgba(255, 255, 255, 0.26);
+}
+
+.nav:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gk-on-dark);
+}
+
+.nav[data-side='prev'] {
+  left: 12px;
+}
+
+.nav[data-side='next'] {
+  right: 12px;
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: auto;
+}
+
+.zoomValue {
+  min-width: 48px;
+  font-size: 13px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--gk-ink-2);
+}
+
+/* The download card for files the browser cannot show. */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  margin: 16px;
+  padding: 28px 24px;
+  border-radius: var(--gk-radius-lg);
+  background: var(--gk-surface);
+  box-shadow: var(--gk-shadow-card);
+  text-align: center;
+}
+
+.cardTile {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--gk-radius-md);
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+  font-size: 22px;
+}
+
+.cardName {
+  font-weight: 600;
+  color: var(--gk-ink);
+  overflow-wrap: anywhere;
+}
+
+.cardText {
+  margin: 0 0 4px;
+  font-size: 13px;
+  color: var(--gk-muted);
+}

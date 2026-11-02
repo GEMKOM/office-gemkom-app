@@ -1,11 +1,5 @@
-// Legacy modules the Neo panel reuses as they are: the escaped markdown-lite
-// renderer every rich-text surface uses, and the daily-summary renderer the
-// legacy modal and widget pane share.
-
-declare module '@legacy/utils/richText.js' {
-  /** User or model text as safe HTML: escaped first, then a few markers. */
-  export function renderRichText(content: string, options?: Record<string, unknown>): string;
-}
+// Legacy modules the Neo panel reuses as they are: the daily-summary renderer
+// the legacy modal and widget pane share.
 
 declare module '@legacy/components/daily-summary/render.js' {
   export interface RenderOptions {

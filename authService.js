@@ -553,7 +553,9 @@ export function navigateTo(path, options = {}) {
     }, 100);
 }
 
-export function navigateByTeam() {
+// The department's home page, where a fresh login lands. The React login page
+// reads it to navigate client-side; navigateByTeam() does a full page load.
+export function teamLandingRoute() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -563,33 +565,35 @@ export function navigateByTeam() {
             null;
 
         if (isAdmin() || !departmentCode) {
-            navigateTo(ROUTES.HOME);
-            return;
+            return ROUTES.HOME;
         }
         if (departmentCode === 'machining') {
-            navigateTo(ROUTES.MACHINING);
+            return ROUTES.MACHINING;
         } else if (departmentCode === 'maintenance') {
-            navigateTo(ROUTES.MAINTENANCE);
+            return ROUTES.MAINTENANCE;
         } else if (departmentCode === 'manufacturing') {
-            navigateTo(ROUTES.MANUFACTURING);
+            return ROUTES.MANUFACTURING;
         } else if (departmentCode === 'planning') {
-            navigateTo('/manufacturing/machining/capacity/planning');
+            return '/manufacturing/machining/capacity/planning';
         } else if (departmentCode === 'procurement') {
-            navigateTo('/procurement/purchase-requests');
+            return '/procurement/purchase-requests';
         } else if (departmentCode === 'finance') {
-            navigateTo('/finance/purchase-orders');
+            return '/finance/purchase-orders';
         } else if (departmentCode === 'human_resources') {
-            navigateTo('/human_resources/users');
+            return '/human_resources/users';
         } else if (departmentCode === 'human_resouces') {
-            navigateTo('/human_resources/users');
-        } else {
-            // Fallback: redirect all other departments to home page
-            navigateTo(ROUTES.HOME);
+            return '/human_resources/users';
         }
+        // Fallback: redirect all other departments to home page
+        return ROUTES.HOME;
     } catch (error) {
         console.warn('Failed to parse user data for department-based navigation:', error);
-        navigateTo(ROUTES.HOME);
+        return ROUTES.HOME;
     }
+}
+
+export function navigateByTeam() {
+    navigateTo(teamLandingRoute());
 }
 
 // Handle department-based navigation only on fresh logins

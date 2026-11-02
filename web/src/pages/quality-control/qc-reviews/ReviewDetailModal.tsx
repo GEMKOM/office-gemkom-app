@@ -5,9 +5,8 @@ import {
   type DiscussionTopic,
   type QCReview,
 } from '@/api/quality-control/qcReviews';
-import { DetailModal, FaIcon, notify } from '@/ui';
+import { DetailModal, FaIcon, notify, RichText } from '@/ui';
 import { isPendingReview, NcrLink, OpenNcrCount } from './columns';
-import { RichText } from './RichText';
 
 export interface PartRow {
   position_no?: unknown;

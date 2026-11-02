@@ -1,0 +1,183 @@
+/* The discussion panel: topic text, files, the comment list and the composer. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+}
+
+.heading > i {
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.topicBody {
+  padding: 12px 14px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface-subtle);
+}
+
+.state {
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+/* The thread scrolls on its own, so the composer stays near. */
+.comments {
+  max-height: 440px;
+  overflow-y: auto;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+}
+
+.empty {
+  margin: 0;
+  padding: 24px;
+  color: var(--gk-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.comment {
+  display: flex;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--gk-line);
+  transition: background 150ms ease-out;
+}
+
+.comment:last-child {
+  border-bottom: 0;
+}
+
+.comment:hover {
+  background: var(--gk-surface-subtle);
+}
+
+/* The comment Tartışmalarım opened the thread for. */
+.comment[data-highlight] {
+  background: var(--gk-red-050);
+  box-shadow: inset 3px 0 0 var(--gk-red-700);
+}
+
+.commentMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.commentHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.author {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gk-ink);
+}
+
+.when {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.editButton {
+  margin-left: auto;
+}
+
+.commentFiles {
+  margin-top: 6px;
+}
+
+.editForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.composer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--gk-line);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--gk-line);
+  border-radius: 999px;
+  background: var(--gk-surface-subtle);
+  font-size: 12px;
+  color: var(--gk-ink-2);
+}
+
+.chip > i {
+  color: var(--gk-muted);
+  font-size: 11px;
+}
+
+.chipName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chipSize {
+  color: var(--gk-muted);
+}
+
+.chipRemove {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--gk-muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.chipRemove:hover {
+  background: var(--gk-line);
+  color: var(--gk-danger);
+}
+
+.chipRemove:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
