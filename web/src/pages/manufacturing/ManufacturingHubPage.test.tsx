@@ -2,7 +2,8 @@ import { authedFetch } from '@legacy/authService.js';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
-import migratedRoutes from '@/routes/migrated-routes.json';
+import { normalizeRoute } from '@/routes/migrated';
+import { appRoutes } from '@/routes/router';
 import { MANUFACTURING_HUBS } from './hubs';
 import { ManufacturingHubPage } from './ManufacturingHubPage';
 
@@ -42,8 +43,12 @@ beforeEach(() => {
   });
 });
 
-it('has a hub for every migrated manufacturing route', () => {
-  const routes = migratedRoutes.filter((route) => route.startsWith('/manufacturing'));
+it('has a hub for every manufacturing hub route', () => {
+  // Manufacturing list pages are routes too; only the hub-handled ones need cards.
+  const routes = appRoutes
+    .filter((route) => (route.handle as { access?: string } | undefined)?.access === 'hub')
+    .map((route) => normalizeRoute(route.path ?? ''))
+    .filter((route) => route.startsWith('/manufacturing'));
   expect(Object.keys(MANUFACTURING_HUBS).sort()).toEqual(routes.sort());
 });
 
@@ -114,6 +119,28 @@ it('renders a hub without figures from its path', () => {
   expect(screen.getByRole('link', { name: 'Maliyet Analizi Raporu' })).toHaveAttribute(
     'href',
     '/manufacturing/welding/reports/cost-analysis',
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it('renders the two report hubs that were inline MenuComponents', () => {
+  const { unmount } = renderWithProviders(<ManufacturingHubPage />, {
+    route: '/manufacturing/maintenance/reports/',
+  });
+  expect(screen.getByRole('heading', { name: 'Bakım Raporları' })).toBeInTheDocument();
+  expect(cardTitles()).toEqual([
+    'Arızalar Özeti',
+    'Kullanıcı Çözüm Raporu',
+    'Personel Faaliyet Raporu',
+    'Aylık Metrikler',
+  ]);
+  unmount();
+
+  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/reports' });
+  expect(screen.getByRole('heading', { name: 'Raporlar' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'İş Maliyeti' })).toHaveAttribute(
+    'href',
+    '/manufacturing/reports/combined-job-costs',
   );
   expect(fetchMock).not.toHaveBeenCalled();
 });

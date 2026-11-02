@@ -88,6 +88,8 @@ export const appRoutes: RouteObject[] = [
   { path: '/manufacturing/subcontracting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/welding', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/welding/reports', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing/maintenance/reports', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing/reports', handle: hub, lazy: manufacturingHub },
   {
     path: '/procurement',
     handle: hub,
@@ -210,6 +212,53 @@ export const appRoutes: RouteObject[] = [
     path: '/design',
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),
+  },
+  // Manufacturing shop-floor lists and reports (Phase 3b).
+  {
+    path: '/manufacturing/subcontracting/adjustments',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/subcontracting/adjustments/AdjustmentsPage'))
+        .AdjustmentsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/subcontracting/subcontractors',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/subcontracting/subcontractors/SubcontractorsPage')
+      ).SubcontractorsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/reports/cost-analysis',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/welding/reports/cost-analysis/CostAnalysisPage')
+      ).CostAnalysisPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/reports/user-work-hours',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/welding/reports/user-work-hours/UserWorkHoursPage')
+      ).UserWorkHoursPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/teams',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/welding/teams/WeldingTeamsPage'))
+        .WeldingTeamsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/reports/combined-job-costs',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/reports/combined-job-costs/CombinedJobCostsPage')
+      ).CombinedJobCostsPage,
+    }),
   },
 ];
 

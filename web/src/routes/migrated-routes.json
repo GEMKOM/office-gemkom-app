@@ -21,6 +21,8 @@
   "/manufacturing/subcontracting",
   "/manufacturing/welding",
   "/manufacturing/welding/reports",
+  "/manufacturing/maintenance/reports",
+  "/manufacturing/reports",
   "/procurement",
   "/procurement/purchase-requests",
   "/procurement/reports",
@@ -37,5 +39,11 @@
   "/human_resources/attendance",
   "/quality-control",
   "/projects",
-  "/design"
+  "/design",
+  "/manufacturing/subcontracting/adjustments",
+  "/manufacturing/subcontracting/subcontractors",
+  "/manufacturing/welding/reports/cost-analysis",
+  "/manufacturing/welding/reports/user-work-hours",
+  "/manufacturing/welding/teams",
+  "/manufacturing/reports/combined-job-costs"
 ]

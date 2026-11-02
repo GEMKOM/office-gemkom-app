@@ -556,4 +556,56 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
       },
     ],
   },
+
+  // manufacturing/maintenance/reports/index.html (inline MenuComponent)
+  '/manufacturing/maintenance/reports': {
+    title: 'Bakım Raporları',
+    subtitle: 'Bakım süreçlerine dair raporlar',
+    cards: [
+      {
+        title: 'Arızalar Özeti',
+        description: 'Arızalara ilişkin özet rapor.',
+        icon: 'fas fa-file-alt',
+        iconColor: 'primary',
+        link: '/manufacturing/maintenance/reports/faults',
+      },
+      {
+        title: 'Kullanıcı Çözüm Raporu',
+        description: 'Kullanıcıların çözüm performansları.',
+        icon: 'fas fa-user-check',
+        iconColor: 'success',
+        link: '/manufacturing/maintenance/reports/user-resolution',
+      },
+      {
+        title: 'Personel Faaliyet Raporu',
+        description: 'Her personelin çözdüğü arızalar, zamanlayıcıları ve toplam çalışma süreleri.',
+        icon: 'fas fa-user-clock',
+        iconColor: 'primary',
+        link: '/manufacturing/maintenance/reports/staff-report',
+      },
+      {
+        title: 'Aylık Metrikler',
+        description: 'Aylık arıza sayıları, ortalama çözüm süreleri, duruş süreleri ve trend analizi.',
+        icon: 'fas fa-chart-line',
+        iconColor: 'info',
+        link: '/manufacturing/maintenance/reports/monthly-metrics',
+      },
+    ],
+  },
+
+  // manufacturing/reports/index.html (inline MenuComponent)
+  '/manufacturing/reports': {
+    title: 'Raporlar',
+    subtitle: 'Üretim süreçlerinizi analiz etmek ve performansınızı takip etmek için kapsamlı raporlar',
+    cards: [
+      {
+        title: 'İş Maliyeti',
+        description:
+          'iş maliyeti analizi. Tüm iş numaraları için detaylı maliyet ve saat bilgilerini görüntüleyin.',
+        icon: 'fas fa-calculator',
+        iconColor: 'success',
+        link: '/manufacturing/reports/combined-job-costs',
+      },
+    ],
+  },
 };
