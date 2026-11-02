@@ -69,5 +69,18 @@
   "/general/vacation/pending",
   "/general/vacation/requests",
   "/general/machines",
-  "/general/notifications"
+  "/general/notifications",
+  "/manufacturing/cnc-cutting/reports",
+  "/manufacturing/machining/reports",
+  "/manufacturing/cnc-cutting/dashboard",
+  "/manufacturing/linear-cutting/dashboard",
+  "/manufacturing/linear-cutting/tasks",
+  "/manufacturing/machining/dashboard",
+  "/manufacturing/cnc-cutting/reports/finished-timers",
+  "/manufacturing/cnc-cutting/reports/user-report",
+  "/manufacturing/machining/reports/finished-timers",
+  "/manufacturing/machining/reports/user-report",
+  "/manufacturing/cnc-cutting/remnants",
+  "/manufacturing/cnc-cutting/reports/parts-search",
+  "/manufacturing/machining/reports/cost-analysis"
 ]

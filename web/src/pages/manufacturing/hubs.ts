@@ -556,4 +556,108 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
       },
     ],
   },
+
+  // manufacturing/cnc-cutting/reports/index.html (inline MenuComponent)
+  '/manufacturing/cnc-cutting/reports': {
+    title: 'CNC Kesim Raporlar',
+    subtitle: 'CNC kesim süreçlerinizi analiz etmek ve performansınızı takip etmek için kapsamlı raporlar',
+    cards: [
+      {
+        title: 'Biten Zamanlayıcılar',
+        description:
+          'Tamamlanan zamanlayıcıların detaylı analizi. Kullanıcı performansları, süre dağılımları ve verimlilik metriklerini görüntüleyin.',
+        icon: 'fas fa-clock',
+        iconColor: 'primary',
+        link: '/manufacturing/cnc-cutting/reports/finished-timers',
+      },
+      {
+        title: 'Kullanıcı Raporu',
+        description:
+          'Seçilen tarih aralığında CNC kesim ekibi kullanıcı performansı, parça ve görev özetleri. Detayda günlük görevler, nesting, malzeme ve parça adetleri.',
+        icon: 'fas fa-calendar-alt',
+        iconColor: 'primary',
+        link: '/manufacturing/cnc-cutting/reports/user-report',
+      },
+      {
+        title: 'Parça Arama',
+        description:
+          'İş No, Resim No veya Pozisyon No ile CNC parçalarını arayın. Görev detayları, planlama bilgileri ve tamamlanma durumlarını görüntüleyin.',
+        icon: 'fas fa-search',
+        iconColor: 'success',
+        link: '/manufacturing/cnc-cutting/reports/parts-search',
+      },
+    ],
+  },
+
+  // manufacturing/machining/reports/index.html (inline MenuComponent)
+  '/manufacturing/machining/reports': {
+    title: 'Raporlar',
+    subtitle: 'Üretim süreçlerinizi analiz etmek ve performansınızı takip etmek için kapsamlı raporlar',
+    cards: [
+      {
+        title: 'Kullanıcı Raporu',
+        description:
+          'Seçilen tarih aralığında kullanıcı çalışma performansı ve zaman kullanımı analizi. Detayda günlük görevler, boşta geçen dönemler ve verimlilik metriklerini görüntüleyin.',
+        icon: 'fas fa-calendar-alt',
+        iconColor: 'primary',
+        link: '/manufacturing/machining/reports/user-report',
+      },
+      {
+        title: 'Günlük Verimlilik Raporu',
+        description:
+          'Kullanıcıların günlük görev verimliliği analizi. Her görev için günlük süre, toplam harcanan saat, tahmini saat ve verimlilik oranlarını görüntüleyin.',
+        icon: 'fas fa-chart-line',
+        iconColor: 'success',
+        link: '/manufacturing/machining/reports/daily-efficiency',
+      },
+      {
+        title: 'Performans Raporu',
+        description:
+          'Seçilen dönemde kullanıcı bazlı kapsamlı performans analizi. Ortalama verimlilik, çalışma saatleri, tamamlanan görev sayısı, zamanında tamamlama oranı ve daha fazlasını görüntüleyin.',
+        icon: 'fas fa-chart-bar',
+        iconColor: 'primary',
+        link: '/manufacturing/machining/reports/performance',
+      },
+      {
+        title: 'Biten Zamanlayıcılar',
+        description:
+          'Tamamlanan zamanlayıcıların detaylı analizi. Kullanıcı performansları, süre dağılımları ve verimlilik metriklerini görüntüleyin.',
+        icon: 'fas fa-clock',
+        iconColor: 'primary',
+        link: '/manufacturing/machining/reports/finished-timers',
+      },
+      {
+        title: 'Toplam Raporu',
+        description:
+          'Talaşlı imalat süreçlerinin gruplandırılmış analizi. Kullanıcı, makine, iş no ve TI numarasına göre toplam süreleri görüntüleyin.',
+        icon: 'fas fa-chart-pie',
+        iconColor: 'success',
+        link: '/manufacturing/machining/reports/sum-report',
+      },
+      {
+        title: 'Maliyet Analizi',
+        description:
+          'İş numarasına göre çalışma saatleri analizi ve maliyet hesaplamaları. Hafta içi, mesai ve pazar çalışma saatlerini detaylı olarak görüntüleyin.',
+        icon: 'fas fa-calculator',
+        iconColor: 'warning',
+        link: '/manufacturing/machining/reports/cost-analysis',
+      },
+      {
+        title: 'Makine Çalışma Geçmişi',
+        description:
+          'Makine kapasite geçmişini görüntüleyin ve analiz edin. Gantt çizelgeleri ile zaman çizelgesi analizi yapın.',
+        icon: 'fas fa-history',
+        iconColor: 'info',
+        link: '/manufacturing/machining/reports/history',
+      },
+      {
+        title: 'Üretim Planı',
+        description:
+          'Üretim planını görüntüleyin ve analiz edin. Gantt çizelgeleri ile zaman çizelgesi analizi yapın.',
+        icon: 'fas fa-calendar-alt',
+        iconColor: 'info',
+        link: '/manufacturing/machining/reports/production-plan',
+      },
+    ],
+  },
 };

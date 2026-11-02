@@ -22,8 +22,6 @@ const SKIP_PREFIXES = ['web/', 'graphify-out/', 'node_modules/', '.claude/'];
 // A classic <script src> 404 only logs an error, so these pages still work. Remove
 // an entry once its page is fixed; a stale entry fails the check too.
 const KNOWN_MISSING = new Set([
-  'manufacturing/cnc-cutting/reports/index.html -> components/dropdown.js',
-  'manufacturing/machining/reports/index.html -> components/dropdown.js',
   'manufacturing/reports/index.html -> components/dropdown.js',
 ]);
 
