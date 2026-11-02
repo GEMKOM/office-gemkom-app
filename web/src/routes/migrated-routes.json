@@ -106,5 +106,8 @@
   "/procurement/reports/staff",
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
-  "/procurement/suppliers/payment-terms"
+  "/procurement/suppliers/payment-terms",
+  "/manufacturing/subcontracting/labor-pricing",
+  "/manufacturing/subcontracting/overview",
+  "/manufacturing/subcontracting/statements"
 ]
