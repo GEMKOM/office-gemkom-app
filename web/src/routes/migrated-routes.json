@@ -47,5 +47,10 @@
   "/manufacturing/welding/teams",
   "/manufacturing/reports/combined-job-costs",
   "/manufacturing/material-tracking",
-  "/manufacturing/material-tracking/pull-requests"
+  "/manufacturing/material-tracking/pull-requests",
+  "/manufacturing/maintenance/dashboard",
+  "/manufacturing/maintenance/fault-requests",
+  "/manufacturing/maintenance/reports/faults",
+  "/manufacturing/maintenance/reports/monthly-metrics",
+  "/manufacturing/maintenance/reports/staff-report"
 ]

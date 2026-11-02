@@ -275,6 +275,45 @@ export const appRoutes: RouteObject[] = [
       ).PullRequestsPage,
     }),
   },
+  {
+    path: '/manufacturing/maintenance/dashboard',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/dashboard/MaintenanceDashboardPage')
+      ).MaintenanceDashboardPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/fault-requests',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/fault-requests/FaultRequestsPage')
+      ).FaultRequestsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/reports/faults',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/maintenance/reports/faults/FaultsReportPage'))
+        .FaultsReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/reports/monthly-metrics',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/reports/monthly-metrics/MonthlyMetricsPage')
+      ).MonthlyMetricsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/reports/staff-report',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/reports/staff-report/StaffReportPage')
+      ).StaffReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

@@ -24,7 +24,6 @@ const SKIP_PREFIXES = ['web/', 'graphify-out/', 'node_modules/', '.claude/'];
 const KNOWN_MISSING = new Set([
   'manufacturing/cnc-cutting/reports/index.html -> components/dropdown.js',
   'manufacturing/machining/reports/index.html -> components/dropdown.js',
-  'manufacturing/reports/index.html -> components/dropdown.js',
 ]);
 
 const known = new Set(
