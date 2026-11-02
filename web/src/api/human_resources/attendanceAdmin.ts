@@ -1,10 +1,12 @@
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, cleanParams } from '../client';
 import { extractResults } from '../types';
+import { patchAttendanceHrRecord } from './userAttendance';
 
 // Port of the HR side of apis/human_resources/attendance.js used by the PDKS
 // pages: pending overrides, shift rules and the per-user summary. The hub's
 // read-only count lives in ./attendance.ts and shares the pendingOverrides key.
+// Also the records list and its session edits (PDKS Kayıtları).
 
 // ---- pending overrides ----
 
@@ -174,5 +176,117 @@ export function attendanceSummaryQueryOptions(params: AttendanceSummaryParams) {
       extractResults<AttendanceSummaryRow>(
         await apiFetch<unknown>('/attendance/hr/summary/', { params: trimmed, signal }),
       ),
+  });
+}
+
+// ---- HR records (PDKS Kayıtları) ----
+
+export interface AttendanceHrSession extends AttendanceSession {
+  method?: string;
+  method_display?: string;
+  client_ip?: string | null;
+  status_display?: string;
+  duration_minutes?: number | null;
+}
+
+export interface AttendanceHrRecord {
+  id: number;
+  user_display?: string;
+  reviewed_by_display?: string | null;
+  date?: string | null;
+  status?: AttendanceStatus;
+  status_display?: string;
+  leave_type?: string | null;
+  notes?: string | null;
+  first_check_in?: string | null;
+  last_check_out?: string | null;
+  overtime_minutes?: number | null;
+  total_present_minutes?: number | null;
+  sessions?: AttendanceHrSession[];
+  [key: string]: unknown;
+}
+
+export type AttendanceRecordsParams = {
+  date?: string;
+  date_from?: string;
+  date_to?: string;
+  user_id?: string;
+  username?: string;
+  name?: string;
+  group_id?: string;
+  status?: string;
+};
+
+export interface AttendanceSessionInput {
+  /** datetime-local text, sent as typed (legacy). */
+  check_in_time: string;
+  check_out_time: string | null;
+  method: string;
+  status: string;
+  override_reason: string;
+}
+
+const RECORDS_KEY = ['attendance', 'hrRecords'] as const;
+
+/** fetchAttendanceHrRecords; empty (or blank) filters are left out of the query. */
+export function attendanceRecordsQueryOptions(params: AttendanceRecordsParams) {
+  const trimmed = Object.fromEntries(Object.entries(params).map(([k, v]) => [k, v?.trim()]));
+  return queryOptions({
+    queryKey: [...RECORDS_KEY, cleanParams(trimmed)] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<AttendanceHrRecord>(
+        await apiFetch<unknown>('/attendance/hr/records/', { params: trimmed, signal }),
+      ),
+  });
+}
+
+/** patchAttendanceHrRecord */
+export function usePatchAttendanceRecord() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: number; data: Record<string, unknown> }) =>
+      patchAttendanceHrRecord(id, data),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: RECORDS_KEY }),
+  });
+}
+
+export type SaveSessionArgs =
+  | { sessionId: number; data: AttendanceSessionInput }
+  | { recordId: number; data: AttendanceSessionInput };
+
+/** patchAttendanceHrSession (sessionId) or createAttendanceHrSession (recordId). */
+export function useSaveAttendanceSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (args: SaveSessionArgs) =>
+      'sessionId' in args
+        ? apiFetch<unknown>(`/attendance/hr/sessions/${args.sessionId}/`, {
+            method: 'PATCH',
+            body: args.data,
+          })
+        : apiFetch<unknown>(`/attendance/hr/records/${args.recordId}/sessions/`, {
+            method: 'POST',
+            body: args.data,
+          }),
+    // A session status can put a record into (or out of) the pending overrides.
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: RECORDS_KEY }),
+        queryClient.invalidateQueries({ queryKey: PENDING_KEY }),
+      ]),
+  });
+}
+
+/** deleteAttendanceHrSession */
+export function useDeleteAttendanceSession() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (sessionId: number) =>
+      apiFetch<unknown>(`/attendance/hr/sessions/${sessionId}/`, { method: 'DELETE' }),
+    onSuccess: () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: RECORDS_KEY }),
+        queryClient.invalidateQueries({ queryKey: PENDING_KEY }),
+      ]),
   });
 }
