@@ -37,6 +37,7 @@ import {
   formatNumber,
   GROUPING_STORAGE_KEY,
   GROUPINGS,
+  hasRows,
   monthlyPerPerson,
   nodeTotal,
   num,
@@ -503,6 +504,11 @@ export function OverviewPage() {
               // Rows arrive in tree order, so the groups keep it.
               sort: false,
               defaultExpanded: expandAll,
+              // A node with nothing under it (remaining work only) has nothing to open.
+              collapsible: (group) => {
+                const node = tree?.nodes.get(String(group.value));
+                return node ? hasRows(node) : true;
+              },
               header: groupHeader,
             }}
             footer={totalRow}

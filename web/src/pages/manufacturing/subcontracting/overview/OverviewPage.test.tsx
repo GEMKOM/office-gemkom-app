@@ -176,6 +176,8 @@ it('shows the subcontractors with their period sums, the backlog and the figures
   expect(demir).toHaveTextContent('Pasif');
   expect(demir).toHaveTextContent('40 kg');
   expect(demir.querySelector('[data-leafless]')).not.toBeNull();
+  // Nothing to open: no toggle.
+  expect(demir.querySelector('[aria-expanded]')).toBeNull();
 
   expect(screen.queryByText('Şubat 2026')).toBeNull();
   expect(screen.getByTestId('overview-total')).toHaveTextContent('Genel Toplam');

@@ -231,7 +231,7 @@ function childCountChip(node: TreeNode): ReactNode {
 
 export function groupLabel(lookup: Lookup, node: TreeNode): ReactNode {
   const count = childCountChip(node);
-  // A node with nothing under it shows no toggle (see Overview.module.css).
+  // Marks a node with nothing under it (the table gives it no toggle).
   const leafless = hasRows(node) ? undefined : '';
 
   if (node.level === 'sub') {

@@ -5,15 +5,6 @@
   display: none;
 }
 
-/* A node with nothing under it (remaining work only) has nothing to open. */
-.tree tr:has([data-leafless]) button[aria-expanded] {
-  visibility: hidden;
-}
-
-.tree tr:has([data-leafless]) {
-  cursor: default !important;
-}
-
 /* Group rows get lighter the deeper they sit. */
 .tree tr[data-group-row='header'][data-depth='0'] > td {
   background: #e9ecef;
