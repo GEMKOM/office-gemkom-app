@@ -78,7 +78,9 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/sales/catalog',
-    lazy: async () => ({ Component: (await import('@/pages/sales/catalog/CatalogPage')).CatalogPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/sales/catalog/CatalogPage')).CatalogPage,
+    }),
   },
   { path: '/manufacturing', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/cnc-cutting', handle: hub, lazy: manufacturingHub },
@@ -214,11 +216,15 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/projects/estimates',
-    lazy: async () => ({ Component: (await import('@/pages/projects/estimates/EstimatesPage')).EstimatesPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/projects/estimates/EstimatesPage')).EstimatesPage,
+    }),
   },
   {
     path: '/projects/references',
-    lazy: async () => ({ Component: (await import('@/pages/projects/references/ReferencesPage')).ReferencesPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/projects/references/ReferencesPage')).ReferencesPage,
+    }),
   },
   {
     path: '/design',
@@ -260,11 +266,15 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/it/permissions',
-    lazy: async () => ({ Component: (await import('@/pages/it/permissions/PermissionsPage')).PermissionsPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/it/permissions/PermissionsPage')).PermissionsPage,
+    }),
   },
   {
     path: '/it/job-completion',
-    lazy: async () => ({ Component: (await import('@/pages/it/job-completion/JobCompletionPage')).JobCompletionPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/it/job-completion/JobCompletionPage')).JobCompletionPage,
+    }),
   },
   // Phase 3b: quality control, HR and other list pages.
   {
@@ -306,7 +316,9 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/human_resources/org',
-    lazy: async () => ({ Component: (await import('@/pages/human_resources/org/OrgChartPage')).OrgChartPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/org/OrgChartPage')).OrgChartPage,
+    }),
   },
   {
     path: '/human_resources/attendance/pending-overrides',
@@ -810,6 +822,20 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/procurement/purchase-requests/pending',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/purchase-requests/pending/PendingRequestsPage'))
+        .PendingRequestsPage,
+    }),
+  },
+  {
+    path: '/procurement/purchase-requests/registry',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/purchase-requests/registry/RegistryPage'))
+        .RegistryPage,
+    }),
+  },
+  {
     path: '/procurement/payment-lists',
     lazy: async () => ({
       Component: (await import('@/pages/procurement/payment-lists/PaymentListsPage'))
@@ -833,7 +859,8 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/manufacturing/welding/timesheets',
     lazy: async () => ({
-      Component: (await import('@/pages/manufacturing/welding/timesheets/TimesheetsPage')).TimesheetsPage,
+      Component: (await import('@/pages/manufacturing/welding/timesheets/TimesheetsPage'))
+        .TimesheetsPage,
     }),
   },
   {
