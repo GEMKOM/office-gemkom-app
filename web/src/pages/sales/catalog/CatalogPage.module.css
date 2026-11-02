@@ -1,0 +1,97 @@
+/* Catalogs on the left, the selected one's tree on the right (legacy col-md-4 / col-md-8). */
+.layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 768px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  }
+}
+
+.card {
+  display: block;
+  width: 100%;
+  margin-bottom: 12px;
+  padding: 16px 20px;
+  border: 2px solid transparent;
+  border-radius: var(--gk-radius-lg);
+  background: var(--gk-surface);
+  box-shadow: var(--gk-shadow-card);
+  text-align: left;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--gk-shadow-card-hover);
+}
+
+.card[data-selected] {
+  border-color: var(--gk-red-700);
+}
+
+.treePanel {
+  min-height: 360px;
+}
+
+.node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 6px 10px;
+  border-radius: var(--gk-radius-sm);
+}
+
+.node:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.spacer {
+  display: inline-block;
+  width: 22px;
+  flex: 0 0 auto;
+}
+
+.nodeTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.count,
+.sequence {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: var(--gk-radius-sm);
+  background: var(--gk-surface-subtle);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+}
+
+.count {
+  margin-left: 6px;
+  border: 1px solid var(--gk-line);
+}
+
+/* The row's buttons show on hover or keyboard focus. */
+.actions {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.node:hover .actions,
+.node:focus-within .actions {
+  opacity: 1;
+}
+
+.children {
+  margin-left: 12px;
+  padding-left: 24px;
+  border-left: 2px solid var(--gk-line);
+}
