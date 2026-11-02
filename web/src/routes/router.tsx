@@ -238,6 +238,14 @@ export const appRoutes: RouteObject[] = [
     path: '/it/password-resets',
     lazy: async () => ({ Component: (await import('@/pages/it/password-resets/PasswordResetsPage')).PasswordResetsPage }),
   },
+  {
+    path: '/it/permissions',
+    lazy: async () => ({ Component: (await import('@/pages/it/permissions/PermissionsPage')).PermissionsPage }),
+  },
+  {
+    path: '/it/job-completion',
+    lazy: async () => ({ Component: (await import('@/pages/it/job-completion/JobCompletionPage')).JobCompletionPage }),
+  },
   // Phase 3b: quality control, HR and other list pages.
   {
     path: '/quality-control/cost-lines',

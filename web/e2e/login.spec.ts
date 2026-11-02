@@ -15,7 +15,7 @@ import {
 // answered by the mock with the fake tokens from fixtures.ts.
 
 const CUSTOMERS = '/sales/customers/';
-const LEGACY_PAGE = '/it/permissions/'; // still a legacy page (Yetki Yönetimi)
+const LEGACY_PAGE = '/planning/department-requests/'; // still legacy, and guarded by guardRoute()
 
 // Chrome logs the 401 of a refused sign-in as a console error.
 const REFUSED_LOGIN = /status of 401/;

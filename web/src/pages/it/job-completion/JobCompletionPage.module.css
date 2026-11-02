@@ -1,0 +1,197 @@
+.filters {
+  padding: 12px 16px 0;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px 12px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.toolbarGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary,
+.summaryActive {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--gk-muted);
+}
+
+.summaryActive {
+  color: var(--gk-red-700);
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.table th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--gk-surface-subtle);
+  border-bottom: 1px solid var(--gk-line);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+  text-align: left;
+  white-space: nowrap;
+  padding: 8px 10px;
+}
+
+.table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--gk-line);
+  vertical-align: middle;
+}
+
+.row:hover > td {
+  background: var(--gk-surface-subtle);
+}
+
+.row[data-selected] > td {
+  background: rgba(139, 0, 0, 0.06);
+}
+
+.row[data-resolved] .jobNo,
+.row[data-resolved] .title {
+  color: #9ca3af;
+}
+
+.colCheck {
+  width: 42px;
+}
+
+.colCustomer {
+  width: 18%;
+}
+
+.colStatus {
+  width: 130px;
+}
+
+.colProgress {
+  width: 140px;
+}
+
+.colTasks {
+  width: 110px;
+}
+
+.table th.colTasks,
+.tasks {
+  text-align: center;
+}
+
+/* Indentation is inline per depth so the caret column stays aligned. */
+.node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.caret {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: #9ca3af;
+  font-size: 11px;
+}
+
+.caret:hover {
+  color: var(--gk-ink);
+}
+
+.jobNo {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.title {
+  color: var(--gk-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.childCount {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.progressBar {
+  flex: 1 1 auto;
+  min-width: 50px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--gk-line);
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--gk-red-700);
+}
+
+.progressValue {
+  flex: 0 0 auto;
+  min-width: 34px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.openCount {
+  font-weight: 700;
+  color: var(--gk-red-700);
+}
+
+.openCountZero {
+  color: #9ca3af;
+}
+
+.confirmList {
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 13px;
+  margin: 8px 0 0;
+  padding-left: 18px;
+}
+
+@media (max-width: 768px) {
+  .colCustomer,
+  .customer,
+  .colProgress,
+  .table td:nth-child(5) {
+    display: none;
+  }
+}
