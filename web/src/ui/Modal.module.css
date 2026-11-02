@@ -1,0 +1,218 @@
+/* Modals, direction A "Kırmızı şerit": a slim red strip echoes the page band,
+   white body, footer on surface-subtle. Root, overlay and content apply to
+   every Mantine Modal (theme.ts); the rest is used by ModalParts. */
+
+.root {
+  --modal-y-offset: 6dvh;
+}
+
+@media (max-width: 36em) {
+  .root {
+    --modal-y-offset: 12px;
+    --modal-x-offset: 12px;
+  }
+}
+
+.content {
+  border-radius: var(--gk-radius-lg);
+  box-shadow: var(--gk-shadow-popover);
+}
+
+.content[data-full-screen] {
+  border-radius: 0;
+}
+
+/* Pairs with modalClassNames: ModalHeader, sections and ModalFooter pad themselves. */
+.body {
+  padding: 0;
+}
+
+/* ---- header ---- */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 68px;
+  padding: 14px 12px 14px 20px;
+  background: var(--gk-surface);
+  border-bottom: 1px solid var(--gk-line);
+  color: var(--gk-ink);
+}
+
+.header[data-tone='brand'] {
+  background: var(--gk-red-700);
+  border-bottom-color: var(--gk-red-800);
+  color: var(--gk-on-dark);
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--gk-radius-md);
+  font-size: 17px;
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+}
+
+.header[data-tone='brand'] .tile {
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--gk-on-dark);
+}
+
+.header[data-tone='danger'] .tile {
+  background: #fde8e8;
+  color: var(--gk-danger);
+}
+
+.heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+
+.subtitle {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--gk-muted);
+  overflow-wrap: anywhere;
+}
+
+.header[data-tone='brand'] .subtitle {
+  color: var(--gk-on-band-muted);
+}
+
+.close {
+  flex: none;
+  align-self: flex-start;
+  color: var(--gk-muted);
+  transition:
+    background 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.close:hover {
+  background: var(--gk-surface-subtle);
+  color: var(--gk-ink);
+}
+
+.header[data-tone='brand'] .close {
+  color: var(--gk-on-band-muted);
+}
+
+.header[data-tone='brand'] .close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--gk-on-dark);
+}
+
+.header[data-tone='brand'] .close:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gk-on-dark);
+}
+
+/* ---- body ---- */
+
+.main {
+  position: relative;
+  padding: 20px;
+}
+
+.message {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.description {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.record {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface-subtle);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.section + .section {
+  margin-top: 22px;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+}
+
+.sectionTitle::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gk-line);
+}
+
+.sectionIcon {
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.sectionDescription {
+  margin: -6px 0 12px;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+/* ---- footer ---- */
+
+/* Sticky, so the actions stay in view while a long form scrolls. */
+.footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--gk-surface-subtle);
+  border-top: 1px solid var(--gk-line);
+}
+
+@media (max-width: 36em) {
+  .header {
+    padding-left: 16px;
+  }
+
+  .main {
+    padding: 16px;
+  }
+
+  .footer {
+    padding: 12px 16px;
+  }
+}

@@ -18,13 +18,22 @@ let filtersComponent = null;
 let currentPage = 1;
 let currentPageSize = 20;
 let currentOrdering = '-created_at';
-let currentFilters = { document_type: '', search: '' };
+const EXPIRY_STATUS_PARAM = new URLSearchParams(window.location.search).get('expiry_status') || '';
+let currentFilters = { document_type: '', search: '', expiry_status: EXPIRY_STATUS_PARAM };
 let editModal = null;
 let editingDocument = null;
 
 const TYPE_LABELS = Object.fromEntries(
     QUALITY_DOCUMENT_TYPE_CHOICES.map(c => [c.value, c.label])
 );
+
+// Backend computes expiry_status: 'expiring' = 30 days or less left.
+const EXPIRY_STATUS_OPTIONS = [
+    { value: '', label: 'Tümü' },
+    { value: 'expiring', label: 'Süresi Dolmak Üzere (30 gün)' },
+    { value: 'expired', label: 'Süresi Dolmuş' },
+    { value: 'valid', label: 'Geçerli' }
+];
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
@@ -39,14 +48,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         createButtonText: 'Yeni Evrak',
         showRefreshButton: 'block',
         onCreateClick: openCreateModal,
-        onRefreshClick: () => { currentPage = 1; loadDocuments(); },
+        onRefreshClick: () => { currentPage = 1; loadDocuments(); loadExpiryBanner(); },
         backUrl: '/quality-control/'
     });
 
     initFilters();
     initTable();
     initModal();
-    await loadDocuments();
+    await Promise.all([loadDocuments(), loadExpiryBanner()]);
 });
 
 function initFilters() {
@@ -56,13 +65,14 @@ function initFilters() {
             currentPage = 1;
             currentFilters = {
                 document_type: values['type-filter'] ?? '',
-                search: values['search-filter'] ?? ''
+                search: values['search-filter'] ?? '',
+                expiry_status: values['expiry-filter'] ?? ''
             };
             loadDocuments();
         },
         onClear: () => {
             currentPage = 1;
-            currentFilters = { document_type: '', search: '' };
+            currentFilters = { document_type: '', search: '', expiry_status: '' };
             loadDocuments();
         }
     });
@@ -79,6 +89,14 @@ function initFilters() {
         placeholder: 'Tümü',
         colSize: 3
     });
+    filtersComponent.addDropdownFilter({
+        id: 'expiry-filter',
+        label: 'Geçerlilik Durumu',
+        options: EXPIRY_STATUS_OPTIONS,
+        value: currentFilters.expiry_status,
+        placeholder: 'Tümü',
+        colSize: 3
+    });
 }
 
 function initTable() {
@@ -91,7 +109,7 @@ function initTable() {
             { field: 'document_number', label: 'Evrak No', sortable: false, formatter: (v) => v || '-' },
             { field: 'revision', label: 'Rev.', sortable: false, formatter: (v) => v || '-' },
             { field: 'job_order_no', label: 'İş Emri', sortable: false, formatter: (v) => v || '-' },
-            { field: 'valid_until', label: 'Geçerlilik', sortable: true, formatter: formatDate },
+            { field: 'valid_until', label: 'Geçerlilik', sortable: true, formatter: formatValidUntil },
             { field: 'uploaded_by_name', label: 'Yükleyen', sortable: false, formatter: (v) => v || '-' },
             { field: 'created_at', label: 'Yüklenme', sortable: true, formatter: formatDate }
         ],
@@ -118,7 +136,7 @@ function initTable() {
         emptyMessage: 'Kayıtlı kalite evrağı bulunamadı.',
         emptyIcon: 'fas fa-inbox',
         refreshable: true,
-        onRefresh: () => { currentPage = 1; loadDocuments(); }
+        onRefresh: () => { currentPage = 1; loadDocuments(); loadExpiryBanner(); }
     });
 }
 
@@ -126,6 +144,7 @@ async function loadDocuments() {
     try {
         const filters = {};
         if (currentFilters.document_type) filters.document_type = currentFilters.document_type;
+        if (currentFilters.expiry_status) filters.expiry_status = currentFilters.expiry_status;
         const { results, count } = await listQualityDocuments(
             filters, currentFilters.search, currentOrdering, currentPage, currentPageSize
         );
@@ -134,6 +153,50 @@ async function loadDocuments() {
         console.error(err);
         showNotification('Kalite evrakları yüklenemedi: ' + err.message, 'error');
     }
+}
+
+// Counts across all active documents (the backend's expiry_status filter skips
+// inactive ones), independent of the table's filters/page.
+async function loadExpiryBanner() {
+    const banner = document.getElementById('expiry-banner');
+    if (!banner) return;
+    try {
+        const countFor = async (status) => {
+            const { count } = await listQualityDocuments(
+                { expiry_status: status }, '', 'valid_until', 1, 1
+            );
+            return count || 0;
+        };
+        const [expiring, expired] = await Promise.all([countFor('expiring'), countFor('expired')]);
+        if (!expiring && !expired) {
+            banner.classList.add('d-none');
+            banner.innerHTML = '';
+            return;
+        }
+        const parts = [];
+        if (expiring) {
+            parts.push(`<button type="button" class="btn btn-link p-0 expiry-banner-link" data-expiry="expiring">
+                <span class="status-badge status-orange">${expiring} evrak</span> 30 gün içinde süresi doluyor</button>`);
+        }
+        if (expired) {
+            parts.push(`<button type="button" class="btn btn-link p-0 expiry-banner-link" data-expiry="expired">
+                <span class="status-badge status-red">${expired} evrak</span> süresi dolmuş</button>`);
+        }
+        banner.innerHTML = `<i class="fas fa-exclamation-triangle expiry-banner-icon"></i>${parts.join('')}`;
+        banner.classList.remove('d-none');
+        banner.querySelectorAll('[data-expiry]').forEach(btn => {
+            btn.addEventListener('click', () => applyExpiryFilter(btn.dataset.expiry));
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+function applyExpiryFilter(status) {
+    filtersComponent.setFilterValues({ 'expiry-filter': status });
+    currentFilters.expiry_status = status;
+    currentPage = 1;
+    loadDocuments();
 }
 
 function downloadDocument(row) {
@@ -150,6 +213,7 @@ async function removeDocument(row) {
         await deleteQualityDocument(row.id);
         showNotification('Evrak silindi.', 'success');
         loadDocuments();
+        loadExpiryBanner();
     } catch (err) {
         console.error(err);
         showNotification('Evrak silinemedi: ' + err.message, 'error');
@@ -276,11 +340,28 @@ async function handleSave(formData) {
         editModal.hide();
         editingDocument = null;
         loadDocuments();
+        loadExpiryBanner();
     } catch (err) {
         console.error(err);
         showNotification('İşlem başarısız: ' + err.message, 'error');
         throw err; // keep the modal open on failure
     }
+}
+
+function formatValidUntil(value, row) {
+    const date = formatDate(value);
+    if (!value || !row?.is_active) return date;
+    const days = row.days_until_expiry;
+    if (row.expiry_status === 'expired') {
+        return `${date}<br><span class="status-badge status-red mt-1" title="Geçerlilik süresi doldu">
+            <i class="fas fa-exclamation-circle me-1"></i>Süresi Doldu</span>`;
+    }
+    if (row.expiry_status === 'expiring') {
+        const label = days === 0 ? 'Bugün Doluyor' : `${days} Gün Kaldı`;
+        return `${date}<br><span class="status-badge status-orange mt-1" title="Geçerlilik süresi 30 gün içinde doluyor">
+            <i class="fas fa-exclamation-triangle me-1"></i>${label}</span>`;
+    }
+    return date;
 }
 
 function formatDate(value) {

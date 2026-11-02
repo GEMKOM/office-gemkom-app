@@ -1,4 +1,5 @@
 import { guardRoute } from '../../authService.js';
+import { renderDeliveryState, DELIVERY_FILTER_OPTIONS, deliveryFilterParams } from '../../utils/deliveryState.js';
 import { initNavbar } from '../../components/navbar.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
@@ -190,11 +191,7 @@ function initFilters() {
         .addDropdownFilter({
             id: 'is_delivered',
             label: 'Teslim',
-            options: [
-                { value: '', label: 'Tümü' },
-                { value: 'true', label: 'Teslim Edildi' },
-                { value: 'false', label: 'Teslim Edilmedi' }
-            ],
+            options: DELIVERY_FILTER_OPTIONS,
             placeholder: 'Tümü',
             colSize: 2
         })
@@ -301,7 +298,7 @@ function initTable() {
                 sortable: false,
                 formatter: (v) => renderLatestUnitPriceSource(v)
             },
-            { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v) => renderBoolIcon(v) },
+            { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v, row) => renderDeliveryState(row) },
             {
                 field: 'is_consumed',
                 label: 'Kullanıldı',
@@ -398,7 +395,7 @@ async function loadItems() {
             planning_request_number: values.planning_request_number || undefined,
             planning_request_status: values.planning_request_status || undefined,
             job_no: values.job_no || undefined,
-            is_delivered: values.is_delivered || undefined,
+            ...deliveryFilterParams(values.is_delivered),
             is_plate: values.is_plate || undefined,
             is_consumed: values.is_consumed || undefined,
             from_inventory: values.from_inventory || undefined,

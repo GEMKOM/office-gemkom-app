@@ -748,6 +748,7 @@ export async function getJobOrderDropdown(includeAll = false, options = {}) {
         if (includeAll) params.append('all', 'true');
         if (options.rootOnly) params.append('root_only', 'true');
         if (options.withCustomer) params.append('with_customer', 'true');
+        if (options.weldingOnly) params.append('welding_only', 'true');
         const query = params.toString() ? `?${params}` : '';
         const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/${query}`);
 
@@ -920,6 +921,25 @@ export async function getJobOrderPlanSheet(jobNo) {
         console.error(`Error fetching plan sheet for ${jobNo}:`, error);
         throw error;
     }
+}
+
+/**
+ * Görev Planlama: this job order and every descendant (depth-first), each
+ * with its existing main department tasks.
+ * Endpoint: GET /projects/job-orders/{jobNo}/task-planner/
+ * @param {string} jobNo - Root job order number
+ * @returns {Promise<Object>} {root, job_orders: [{job_no, title, status,
+ *   status_display, parent, depth, is_phase, can_plan, tasks: [{id,
+ *   department, department_display, title, status, status_display,
+ *   task_type, sequence, subtask_count}]}]}
+ */
+export async function getJobOrderTaskPlanner(jobNo) {
+    const response = await authedFetch(
+        `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/task-planner/`);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
 }
 
 /**

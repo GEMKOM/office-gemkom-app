@@ -118,7 +118,8 @@ function procurementTile(procurement) {
         big: `<span class="${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span><span class="pp-tile-big-dim">/${fmtInt(total)}</span>`,
         label: 'bekleyen kalem',
         subs: [
-            `<span class="pp-num-green">%${pct === null || pct === undefined ? 0 : pct.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span> tedarik · talebe dönüşmedi ${fmtInt(procurement.not_yet_requested)}`,
+            `<span class="pp-num-green">%${pct === null || pct === undefined ? 0 : pct.toLocaleString('tr-TR', { maximumFractionDigits: 0 })}</span> tedarik · talebe dönüşmedi ${fmtInt(procurement.not_yet_requested)}`
+                + (procurement.partially_delivered ? ` · kısmi teslim ${fmtInt(procurement.partially_delivered)}` : ''),
             procurement.critical_waiting
                 ? `<span class="pp-num-red">Kritik bekleyen ${fmtInt(procurement.critical_waiting)}: imalatı tutuyor</span>`
                 : pullLine,

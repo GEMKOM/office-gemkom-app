@@ -12,6 +12,9 @@ import {
     setSupplierStatus,
     getSupplierEvaluations,
     getSupplierStatusHistory,
+    getSupplierPurchaseHistory,
+    createSupplierEvaluation,
+    updateSupplierEvaluation,
     getPaymentTerms
 } from '../../../apis/procurement.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -50,6 +53,8 @@ let statusChangeModal = null; // dedicated status-change modal (needs a reason)
 // Procurement uses page-based permissions; the suppliers-list page permission is
 // the management gate. Superusers always qualify (matches user_has_role_perm).
 const canWriteSuppliers = isSuperuser() || hasPerm('access_procurement_suppliers_list');
+// Rating gate — mirrors the backend RATING_WRITE_PERM (procurement/permissions.py).
+const canRateSuppliers = isSuperuser() || hasPerm('access_procurement_purchase_requests_create');
 
 const CURRENCY_DROPDOWN_OPTIONS = [
     { value: 'TRY', label: 'TRY — Türk Lirası' },
@@ -448,6 +453,9 @@ function renderSuppliersTable(suppliers) {
             </td>
              <td class="text-center">
                 <div class="action-buttons">
+                    <button class="btn btn-sm btn-outline-info me-1" title="Satın Alma Geçmişi" onclick="event.stopPropagation(); viewSupplierPurchaseHistory(${supplier.id})">
+                        <i class="fas fa-clipboard-list"></i>
+                    </button>
                     <button class="btn btn-sm btn-outline-warning me-1" title="Değerlendirmeler" onclick="event.stopPropagation(); viewSupplierRatings(${supplier.id})">
                         <i class="fas fa-star"></i>
                     </button>
@@ -1196,5 +1204,307 @@ window.viewSupplierRatings = async (supplierId) => {
         ratingsDisplayModal.clearData?.();
         ratingsDisplayModal.addCustomSection({ id: 'ratings-error', customContent: `<div class="text-danger">Yüklenirken hata oluştu: ${escapeHtml(error.message)}</div>` });
         ratingsDisplayModal.render();
+    }
+};
+
+// --- Satın Alma Geçmişi: approved PRs this supplier won, rated in place ---
+// One card per purchase order (backend: /suppliers/{id}/purchase-history/).
+// Ratings are per PO, same as the PR registry and the finance PO page.
+
+const PH_CONTAINER_ID = 'supplier-purchase-history-modal-container';
+const PH_CRITERIA = [
+    { key: 'quality_score', label: 'Kalite' },
+    { key: 'delivery_score', label: 'Teslimat' },
+    { key: 'price_score', label: 'Fiyat' },
+    { key: 'service_score', label: 'Servis' },
+];
+
+let purchaseHistoryModal = null;
+let phSupplierId = null;
+let phRows = [];
+let phOnlyUnrated = false;
+let phEventsBound = false;
+
+function phMoney(amount, currency) {
+    const n = Number(amount);
+    if (!Number.isFinite(n)) return '-';
+    return `${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${escapeHtml(currency || '')}`;
+}
+
+function phQty(value) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toLocaleString('tr-TR', { maximumFractionDigits: 2 }) : '-';
+}
+
+function phPoStatusBadge(row) {
+    const cls = row.po_status === 'paid' ? 'status-green' : 'status-orange';
+    return `<span class="status-badge ${cls}">${escapeHtml(row.po_status_label || row.po_status)}</span>`;
+}
+
+function phStaticStars(value) {
+    const n = Number(value) || 0;
+    return `<span class="text-warning">${'<i class="fas fa-star"></i>'.repeat(n)}${'<i class="far fa-star"></i>'.repeat(5 - n)}</span>`;
+}
+
+function phStarInput(criterion, label, value = 0) {
+    const stars = [1, 2, 3, 4, 5]
+        .map(n => `<i class="${n <= value ? 'fas' : 'far'} fa-star ph-star" data-value="${n}"></i>`)
+        .join('');
+    return `
+        <div class="ph-crit-row border-bottom">
+            <span class="small fw-semibold">${label}</span>
+            <span class="ph-stars text-warning" data-criterion="${criterion}" data-value="${value}">${stars}</span>
+        </div>`;
+}
+
+function phFormHTML(ev = null) {
+    return `
+        <div class="ph-form">
+            ${PH_CRITERIA.map(c => phStarInput(c.key, c.label, ev ? ev[c.key] : 0)).join('')}
+            <textarea class="form-control form-control-sm mt-2 ph-comment" rows="2" placeholder="Yorum (opsiyonel)">${escapeHtml(ev?.comment || '')}</textarea>
+            <div class="text-end mt-2">
+                ${ev ? '<button type="button" class="btn btn-sm btn-outline-secondary me-1 ph-cancel">Vazgeç</button>' : ''}
+                <button type="button" class="btn btn-sm btn-primary ph-save">
+                    <i class="fas fa-save me-1"></i>${ev ? 'Güncelle' : 'Değerlendir'}
+                </button>
+            </div>
+        </div>`;
+}
+
+function phEvaluationHTML(row) {
+    const ev = row.evaluation;
+    if (!ev) {
+        return canRateSuppliers
+            ? phFormHTML()
+            : '<div class="small text-muted">Henüz değerlendirilmedi.</div>';
+    }
+    return `
+        <div class="d-flex justify-content-between align-items-start gap-2">
+            <div class="flex-grow-1">
+                <div class="ph-crit-grid">
+                    ${PH_CRITERIA.map(c => `
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted me-2">${c.label}</span>${phStaticStars(ev[c.key])}
+                        </div>`).join('')}
+                </div>
+                ${ev.comment ? `<div class="small mt-1"><i class="fas fa-comment text-muted me-1"></i>${escapeHtml(ev.comment)}</div>` : ''}
+                <div class="small text-muted mt-1">${escapeHtml(ev.evaluated_by_username || '')} · ${fmtDate(ev.updated_at)}</div>
+            </div>
+            <div class="text-end">
+                <div class="fw-bold">${Number(ev.composite_score).toFixed(2)} <span class="small text-muted">/ 5</span></div>
+                ${canRateSuppliers ? '<button type="button" class="btn btn-sm btn-outline-secondary mt-1 ph-edit"><i class="fas fa-pen me-1"></i>Düzenle</button>' : ''}
+            </div>
+        </div>`;
+}
+
+function phCardHTML(row) {
+    const lineRows = (row.lines || []).map(l => `
+        <tr>
+            <td class="small">${escapeHtml(l.item_code || '')}</td>
+            <td class="small">${escapeHtml(l.item_name || l.description || '')}${l.item_name && l.description && l.description !== l.item_name ? `<div class="text-muted">${escapeHtml(l.description)}</div>` : ''}</td>
+            <td class="small text-end">${phQty(l.quantity)} ${escapeHtml(l.unit || '')}</td>
+            <td class="small text-end">${phMoney(l.unit_price, row.currency)}</td>
+            <td class="small text-center">${l.is_delivered ? '<i class="fas fa-check text-success" title="Teslim alındı"></i>' : '<span class="text-muted">—</span>'}</td>
+        </tr>`).join('');
+    const registryUrl = `/procurement/purchase-requests/registry/?talep=${encodeURIComponent(row.request_number)}`;
+    return `
+        <div class="ph-card ${row.evaluation ? '' : 'ph-unrated'}" data-po-id="${row.purchase_order}">
+            <div class="ph-head">
+                <div>
+                    <a href="${registryUrl}" target="_blank" rel="noopener" class="fw-semibold">${escapeHtml(row.request_number)}</a>
+                    <span class="text-muted small ms-1">PO-${row.purchase_order}</span>
+                    <div>${escapeHtml(row.title || '')}</div>
+                    <div class="small text-muted">
+                        Onay: ${fmtDate(row.approved_at)}
+                        ${row.requestor_username ? ` · Talep eden: ${escapeHtml(row.requestor_username)}` : ''}
+                        · ${row.line_count} kalem (${row.delivered_line_count} teslim alındı)
+                    </div>
+                </div>
+                <div class="ph-total">
+                    <div class="fw-bold">${phMoney(row.total_amount, row.currency)}</div>
+                    ${phPoStatusBadge(row)}
+                </div>
+            </div>
+            ${lineRows ? `
+            <details class="ph-lines">
+                <summary>Kalemleri göster</summary>
+                <div class="table-responsive"><table class="table table-sm">
+                    <thead><tr>
+                        <th class="small">Kod</th><th class="small">Malzeme</th>
+                        <th class="small text-end">Miktar</th><th class="small text-end">Birim Fiyat</th>
+                        <th class="small text-center">Teslim</th>
+                    </tr></thead>
+                    <tbody>${lineRows}</tbody>
+                </table></div>
+            </details>` : ''}
+            <div class="ph-eval">${phEvaluationHTML(row)}</div>
+        </div>`;
+}
+
+function phToolbarHTML() {
+    const rated = phRows.filter(r => r.evaluation).length;
+    const unrated = phRows.length - rated;
+    const supplier = suppliers.find(s => s.id === phSupplierId);
+    return `
+        <div class="ph-toolbar">
+            <div class="small">
+                ${supplier ? `${renderStarRating(supplier.rating_score, { compact: true })} · ` : ''}
+                <strong>${phRows.length}</strong> onaylı talep ·
+                <span class="text-success">${rated} değerlendirildi</span> ·
+                <span class="text-primary">${unrated} bekliyor</span>
+            </div>
+            <div class="btn-group btn-group-sm" role="group">
+                <button type="button" class="btn ${phOnlyUnrated ? 'btn-outline-secondary' : 'btn-secondary'} ph-filter" data-only-unrated="0">Tümü</button>
+                <button type="button" class="btn ${phOnlyUnrated ? 'btn-secondary' : 'btn-outline-secondary'} ph-filter" data-only-unrated="1">Değerlendirilmemiş</button>
+            </div>
+        </div>`;
+}
+
+function phContentHTML() {
+    if (!phRows.length) {
+        return '<p class="text-muted mb-0">Bu tedarikçinin seçildiği onaylanmış bir satın alma talebi yok.</p>';
+    }
+    const visible = phOnlyUnrated ? phRows.filter(r => !r.evaluation) : phRows;
+    const cards = visible.length
+        ? visible.map(phCardHTML).join('')
+        : '<p class="text-muted">Değerlendirilmemiş talep kalmadı.</p>';
+    return phToolbarHTML() + `<div class="ph-list">${cards}</div>`;
+}
+
+function phRender() {
+    purchaseHistoryModal.clearData?.();
+    purchaseHistoryModal.addCustomSection({ id: 'ph-content', customContent: phContentHTML() });
+    purchaseHistoryModal.render();
+}
+
+function phRefreshToolbar() {
+    const toolbar = document.querySelector(`#${PH_CONTAINER_ID} .ph-toolbar`);
+    if (!toolbar) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = phToolbarHTML();
+    toolbar.replaceWith(tmp.firstElementChild);
+}
+
+function phPaint(group, value) {
+    group.querySelectorAll('.ph-star').forEach(star => {
+        const n = Number(star.dataset.value);
+        star.classList.toggle('fas', n <= value);
+        star.classList.toggle('far', n > value);
+    });
+}
+
+async function phSave(card, btn) {
+    const poId = Number(card.dataset.poId);
+    const row = phRows.find(r => r.purchase_order === poId);
+    if (!row) return;
+    const scores = {};
+    PH_CRITERIA.forEach(c => {
+        scores[c.key] = Number(card.querySelector(`.ph-stars[data-criterion="${c.key}"]`)?.dataset.value || 0);
+    });
+    if (!Object.values(scores).every(v => v >= 1 && v <= 5)) {
+        showNotification('Lütfen tüm kriterleri (1–5) yıldız ile değerlendirin.', 'error');
+        return;
+    }
+    const comment = card.querySelector('.ph-comment')?.value?.trim() || '';
+    btn.disabled = true;
+    try {
+        const payload = { purchase_order: poId, ...scores, comment };
+        const result = row.evaluation
+            ? await updateSupplierEvaluation(row.evaluation.id, payload)
+            : await createSupplierEvaluation(payload);
+        row.evaluation = {
+            id: result.id,
+            ...scores,
+            comment: result.comment ?? comment,
+            composite_score: result.composite_score,
+            evaluated_by_username: result.evaluated_by_username,
+            updated_at: result.updated_at,
+        };
+        showNotification(`Değerlendirme kaydedildi (${Number(result.composite_score).toFixed(2)} / 5).`, 'success');
+        // Swap just this card so unsaved input on other cards survives.
+        card.outerHTML = phCardHTML(row);
+        phRefreshToolbar();
+        // The supplier's cached rating is recomputed on commit; reload the
+        // table so its star column (and the toolbar's average) catch up.
+        loadSuppliers().then(phRefreshToolbar).catch(() => {});
+    } catch (error) {
+        console.error('Error saving supplier evaluation:', error);
+        showNotification(error.message || 'Değerlendirme kaydedilirken hata oluştu', 'error');
+        btn.disabled = false;
+    }
+}
+
+// Delegated once on the container: survives every re-render of the modal body.
+function phBindEvents() {
+    if (phEventsBound) return;
+    const root = document.getElementById(PH_CONTAINER_ID);
+    if (!root) return;
+    phEventsBound = true;
+
+    root.addEventListener('click', (e) => {
+        const star = e.target.closest('.ph-star');
+        if (star) {
+            const group = star.closest('.ph-stars');
+            group.dataset.value = star.dataset.value;
+            phPaint(group, Number(star.dataset.value));
+            return;
+        }
+        const filterBtn = e.target.closest('.ph-filter');
+        if (filterBtn) {
+            phOnlyUnrated = filterBtn.dataset.onlyUnrated === '1';
+            phRender();
+            return;
+        }
+        const card = e.target.closest('.ph-card');
+        if (!card) return;
+        const row = phRows.find(r => r.purchase_order === Number(card.dataset.poId));
+        if (e.target.closest('.ph-edit') && row) {
+            card.querySelector('.ph-eval').innerHTML = phFormHTML(row.evaluation);
+        } else if (e.target.closest('.ph-cancel') && row) {
+            card.querySelector('.ph-eval').innerHTML = phEvaluationHTML(row);
+        } else if (e.target.closest('.ph-save')) {
+            phSave(card, e.target.closest('.ph-save'));
+        }
+    });
+    // Hover preview; reverts to the committed value when the pointer leaves the group.
+    root.addEventListener('mouseover', (e) => {
+        const star = e.target.closest('.ph-star');
+        if (star) phPaint(star.closest('.ph-stars'), Number(star.dataset.value));
+    });
+    root.addEventListener('mouseout', (e) => {
+        const group = e.target.closest('.ph-stars');
+        if (group && !group.contains(e.relatedTarget)) phPaint(group, Number(group.dataset.value || 0));
+    });
+}
+
+window.viewSupplierPurchaseHistory = async (supplierId) => {
+    const supplier = suppliers.find(s => s.id === supplierId);
+    if (!purchaseHistoryModal) {
+        purchaseHistoryModal = new DisplayModal(PH_CONTAINER_ID, {
+            title: 'Satın Alma Geçmişi',
+            icon: 'fas fa-clipboard-list',
+            size: 'xl',
+        });
+    }
+    phBindEvents();
+    phSupplierId = supplierId;
+    phRows = [];
+    phOnlyUnrated = false;
+    purchaseHistoryModal.clearData?.();
+    purchaseHistoryModal.setTitle?.(`Satın Alma Geçmişi — ${supplier ? supplier.name : ''}`);
+    purchaseHistoryModal.addCustomSection({ id: 'ph-loading', customContent: '<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</div>' });
+    purchaseHistoryModal.render();
+    purchaseHistoryModal.show();
+
+    try {
+        const rows = await getSupplierPurchaseHistory(supplierId);
+        if (phSupplierId !== supplierId) return; // another supplier was opened meanwhile
+        phRows = rows || [];
+        phRender();
+    } catch (error) {
+        console.error('Error loading supplier purchase history:', error);
+        purchaseHistoryModal.clearData?.();
+        purchaseHistoryModal.addCustomSection({ id: 'ph-error', customContent: `<div class="text-danger">Yüklenirken hata oluştu: ${escapeHtml(error.message)}</div>` });
+        purchaseHistoryModal.render();
     }
 };

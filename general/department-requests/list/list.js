@@ -22,6 +22,7 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { fetchAllUsers } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
+import { shiftAttachTargets } from './fileItemMapping.js';
 
 // State management
 let currentPage = 1;
@@ -1276,26 +1277,14 @@ function removeItem(index) {
     const itemRow = document.querySelector(`.item-row[data-index="${index}"]`);
     if (itemRow) {
         itemRow.remove();
-        // Update indices after removal
-        updateItemIndices();
-        
-        // Update file mappings - remove references to this item index and adjust indices
+        // Compact attachTo against the deleted data-index *before* remaining
+        // rows are reindexed — doing both would shift later files twice.
         if (!isEditMode) {
             fileItemMappings.forEach(mapping => {
-                // Remove the deleted item index
-                mapping.attachTo = mapping.attachTo.filter(t => t !== index);
-                // Adjust indices greater than the removed index
-                mapping.attachTo = mapping.attachTo.map(t => {
-                    if (typeof t === 'number' && t > index) {
-                        return t - 1;
-                    }
-                    return t;
-                });
+                mapping.attachTo = shiftAttachTargets(mapping.attachTo, index);
             });
-            setTimeout(() => {
-                updateFilesMappingList();
-            }, 100);
         }
+        updateItemIndices();
     }
 }
 
@@ -1366,7 +1355,6 @@ function updateItemIndices() {
 
     const itemRows = container.querySelectorAll('.item-row');
     itemRows.forEach((row, newIndex) => {
-        const oldIndex = parseInt(row.getAttribute('data-index') || newIndex);
         row.setAttribute('data-index', newIndex);
         
         // Update onclick handlers for buttons
@@ -1378,18 +1366,6 @@ function updateItemIndices() {
         }
         if (removeBtn) {
             removeBtn.setAttribute('onclick', `removeItem(${newIndex})`);
-        }
-        
-        // Update file mappings if indices changed
-        if (!isEditMode && oldIndex !== newIndex) {
-            fileItemMappings.forEach(mapping => {
-                mapping.attachTo = mapping.attachTo.map(t => {
-                    if (typeof t === 'number' && t === oldIndex) {
-                        return newIndex;
-                    }
-                    return t;
-                });
-            });
         }
     });
     
