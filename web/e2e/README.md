@@ -36,6 +36,9 @@ Port 4173 by default (`E2E_PORT` changes it). Locally an already running
 `manufacturing.spec.ts`: the manufacturing hubs, as admin (cards, band counts,
 hub to hub inside the SPA) and as a user with a few page grants.
 
+`hr-users.spec.ts`: `/human_resources/users/` as admin, creating a user with a
+first wage (`POST /users/`, then `POST /users/wages/`) and the list reloading.
+
 ## Fixtures (`fixtures.ts`)
 
 Import `test` and `expect` from `./fixtures`, not from `@playwright/test`: that

@@ -91,17 +91,17 @@ test.describe('navigation', () => {
     await page.goto(CUSTOMERS);
     await expectCustomersTable(page);
 
-    // React rail: Genel's flyout -> Makineler is a legacy page, so a full load.
+    // React rail: user menu -> Tartışmalarım is a legacy page, so a full load.
     await page.evaluate(() => {
       window.__spaMarker = 'spa';
     });
     await page
       .getByRole('navigation', { name: 'Ana menü' })
-      .getByRole('button', { name: 'Genel' })
-      .hover();
-    await page.getByRole('menuitem', { name: 'Makineler' }).click();
+      .getByRole('button', { name: 'E2E Admin' })
+      .click();
+    await page.getByRole('menuitem', { name: 'Tartışmalarım' }).click();
 
-    await expect(page).toHaveURL(/\/general\/machines\/$/);
+    await expect(page).toHaveURL(/\/general\/discussions\/$/);
     await expect(page.locator('#navbar-container')).toHaveCount(1);
     await expect(page.locator('#root')).toHaveCount(0);
     expect(await page.evaluate(() => window.__spaMarker)).toBeUndefined();

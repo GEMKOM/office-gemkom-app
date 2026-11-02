@@ -1,0 +1,73 @@
+/* The legacy .rich-text rules from style.css, which the SPA does not load. */
+.richText {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  font-size: var(--mantine-font-size-sm);
+}
+
+.richText strong {
+  font-weight: 600;
+}
+
+.richText code {
+  background-color: var(--mantine-color-gray-1);
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: 3px;
+  padding: 0.05em 0.35em;
+  font-size: 0.9em;
+  font-family: var(--mantine-font-family-monospace);
+}
+
+.richText :global(.rt-critical),
+.richText :global(.rt-positive) {
+  border-radius: 3px;
+  padding: 0.05em 0.3em;
+  font-weight: 500;
+}
+
+.richText :global(.rt-critical) {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.richText :global(.rt-positive) {
+  background-color: #d1fae5;
+  color: #065f46;
+}
+
+.richText ul,
+.richText ol {
+  margin: 0.35rem 0;
+  padding-left: 1.35rem;
+}
+
+.richText li {
+  margin-bottom: 0.15rem;
+}
+
+.richText a {
+  color: var(--mantine-color-anchor);
+  text-decoration: underline;
+}
+
+.richText s {
+  opacity: 0.75;
+}
+
+.richText :global(.mention-badge) {
+  display: inline-block;
+  background-color: #e3fcef;
+  color: #006644;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+  font-size: 13px;
+  margin: 0 2px;
+}
+
+.richText :global(.mention-badge-group) {
+  background-color: #dbeafe;
+  color: #1e40af;
+  cursor: pointer;
+  user-select: none;
+}

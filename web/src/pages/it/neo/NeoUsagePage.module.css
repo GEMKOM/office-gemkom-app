@@ -1,0 +1,393 @@
+/* Neo Kullanımı: page layout, the conversation transcript and the daily
+   summary body (port of it/neo/neo.css and the full layer of
+   components/daily-summary/daily-summary.css). No yellow (house rule). */
+
+.stack > * + * {
+  margin-top: 16px;
+}
+
+/* Users / tools / jobs side by side from xl (legacy col-xl-5 / 4 / 3). */
+.breakdown {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+@media (min-width: 75em) {
+  .breakdown {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 4fr) minmax(0, 3fr);
+  }
+}
+
+/* A cell per table, so the panels are not siblings and keep no stacking margin. */
+.cell {
+  min-width: 0;
+}
+
+.danger {
+  color: var(--gk-danger);
+}
+
+.muted {
+  color: var(--gk-muted);
+}
+
+/* ---- transcript ------------------------------------------------------------ */
+
+.msg {
+  border: 1px solid var(--gk-line);
+  border-radius: 10px;
+  padding: 10px 13px;
+  margin-bottom: 10px;
+}
+
+.msg[data-role='user'] {
+  background: var(--gk-surface-subtle);
+}
+
+.msgRole {
+  font-size: 11.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  color: #3e5a74;
+}
+
+.msg[data-role='assistant'] .msgRole {
+  color: var(--gk-red-700);
+}
+
+.msgMeta {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: #8a939b;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 13px;
+}
+
+/* ---- rich text: markup of the legacy utils/richText.js (its classes live in
+   the legacy style.css, which the SPA does not load) ------------------------- */
+
+.richText {
+  font-size: 14px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.richText ul,
+.richText ol {
+  margin: 4px 0;
+  padding-left: 22px;
+}
+
+.richText code {
+  font-family: var(--gk-font-mono);
+  font-size: 0.9em;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: #f1f3f5;
+}
+
+.richText :global(.rt-critical) {
+  color: var(--gk-danger);
+  font-weight: 600;
+}
+
+.richText :global(.rt-positive) {
+  color: #1e7a46;
+  font-weight: 600;
+}
+
+.richText :global(.mention-badge) {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+  font-weight: 500;
+}
+
+/* ---- daily summary: meta strip --------------------------------------------- */
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.meta strong {
+  font-weight: 600;
+}
+
+.errorDetail {
+  margin: 0;
+  font-size: 13px;
+  white-space: pre-wrap;
+  font-family: var(--gk-font-mono);
+}
+
+/* ---- daily summary body (renderDailySummary, full layer) ------------------- */
+
+.ds {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gk-ink);
+}
+
+.ds a {
+  text-decoration: none;
+}
+
+.dsHeadline {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.45;
+  margin: 0 0 12px;
+  padding: 11px 14px;
+  border-left: 4px solid var(--gk-red-700);
+  background: var(--gk-surface-subtle);
+  border-radius: 0 8px 8px 0;
+}
+
+.dsStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.chip {
+  display: inline-block;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.25;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.chip[data-color='grey'] { background: #e5e7eb; color: #374151; border-color: #d1d5db; }
+.chip[data-color='green'] { background: #d1fae5; color: #065f46; border-color: #10b981; }
+.chip[data-color='blue'] { background: #dbeafe; color: #1e40af; border-color: #3b82f6; }
+.chip[data-color='red'] { background: #fee2e2; color: #991b1b; border-color: #ef4444; }
+.chip[data-color='purple'] { background: #ede9fe; color: #5b21b6; border-color: #8b5cf6; }
+.chip[data-color='orange'] { background: #ffedd5; color: #9a3412; border-color: #f97316; }
+
+.dsStat {
+  font-weight: 500;
+}
+
+.count {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 0 0.4em;
+  margin-left: 4px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  color: #374151;
+  background: #e5e7eb;
+  border-radius: 999px;
+  vertical-align: middle;
+}
+
+.section {
+  margin: 0 0 16px;
+  padding-top: 10px;
+  border-top: 1px solid #edf0f2;
+}
+
+.section:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 700;
+  margin-bottom: 7px;
+}
+
+.sectionTitle i {
+  color: var(--gk-red-700);
+  width: 1.1em;
+  text-align: center;
+}
+
+.subsection {
+  margin: 5px 0 8px;
+}
+
+.subtitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #5b6670;
+  margin: 4px 0;
+}
+
+.subtitle i {
+  color: #9aa3ab;
+  width: 1.1em;
+  text-align: center;
+  font-size: 0.75em;
+}
+
+.areaNote {
+  margin: 0 0 7px;
+  color: #3d4a55;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.item {
+  position: relative;
+  padding: 5px 0 5px 16px;
+  border-bottom: 1px dashed #eef1f3;
+}
+
+.item:last-child {
+  border-bottom: 0;
+}
+
+.item::before {
+  content: '';
+  position: absolute;
+  left: 2px;
+  top: 0.85em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c9cfd5;
+}
+
+.highlights .item::before {
+  background: var(--gk-red-700);
+}
+
+.itemText {
+  margin-right: 4px;
+}
+
+.refs {
+  display: inline;
+  margin-left: 2px;
+}
+
+.ref,
+.refPlain {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.3;
+  padding: 2px 7px;
+  margin: 2px 3px 2px 0;
+  border-radius: 6px;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.ref {
+  color: var(--gk-red-700);
+  background: rgba(139, 0, 0, 0.07);
+  border: 1px solid rgba(139, 0, 0, 0.18);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.ref:hover {
+  color: #fff;
+  background: var(--gk-red-700);
+  border-color: var(--gk-red-700);
+}
+
+.refPlain {
+  color: #4b5560;
+  background: #f1f3f5;
+  border: 1px solid #e1e5e9;
+}
+
+.jobTitle {
+  font-weight: 500;
+}
+
+.dsMuted {
+  color: #7d8790;
+  font-size: 0.85em;
+}
+
+.topicHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+
+.topicTitle {
+  font-weight: 600;
+  color: var(--gk-ink);
+}
+
+a.topicTitle:hover {
+  color: var(--gk-red-700);
+  text-decoration: underline;
+}
+
+.topicChips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.gist {
+  margin-top: 3px;
+  color: #3d4a55;
+  font-size: 0.87em;
+}
+
+.omitted {
+  margin-top: 5px;
+  color: #7d8790;
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.moreBtn {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--gk-red-700);
+  background: transparent;
+  border: 1px solid rgba(139, 0, 0, 0.3);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.moreBtn:hover {
+  color: #fff;
+  background: var(--gk-red-700);
+  border-color: var(--gk-red-700);
+}
+
+.moreBtn:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}

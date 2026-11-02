@@ -28,17 +28,28 @@ import { imalatPlanStart, imalatStageFractions, shippingAnchor } from './imalatP
 import { deptSchedulePatch } from './deptSchedulePatch.js';
 import { canRederiveForecast, forecastRemainingWd } from './forecastLayout.js';
 import { blockSchedulePatch } from './blockSchedulePatch.js';
+import { indexMachining, machiningWeightItems } from './machiningWeight.js';
 import { compareJobsBy, earliestDate, normalizeSortMode } from './jobSort.js';
 import {
     assignmentKey,
     knownAssignmentKeys,
     createdBlocksFromBoard,
     matchCreatedBlock,
+    adoptedBlockSnap,
     adoptStageIds,
     leftoverDeleted,
+    sentMoveToByAssignment,
+    shouldClearMoveTo,
     shouldPostNewBlock,
     shouldHydrateAfterSave,
+    shouldDiscardNewBlockLocally,
+    enqueueDeletedAssignment,
+    adoptDeletedCreateIdentities,
     adoptExistingBlockStageIds,
+    newStageCidsFromBlock,
+    shouldDiscardNewStageLocally,
+    findBoardBlock,
+    adoptDeletedStageIds,
 } from './saveReconcile.js';
 import { exportPlanningPdf } from './pdf.js';
 import { initCapacityPanel } from './capacityPanel.js';
@@ -71,12 +82,13 @@ let resources = [];               // [{resource_type, id, name, blocks: [BlockVM
 let weldingTasks = [];            // assignable jobs
 let jobInfo = {};                 // job_no -> {job_order, material_supply, machining[], cutting[], painting, logistics}
 let deptByJob = {};               // job_no -> {manufacturing, welding, painting} VMs
-let machiningByJob = {};          // job_no -> Talaşlı İmalat VM (weight only)
+let machiningByJob = {};          // job_no -> first Talaşlı VM (İmalat share)
+let machiningByTask = {};         // task_id -> Talaşlı İmalat VM (weight only)
 
 let snapBlocks = new Map();       // block.key -> {allocated_weight_kg, notes, subtask: {actual_start_date}}
 let dirtyBlocks = new Set();      // block.key
 let dirtyDept = new Map();        // "job_no|slot" -> Set of edited field names
-let dirtyMachining = new Map();   // job_no -> Set of edited field names
+let dirtyMachining = new Map();   // task_id -> Set of edited field names
 let dirtyLogistics = new Map();   // job_no -> Set of edited field names
 let dirtyCutting = new Map();     // task_id -> Set of edited field names (Kesim)
 let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKey}
@@ -85,6 +97,12 @@ let deletedBlocks = [];           // {assignment_type, assignment_id, resourceKe
 // edited during the wait, so hydrate must not replace the working copy.
 let mutationClock = 0;
 let saveInFlight = false;
+// Keys of new_blocks in the in-flight save. Delete must not treat those as
+// local-only — the server is about to create them.
+let inflightNewKeys = new Set();
+// Cids of id-less stages in the in-flight save. Delete must not splice
+// those as local-only — the server is about to create them.
+let inflightNewStageCids = new Set();
 
 let liveForecastJobs = new Set(); // jobs edited this session -> live client projections
 let activeResourceKey = null;     // 'team-3' / 'subcontractor-5'
@@ -430,21 +448,11 @@ function hydrate(boardData) {
     jobInfo = boardData.job_info || {};
 
     deptByJob = {};
-    machiningByJob = {};
+    ({ machiningByJob, machiningByTask } = indexMachining(jobInfo));
     Object.entries(jobInfo).forEach(([jobNo, info]) => {
         const slots = {};
         DEPT_SLOTS.forEach(slot => { slots[slot] = deptVM(info[slot]); });
         deptByJob[jobNo] = slots;
-        const machining = (info.machining || [])[0];
-        if (machining) {
-            machiningByJob[jobNo] = {
-                task_id: machining.task_id,
-                weight: machining.weight ?? null,
-                // The weight split has to know when this row is out of scope
-                // — a skipped Talaşlı takes no share of the İmalat number.
-                status: machining.status,
-            };
-        }
     });
 
     resources = (boardData.resources || []).map(res => ({
@@ -570,10 +578,10 @@ function deptOf(jobNo, slot) {
     return (deptByJob[jobNo] || {})[slot] || null;
 }
 
-function markMachiningDirty(jobNo, field) {
-    const fields = dirtyMachining.get(jobNo) || new Set();
+function markMachiningDirty(taskId, jobNo, field) {
+    const fields = dirtyMachining.get(taskId) || new Set();
     if (field) fields.add(field);
-    dirtyMachining.set(jobNo, fields);
+    dirtyMachining.set(taskId, fields);
     liveForecastJobs.add(jobNo);
     bumpMutation();
     updateSaveState();
@@ -1553,11 +1561,13 @@ function buildSheetRows(res) {
         if (manufacturing) rows.push(manufacturing);
 
         const machiningRows = info.machining || [];
-        machiningRows.forEach((x, i) => {
+        machiningRows.forEach((x) => {
             const row = infoRow(
                 x, `Talaşlı İmalat${machiningRows.length > 1 ? ` — ${x.title}` : ''}`,
                 'machining', 2);
-            if (i === 0 && machiningByJob[jobNo]) row.weight = machiningByJob[jobNo].weight;
+            row.machining_task_id = x.task_id;
+            const vm = machiningByTask[x.task_id];
+            if (vm) row.weight = vm.weight;
             rows.push(row);
         });
 
@@ -3345,7 +3355,7 @@ function onCellEdit(row, field, newValue) {
     if (row.kind === 'stage') {
         target = block && block.stages.find(s => s.cid === row.stageCid);
     } else if (row.kind === 'machining') {
-        target = machiningByJob[row.job_no];
+        target = machiningByTask[row.machining_task_id];
     } else if (row.kind === 'dept') {
         target = deptOf(row.job_no, row.slot);
     } else if (row.kind === 'block') {
@@ -3357,7 +3367,7 @@ function onCellEdit(row, field, newValue) {
 
     const markDirty = () => {
         if (row.kind === 'dept') markDeptDirty(row.job_no, row.slot, field);
-        else if (row.kind === 'machining') markMachiningDirty(row.job_no, field);
+        else if (row.kind === 'machining') markMachiningDirty(row.machining_task_id, row.job_no, field);
         else if (row.editable_duration) markLogisticsDirty(row.job_no, field);
         else markBlockDirty(block.key);
     };
@@ -3706,14 +3716,77 @@ function onDeleteCustomStage(row) {
                 : ''),
         confirmText: 'Sil',
         onConfirm: () => {
-            if (stage.id == null) {
-                block.stages = block.stages.filter(s => s.cid !== stage.cid);
+            const liveBlock = findBlock(row.blockRef) || block;
+            const liveStage = (liveBlock.stages || []).find(s => s.cid === stage.cid)
+                || (stage.id != null
+                    ? (liveBlock.stages || []).find(s => s.id === stage.id)
+                    : null)
+                || stage;
+            if (shouldDiscardNewStageLocally(liveStage, inflightNewStageCids)) {
+                liveBlock.stages = (liveBlock.stages || []).filter(
+                    s => s.cid !== liveStage.cid);
             } else {
-                stage.deleted = true;
+                liveStage.deleted = true;
             }
-            markBlockDirty(block.key);
+            markBlockDirty(liveBlock.key);
             scheduleRefresh();
         },
+    });
+}
+
+function resourceOfBlock(block) {
+    if (!block) return null;
+    return resources.find(r =>
+        r.resource_type === block.resource_type && Number(r.id) === Number(block.resource_id))
+        || null;
+}
+
+function resolveBlockForDelete(stale) {
+    if (!stale) return null;
+    const byKey = findBlock(stale.key);
+    if (byKey) return byKey;
+    if (stale.assignment_id != null) {
+        const hydrated = findBlock(`${stale.assignment_type}-${stale.assignment_id}`);
+        if (hydrated) return hydrated;
+    }
+    const res = resourceOfBlock(stale);
+    if (!res) return null;
+    const matches = (res.blocks || []).filter(b =>
+        !b.deleted
+        && Number(b.welding_task_id) === Number(stale.welding_task_id)
+        && Number(b.allocated_weight_kg) === Number(stale.allocated_weight_kg));
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function queueDeletedBlock(block, res) {
+    deletedBlocks = enqueueDeletedAssignment(
+        deletedBlocks,
+        block,
+        res ? resourceKeyOf(res) : activeResourceKey,
+    );
+}
+
+function flushPendingDeletedCreates() {
+    resources.forEach((res) => {
+        (res.blocks || []).forEach((b) => {
+            if (b && b.deleted) queueDeletedBlock(b, res);
+        });
+    });
+}
+
+function adoptIdentitiesForDeletedCreates(board, knownIds, sentNewKeys) {
+    if (!board) return;
+    const created = createdBlocksFromBoard(board, knownIds);
+    const clients = (sentNewKeys || []).map((key) => findBlock(key)).filter((b) => b && b.deleted);
+    adoptDeletedCreateIdentities(clients, created, new Set());
+    flushPendingDeletedCreates();
+}
+
+function discardUnsentDeletedCreates() {
+    resources.forEach((res) => {
+        res.blocks = (res.blocks || []).filter((b) => !(
+            b.deleted && b.isNew && b.assignment_id == null && !b.createdOnServer
+        ));
     });
 }
 
@@ -3730,24 +3803,22 @@ function onDeleteBlock(blockRef) {
         description: 'Atama, kaynak alt görevi ve tüm aşamaları birlikte silinir.',
         confirmText: 'Sil',
         onConfirm: () => {
-            const res = resources.find(r =>
-                r.resource_type === block.resource_type && r.id === block.resource_id);
-            if (block.isNew) {
-                if (res) res.blocks = res.blocks.filter(b => b.key !== block.key);
-                dirtyBlocks.delete(block.key);
+            // Hydrate may have replaced this object (new-N → type-id) while
+            // the confirm dialog was open.
+            const live = resolveBlockForDelete(block) || block;
+            const res = resourceOfBlock(live);
+            if (shouldDiscardNewBlockLocally(live, inflightNewKeys)) {
+                if (res) res.blocks = res.blocks.filter(b => b.key !== live.key);
+                dirtyBlocks.delete(live.key);
             } else {
-                block.deleted = true;
-                dirtyBlocks.delete(block.key);
-                deletedBlocks.push({
-                    assignment_type: block.assignment_type,
-                    assignment_id: block.assignment_id,
-                    resourceKey: res ? resourceKeyOf(res) : activeResourceKey,
-                });
+                live.deleted = true;
+                dirtyBlocks.delete(live.key);
+                queueDeletedBlock(live, res);
             }
             bumpMutation();
             // The deletion moves the job's projection (the deleted block's
             // window no longer counts) — recompute live like any other edit.
-            liveForecastJobs.add(block.job_no);
+            liveForecastJobs.add(live.job_no || block.job_no);
             updateSaveState();
             scheduleRefresh();
         },
@@ -4492,11 +4563,9 @@ function buildPayload() {
 
     // Talaşlı İmalat travels the same channel, but only ever its weight — the
     // server refuses a schedule on it, because those dates are its operations'.
-    dirtyMachining.forEach((fields, jobNo) => {
-        const vm = machiningByJob[jobNo];
-        if (!vm || !fields.has('weight') || vm.weight == null) return;
-        payload.department_tasks.push({ task_id: vm.task_id, weight: vm.weight });
-    });
+    // Keyed by task_id so a second Talaşlı row cannot overwrite the first.
+    payload.department_tasks.push(
+        ...machiningWeightItems(dirtyMachining, machiningByTask));
 
     // Lojistik travels it too, and only ever its duration: the server refuses
     // a date or a status on this row, because the window is the tail of the
@@ -4537,9 +4606,18 @@ async function onSave() {
     const clockAtSend = mutationClock;
     const knownIds = knownAssignmentKeys(resources);
     const sentNewKeys = [];
+    const sentNewStageCids = [];
     resources.forEach(res => res.blocks.forEach(b => {
-        if (shouldPostNewBlock(b)) sentNewKeys.push(b.key);
+        if (b.deleted) return;
+        if (shouldPostNewBlock(b)) {
+            sentNewKeys.push(b.key);
+            sentNewStageCids.push(...newStageCidsFromBlock(b));
+        } else if (!b.isNew && dirtyBlocks.has(b.key)) {
+            sentNewStageCids.push(...newStageCidsFromBlock(b));
+        }
     }));
+    inflightNewKeys = new Set(sentNewKeys);
+    inflightNewStageCids = new Set(sentNewStageCids);
     try {
         const resp = await bulkSaveWeldingPlanning(payload);
         showNotification('Plan kaydedildi.', 'success');
@@ -4553,7 +4631,7 @@ async function onSave() {
         // save (or a skipped hydrate) cannot recreate them. Cell-level dirty
         // stays until hydrate so an edit typed during this request is not
         // dropped.
-        finalizeSavedStructuralOps(payload, sentNewKeys);
+        finalizeSavedStructuralOps(payload, sentNewKeys, sentNewStageCids);
         const board = resp && resp.board;
         if (shouldHydrateAfterSave(clockAtSend, mutationClock)) {
             // This payload is fully committed and nobody typed during the
@@ -4577,17 +4655,29 @@ async function onSave() {
             adoptExistingBlockStageIds(resources, board);
             scheduleRefresh();
         }
+        // A delete during this request skipped hydrate and left the create
+        // marked deleted with no assignment_id. Stitch the id from resp.board
+        // now so Kaydet can send deleted_blocks without waiting on refresh.
+        adoptIdentitiesForDeletedCreates(board, knownIds, sentNewKeys);
+        // A stage deleted during this request skipped hydrate and left an
+        // id-less deleted row. Stitch the id from resp.board now so Kaydet
+        // can send `{id, deleted: true}` without waiting on refresh.
+        stitchIdentitiesAfterSkippedHydrate(board, knownIds, sentNewKeys);
         refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys });
     } catch (e) {
+        discardUnsentDeletedCreates();
+        discardUnsentDeletedStages();
         if (btn) btn.disabled = false;
         showNotification(e.message, 'error');
     } finally {
+        inflightNewKeys = new Set();
+        inflightNewStageCids = new Set();
         saveInFlight = false;
         if (hasUnsavedChanges()) updateSaveState();
     }
 }
 
-function finalizeSavedStructuralOps(payload, sentNewKeys) {
+function finalizeSavedStructuralOps(payload, sentNewKeys, sentNewStageCids) {
     (sentNewKeys || []).forEach((key) => {
         const b = findBlock(key);
         if (!b) return;
@@ -4595,17 +4685,67 @@ function finalizeSavedStructuralOps(payload, sentNewKeys) {
         b.createDefaultStages = false;
         delete b.moveTo;
     });
+    const sentMoves = sentMoveToByAssignment(payload.blocks);
+    (sentNewStageCids || []).forEach((cid) => {
+        const stage = findStageByCid(cid);
+        if (stage) stage.createdOnServer = true;
+    });
     const sentBlockIds = new Set(
         (payload.blocks || []).map((b) => assignmentKey(b.assignment_type, b.assignment_id)),
     );
     resources.forEach((res) => res.blocks.forEach((b) => {
         if (b.isNew || b.assignment_id == null) return;
-        if (sentBlockIds.has(assignmentKey(b.assignment_type, b.assignment_id))) {
+        const key = assignmentKey(b.assignment_type, b.assignment_id);
+        if (sentBlockIds.has(key)) {
             b.createDefaultStages = false;
-            delete b.moveTo;
+            // Only drop a move this payload actually sent. An Atamayı
+            // değiştir typed while that same row's notes/kg/stages were
+            // saving (or a second move while the first is in flight)
+            // must stay so the next Kaydet can re-home the assignment.
+            if (shouldClearMoveTo(sentMoves.get(key), b.moveTo)) {
+                delete b.moveTo;
+            }
         }
     }));
     deletedBlocks = leftoverDeleted(deletedBlocks, payload.deleted_blocks || []);
+}
+
+function findStageByCid(cid) {
+    if (!cid) return null;
+    for (const res of resources) {
+        for (const b of (res.blocks || [])) {
+            const stage = (b.stages || []).find(s => s.cid === cid);
+            if (stage) return stage;
+        }
+    }
+    return null;
+}
+
+function discardUnsentDeletedStages() {
+    resources.forEach((res) => {
+        (res.blocks || []).forEach((b) => {
+            b.stages = (b.stages || []).filter((s) => !(
+                s.deleted && s.id == null && !s.createdOnServer
+            ));
+        });
+    });
+}
+
+function adoptDeletedStageIdentities(board) {
+    if (!board) return;
+    resources.forEach((res) => {
+        (res.blocks || []).forEach((b) => {
+            if (!b || b.assignment_id == null) return;
+            const serverBlock = findBoardBlock(board, b.assignment_type, b.assignment_id);
+            if (serverBlock) adoptDeletedStageIds(b.stages, serverBlock.stages);
+        });
+    });
+}
+
+function stitchIdentitiesAfterSkippedHydrate(board, knownIds, sentNewKeys) {
+    if (!board) return;
+    adoptCreatedBlockIdentities(board, knownIds, sentNewKeys);
+    adoptDeletedStageIdentities(board);
 }
 
 function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
@@ -4613,7 +4753,7 @@ function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
     const used = new Set();
     (sentNewKeys || []).forEach((key) => {
         const client = findBlock(key);
-        if (!client || !client.isNew) return;
+        if (!client || !client.isNew || client.deleted) return;
         const idx = matchCreatedBlock(client, created, used);
         if (idx < 0) return;
         const matched = created[idx];
@@ -4626,11 +4766,7 @@ function adoptCreatedBlockIdentities(board, knownIds, sentNewKeys) {
         client.createDefaultStages = false;
         delete client.moveTo;
         adoptStageIds(client.stages, matched.block.stages);
-        snapBlocks.set(client.key, {
-            allocated_weight_kg: client.allocated_weight_kg,
-            notes: client.notes,
-            subtask: { actual_start_date: client.subtask.actual_start_date ?? null },
-        });
+        snapBlocks.set(client.key, adoptedBlockSnap(matched.block));
     });
 }
 
@@ -4646,7 +4782,9 @@ async function refreshBoardInBackground({ clockAtSend, knownIds, sentNewKeys } =
         // server identities onto the blocks this save created so the next
         // save updates them instead of posting duplicates.
         adoptCreatedBlockIdentities(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
+        adoptIdentitiesForDeletedCreates(data, knownIds || knownAssignmentKeys(resources), sentNewKeys || []);
         adoptExistingBlockStageIds(resources, data);
+        adoptDeletedStageIdentities(data);
         updateSaveState();
         scheduleRefresh();
     } catch (e) {
