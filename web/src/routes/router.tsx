@@ -277,6 +277,20 @@ export const appRoutes: RouteObject[] = [
         .WeldingReportPage,
     }),
   },
+  {
+    path: '/general/vacation/pending',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/vacation/pending/VacationPendingPage'))
+        .VacationPendingPage,
+    }),
+  },
+  {
+    path: '/general/vacation/requests',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/vacation/requests/VacationRequestsPage'))
+        .VacationRequestsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

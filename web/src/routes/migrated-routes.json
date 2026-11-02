@@ -46,5 +46,7 @@
   "/general/overtime/pending",
   "/general/overtime/registry",
   "/general/overtime/users",
-  "/general/overtime/welding-report"
+  "/general/overtime/welding-report",
+  "/general/vacation/pending",
+  "/general/vacation/requests"
 ]
