@@ -255,8 +255,11 @@ describe('pool view', () => {
 });
 
 describe('detail view', () => {
+  /** The editable cell, or null when the cell is read-only. */
   const cell = (rowId: string, col: string) =>
-    document.querySelector<HTMLElement>(`tr[data-row-id="${rowId}"] td[data-col="${col}"]`);
+    document.querySelector<HTMLElement>(
+      `tr[data-row-id="${rowId}"] td[data-edit-cell][data-col="${col}"]`,
+    );
 
   it('shows the toolbar the allowed actions permit', async () => {
     detailBody = detail(['add_items', 'submit', 'delete']);

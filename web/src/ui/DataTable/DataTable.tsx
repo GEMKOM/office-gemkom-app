@@ -343,7 +343,7 @@ function RowImpl<T>({
         const enabled = Boolean(editor) && rowEditable && (editor?.enabled?.(row) ?? true);
         if (!editor || !enabled) {
           return (
-            <Table.Td key={column.key} style={{ textAlign: column.align }}>
+            <Table.Td key={column.key} data-col={column.key} style={{ textAlign: column.align }}>
               {renderCellContent(column, row, index, editor)}
             </Table.Td>
           );

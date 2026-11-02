@@ -248,7 +248,7 @@ describe('DataTable inline editing', () => {
     expect(row2.querySelector('[data-edit-cell]')).toBeNull();
     expect(cell('1', 'status')).toHaveAttribute('data-edit-cell');
     const row3 = document.querySelector('tr[data-row-id="3"]')!;
-    expect(row3.querySelector('td[data-col="status"]')).toBeNull();
+    expect(row3.querySelector('td[data-col="status"]')).not.toHaveAttribute('data-edit-cell');
   });
 
   it('is read-only without onCellEdit', () => {
