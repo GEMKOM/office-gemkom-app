@@ -114,5 +114,7 @@
   "/manufacturing/machining/reports/performance",
   "/manufacturing/machining/reports/sum-report",
   "/human_resources/vacation",
-  "/human_resources/attendance/records"
+  "/human_resources/attendance/records",
+  "/procurement/payment-lists",
+  "/planning/task-templates"
 ]
