@@ -55,9 +55,24 @@ declare module '@legacy/authService.js' {
   export function impersonateUser(userId: number): Promise<void>;
   export function stopImpersonation(): Promise<void>;
   export function navigateTo(path: string): void;
+  /** Signs in; throws Error('FORBIDDEN') for accounts without office_access. */
+  export function login(username: string, password: string): Promise<unknown>;
+  export function shouldBeOnLoginPage(): boolean;
+  export function shouldBeOnResetPasswordPage(): boolean;
+  /** Where a fresh login lands for this user's department. */
+  export function teamLandingRoute(): string;
   export function rememberReturnUrl(url?: string): void;
+  /** Read-and-clear the URL parked before the login redirect (same-origin paths only). */
+  export function takeReturnUrl(): string | null;
   /** Adds the Bearer token, refreshes once on 401. Returns the raw Response. */
   export function authedFetch(url: string, options?: RequestInit): Promise<Response>;
+}
+
+declare module '@legacy/apis/users.js' {
+  /** Unauthenticated; the raw Response. */
+  export function forgotPassword(username: string): Promise<Response>;
+  /** Sets the signed-in user's new password; the raw Response. */
+  export function resetPassword(newPassword: string): Promise<Response>;
 }
 
 declare module '@legacy/apis/accessControl.js' {

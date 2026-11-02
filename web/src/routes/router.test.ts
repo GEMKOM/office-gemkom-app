@@ -1,13 +1,13 @@
 import migratedRoutes from './migrated-routes.json';
 import { normalizeRoute } from './migrated';
-import { appRoutes } from './router';
+import { appRoutes, publicRoutes } from './router';
 
 // The router and migrated-routes.json have to agree: a route missing from the
 // JSON never gets its index.html at deploy time, and a JSON entry without a
 // route would publish an SPA page that only shows "Sayfa bulunamadı".
 describe('migrated routes', () => {
   it('lists every app route in migrated-routes.json and nothing else', () => {
-    const routerPaths = appRoutes.map((r) => normalizeRoute(r.path ?? '')).sort();
+    const routerPaths = [...publicRoutes, ...appRoutes].map((r) => normalizeRoute(r.path ?? '')).sort();
     const listed = migratedRoutes.map(normalizeRoute).sort();
     expect(routerPaths).toEqual(listed);
   });
