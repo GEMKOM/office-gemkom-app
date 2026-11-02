@@ -37,5 +37,9 @@
   "/human_resources/attendance",
   "/quality-control",
   "/projects",
-  "/design"
+  "/design",
+  "/quality-control/cost-lines",
+  "/quality-control/documents",
+  "/quality-control/ncrs",
+  "/quality-control/qc-reviews"
 ]

@@ -211,6 +211,31 @@ export const appRoutes: RouteObject[] = [
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),
   },
+  // Phase 3b: quality control, HR and other list pages.
+  {
+    path: '/quality-control/cost-lines',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/cost-lines/CostLinesPage')).CostLinesPage,
+    }),
+  },
+  {
+    path: '/quality-control/documents',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/documents/DocumentsPage')).DocumentsPage,
+    }),
+  },
+  {
+    path: '/quality-control/ncrs',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/ncrs/NcrsPage')).NcrsPage,
+    }),
+  },
+  {
+    path: '/quality-control/qc-reviews',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/qc-reviews/QcReviewsPage')).QcReviewsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
