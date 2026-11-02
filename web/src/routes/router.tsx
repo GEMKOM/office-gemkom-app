@@ -275,6 +275,29 @@ export const appRoutes: RouteObject[] = [
       ).MachiningUserReportPage,
     }),
   },
+  {
+    path: '/manufacturing/cnc-cutting/remnants',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/cnc-cutting/remnants/RemnantsPage'))
+        .RemnantsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/cnc-cutting/reports/parts-search',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/cnc-cutting/reports/parts-search/PartsSearchPage')
+      ).PartsSearchPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/cost-analysis',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/cost-analysis/CostAnalysisPage')
+      ).CostAnalysisPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
