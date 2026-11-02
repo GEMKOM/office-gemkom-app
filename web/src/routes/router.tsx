@@ -713,6 +713,19 @@ export const appRoutes: RouteObject[] = [
         .SumReportPage,
     }),
   },
+  {
+    path: '/human_resources/vacation',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/vacation/HrVacationPage')).HrVacationPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/records',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/records/AttendanceRecordsPage'))
+        .AttendanceRecordsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

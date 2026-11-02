@@ -112,5 +112,7 @@
   "/general/overtime/machining-report",
   "/manufacturing/machining/reports/daily-efficiency",
   "/manufacturing/machining/reports/performance",
-  "/manufacturing/machining/reports/sum-report"
+  "/manufacturing/machining/reports/sum-report",
+  "/human_resources/vacation",
+  "/human_resources/attendance/records"
 ]
