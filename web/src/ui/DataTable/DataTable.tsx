@@ -531,10 +531,10 @@ function GroupRow<T>({
   };
   if (isCells(content)) {
     return (
-      <tr {...rowProps}>
-        {leading > 0 ? <td colSpan={leading} /> : null}
+      <Table.Tr {...rowProps}>
+        {leading > 0 ? <Table.Td colSpan={leading} /> : null}
         {columns.map((column, i) => (
-          <td
+          <Table.Td
             key={column.key}
             style={{ textAlign: column.align, ...(i === 0 ? indent : undefined) }}
           >
@@ -546,21 +546,21 @@ function GroupRow<T>({
             ) : (
               content.cells[column.key]
             )}
-          </td>
+          </Table.Td>
         ))}
-        {hasActions ? <td style={{ textAlign: 'right' }}>{content.cells._actions}</td> : null}
-      </tr>
+        {hasActions ? <Table.Td style={{ textAlign: 'right' }}>{content.cells._actions}</Table.Td> : null}
+      </Table.Tr>
     );
   }
   return (
-    <tr {...rowProps}>
-      <td colSpan={leading + columns.length + (hasActions ? 1 : 0)} style={indent}>
+    <Table.Tr {...rowProps}>
+      <Table.Td colSpan={leading + columns.length + (hasActions ? 1 : 0)} style={indent}>
         <span className={tableClasses.groupLabel}>
           {toggle}
           <span className={tableClasses.groupContent}>{content}</span>
         </span>
-      </td>
-    </tr>
+      </Table.Td>
+    </Table.Tr>
   );
 }
 
