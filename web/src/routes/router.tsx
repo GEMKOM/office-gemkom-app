@@ -211,6 +211,28 @@ export const appRoutes: RouteObject[] = [
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),
   },
+  // ---- Genel list pages (Phase 3b) ----
+  {
+    path: '/general/crane-requests/list',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/crane-requests/list/CraneRequestsListPage'))
+        .CraneRequestsListPage,
+    }),
+  },
+  {
+    path: '/general/crane-requests/pending',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/crane-requests/pending/CraneRequestsPendingPage'))
+        .CraneRequestsPendingPage,
+    }),
+  },
+  {
+    path: '/general/crane-requests/prices',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/crane-requests/prices/CranePricesPage'))
+        .CranePricesPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

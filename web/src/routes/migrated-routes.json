@@ -37,5 +37,8 @@
   "/human_resources/attendance",
   "/quality-control",
   "/projects",
-  "/design"
+  "/design",
+  "/general/crane-requests/list",
+  "/general/crane-requests/pending",
+  "/general/crane-requests/prices"
 ]
