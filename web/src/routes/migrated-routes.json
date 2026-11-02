@@ -40,5 +40,7 @@
   "/design",
   "/general/crane-requests/list",
   "/general/crane-requests/pending",
-  "/general/crane-requests/prices"
+  "/general/crane-requests/prices",
+  "/general/department-requests/list",
+  "/general/department-requests/pending"
 ]

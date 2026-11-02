@@ -233,6 +233,22 @@ export const appRoutes: RouteObject[] = [
         .CranePricesPage,
     }),
   },
+  {
+    path: '/general/department-requests/list',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/general/department-requests/list/DepartmentRequestsListPage')
+      ).DepartmentRequestsListPage,
+    }),
+  },
+  {
+    path: '/general/department-requests/pending',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/general/department-requests/pending/PendingDepartmentRequestsPage')
+      ).PendingDepartmentRequestsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
