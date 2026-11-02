@@ -669,6 +669,14 @@ export const appRoutes: RouteObject[] = [
         .PaymentTermsPage,
     }),
   },
+  // Phase 4: welding time entries and IT notification configs
+  {
+    path: '/manufacturing/welding/time-entries',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/welding/time-entries/TimeEntriesPage'))
+        .TimeEntriesPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
