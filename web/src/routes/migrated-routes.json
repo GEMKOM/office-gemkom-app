@@ -110,5 +110,6 @@
   "/management/reports/overview",
   "/finance/reports/executive-overview",
   "/management/reports/cash-flow",
-  "/management/dashboard"
+  "/management/dashboard",
+  "/management/analytics"
 ]
