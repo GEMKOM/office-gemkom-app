@@ -41,6 +41,8 @@ import {
     getDrawingRelease
 } from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
+import { fmtQty as fmtDeliveryQty } from '../../utils/deliveryState.js';
+import { createExclusiveRun } from '../../utils/exclusiveRun.js';
 import { getCncParts } from '../../apis/cnc_cutting/parts.js';
 import { getParts as getMachiningParts } from '../../apis/machining/parts.js';
 import { 
@@ -82,6 +84,8 @@ function formatCommentWithMentions(content, mentionedUsers = [], mentionedGroups
  * @param {string} [config.userTeam] - Team for assigned-user filter (defaults to department)
  * @param {Object} [config.containerIds] - Override container IDs: header, filters, table
  * @param {Array} [config.customFilters] - Extra filter definitions added after defaults
+ * @param {boolean} [config.syncFiltersToUrl] - Keep filter values in the URL query string so the
+ *   filtered view survives reloads and returning from a task detail (opt-in; default false)
  * @param {Object} [config.customTableColumns] - { insertAfter: string, columns: Array } to add columns
  * @param {Function} [config.onBeforeLoadTasks] - Called before each loadTasks()
  * @param {Function} [config.onAfterLoadTasks] - Called after each loadTasks()
@@ -96,6 +100,7 @@ export async function initDepartmentTasksPage(config) {
         canCreateTasks = false,
         containerIds: containerIdsOverride = {},
         customFilters = [],
+        syncFiltersToUrl = false,
         customTableColumns,
         onBeforeLoadTasks,
         onAfterLoadTasks
@@ -398,6 +403,71 @@ function updateUrlParams(params) {
     window.history.replaceState({}, '', url);
 }
 
+// --- Filter state in the URL (opt-in via config.syncFiltersToUrl) ---
+// Query param name used for each filter id. Custom filters fall back to their
+// apiParam (or id) so a page adding filters gets URL support for free.
+function getFilterUrlParamMap() {
+    const map = {
+        'status-filter': 'status',
+        'search-filter': 'search',
+        'job-order-filter': 'job_order',
+        'customer-filter': 'customer',
+        'assigned-to-filter': 'assigned_to',
+        'target-start-date-filter': 'target_start_date',
+        'target-completion-date-filter': 'target_completion_date'
+    };
+    (customFilters || []).forEach((filterDef) => {
+        if (filterDef && filterDef.id && !map[filterDef.id]) {
+            map[filterDef.id] = filterDef.apiParam || filterDef.id;
+        }
+    });
+    return map;
+}
+
+// Values present in the URL, keyed by filter id. Absent params are omitted so
+// callers can tell "not in URL" from "explicitly empty".
+function readFilterValuesFromUrl() {
+    const values = {};
+    if (!syncFiltersToUrl) return values;
+
+    const params = new URLSearchParams(window.location.search);
+    const map = getFilterUrlParamMap();
+    Object.keys(map).forEach((filterId) => {
+        const param = map[filterId];
+        if (params.has(param)) {
+            values[filterId] = params.get(param);
+        }
+    });
+    return values;
+}
+
+function syncFilterValuesToUrl() {
+    if (!syncFiltersToUrl || !tasksFilters) return;
+
+    // Filters whose empty value is a deliberate choice ("Tümü") rather than "not set":
+    // their param is written as empty instead of removed, so a reload does not
+    // silently re-apply the built-in default.
+    const filtersWithDefaultValue = ['status-filter'];
+
+    const map = getFilterUrlParamMap();
+    const filterValues = tasksFilters.getFilterValues();
+    const params = {};
+
+    Object.keys(map).forEach((filterId) => {
+        const value = filterValues[filterId];
+        const normalized = Array.isArray(value) ? value.join(',') : (value ?? '');
+        if (String(normalized).trim() === '') {
+            params[map[filterId]] = filtersWithDefaultValue.includes(filterId) ? '' : null;
+        } else {
+            params[map[filterId]] = normalized;
+        }
+    });
+
+    // Filter changes always restart paging, so keep the page param in step.
+    params.page = currentPage;
+    updateUrlParams(params);
+}
+
 async function checkUrlAndOpenModal() {
     const urlParams = new URLSearchParams(window.location.search);
     const taskParam = urlParams.get('task');
@@ -423,16 +493,32 @@ async function checkUrlAndOpenModal() {
 }
 
 function initializeFiltersComponent(defaultAssignedUserId = null) {
+    // Values carried in the URL (only when syncFiltersToUrl is on) win over the
+    // built-in defaults, so a filtered view survives a reload or a return from
+    // a task detail.
+    const urlFilterValues = readFilterValuesFromUrl();
+    const initialFilterValue = (filterId, fallback = '') => (
+        urlFilterValues[filterId] !== undefined ? urlFilterValues[filterId] : fallback
+    );
+    // Remote-search dropdowns start with no items, so a restored value would show
+    // the placeholder; seed the selected item with a label we can derive.
+    const seedOptionsFor = (filterId, labelFor = (value) => value) => {
+        const value = initialFilterValue(filterId);
+        return value ? [{ value, label: labelFor(value) }] : [];
+    };
+
     tasksFilters = new FiltersComponent(containerIds.filters, {
         title: 'Görev Filtreleri',
         onApply: (values) => {
             currentPage = 1;
+            syncFilterValuesToUrl();
             loadTasks();
         },
         onClear: () => {
             currentPage = 1;
             currentStatusFilter = '';
             currentFilters = {};
+            syncFilterValuesToUrl();
             loadTasks();
             showNotification('Filtreler temizlendi', 'info');
         },
@@ -453,7 +539,7 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'Durum',
         options: statusFilterOptions,
         placeholder: 'Durum seçin',
-        value: 'pending,in_progress',
+        value: initialFilterValue('status-filter', 'pending,in_progress'),
         colSize: 2
     });
 
@@ -462,6 +548,7 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         id: 'search-filter',
         label: 'Arama',
         placeholder: 'Görev başlığı, açıklama, iş emri...',
+        value: initialFilterValue('search-filter'),
         colSize: 3
     });
 
@@ -471,6 +558,8 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'İş Emri',
         options: [],
         placeholder: 'İş emri ara (en az 2 karakter)',
+        value: initialFilterValue('job-order-filter'),
+        seedOptions: seedOptionsFor('job-order-filter'),
         colSize: 2,
         searchable: true,
         minSearchLength: 2,
@@ -497,6 +586,8 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'Müşteri',
         options: [],
         placeholder: 'Müşteri ara (en az 3 karakter)',
+        value: initialFilterValue('customer-filter'),
+        seedOptions: seedOptionsFor('customer-filter', (value) => `#${value}`),
         colSize: 2,
         searchable: true,
         minSearchLength: 3,
@@ -524,7 +615,7 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         label: 'Atanan Kişi',
         options: userOptions,
         placeholder: 'Kişi seçin',
-        value: defaultAssignedUserId || '',
+        value: initialFilterValue('assigned-to-filter', defaultAssignedUserId || ''),
         colSize: 2
     });
 
@@ -532,20 +623,24 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
     tasksFilters.addDateFilter({
         id: 'target-start-date-filter',
         label: 'Hedef Başlangıç',
+        value: initialFilterValue('target-start-date-filter'),
         colSize: 2
     });
 
     tasksFilters.addDateFilter({
         id: 'target-completion-date-filter',
         label: 'Hedef Bitiş',
+        value: initialFilterValue('target-completion-date-filter'),
         colSize: 2
     });
 
     // Optional: add custom filters (for future per-page extensions)
     (customFilters || []).forEach(f => {
-        if (f.type === 'dropdown') tasksFilters.addDropdownFilter(f);
-        else if (f.type === 'text') tasksFilters.addTextFilter(f);
-        else if (f.type === 'date') tasksFilters.addDateFilter(f);
+        const restored = urlFilterValues[f.id];
+        const filterDef = restored !== undefined ? { ...f, value: restored } : f;
+        if (f.type === 'dropdown') tasksFilters.addDropdownFilter(filterDef);
+        else if (f.type === 'text') tasksFilters.addTextFilter(filterDef);
+        else if (f.type === 'date') tasksFilters.addDateFilter(filterDef);
     });
 }
 
@@ -747,7 +842,13 @@ function initializeTableComponent() {
                             // Make the key clickable, opening in a new tab
                             const keyUrl = `/manufacturing/machining/tasks/list/?key=${encodeURIComponent(key)}`;
                             const keyLink = `<a href="${keyUrl}" target="_blank" rel="noopener noreferrer" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${key}</a>`;
-                            return `<div style="padding-left: ${indent}px;">${prefix}${keyLink}</div>`;
+                            // Part shared with other job orders: "6 / 10 adet · ortak: 260-02"
+                            const md = row.machining_data || {};
+                            const otherJobNos = Array.isArray(md.other_job_nos) ? md.other_job_nos.filter(Boolean) : [];
+                            const sharedHint = otherJobNos.length
+                                ? `<small class="text-muted d-block" title="Birden fazla iş emrine bölünmüş parça">${md.allocated_quantity ?? '-'} / ${md.quantity ?? '-'} adet · ortak: ${escapeHtml(otherJobNos.join(', '))}</small>`
+                                : '';
+                            return `<div style="padding-left: ${indent}px;">${prefix}${keyLink}${sharedHint}</div>`;
                         }
                     }
                     
@@ -832,8 +933,14 @@ function initializeTableComponent() {
                 sortable: true,
                 formatter: (value, row) => {
                     const status = statusOptions.find(s => s.value === value) || { label: value, color: 'grey' };
-                    const colorClass = `status-${status.color}`;
-                    const statusBadge = `<span class="status-badge ${colorClass}">${status.label}</span>`;
+                    // Procurement item rows carry their own receipt state
+                    // ("Kısmi Teslim (600 / 1200 kg)", "Teslim Edildi", "Ödendi"...)
+                    const isProcurementItem = row.task_type === 'procurement_item';
+                    const colorClass = isProcurementItem && row.is_partially_delivered
+                        ? 'status-orange'
+                        : `status-${status.color}`;
+                    const label = isProcurementItem && row.status_display ? row.status_display : status.label;
+                    const statusBadge = `<span class="status-badge ${colorClass}">${label}</span>`;
                     const revisionBadge = row.is_under_revision
                         ? `<span class="status-badge status-red ms-1"><i class="fas fa-rotate me-1"></i>Revizyonda</span>`
                         : '';
@@ -7433,27 +7540,71 @@ async function handleStartTask(taskId) {
     });
 }
 
+// mark_delivered appends a receipt; overlapping confirms would double-count kg.
+const runDeliveryReceipt = createExclusiveRun();
+
 async function handleCompleteTask(taskId, taskRow = null) {
     // For procurement_item tasks with planning_request_item_id, use special completion flow
     if (taskRow && taskRow.task_type === 'procurement_item' && taskRow.planning_request_item_id) {
+        // Receipt amount: defaults to what is still outstanding; the office
+        // lowers it when only part of the material arrived (partial delivery).
+        const unit = taskRow.item_unit || '';
+        const planned = Number(taskRow.quantity || 0);
+        const onHand = Number(taskRow.delivered_quantity || 0);
+        const remaining = Math.max(Math.round((planned - onHand) * 100) / 100, 0);
+        const qtyInputId = `dt-delivery-qty-${taskRow.planning_request_item_id}`;
+        const details = planned > 0 ? `
+            <div class="text-start">
+                <div class="small mb-2">
+                    Planlanan <strong>${fmtDeliveryQty(planned)} ${unit}</strong>
+                    · Daha önce alınan <strong>${fmtDeliveryQty(onHand)} ${unit}</strong>
+                    · Kalan <strong>${fmtDeliveryQty(remaining)} ${unit}</strong>
+                </div>
+                <label class="form-label small mb-1" for="${qtyInputId}">Teslim alınan miktar${unit ? ` (${unit})` : ''}</label>
+                <input type="number" class="form-control form-control-sm" id="${qtyInputId}"
+                       value="${remaining}" min="0.01" max="${remaining}" step="0.01" inputmode="decimal">
+                <div class="form-text">Tamamı gelmediyse miktarı düşürün; kalan kısım beklemede kalır.</div>
+            </div>` : '';
         confirmationModal.show({
-            message: 'Bu planlama talebi kalemini teslim edildi olarak işaretlemek istediğinize emin misiniz?',
-            confirmText: 'Evet, Teslim Edildi',
+            message: 'Bu planlama talebi kalemini teslim alındı olarak işaretlemek istediğinize emin misiniz?',
+            details,
+            confirmText: 'Evet, Teslim Alındı',
             onConfirm: async () => {
                 try {
                     // Get the task to ensure we have the latest data
                     const task = taskRow || await getDepartmentTaskById(taskId);
-                    
+
                     if (!task.planning_request_item_id) {
                         showNotification('Planlama talebi kalemi bulunamadı', 'error');
                         return;
                     }
-                    
-                    // Use planning_request_item_id from the task response
-                    await markPlanningRequestItemDelivered(task.planning_request_item_id);
-                    showNotification('Planlama talebi kalemi teslim edildi olarak işaretlendi', 'success');
+
+                    const receipt = {};
+                    const input = document.getElementById(qtyInputId);
+                    if (input) {
+                        const value = Number(input.value);
+                        if (!(value > 0) || value > remaining + 1e-9) {
+                            showNotification(`Miktar 0'dan büyük ve en fazla ${fmtDeliveryQty(remaining)} ${unit} olmalıdır`, 'error');
+                            throw new Error('invalid quantity');
+                        }
+                        receipt.quantity = value;
+                    }
+
+                    // Each POST appends a receipt. Hold the lock only around the
+                    // write so a later Tamamla on another row is not dropped.
+                    const outcome = await runDeliveryReceipt(() =>
+                        markPlanningRequestItemDelivered(task.planning_request_item_id, receipt)
+                    );
+                    if (!outcome.started) return;
+                    const result = outcome.result;
+                    showNotification(result && result.is_delivered === false
+                        ? `Kısmi teslimat kaydedildi (${fmtDeliveryQty(result.delivered_quantity)} / ${fmtDeliveryQty(result.quantity)} ${unit})`
+                        : 'Planlama talebi kalemi teslim alındı olarak işaretlendi', 'success');
                     confirmationModal.hide();
+                    // The parent task's percentage and the item rows changed
+                    await loadTasks();
                 } catch (error) {
+                    if (error && error.message === 'invalid quantity') throw error;
                     console.error('Error marking planning request item as delivered:', error);
                     let errorMessage = 'Planlama talebi kalemi işaretlenirken hata oluştu';
                     try {

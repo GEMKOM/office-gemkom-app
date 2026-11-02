@@ -1,4 +1,4 @@
-import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES, isImpersonating, stopImpersonation } from '../authService.js';
+import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES, isImpersonating, stopImpersonation, refreshPermissions, PERMISSIONS_REFRESHED_EVENT } from '../authService.js';
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
 import { filterNavigationByAccess, hasRouteAccess } from '../apis/accessControl.js';
@@ -99,6 +99,22 @@ function findNavigationItem(path, structure = NAVIGATION_STRUCTURE) {
 // Maximum number of top-level nav items shown in the bar; rest go into "Daha Fazla" dropdown
 const MAX_VISIBLE_NAV_ITEMS = 7;
 
+// /general/* paths that have a page. Anything else under /general is still a
+// placeholder and gets the "geliştirilme aşamasında" alert — so a new Genel
+// page has to be listed here, or its menu entry refuses to open it.
+const BUILT_GENERAL_PAGES = [
+    '/general/machines',
+    '/general/overtime',
+    '/general/vacation',
+    '/general/department-requests',
+    '/general/crane-requests',
+    '/general/discussions',
+];
+
+function isUnbuiltGeneralPage(path) {
+    return path.startsWith('/general/') && !BUILT_GENERAL_PAGES.some(page => path.startsWith(page));
+}
+
 // Helper: split filtered nav into visible + more, return HTML for both (more as one dropdown)
 function renderNavigationWithMore(items, currentPath) {
     const entries = Object.entries(items);
@@ -126,12 +142,21 @@ function renderNavigationWithMore(items, currentPath) {
     return html;
 }
 
+// A menu entry can sit under a parent whose path it does not share — İSG
+// Bildirimleri hangs off Genel but keeps its /isg/issues route — so a parent is
+// active when the current path matches it or any of its descendants.
+function isPathActive(path, item, currentPath) {
+    if (currentPath === path || currentPath.startsWith(path + '/')) return true;
+    return Object.entries(item.children || {})
+        .some(([childPath, child]) => isPathActive(childPath, child, currentPath));
+}
+
 // Helper function to render navigation items recursively
 function renderNavigationItems(items, currentPath, level = 0) {
     let html = '';
     
     for (const [path, item] of Object.entries(items)) {
-        const isActive = currentPath === path || currentPath.startsWith(path + '/');
+        const isActive = isPathActive(path, item, currentPath);
         const hasChildren = Object.keys(item.children).length > 0;
         // Keep dropdowns closed by default - only show when explicitly clicked
         const isExpanded = false; // Changed from: isActive && hasChildren
@@ -164,8 +189,13 @@ function renderNavigationItems(items, currentPath, level = 0) {
                     </li>
                 `;
             }
-        } else if (level === 1) {
-            // Second level items
+        } else {
+            // Second level and deeper. This has to keep nesting rather than
+            // flatten: "Daha Fazla" renders the sections it holds starting at
+            // level 1, so its sections' own children land here, and stopping
+            // the recursion dropped every page below them from the menu
+            // entirely (İmalat > Kaynaklı İmalat > İmalat Planlama, and ~17
+            // more across Satın Alma, Finans, İnsan Kaynakları and Yönetim).
             if (hasChildren) {
                 html += `
                     <li class="dropend">
@@ -189,19 +219,9 @@ function renderNavigationItems(items, currentPath, level = 0) {
                     </li>
                 `;
             }
-        } else {
-            // Third level and deeper items
-            html += `
-                <li>
-                    <a class="dropdown-item ${activeClass}" href="#" data-path="${path}">
-                        <i class="${item.icon} me-1"></i>
-                        <span>${item.label}</span>
-                    </a>
-                </li>
-            `;
         }
     }
-    
+
     return html;
 }
 
@@ -280,6 +300,32 @@ export function initNavbar() {
       return;
     }
 
+    // The menu is painted from the cached permission payload straight away;
+    // authService refreshes that payload in the background (page load, token
+    // refresh, another tab) and announces when the grants changed. Only the
+    // navigation list is rebuilt then: the bell, the assistant widget and the
+    // PDKS indicator keep their state. A change that lands before the first
+    // render has wired its handlers is applied right after it has.
+    let menusWired = false;
+    let pendingMenuRerender = false;
+
+    function rerenderNavigationItems() {
+        const navList = navbarContainer.querySelector('#main-nav-items');
+        if (!navList) return;
+        const filteredNavigation = filterNavigationByAccess(NAVIGATION_STRUCTURE);
+        navList.innerHTML = renderNavigationWithMore(filteredNavigation, window.location.pathname);
+        wireMenus(navList);
+    }
+
+    window.addEventListener(PERMISSIONS_REFRESHED_EVENT, (event) => {
+        if (!event.detail?.changed) return;
+        if (!menusWired) {
+            pendingMenuRerender = true;
+            return;
+        }
+        rerenderNavigationItems();
+    });
+
     async function renderNavbar() {
       let user = null;
       try {
@@ -342,7 +388,7 @@ export function initNavbar() {
                 </button>
                 
                 <div class="collapse navbar-collapse" id="navbarNav">
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0" id="main-nav-items">
                         ${navigationItems}
                     </ul>
                     
@@ -425,6 +471,9 @@ export function initNavbar() {
                                 <li><a class="dropdown-item" href="#" id="edit-profile-btn">
                                     <i class="fas fa-user-edit me-2"></i>Profili Düzenle
                                 </a></li>
+                                <li><a class="dropdown-item" href="/general/discussions">
+                                    <i class="fas fa-comments me-2"></i>Tartışmalarım
+                                </a></li>
                                 <li><h6 class="dropdown-item">Departman: ${user?.position?.department_code || user?.department_code || 'Atanmamış'}</h6></li>
                                 <li><hr class="dropdown-divider"></li>
                                 ${stopImpersonationItem}
@@ -455,6 +504,14 @@ export function initNavbar() {
           initAssistantWidget(navbarContainer.querySelector('#assistant-launcher-li'));
       } catch (e) {
           console.error('Assistant widget failed to initialize:', e);
+      }
+
+      // Günlük Özet first-open modal, fenced the same way.
+      try {
+          const { initDailySummary } = await import('./daily-summary/daily-summary.js');
+          initDailySummary();
+      } catch (e) {
+          console.error('Daily summary failed to initialize:', e);
       }
 
       // Attendance indicator (check-in / check-out)
@@ -647,12 +704,90 @@ export function initNavbar() {
 
         refreshAttendanceIndicator();
         
+        // Add click outside handler to close all dropdowns
+        document.addEventListener('click', (e) => {
+            const isDropdownClick = e.target.closest('.nav-item.dropdown') || 
+                                  e.target.closest('.dropdown-menu') ||
+                                  e.target.closest('.dropend');
+            
+            if (!isDropdownClick) {
+                // Close all dropdowns when clicking outside
+                navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle').forEach(toggle => {
+                    const dropdownMenu = toggle.nextElementSibling;
+                    if (dropdownMenu) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+                
+                // Close all nested submenus
+                navbarContainer.querySelectorAll('.dropend .dropdown-toggle').forEach(toggle => {
+                    const dropdownMenu = toggle.nextElementSibling;
+                    if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+            }
+        });
+        
+        // Add event listeners
+      const editProfileBtn = document.getElementById('edit-profile-btn');
+      if (editProfileBtn) {
+          editProfileBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              createUserEditModal(user);
+          });
+      }
+      
+      const teamInfoBtn = document.getElementById('team-info-btn');
+      if (teamInfoBtn) {
+          teamInfoBtn.addEventListener('click', (e) => {
+              e.preventDefault();
+              const departmentCode = user?.position?.department_code || user?.department_code || null;
+              alert(`Departmanınız: ${departmentCode || 'Atanmamış'}`);
+          });
+      }
+
+      const logoutButton = document.getElementById('logout-button');
+      if (logoutButton) {
+          logoutButton.addEventListener('click', (e) => {
+              e.preventDefault();
+              logout();
+          });
+      }
+
+      const stopImpersonationBtn = document.getElementById('stop-impersonation-btn');
+      if (stopImpersonationBtn) {
+          stopImpersonationBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              try {
+                  await stopImpersonation();
+              } catch (err) {
+                  console.error('Failed to stop impersonation:', err);
+                  alert('Impersonation sonlandırılamadı.');
+              }
+          });
+      }
+      
+        wireMenus(navbarContainer);
+        menusWired = true;
+        if (pendingMenuRerender) {
+            pendingMenuRerender = false;
+            rerenderNavigationItems();
+        }
+    }
+
+    // Hover and click behaviour for every menu entry under `root`. The first
+    // render wires the whole navbar; a permission refresh that changed the
+    // grants rebuilds only the navigation list and wires that subtree again.
+    // "Close the others" always looks the live DOM up through navbarContainer,
+    // so entries from the two generations still close each other.
+    function wireMenus(root) {
         // Add hover functionality for main navbar dropdowns (top level only)
-        const mainDropdownToggles = navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle');
+        const mainDropdownToggles = root.querySelectorAll('.nav-item.dropdown .dropdown-toggle');
         
         // Function to close all dropdowns except the specified one
         function closeOtherDropdowns(exceptElement) {
-            mainDropdownToggles.forEach(toggle => {
+            navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle').forEach(toggle => {
                 const navItem = toggle.closest('.nav-item');
                 const dropdownMenu = toggle.nextElementSibling;
                 
@@ -753,15 +888,20 @@ export function initNavbar() {
         });
         
         // Initialize nested dropdowns (dropend) with hover functionality
-        const dropendElements = navbarContainer.querySelectorAll('.dropend .dropdown-toggle');
+        const dropendElements = root.querySelectorAll('.dropend .dropdown-toggle');
         
         // Function to close all nested submenus except the specified one
         function closeOtherSubmenus(exceptElement) {
-            dropendElements.forEach(toggle => {
+            navbarContainer.querySelectorAll('.dropend .dropdown-toggle').forEach(toggle => {
                 const dropendItem = toggle.closest('.dropend');
                 const dropdownMenu = toggle.nextElementSibling;
                 
-                if (dropendItem !== exceptElement && dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                // An ancestor of the item being hovered has to stay open, or
+                // opening a third-level submenu would close the second-level
+                // menu it lives in -- taking the submenu down with it.
+                const isAncestorOfHovered = exceptElement && dropendItem.contains(exceptElement);
+
+                if (dropendItem !== exceptElement && !isAncestorOfHovered && dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
                     dropdownMenu.classList.remove('show');
                 }
             });
@@ -827,72 +967,8 @@ export function initNavbar() {
             }
                 });
         
-        // Add click outside handler to close all dropdowns
-        document.addEventListener('click', (e) => {
-            const isDropdownClick = e.target.closest('.nav-item.dropdown') || 
-                                  e.target.closest('.dropdown-menu') ||
-                                  e.target.closest('.dropend');
-            
-            if (!isDropdownClick) {
-                // Close all dropdowns when clicking outside
-                mainDropdownToggles.forEach(toggle => {
-                    const dropdownMenu = toggle.nextElementSibling;
-                    if (dropdownMenu) {
-                        dropdownMenu.classList.remove('show');
-                    }
-                });
-                
-                // Close all nested submenus
-                dropendElements.forEach(toggle => {
-                    const dropdownMenu = toggle.nextElementSibling;
-                    if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
-                        dropdownMenu.classList.remove('show');
-                    }
-                });
-            }
-        });
-        
-        // Add event listeners
-      const editProfileBtn = document.getElementById('edit-profile-btn');
-      if (editProfileBtn) {
-          editProfileBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              createUserEditModal(user);
-          });
-      }
-      
-      const teamInfoBtn = document.getElementById('team-info-btn');
-      if (teamInfoBtn) {
-          teamInfoBtn.addEventListener('click', (e) => {
-              e.preventDefault();
-              const departmentCode = user?.position?.department_code || user?.department_code || null;
-              alert(`Departmanınız: ${departmentCode || 'Atanmamış'}`);
-          });
-      }
-
-      const logoutButton = document.getElementById('logout-button');
-      if (logoutButton) {
-          logoutButton.addEventListener('click', (e) => {
-              e.preventDefault();
-              logout();
-          });
-      }
-
-      const stopImpersonationBtn = document.getElementById('stop-impersonation-btn');
-      if (stopImpersonationBtn) {
-          stopImpersonationBtn.addEventListener('click', async (e) => {
-              e.preventDefault();
-              try {
-                  await stopImpersonation();
-              } catch (err) {
-                  console.error('Failed to stop impersonation:', err);
-                  alert('Impersonation sonlandırılamadı.');
-              }
-          });
-      }
-      
-                     // Add click handlers for navigation
-        const navLinks = navbarContainer.querySelectorAll('.nav-link, .dropdown-item');
+        // Add click handlers for navigation
+        const navLinks = root.querySelectorAll('.nav-link, .dropdown-item');
         navLinks.forEach(link => {
             link.addEventListener('click', (e) => {
                 const path = link.getAttribute('data-path');
@@ -942,7 +1018,7 @@ export function initNavbar() {
                             return;
                         }
                         
-                                        if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests') && !path.startsWith('/general/crane-requests')) {
+                                        if (isUnbuiltGeneralPage(path)) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
@@ -1065,7 +1141,7 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests') && !path.startsWith('/general/crane-requests')) {
+                if (isUnbuiltGeneralPage(path)) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
@@ -1143,7 +1219,10 @@ export function initNavbar() {
             });
         });
     }
-    
+
+    // Kicked off before the render so the request is already out while the
+    // cached menu paints; never awaited, and a failure changes nothing.
+    refreshPermissions().catch(() => {});
     renderNavbar();
 }
 

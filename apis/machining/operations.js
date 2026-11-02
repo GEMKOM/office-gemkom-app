@@ -251,6 +251,87 @@ export async function unmarkOperationCompleted(operationKey) {
 }
 
 /**
+ * Lock an operation's position in its machine plan
+ * Custom action endpoint; the server keeps locked rows where they are when it re-sorts
+ * @param {string} operationKey - The operation key (primary key)
+ * @returns {Promise<Object>} Updated operation detail payload
+ */
+export async function lockOperation(operationKey) {
+    try {
+        const response = await authedFetch(`${MACHINING_2_BASE_URL}/operations/${operationKey}/lock/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to lock operation: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error locking operation:', error);
+        throw error;
+    }
+}
+
+/**
+ * Unlock an operation so the server may re-sort it by due date again
+ * Custom action endpoint
+ * @param {string} operationKey - The operation key (primary key)
+ * @returns {Promise<Object>} Updated operation detail payload
+ */
+export async function unlockOperation(operationKey) {
+    try {
+        const response = await authedFetch(`${MACHINING_2_BASE_URL}/operations/${operationKey}/unlock/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to unlock operation: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error unlocking operation:', error);
+        throw error;
+    }
+}
+
+/**
+ * Trigger a full server-side reschedule of every machining machine queue
+ * The server already reschedules silently after every relevant change; this is the
+ * manual "Yeniden Planla" safety net.
+ * @returns {Promise<Object>} { scheduled, machines, late_parts: [...], flags: {...} }
+ */
+export async function rescheduleMachiningPlan() {
+    try {
+        const response = await authedFetch(`${MACHINING_2_BASE_URL}/operations/planning/reschedule/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to reschedule machining plan: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error rescheduling machining plan:', error);
+        throw error;
+    }
+}
+
+/**
  * Utility function to validate operation data
  * @param {Object} operationData - Operation data to validate
  * @param {boolean} isUpdate - Whether this is an update operation (optional fields)
@@ -301,13 +382,14 @@ export function validateOperationData(operationData, isUpdate = false) {
 
 /**
  * Bulk save operations planning data
+ * Dates are computed server-side now: send plan_order (+ plan_locked: true for rows the
+ * user moved by hand); the server re-sorts everything else by due date and refreshes dates.
  * @param {Array<Object>} planningData - Array of operation planning objects
  * @param {string} planningData[].key - Operation key
- * @param {number} planningData[].machine_fk - Machine ID
- * @param {number} planningData[].planned_start_ms - Planned start time in milliseconds (timestamp)
- * @param {number} planningData[].planned_end_ms - Planned end time in milliseconds (timestamp)
- * @param {number} planningData[].plan_order - Planning order
- * @param {boolean} planningData[].in_plan - Whether operation is in plan
+ * @param {number} [planningData[].machine_fk] - Machine ID
+ * @param {number} [planningData[].plan_order] - Planning order
+ * @param {boolean} [planningData[].plan_locked] - Keep this row at its plan_order on reschedule
+ * @param {boolean} [planningData[].in_plan] - Whether operation is in plan
  * @returns {Promise<Object>} Response from the bulk save operation
  */
 export async function bulkSaveOperationsPlanning(planningData) {

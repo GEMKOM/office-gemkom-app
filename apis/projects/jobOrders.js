@@ -737,11 +737,19 @@ export async function recalculateJobOrderProgress(jobNo) {
 /**
  * Get job orders for dropdown (simplified list with job_no and title)
  * @param {boolean} includeAll - Include completed/cancelled job orders
+ * @param {Object} options - Opt-in extras; omit them and the payload is unchanged
+ * @param {boolean} options.rootOnly - Only top-level job orders (drops children and phases)
+ * @param {boolean} options.withCustomer - Add customer_name to each row
  * @returns {Promise<Array>} Array of job orders with job_no and title
  */
-export async function getJobOrderDropdown(includeAll = false) {
+export async function getJobOrderDropdown(includeAll = false, options = {}) {
     try {
-        const query = includeAll ? '?all=true' : '';
+        const params = new URLSearchParams();
+        if (includeAll) params.append('all', 'true');
+        if (options.rootOnly) params.append('root_only', 'true');
+        if (options.withCustomer) params.append('with_customer', 'true');
+        if (options.weldingOnly) params.append('welding_only', 'true');
+        const query = params.toString() ? `?${params}` : '';
         const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/${query}`);
 
         if (!response.ok) {
@@ -890,6 +898,51 @@ export async function getProductionPlanOverview(status = 'active', { refresh = f
 }
 
 /**
+ * Plan sheet (Sunum Modu): the entered plan vs progress for a job order's
+ * whole subtree — one row per department task with plan window, projected
+ * finish, deviation (own + inherited from predecessors) and a named cause.
+ * Endpoint: GET /projects/job-orders/{jobNo}/plan-sheet/
+ * @param {string} jobNo - Root job order number
+ * @returns {Promise<Object>} {job_order, today, termin, plan_end, projected_end,
+ *   deviation_wd, termin_gap_wd, plan_vs_termin_wd, root_cause, nodes, rows,
+ *   holidays, defaults, summary}
+ */
+export async function getJobOrderPlanSheet(jobNo) {
+    try {
+        const response = await authedFetch(
+            `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/plan-sheet/`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching plan sheet for ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Görev Planlama: this job order and every descendant (depth-first), each
+ * with its existing main department tasks.
+ * Endpoint: GET /projects/job-orders/{jobNo}/task-planner/
+ * @param {string} jobNo - Root job order number
+ * @returns {Promise<Object>} {root, job_orders: [{job_no, title, status,
+ *   status_display, parent, depth, is_phase, can_plan, tasks: [{id,
+ *   department, department_display, title, status, status_display,
+ *   task_type, sequence, subtask_count}]}]}
+ */
+export async function getJobOrderTaskPlanner(jobNo) {
+    const response = await authedFetch(
+        `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/task-planner/`);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+}
+
+/**
  * Meeting brief (Sunum Modu): NCR/revision/procurement/cutting/manufacturing/
  * files/financial context for one ROOT job order's whole subtree.
  * Endpoint: GET /projects/job-orders/{jobNo}/meeting-brief/
@@ -984,4 +1037,37 @@ export async function forceCompleteJobOrders(jobNos, { includeDescendants = true
     }
 
     return data;
+}
+
+/**
+ * Plan sheet share links: a temporary, login-free link a customer can open
+ * (projects/plan-sheet/?share=<token>).
+ * POST /projects/job-orders/{job_no}/plan-sheet/share/
+ * @param {string} jobNo
+ * @param {Object} payload {columns: string[], options: {expand_all, main_only, collapsed}, expires_in_days}
+ */
+export async function createPlanSheetShareLink(jobNo, payload) {
+    const response = await authedFetch(
+        `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/plan-sheet/share/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload || {}),
+        });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+}
+
+/** DELETE /projects/job-orders/{job_no}/plan-sheet/share/{token}/ */
+export async function revokePlanSheetShareLink(jobNo, token) {
+    const response = await authedFetch(
+        `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/plan-sheet/share/${encodeURIComponent(token)}/`,
+        { method: 'DELETE' });
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || errorData.detail || `HTTP error! status: ${response.status}`);
+    }
+    return response.json();
 }

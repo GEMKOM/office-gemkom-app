@@ -304,13 +304,40 @@ export function validatePartData(partData, isUpdate = false) {
         }
     }
     
-    if (partData.quantity !== undefined && partData.quantity !== null && partData.quantity !== '') {
+    if (partData.job_allocations !== undefined && partData.job_allocations !== null) {
+        // Multi-job payload: at least one row, quantity >= 1, unique job_no.
+        // When job_allocations is sent, job_no / quantity must not be.
+        const allocations = partData.job_allocations;
+        if (!Array.isArray(allocations) || allocations.length === 0) {
+            errors.push('At least one job allocation is required');
+        } else {
+            const seen = new Set();
+            allocations.forEach((row, index) => {
+                const jobNo = row && row.job_no !== undefined && row.job_no !== null ? String(row.job_no).trim() : '';
+                if (!jobNo) {
+                    errors.push(`Allocation ${index + 1}: job_no is required`);
+                } else if (seen.has(jobNo)) {
+                    errors.push(`Allocation ${index + 1}: duplicate job_no ${jobNo}`);
+                } else {
+                    seen.add(jobNo);
+                }
+                const quantity = Number(row?.quantity);
+                if (!Number.isInteger(quantity) || quantity < 1) {
+                    errors.push(`Allocation ${index + 1}: quantity must be an integer >= 1`);
+                }
+            });
+        }
+        if (partData.job_no !== undefined || partData.quantity !== undefined) {
+            errors.push('Send either job_allocations or job_no/quantity, not both');
+        }
+    } else if (partData.quantity !== undefined && partData.quantity !== null && partData.quantity !== '') {
+        // Legacy single-job payload
         const quantity = parseInt(partData.quantity);
         if (isNaN(quantity) || quantity < 0) {
             errors.push('Quantity must be a valid positive integer');
         }
     }
-    
+
     return {
         isValid: errors.length === 0,
         errors
@@ -437,16 +464,42 @@ export async function getPartsStats() {
 }
 
 /**
+ * Get the cost breakdown of a part, split per job-order allocation
+ * GET /tasks/parts/{key}/cost/
+ * Requires the view_job_costs permission; the thrown error carries `status`
+ * (403 when the user may not see costs) so callers can hide the card quietly.
+ * @param {string} partKey - The part key (primary key)
+ * @returns {Promise<Object>} {part_key, currency, total_quantity, unit_cost, hours, total_cost, job_allocations, updated_at}
+ */
+export async function getPartCost(partKey) {
+    const response = await authedFetch(`${MACHINING_2_BASE_URL}/parts/${partKey}/cost/`);
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const error = new Error(errorData.error || errorData.detail || `Failed to fetch part cost: ${response.statusText}`);
+        error.status = response.status;
+        throw error;
+    }
+
+    return await response.json();
+}
+
+/**
  * Utility function to format part data for display
  * @param {Object} part - Part object
  * @returns {Object} Formatted part data
  */
 export function formatPartForDisplay(part) {
+    const jobAllocations = Array.isArray(part.job_allocations) ? part.job_allocations : [];
     return {
         key: part.key,
         name: part.name,
         description: part.description,
         jobNo: part.job_no,
+        jobNoLabel: part.job_no,
+        jobNoPrimary: part.job_no_primary !== undefined ? part.job_no_primary : (jobAllocations[0]?.job_no ?? part.job_no ?? null),
+        jobAllocations,
+        isMultiJob: part.is_multi_job !== undefined ? Boolean(part.is_multi_job) : jobAllocations.length > 1,
         imageNo: part.image_no,
         positionNo: part.position_no,
         quantity: part.quantity,
