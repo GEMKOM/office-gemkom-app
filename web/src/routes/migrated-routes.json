@@ -116,5 +116,7 @@
   "/human_resources/vacation",
   "/human_resources/attendance/records",
   "/procurement/payment-lists",
-  "/planning/task-templates"
+  "/planning/task-templates",
+  "/manufacturing/welding/time-entries",
+  "/it/notifications"
 ]

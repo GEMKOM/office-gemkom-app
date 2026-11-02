@@ -738,6 +738,20 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/planning/task-templates/TaskTemplatesPage')).TaskTemplatesPage,
     }),
   },
+  {
+    path: '/manufacturing/welding/time-entries',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/welding/time-entries/TimeEntriesPage'))
+        .TimeEntriesPage,
+    }),
+  },
+  {
+    path: '/it/notifications',
+    lazy: async () => ({
+      Component: (await import('@/pages/it/notifications/NotificationConfigsPage'))
+        .NotificationConfigsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
