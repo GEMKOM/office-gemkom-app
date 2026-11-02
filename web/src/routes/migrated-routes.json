@@ -49,5 +49,6 @@
   "/general/overtime/welding-report",
   "/general/vacation/pending",
   "/general/vacation/requests",
-  "/general/machines"
+  "/general/machines",
+  "/general/notifications"
 ]
