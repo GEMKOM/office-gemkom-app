@@ -1,0 +1,89 @@
+/* Star ratings (legacy supplier-badges.css .supplier-stars + text-warning). */
+.stars {
+  white-space: nowrap;
+  font-size: 0.85rem;
+  letter-spacing: 1px;
+  color: var(--mantine-color-yellow-6);
+}
+
+.starInput {
+  display: inline-flex;
+  gap: 2px;
+  font-size: 1.15rem;
+  color: var(--mantine-color-yellow-6);
+}
+
+.starButton {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0 1px;
+  color: inherit;
+  line-height: 1;
+  transition: transform 0.08s ease;
+}
+
+.starButton:hover {
+  transform: scale(1.25);
+}
+
+.starButton:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 1px;
+}
+
+/* Satın Alma Geçmişi cards (legacy .ph-*). */
+.phCard {
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
+  background: var(--mantine-color-body);
+}
+
+.phCard[data-unrated] {
+  border-left: 4px solid var(--mantine-primary-color-filled);
+}
+
+.phHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.phTotal {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.phLines summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--mantine-primary-color-filled);
+  margin-top: 6px;
+}
+
+.phEval {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--mantine-color-gray-3);
+}
+
+.phCritRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--mantine-color-gray-2);
+}
+
+.phCritGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 4px 16px;
+}
+
+.phForm {
+  max-width: 420px;
+}
