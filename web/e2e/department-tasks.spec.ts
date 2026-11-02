@@ -9,9 +9,17 @@ import { expect, mockBackend, paginated, seedSession, test } from './fixtures';
 const PAGES = [
   { path: '/design/projects/', department: 'design', title: 'Dizayn Departmanı Görevleri' },
   { path: '/logistics/projects/', department: 'logistics', title: 'Lojistik Departmanı Görevleri' },
-  { path: '/manufacturing/projects/', department: 'manufacturing', title: 'İmalat Departmanı Görevleri' },
+  {
+    path: '/manufacturing/projects/',
+    department: 'manufacturing',
+    title: 'İmalat Departmanı Görevleri',
+  },
   { path: '/planning/projects/', department: 'planning', title: 'Planlama Departmanı Görevleri' },
-  { path: '/procurement/projects/', department: 'procurement', title: 'Satın Alma Departmanı Görevleri' },
+  {
+    path: '/procurement/projects/',
+    department: 'procurement',
+    title: 'Satın Alma Departmanı Görevleri',
+  },
 ];
 
 const TASK = {
@@ -28,14 +36,19 @@ const TASK = {
 };
 
 for (const { path, department, title } of PAGES) {
-  test(`${path}: lists the department's tasks and opens a task`, async ({ page, consoleErrors }) => {
+  test(`${path}: lists the department's tasks and opens a task`, async ({
+    page,
+    consoleErrors,
+  }) => {
     const session = await seedSession(page, { admin: true });
     const backend = await mockBackend(
       page,
       {
         'GET /projects/department-tasks/': { json: paginated([{ ...TASK, department }]) },
         'GET /projects/department-tasks/41/': { json: { ...TASK, department } },
-        'PATCH /projects/department-tasks/41/': ({ body }) => ({ json: { ...TASK, ...(body as object) } }),
+        'PATCH /projects/department-tasks/41/': ({ body }) => ({
+          json: { ...TASK, ...(body as object) },
+        }),
       },
       { session },
     );
@@ -55,8 +68,12 @@ for (const { path, department, title } of PAGES) {
     const weight = page.getByRole('textbox', { name: 'Ağırlık' });
     await weight.fill('12,5');
     await weight.press('Enter');
-    await expect.poll(() => backend.callsTo('/projects/department-tasks/41/', 'PATCH').length).toBe(1);
-    expect(backend.callsTo('/projects/department-tasks/41/', 'PATCH')[0]!.body).toEqual({ weight: 12.5 });
+    await expect
+      .poll(() => backend.callsTo('/projects/department-tasks/41/', 'PATCH').length)
+      .toBe(1);
+    expect(backend.callsTo('/projects/department-tasks/41/', 'PATCH')[0]!.body).toEqual({
+      weight: 12.5,
+    });
 
     // Detay: the task modal, deep-linked by ?task=.
     await row.getByRole('button', { name: 'Detay' }).click();
@@ -66,6 +83,21 @@ for (const { path, department, title } of PAGES) {
     await expect(dialog.getByRole('tab', { name: 'Başlat' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(page).not.toHaveURL(/task=41/);
+
+    // Gantt: the list is asked for the visible month, by start date.
+    await page.getByText('Gantt', { exact: true }).click();
+    await expect(page.getByText('Gantt Gorunumu')).toBeVisible();
+    await expect
+      .poll(() =>
+        backend
+          .callsTo('/projects/department-tasks/', 'GET')
+          .some((c) => c.query.includes('date_range_start')),
+      )
+      .toBe(true);
+    const ganttCall = backend
+      .callsTo('/projects/department-tasks/', 'GET')
+      .find((c) => c.query.includes('date_range_start'))!;
+    expect(new URLSearchParams(ganttCall.query).get('ordering')).toBe('target_start_date');
 
     consoleErrors.expectNone();
   });
