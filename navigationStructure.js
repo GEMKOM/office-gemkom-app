@@ -101,6 +101,20 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            // İSG lives under Genel: the page is open to everyone, so it is a
+            // company-wide entry rather than a module of its own. The route
+            // stays /isg/issues (ALWAYS_ALLOWED_ROUTES in apis/accessControl.js).
+            '/isg/issues': {
+                label: 'İSG Bildirimleri',
+                icon: 'fas fa-helmet-safety',
+                children: {}
+            },
+            // Personal, open to everyone like İSG (ALWAYS_ALLOWED_ROUTES).
+            '/general/discussions': {
+                label: 'Tartışmalarım',
+                icon: 'fas fa-comments',
+                children: {}
             }
         }
     },
@@ -111,6 +125,20 @@ export const NAVIGATION_STRUCTURE = {
             '/projects/project-tracking': {
                 label: 'Proje Takibi',
                 icon: 'fas fa-tasks',
+                children: {}
+            },
+            // Tahmin raporları (estimator app); a sub-entry, so the navbar's
+            // 7-section limit is untouched. Page permission: users/0066.
+            '/projects/estimates': {
+                label: 'Tahminler',
+                icon: 'fas fa-calculator',
+                children: {}
+            },
+            // Tahmin referansları (reference profiles, review, unit times).
+            // Page permission: users/0067.
+            '/projects/references': {
+                label: 'Referanslar',
+                icon: 'fas fa-book-open',
                 children: {}
             }
         }
@@ -143,6 +171,11 @@ export const NAVIGATION_STRUCTURE = {
             '/planning/projects': {
                 label: 'Projeler',
                 icon: 'fas fa-project-diagram',
+                children: {}
+            },
+            '/planning/project-planning': {
+                label: 'Proje Planlama',
+                icon: 'fas fa-calendar-alt',
                 children: {}
             },
             '/planning/department-requests': {
@@ -227,14 +260,14 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-clock',
                         children: {}
                     },
+                    '/manufacturing/welding/timesheets': {
+                        label: 'Puantaj Onayı',
+                        icon: 'fas fa-clipboard-check',
+                        children: {}
+                    },
                     '/manufacturing/welding/teams': {
                         label: 'Ekipler',
                         icon: 'fas fa-users',
-                        children: {}
-                    },
-                    '/manufacturing/welding/capacity-planning': {
-                        label: 'İmalat Planlama',
-                        icon: 'fas fa-calendar-alt',
                         children: {}
                     },
                     '/manufacturing/welding/reports': {
@@ -478,6 +511,11 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-building',
                         children: {}
                     },
+                    '/manufacturing/subcontracting/labor-pricing': {
+                        label: 'İşçilik Fiyatı',
+                        icon: 'fas fa-calculator',
+                        children: {}
+                    },
                     '/manufacturing/subcontracting/statements': {
                         label: 'Hakedişler',
                         icon: 'fas fa-file-invoice-dollar',
@@ -493,6 +531,11 @@ export const NAVIGATION_STRUCTURE = {
             '/manufacturing/material-tracking': {
                 label: 'Malzeme Takibi',
                 icon: 'fas fa-box',
+                children: {}
+            },
+            '/manufacturing/material-tracking/pull-requests': {
+                label: 'Depo Çekme Talepleri',
+                icon: 'fas fa-dolly',
                 children: {}
             }
 
@@ -565,6 +608,11 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            '/procurement/payment-lists': {
+                label: 'Ödeme Listeleri',
+                icon: 'fas fa-money-check-dollar',
+                children: {}
             },
             '/procurement/reports': {
                 label: 'Raporlar',

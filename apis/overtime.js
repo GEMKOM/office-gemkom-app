@@ -371,6 +371,27 @@ export async function getOvertimeMachiningReport(filters = {}) {
 }
 
 /**
+ * Period totals for the machining overtime report: requested hours and hours
+ * worked inside the windows on any job (not only the selected operations).
+ * Takes the same filters as getOvertimeMachiningReport.
+ */
+export async function getOvertimeMachiningSummary(filters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+            params.append(key, value);
+        }
+    });
+    const url = `${backendBase}/overtime/requests/machining_report_summary/${params.toString() ? '?' + params.toString() : ''}`;
+    const resp = await authedFetch(url);
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Mesai özeti yüklenirken hata oluştu');
+    }
+    return await resp.json();
+}
+
+/**
  * Fetch the period overtime cost report.
  *
  * Returns { meta, summary, by_bucket, by_team, by_user, by_job, requests },

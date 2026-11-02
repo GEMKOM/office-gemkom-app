@@ -86,9 +86,12 @@ function plateInfoText(row) {
 function plateSourceCellHtml(row) {
     if (row.planning_request_item) {
         const delivered = row.plate_item_is_delivered === true;
+        const partial = !delivered && Number(row.plate_item_delivered_quantity || 0) > 0;
         const badge = delivered
             ? '<span class="status-badge status-green">Teslim</span>'
-            : '<span class="status-badge status-orange">Malzeme Bekliyor</span>';
+            : partial
+                ? `<span class="status-badge status-purple" title="Kısmi teslim: ${row.plate_item_delivered_quantity} / ${row.plate_item_quantity} alındı">Kısmi Teslim</span>`
+                : '<span class="status-badge status-orange">Malzeme Bekliyor</span>';
         const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
         const tooltip = `${name}${row.plate_item_code ? ' (' + row.plate_item_code + ')' : ''}`;
         return `<div title="${tooltip}"><div>${name}</div>${badge}</div>`;
@@ -106,7 +109,10 @@ function plateSourceCellHtml(row) {
 function plateSourceText(row) {
     if (row.planning_request_item) {
         const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
-        return `${name} (${row.plate_item_is_delivered === true ? 'Teslim' : 'Malzeme Bekliyor'})`;
+        const state = row.plate_item_is_delivered === true
+            ? 'Teslim'
+            : (Number(row.plate_item_delivered_quantity || 0) > 0 ? 'Kısmi Teslim' : 'Malzeme Bekliyor');
+        return `${name} (${state})`;
     }
     if (row.has_remnant_plate) {
         const info = plateInfoText(row);

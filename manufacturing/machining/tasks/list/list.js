@@ -1,7 +1,10 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats, uploadPartFiles, deletePartFile, convertPartsToDepartmentRequest } from '../../../../apis/machining/parts.js';
+import { getParts, getPart, updatePart, deletePart, createPart, updatePartOperations, getPartsStats, uploadPartFiles, deletePartFile, convertPartsToDepartmentRequest, getPartCost } from '../../../../apis/machining/parts.js';
+import { createJobAllocationsEditor, formatSharePercent } from '../../../../components/jobAllocations/jobAllocations.js';
+import { hasPerm, isSuperuser } from '../../../../authService.js';
 import { getOperations, markOperationCompleted, unmarkOperationCompleted, createManualTimeEntry } from '../../../../apis/machining/operations.js';
 import { fetchMachinesDropdown } from '../../../../apis/machines.js';
+import { getMachiningOperators } from '../../../../apis/overtime.js';
 import { fetchAllUsers } from '../../../../apis/users.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
@@ -13,6 +16,26 @@ import { FileViewer } from '../../../../components/file-viewer/file-viewer.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 import { escapeHtml } from '../../../../utils/text.js';
+
+// Plan dates come from the server-side machine plan (read-only on this page).
+function formatIsoDate(isoDate) {
+    // "2026-09-30" -> "30.09.2026" (string split; no timezone drift through Date)
+    if (!isoDate || typeof isoDate !== 'string') return '';
+    const [year, month, day] = isoDate.split('-');
+    if (!year || !month || !day) return isoDate;
+    return `${day}.${month}.${year}`;
+}
+
+function formatPlanStamp(ms, withYear = false) {
+    // epoch ms -> "18.09.2026 08:00" (withYear) or "18.09 08:00"
+    if (!ms) return '';
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    const dayMonth = `${pad(date.getDate())}.${pad(date.getMonth() + 1)}`;
+    const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return withYear ? `${dayMonth}.${date.getFullYear()} ${time}` : `${dayMonth} ${time}`;
+}
 
 // State management
 let currentPage = 1;
@@ -30,6 +53,9 @@ let machines = [];
 let users = [];
 let selectedPartsForConvert = [];
 let partFileUploadTargetKey = null;
+let createAllocationsEditor = null;   // allocation editor inside the create modal
+let editAllocationsEditor = null;     // allocation editor inside #partAllocationsModal
+let editAllocationsPartKey = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -368,7 +394,19 @@ function initializeTableComponent() {
                 label: 'İş No',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => value || '-'
+                cellClass: 'part-alloc-cell',
+                formatter: (value, row) => {
+                    // value is the display label: "254-01" or "254-01 +2"
+                    const label = value || '-';
+                    if (!row?.is_multi_job) {
+                        return escapeHtml(label);
+                    }
+                    const tooltip = escapeHtml(allocationTooltip(row));
+                    const match = /^(.*?)\s\+(\d+)$/.exec(label);
+                    const baseText = match ? match[1] : label;
+                    const extraCount = match ? match[2] : Math.max(0, getPartAllocations(row).length - 1);
+                    return `${escapeHtml(baseText)} <span class="status-badge status-blue part-multi-job-chip" title="${tooltip}">+${extraCount}</span>`;
+                }
             },
             {
                 field: 'image_no',
@@ -390,7 +428,12 @@ function initializeTableComponent() {
                 sortable: false,
                 width: '8%',
                 type: 'number',
-                formatter: (value) => `<span class="quantity-badge">${value || 0}</span>`
+                cellClass: 'part-alloc-cell',
+                formatter: (value, row) => {
+                    // value is the total across all job orders
+                    const tooltip = row?.is_multi_job ? ` title="${escapeHtml(allocationTooltip(row))}"` : '';
+                    return `<span class="quantity-badge"${tooltip}>${value || 0}</span>`;
+                }
             },
             {
                 field: 'material',
@@ -430,6 +473,10 @@ function initializeTableComponent() {
             {
                 field: 'finish_time',
                 label: 'Bitiş Tarihi',
+                // type 'date' makes the inline editor a native date picker (shown in the
+                // browser's locale, e.g. 20.02.2026) instead of a text box with the raw
+                // ISO value; the saved value stays ISO.
+                type: 'date',
                 sortable: true,
                 width: '10%',
                 formatter: (value) => {
@@ -542,10 +589,12 @@ function initializeTableComponent() {
         small: false,
         emptyMessage: 'Parça bulunamadı',
         emptyIcon: 'fas fa-box',
-        rowAttributes: (row) => `data-part-key="${row.key}" class="data-update"`,
+        rowAttributes: (row) => `data-part-key="${row.key}"${row.is_locked ? ' data-locked="1"' : ''} class="data-update"`,
         // Enable cell editing
+        // job_no / quantity are not inline-editable any more: a part may be split
+        // across several job orders, so those cells open the allocation editor modal.
         editable: true,
-        editableColumns: ['name', 'description', 'job_no', 'image_no', 'position_no', 'quantity', 'material', 'weight_kg', 'finish_time'],
+        editableColumns: ['name', 'description', 'image_no', 'position_no', 'material', 'weight_kg', 'finish_time'],
         onEdit: async (row, field, newValue, oldValue) => {
             try {
                 if (row.is_locked) {
@@ -926,6 +975,10 @@ function setupEventListeners() {
         submitConvertToDepartmentRequest();
     });
 
+    document.getElementById('save-part-allocations-btn')?.addEventListener('click', () => {
+        savePartAllocations();
+    });
+
     const hiddenFileInput = document.getElementById('part-file-upload-input');
     hiddenFileInput?.addEventListener('change', async (e) => {
         const files = e.target.files;
@@ -945,12 +998,242 @@ function setupEventListeners() {
 
     document.getElementById('parts-table-container')?.addEventListener('click', (e) => {
         const btn = e.target.closest('.part-file-upload-btn');
-        if (!btn) return;
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+            partFileUploadTargetKey = btn.dataset.partKey;
+            hiddenFileInput?.click();
+            return;
+        }
+
+        // İş No / Adet cells open the job allocation editor
+        const allocCell = e.target.closest('.part-alloc-cell');
+        if (!allocCell) return;
+        const partKey = allocCell.closest('tr[data-part-key]')?.dataset.partKey;
+        if (!partKey) return;
+        const part = parts.find((p) => p.key === partKey);
+        if (!part) return;
         e.preventDefault();
         e.stopPropagation();
-        partFileUploadTargetKey = btn.dataset.partKey;
-        hiddenFileInput?.click();
+        if (part.is_locked) {
+            showNotification('Bu parça departman talebine dönüştürüldü, düzenlenemez.', 'warning');
+            return;
+        }
+        showPartAllocationsModal(part);
     });
+}
+
+// ---------------------------------------------------------------------------
+// Job allocations (a part split across several job orders)
+// ---------------------------------------------------------------------------
+
+/**
+ * Allocation rows of a part: `[{job_no, quantity, share}]`, primary first.
+ * Falls back to the legacy single job_no / quantity when the payload has no rows.
+ */
+function getPartAllocations(part) {
+    if (Array.isArray(part?.job_allocations) && part.job_allocations.length > 0) {
+        return part.job_allocations;
+    }
+    if (part?.job_no) {
+        return [{ job_no: part.job_no, quantity: part.quantity ?? null, share: 1 }];
+    }
+    return [];
+}
+
+function allocationTooltip(part) {
+    return getPartAllocations(part)
+        .map((a) => `${a.job_no} × ${a.quantity ?? '-'}`)
+        .join('\n');
+}
+
+function allocationTableHtml(allocations) {
+    if (!allocations.length) {
+        return '<p class="text-muted small mb-0">İş emri atanmamış</p>';
+    }
+    const total = allocations.reduce((sum, a) => sum + (parseInt(a.quantity, 10) || 0), 0);
+    const rows = allocations.map((a) => {
+        const qty = parseInt(a.quantity, 10);
+        const share = a.share !== undefined && a.share !== null
+            ? Number(a.share)
+            : (total > 0 && qty > 0 ? qty / total : null);
+        return `
+            <tr>
+                <td>${escapeHtml(a.job_no || '-')}</td>
+                <td class="text-end">${Number.isFinite(qty) ? qty : '-'}</td>
+                <td class="text-end">${share !== null ? formatSharePercent(share) : '-'}</td>
+            </tr>`;
+    }).join('');
+    return `
+        <table class="table table-sm table-bordered part-allocation-table mb-0">
+            <thead class="table-light">
+                <tr><th>İş Emri</th><th class="text-end">Adet</th><th class="text-end">Pay %</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+            <tfoot>
+                <tr><th>Toplam</th><th class="text-end">${total}</th><th class="text-end">${total > 0 ? '%100' : '-'}</th></tr>
+            </tfoot>
+        </table>`;
+}
+
+/** Pull the first backend message out of an "... - {json}" API error. */
+function extractApiErrorMessage(error, fallback) {
+    const text = error?.message || '';
+    const start = text.indexOf('{');
+    if (start !== -1) {
+        try {
+            const data = JSON.parse(text.slice(start));
+            const first = Object.values(data)[0];
+            const message = Array.isArray(first) ? first[0] : first;
+            if (typeof message === 'string' && message) return message;
+        } catch (_) {
+            // not JSON — fall through
+        }
+    }
+    return fallback;
+}
+
+function showPartAllocationsModal(part) {
+    const modalElement = document.getElementById('partAllocationsModal');
+    if (!modalElement) return;
+
+    editAllocationsPartKey = part.key;
+    const partLabel = document.getElementById('part-allocations-modal-part');
+    if (partLabel) {
+        partLabel.textContent = `${part.key}${part.name ? ` - ${part.name}` : ''}`;
+    }
+
+    const initial = getPartAllocations(part).map((a) => ({ job_no: a.job_no, quantity: a.quantity }));
+    if (!editAllocationsEditor) {
+        editAllocationsEditor = createJobAllocationsEditor('part-allocations-editor', { initial });
+    } else {
+        editAllocationsEditor.setValue(initial);
+    }
+
+    bootstrap.Modal.getOrCreateInstance(modalElement).show();
+}
+
+async function savePartAllocations() {
+    if (!editAllocationsEditor || !editAllocationsPartKey) return;
+
+    const validationError = editAllocationsEditor.getError();
+    if (validationError) {
+        editAllocationsEditor.showError(validationError);
+        return;
+    }
+
+    const saveBtn = document.getElementById('save-part-allocations-btn');
+    if (saveBtn) saveBtn.disabled = true;
+
+    try {
+        const updatedPart = await updatePart(editAllocationsPartKey, {
+            job_allocations: editAllocationsEditor.getValue()
+        });
+        applyPartUpdate(editAllocationsPartKey, updatedPart);
+        bootstrap.Modal.getInstance(document.getElementById('partAllocationsModal'))?.hide();
+        showNotification('İş emri dağılımı güncellendi', 'success');
+    } catch (error) {
+        console.error('Error updating part allocations:', error);
+        const message = extractApiErrorMessage(error, 'İş emri dağılımı güncellenirken hata oluştu');
+        editAllocationsEditor.showError(message);
+        showNotification(message, 'error');
+    } finally {
+        if (saveBtn) saveBtn.disabled = false;
+    }
+}
+
+/** Merge the allocation fields of a PATCH response into the cached row and re-render. */
+function applyPartUpdate(partKey, updatedPart) {
+    if (!updatedPart) return;
+    const index = parts.findIndex((p) => p.key === partKey);
+    if (index === -1) return;
+    ['job_no', 'job_no_primary', 'job_allocations', 'is_multi_job', 'quantity'].forEach((field) => {
+        if (updatedPart[field] !== undefined) {
+            parts[index][field] = updatedPart[field];
+        }
+    });
+    if (partsTable) {
+        partsTable.updateData(parts, totalParts, currentPage);
+    }
+}
+
+function canViewJobCosts() {
+    try {
+        return isSuperuser() || hasPerm('view_job_costs');
+    } catch (_) {
+        return false;
+    }
+}
+
+function renderPartCostCard(cost) {
+    const currency = cost.currency || 'EUR';
+    const fmtMoney = (v) => `${Number(v || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+    const fmtHours = (v) => Number(v || 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 });
+    const rows = (cost.job_allocations || []).map((a) => `
+        <tr>
+            <td>${escapeHtml(a.job_no || '-')}</td>
+            <td class="text-end">${a.quantity ?? '-'}</td>
+            <td class="text-end">${formatSharePercent(a.share)}</td>
+            <td class="text-end">${fmtHours(a.hours?.total)} s</td>
+            <td class="text-end">${fmtMoney(a.total_cost)}</td>
+        </tr>`).join('');
+    return `
+        <div class="part-cost-card">
+            <div class="part-cost-summary">
+                <div class="part-cost-stat">
+                    <div class="part-cost-stat-label">Toplam maliyet</div>
+                    <div class="part-cost-stat-value">${fmtMoney(cost.total_cost)}</div>
+                </div>
+                <div class="part-cost-stat">
+                    <div class="part-cost-stat-label">Birim maliyet</div>
+                    <div class="part-cost-stat-value">${fmtMoney(cost.unit_cost)}</div>
+                </div>
+                <div class="part-cost-stat">
+                    <div class="part-cost-stat-label">Toplam saat</div>
+                    <div class="part-cost-stat-value">${fmtHours(cost.hours?.total)} s</div>
+                </div>
+                <div class="part-cost-stat">
+                    <div class="part-cost-stat-label">Toplam adet</div>
+                    <div class="part-cost-stat-value">${cost.total_quantity ?? '-'}</div>
+                </div>
+            </div>
+            <table class="table table-sm table-bordered part-allocation-table mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>İş Emri</th>
+                        <th class="text-end">Adet</th>
+                        <th class="text-end">Pay</th>
+                        <th class="text-end">Saat</th>
+                        <th class="text-end">Maliyet</th>
+                    </tr>
+                </thead>
+                <tbody>${rows || '<tr><td colspan="5" class="text-center text-muted">Kayıt yok</td></tr>'}</tbody>
+            </table>
+        </div>`;
+}
+
+async function loadPartCostCard(partKey) {
+    const container = document.getElementById('part-cost-card-container');
+    if (!container) return;
+    if (!canViewJobCosts()) {
+        container.hidden = true;
+        return;
+    }
+    container.hidden = false;
+    container.innerHTML = '<div class="text-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Maliyet yükleniyor...</div>';
+    try {
+        const cost = await getPartCost(partKey);
+        container.innerHTML = renderPartCostCard(cost);
+    } catch (error) {
+        if (error?.status === 403) {
+            // Not allowed to see costs — hide quietly.
+            container.hidden = true;
+            container.innerHTML = '';
+            return;
+        }
+        console.error('Error loading part cost:', error);
+        container.innerHTML = '<div class="text-muted small">Maliyet bilgisi alınamadı</div>';
+    }
 }
 
 function updateBulkActionBar() {
@@ -986,16 +1269,33 @@ function showConvertToDepartmentRequestModal() {
 
     const previewBody = document.getElementById('convert-dr-preview-body');
     if (previewBody) {
-        previewBody.innerHTML = selected.map((part) => `
+        previewBody.innerHTML = selected.map((part) => {
+            const allocations = getPartAllocations(part);
+            // One request line per (part, job order): list the breakdown
+            const jobHtml = allocations.length
+                ? allocations.map((a) => `<div>${escapeHtml(a.job_no)} <span class="text-muted">× ${a.quantity ?? '-'}</span></div>`).join('')
+                : '-';
+            return `
             <tr>
-                <td>${part.name || '-'}</td>
-                <td>${part.job_no || '-'}</td>
+                <td>${escapeHtml(part.name || '-')}</td>
+                <td>${jobHtml}</td>
                 <td>${part.quantity ?? '-'}</td>
                 <td>adet</td>
-                <td>${buildItemDescription(part) || '-'}</td>
+                <td>${escapeHtml(buildItemDescription(part) || '-')}</td>
                 <td>${part.files?.length || 0}</td>
-            </tr>
-        `).join('');
+            </tr>`;
+        }).join('');
+    }
+
+    const summaryEl = document.getElementById('convert-dr-allocation-summary');
+    if (summaryEl) {
+        const totalLines = selected.reduce((n, p) => n + Math.max(1, getPartAllocations(p).length), 0);
+        const distinctJobs = new Set(
+            selected.flatMap((p) => getPartAllocations(p).map((a) => a.job_no).filter(Boolean))
+        ).size;
+        summaryEl.textContent = distinctJobs > 0
+            ? `${distinctJobs} iş emri için ${totalLines} talep kalemi oluşturulacak`
+            : `${totalLines} talep kalemi oluşturulacak`;
     }
 
     document.getElementById('convert-dr-title').value = 'Parça Talebi';
@@ -1063,6 +1363,20 @@ function showCreatePartModal() {
         }
         // Add first operation row
         addOperationRow();
+    }
+
+    // Job allocation editor (one empty row by default, as the old İş No + Adet inputs)
+    if (!createAllocationsEditor && document.getElementById('part-job-allocations-editor')) {
+        createAllocationsEditor = createJobAllocationsEditor('part-job-allocations-editor', { allowEmpty: true });
+    } else if (createAllocationsEditor) {
+        createAllocationsEditor.setValue([]);
+    }
+
+    // "Malzeme ve Özellikler" starts collapsed on every open; it is optional
+    // and only expands when the user asks for it.
+    const materialSection = document.getElementById('part-material-section');
+    if (materialSection && window.bootstrap?.Collapse) {
+        bootstrap.Collapse.getOrCreateInstance(materialSection, { toggle: false }).hide();
     }
 }
 
@@ -1139,16 +1453,33 @@ async function savePart() {
     const partData = {
         name: document.getElementById('part-name')?.value,
         description: document.getElementById('part-description')?.value || null,
-        job_no: document.getElementById('part-job-no')?.value || null,
         image_no: document.getElementById('part-image-no')?.value || null,
         position_no: document.getElementById('part-position-no')?.value || null,
-        quantity: document.getElementById('part-quantity')?.value ? parseInt(document.getElementById('part-quantity').value) : null,
         material: document.getElementById('part-material')?.value || null,
         dimensions: document.getElementById('part-dimensions')?.value || null,
         weight_kg: document.getElementById('part-weight-kg')?.value ? parseFloat(document.getElementById('part-weight-kg').value) : null,
         finish_time: document.getElementById('part-finish-time')?.value || null,
         operations: []
     };
+
+    // Job orders + quantities come from the allocation editor.
+    // With at least one job order picked we send job_allocations (and no
+    // job_no / quantity); with none picked we keep the legacy shape so a part
+    // without a job order stays creatable exactly as before.
+    if (createAllocationsEditor && !createAllocationsEditor.isEmpty()) {
+        const allocationError = createAllocationsEditor.getError();
+        if (allocationError) {
+            createAllocationsEditor.showError(allocationError);
+            showNotification(allocationError, 'error');
+            return;
+        }
+        partData.job_allocations = createAllocationsEditor.getValue();
+    } else {
+        const firstRow = createAllocationsEditor?.getRawRows()[0];
+        const legacyQuantity = firstRow && Number.isInteger(firstRow.quantity) && firstRow.quantity > 0 ? firstRow.quantity : null;
+        partData.job_no = null;
+        partData.quantity = legacyQuantity;
+    }
     
     // Collect operations data
     const operationsBody = document.getElementById('operations-table-body');
@@ -1186,7 +1517,18 @@ async function savePart() {
         
         if (createdPart) {
             const partKey = createdPart.key || '-';
-            showNotification(`Parça başarıyla oluşturuldu: ${partKey}`, 'success');
+            // Creation always plans: show the first operation's slot when the server
+            // returned one (planned_start_ms is null while auto-planning is off).
+            const createdOps = Array.isArray(createdPart.operations)
+                ? [...createdPart.operations].sort((a, b) => (a.order || 0) - (b.order || 0))
+                : [];
+            const firstOp = createdOps[0];
+            let successMessage = `Parça oluşturuldu: ${partKey}`;
+            if (firstOp && firstOp.planned_start_ms) {
+                const machineName = firstOp.machine_name || machines.find(m => m.id === firstOp.machine_fk)?.name || '';
+                successMessage += ` · Plana eklendi: ${formatPlanStamp(firstOp.planned_start_ms, true)}${machineName ? ` (${machineName})` : ''}`;
+            }
+            showNotification(successMessage, 'success');
             const modalElement = document.getElementById('createPartModal');
             if (modalElement) {
                 const modalInstance = bootstrap.Modal.getInstance(modalElement);
@@ -1195,6 +1537,7 @@ async function savePart() {
                 }
             }
             form.reset();
+            createAllocationsEditor?.setValue([]);
             // Clear operations table
             const operationsBody = document.getElementById('operations-table-body');
             if (operationsBody) {
@@ -1264,19 +1607,23 @@ function setupPartDetailFilesSection(part, isLocked) {
 
 async function showPartDetails(partKey) {
     try {
-        // Fetch operations for this part
-        const operationsResponse = await getOperations({ part_key: partKey });
+        // Fetch operations for this part, plus the part detail for its server-computed
+        // plan_summary (the list rows do not carry it; a failed detail fetch is not fatal)
+        const [operationsResponse, partDetail] = await Promise.all([
+            getOperations({ part_key: partKey }),
+            getPart(partKey).catch(() => null)
+        ]);
         const operations = Array.isArray(operationsResponse) ? operationsResponse : (operationsResponse.results || []);
-        
-        // Get part info from the parts list (we already have it)
-        const part = parts.find(p => p.key === partKey);
-        
-        if (part) {
-            showPartDetailsModal(part, operations);
-        } else {
-            // If part not in list, create minimal part object with just the key
-            showPartDetailsModal({ key: partKey, name: partKey }, operations);
+
+        // Get part info from the parts list (we already have it); fall back to a
+        // minimal part object with just the key
+        const listPart = parts.find(p => p.key === partKey);
+        const part = listPart ? { ...listPart } : { key: partKey, name: partKey };
+        if (partDetail && partDetail.plan_summary) {
+            part.plan_summary = partDetail.plan_summary;
         }
+
+        showPartDetailsModal(part, operations);
     } catch (error) {
         console.error('Error showing part details:', error);
         showNotification('Parça detayları gösterilirken hata oluştu', 'error');
@@ -1285,22 +1632,76 @@ async function showPartDetails(partKey) {
 
 function showPartDetailsModal(part, operations = []) {
     const isLocked = Boolean(part.is_locked || part.department_request_id);
+    const allocations = getPartAllocations(part);
+    const jobNoLabel = part.job_no || (allocations.length ? allocations[0].job_no : '');
     // Create display modal instance with fullscreen size
     const displayModal = new DisplayModal('display-modal-container', {
-        title: `Operasyonlar - ${part.key} - ${part.name}${isLocked ? ' (Kilitli)' : ''}`,
+        title: `Operasyonlar - ${part.key} - ${part.name}${jobNoLabel ? ` · İş No: ${jobNoLabel}` : ''}${isLocked ? ' (Kilitli)' : ''}`,
         icon: 'fas fa-cogs text-primary',
         size: 'xl',
         fullscreen: true,
         showEditButton: false
     });
-    
+
     // Store part data for operations management
     window.currentPartDetails = { part, operations };
+
+    // Job order allocation breakdown (+ cost card for users who may see job costs)
+    const allocationSectionHtml = `
+        <div class="row g-3">
+            <div class="col-md-5">
+                <div class="mb-2">
+                    <span class="part-allocation-label">İş No: ${escapeHtml(jobNoLabel || '-')}</span>
+                    ${part.is_multi_job ? `<span class="status-badge status-blue part-multi-job-chip" title="${escapeHtml(allocationTooltip(part))}">${allocations.length} iş emri</span>` : ''}
+                </div>
+                ${allocationTableHtml(allocations)}
+            </div>
+            <div class="col-md-7">
+                <div id="part-cost-card-container" hidden></div>
+            </div>
+        </div>
+    `;
+    displayModal.addCustomSection({
+        title: 'İş Emri Dağılımı',
+        icon: 'fas fa-sitemap',
+        iconColor: 'text-primary',
+        customContent: allocationSectionHtml
+    });
     
+    // One-line plan summary (server-computed; from GET /tasks/parts/{key}/)
+    const planSummary = part.plan_summary || null;
+    let planSummaryHtml = '';
+    if (planSummary) {
+        const flags = planSummary.flags;
+        const hasFlag = (name) => Array.isArray(flags) ? flags.includes(name) : Boolean(flags && flags[name]);
+        const dueLabel = formatIsoDate(planSummary.due_date);
+        const dueSource = planSummary.due_source === 'part' ? 'parça' : (planSummary.due_source === 'job_order' ? 'iş emri' : '');
+        const summaryParts = [
+            `<span><strong>Termin:</strong> ${dueLabel ? `${dueLabel}${dueSource ? ` (${dueSource})` : ''}` : '-'}</span>`,
+            `<span><strong>Tahmini bitiş:</strong> ${planSummary.projected_finish_ms ? formatPlanStamp(planSummary.projected_finish_ms, true) : '-'}</span>`
+        ];
+        if (planSummary.projected_late) {
+            summaryParts.push('<span class="status-badge status-red" title="Tahmini bitiş termini aşıyor">Geç</span>');
+        }
+        if (hasFlag('estimate_missing')) {
+            summaryParts.push('<small class="text-muted" title="Bir veya daha fazla operasyonda tahmini saat yok">tahmin eksik</small>');
+        }
+        if (hasFlag('due_missing')) {
+            summaryParts.push('<small class="text-muted" title="Parçanın ve bağlı iş emirlerinin termini yok">termin yok</small>');
+        }
+        planSummaryHtml = `
+            <div class="part-plan-summary mb-3 d-flex flex-wrap align-items-center gap-2">
+                <i class="fas fa-calendar-alt text-primary"></i>
+                ${summaryParts.join('<span class="text-muted">·</span>')}
+            </div>
+        `;
+    }
+
     // Create operations management section with editable table
     const operationsHtml = `
         <div class="operations-management">
             ${isLocked ? '<div class="alert alert-info py-2 mb-3"><i class="fas fa-lock me-2"></i>Bu parça departman talebine dönüştürüldü; operasyonlar düzenlenemez.</div>' : ''}
+            ${planSummaryHtml}
             <div class="mb-3 d-flex justify-content-between align-items-center">
                 <button type="button" class="btn btn-sm btn-primary" id="add-operation-row-btn" ${isLocked ? 'disabled' : ''}>
                     <i class="fas fa-plus me-1"></i>Satır Ekle
@@ -1319,13 +1720,14 @@ function showPartDetailsModal(part, operations = []) {
                             <th style="width: 10%;">Makine</th>
                             <th style="width: 9%;">Tahmini Saat</th>
                             <th style="width: 9%;">Harcanan Saat</th>
+                            <th style="width: 10%;">Plan</th>
                             <th style="width: 7%;">Değiştirilebilir</th>
                             <th style="width: 7%;">Durum</th>
                             <th style="width: 7%;">İşlem</th>
                         </tr>
                     </thead>
                     <tbody id="operations-detail-table-body">
-                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
+                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -1369,6 +1771,7 @@ function showPartDetailsModal(part, operations = []) {
     setTimeout(() => {
         setupPartDetailFilesSection(part, isLocked);
         setupOperationsDetailEventListeners(part);
+        loadPartCostCard(part.key);
         // Ensure machines are loaded for dropdowns
         if (machines.length === 0) {
             loadMachines().then(() => {
@@ -1494,6 +1897,13 @@ function createOperationRow(operation, isNew = false) {
     const estimatedHoursValue = operation.estimated_hours || '';
     const keyValue = escapeHtml(operation.key || '');
     
+    // Planned window from the server-side machine plan (read-only here)
+    const planStart = formatPlanStamp(operation.planned_start_ms);
+    const planEnd = formatPlanStamp(operation.planned_end_ms);
+    const planHtml = (planStart || planEnd)
+        ? `<small class="text-nowrap">${planStart || '?'} → ${planEnd || '?'}</small>${operation.plan_locked ? ' <i class="fas fa-lock text-secondary ms-1" title="Sıra kilitli"></i>' : ''}`
+        : '<span class="text-muted">-</span>';
+
     // Build machine options HTML
     const machineOptionsHtml = machines.map(m => {
         const selected = operation.machine_fk == m.id ? 'selected' : '';
@@ -1523,6 +1933,9 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 ${hoursSpent > 0 ? parseFloat(hoursSpent).toFixed(2) + ' saat' : '-'}
+            </td>
+            <td class="text-center">
+                ${planHtml}
             </td>
             <td class="text-center">
                 <div class="form-check d-flex justify-content-center">
@@ -1934,7 +2347,7 @@ function updateOperationOrdersInTable() {
     
     // Show empty message if no rows
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
         return;
     }
     
@@ -2091,8 +2504,28 @@ window.deletePartConfirm = function(partKey) {
     deleteModal.show();
 };
 
+// Machining operators (access_machining_tasks), loaded on first use of the
+// manual time modal and kept for the rest of the session.
+let machiningOperatorsPromise = null;
+
+async function populateManualTimeOperators() {
+    const select = document.getElementById('manual-time-operator');
+    if (!machiningOperatorsPromise) {
+        machiningOperatorsPromise = getMachiningOperators().catch(() => []);
+    }
+    const operators = await machiningOperatorsPromise;
+    const rows = Array.isArray(operators) ? operators : (operators?.results || []);
+    select.innerHTML = '<option value="">Operatör seçin...</option>'
+        + rows.map(u => `<option value="${u.id}">${escapeHtml(u.full_name || u.username)}</option>`).join('');
+    if (!rows.length) {
+        showNotification('Operatör listesi yüklenemedi', 'error');
+    }
+}
+
 function showManualTimeModal(operationKey, machineFk = '') {
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('manualTimeModal'));
+    // Fills while the modal opens; the form reset below keeps it on "seçin".
+    populateManualTimeOperators();
     
     // Set operation key
     document.getElementById('manual-time-operation-key').value = operationKey;
@@ -2145,6 +2578,7 @@ async function saveManualTimeEntry() {
     }
     
     const operationKey = document.getElementById('manual-time-operation-key').value;
+    const operatorId = parseInt(document.getElementById('manual-time-operator').value);
     const machineFk = parseInt(document.getElementById('manual-time-machine').value);
     const startTime = document.getElementById('manual-time-start').value;
     const finishTime = document.getElementById('manual-time-finish').value;
@@ -2160,8 +2594,15 @@ async function saveManualTimeEntry() {
     const startTimestamp = new Date(startTime).getTime();
     const finishTimestamp = new Date(finishTime).getTime();
     
+    if (!operatorId) {
+        showNotification('Lütfen operatör seçin', 'error');
+        return;
+    }
+
     const timeData = {
         task_key: operationKey,
+        // The timer is booked to this operator, not to whoever is logged in.
+        user: operatorId,
         machine_fk: machineFk,
         start_time: startTimestamp,
         finish_time: finishTimestamp

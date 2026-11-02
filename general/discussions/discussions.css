@@ -1,0 +1,493 @@
+/* Tartışmalarım — own topics and comments.
+ *
+ * Deliberately the same shape as Bildirimlerim (general/notifications): a tab
+ * rail card on top, a dated list below, type squares on the left. Someone who
+ * knows one page should read the other without learning anything.
+ */
+
+:root {
+    --disc-brand: #8B0000;
+    --disc-border: #e9ecef;
+    --disc-muted: #6c757d;
+}
+
+/* ------------------------------------------------------------------ cards */
+
+.disc-card {
+    padding: 0;
+    /* .dashboard-card gets its white ground from components/table/table.css,
+       which this page does not load (no tables here). Without it the page
+       gradient bled through the list while the day headers stayed opaque. */
+    background: #fff;
+    border: 1px solid #edf0f3;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+    /* dropdown.css force-opens overflow on every .dashboard-card; these hold
+       no dropdowns and need to clip their rows to the rounded corners. */
+    overflow: hidden !important;
+    border-radius: 15px;
+}
+
+.disc-card:hover {
+    transform: none;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* ---------------------------------------------------------- tabs + sorting */
+
+.disc-toolbar {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0 0.75rem;
+}
+
+.disc-tabs {
+    display: flex;
+    align-items: stretch;
+    gap: 0.15rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+.disc-tab {
+    appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.85rem 0.9rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--disc-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+    border-radius: 6px 6px 0 0;
+}
+
+.disc-tab i { font-size: 0.82rem; opacity: 0.75; }
+
+.disc-tab:hover { color: #212529; background: #f6f7f9; }
+
+.disc-tab.active {
+    color: var(--disc-brand);
+    border-bottom-color: var(--disc-brand);
+    background: transparent;
+}
+
+.disc-tab.active i { opacity: 1; }
+
+.disc-tab-count {
+    background: #eef1f5;
+    color: #52606d;
+    border-radius: 999px;
+    padding: 0.05rem 0.45rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    min-width: 1.35rem;
+    text-align: center;
+}
+
+.disc-tab.active .disc-tab-count {
+    background: var(--disc-brand);
+    color: #fff;
+}
+
+.disc-sort {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.5rem 0.5rem;
+}
+
+.disc-sort-label {
+    font-size: 0.8rem;
+    color: var(--disc-muted);
+    margin-right: 0.2rem;
+}
+
+.disc-sort-btn {
+    border: 1px solid var(--disc-border);
+    background: #fff;
+    color: #52606d;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 0.3rem 0.7rem;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.disc-sort-btn:hover:not(.active) {
+    background: #f6f7f9;
+    color: #212529;
+}
+
+.disc-sort-btn.active {
+    background: var(--disc-brand);
+    border-color: var(--disc-brand);
+    color: #fff;
+}
+
+/* ------------------------------------------------------------------- list */
+
+.disc-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.disc-day {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: #f7f8fa;
+    border-top: 1px solid var(--disc-border);
+    border-bottom: 1px solid var(--disc-border);
+    padding: 0.4rem 1.25rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #7b8794;
+}
+
+.disc-list .disc-day:first-child { border-top: none; }
+
+.disc-row {
+    display: grid;
+    grid-template-columns: 36px minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.85rem;
+    padding: 0.75rem 1.25rem 0.75rem 1.1rem;
+    border-bottom: 1px solid #f2f4f6;
+    border-left: 3px solid transparent;
+    transition: background-color 0.15s ease;
+}
+
+.disc-row:last-child { border-bottom: none; }
+
+.disc-row:hover { background: #f8f9fb; }
+
+/* Someone else had the last word: the same rail and tint as an unread
+   notification, so "who is waiting on me" reads at a glance. */
+.disc-row.is-awaiting {
+    border-left-color: var(--disc-brand);
+    background: #fbecec;
+}
+
+.disc-row.is-awaiting:hover { background: #f7e2e2; }
+
+.disc-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+}
+
+.disc-row:not(.is-awaiting) .disc-icon { opacity: 0.8; }
+
+.disc-row-main {
+    min-width: 0;
+    cursor: pointer;
+}
+
+.disc-row-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.disc-row-title-text {
+    font-weight: 600;
+    font-size: 0.92rem;
+    color: #212529;
+    line-height: 1.4;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.disc-row.is-awaiting .disc-row-title-text {
+    color: #7a0b0b;
+    font-weight: 700;
+}
+
+/* One quiet line: job, where the topic lives, counts. */
+.disc-row-facts {
+    margin-top: 0.1rem;
+    font-size: 0.78rem;
+    color: #7b8794;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.disc-row-facts i { font-size: 0.7rem; }
+
+.disc-fact-job {
+    font-weight: 700;
+    color: #3e4c59;
+}
+
+.disc-sep {
+    margin: 0 0.4rem;
+    color: #c4cad1;
+}
+
+/* The one sentence worth reading: the reply that is waiting, else the
+   opening of the topic, else (comments tab) what the user wrote. */
+.disc-row-line {
+    margin-top: 0.3rem;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--disc-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.disc-row-line.is-reply {
+    color: #3e4c59;
+    -webkit-line-clamp: 2;
+}
+
+.disc-row-line.is-reply > i {
+    font-size: 0.7rem;
+    color: var(--disc-brand);
+    margin-right: 0.3rem;
+    transform: scaleX(-1) rotate(180deg);
+    display: inline-block;
+}
+
+.disc-row-who {
+    font-weight: 700;
+    color: #212529;
+    margin-right: 0.25rem;
+}
+
+.disc-row-line.is-own {
+    color: #3e4c59;
+    border-left: 3px solid #dfe3e8;
+    padding-left: 0.6rem;
+    -webkit-line-clamp: 2;
+}
+
+/* Time on top, state under it, actions under that on hover. */
+.disc-row-side {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.35rem;
+    min-width: 96px;
+}
+
+.disc-row-time {
+    font-size: 0.75rem;
+    color: #9aa3af;
+    white-space: nowrap;
+}
+
+.disc-row.is-awaiting .disc-row-time { color: #52606d; }
+
+/* badges.css sizes .status-badge for table cells (min-width 80px, centred);
+   in a row it sits at text height. */
+.status-badge.disc-state-badge {
+    margin: 0;
+    min-width: 0;
+    font-size: 0.66rem;
+    padding: 0.15rem 0.45rem;
+    flex-shrink: 0;
+}
+
+.disc-state-text {
+    font-size: 0.74rem;
+    color: #9aa3af;
+    white-space: nowrap;
+}
+
+.disc-state-text i { font-size: 0.66rem; }
+
+/* Where a topic lives — the discussion modal's header line. */
+.disc-source {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+    color: var(--disc-muted);
+    min-width: 0;
+}
+
+.disc-source i { font-size: 0.72rem; color: #9aa3af; }
+
+.disc-source-label {
+    font-weight: 700;
+    color: #3e4c59;
+    white-space: nowrap;
+}
+
+.disc-source-detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+/* Actions stay out of the way until the row is hovered; touch devices never
+   hover, so they get them permanently. */
+.disc-row-actions {
+    display: flex;
+    gap: 0.3rem;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+}
+
+.disc-row:hover .disc-row-actions,
+.disc-row:focus-within .disc-row-actions {
+    opacity: 1;
+}
+
+.disc-action {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--disc-border);
+    background: #fff;
+    color: var(--disc-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.78rem;
+    transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.disc-action:hover {
+    background: var(--disc-brand);
+    border-color: var(--disc-brand);
+    color: #fff;
+}
+
+@media (hover: none) {
+    .disc-row-actions { opacity: 1; }
+}
+
+/* With a mouse the buttons float over the side column and stand in for the
+   time and state while the row is hovered — in the flow they would make
+   every short row as tall as the button stack. */
+@media (hover: hover) {
+    .disc-row { position: relative; }
+
+    .disc-row-actions {
+        position: absolute;
+        top: 50%;
+        right: 1.25rem;
+        transform: translateY(-50%);
+    }
+
+    .disc-row:hover .disc-row-side > :not(.disc-row-actions),
+    .disc-row:focus-within .disc-row-side > :not(.disc-row-actions) {
+        visibility: hidden;
+    }
+}
+
+/* ------------------------------------------------------------- pager/state */
+
+.disc-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1.25rem;
+    border-top: 1px solid var(--disc-border);
+    background: #fafbfc;
+    font-size: 0.82rem;
+    color: var(--disc-muted);
+}
+
+.disc-pager .btn { font-size: 0.8rem; }
+
+.disc-pager-position {
+    font-weight: 600;
+    color: #52606d;
+    padding: 0 0.5rem;
+}
+
+.disc-state {
+    /* Keeps the card from collapsing between loads, which made the page jump. */
+    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.75rem;
+    color: var(--disc-muted);
+    padding: 2rem 1.25rem;
+    text-align: center;
+}
+
+.disc-state-compact { min-height: 160px; }
+
+.disc-state i {
+    font-size: 2rem;
+    color: #d7dce2;
+}
+
+.disc-state-title {
+    font-weight: 600;
+    color: #52606d;
+}
+
+/* ------------------------------------------------------------------ modal */
+
+.disc-modal-source .disc-source {
+    font-size: 0.88rem;
+    margin-top: 0;
+}
+
+/* The comment the user clicked through from, found again inside the thread. */
+.disc-comment-highlight {
+    background: #fbecec;
+    border-radius: 8px;
+    box-shadow: inset 3px 0 0 var(--disc-brand);
+    padding: 0.5rem 0.5rem 0.75rem 0.75rem;
+}
+
+/* --------------------------------------------------------------- responsive */
+
+@media (max-width: 768px) {
+    .disc-row {
+        grid-template-columns: 32px minmax(0, 1fr);
+        grid-template-areas:
+            "icon main"
+            ". side";
+        row-gap: 0.45rem;
+        padding: 0.75rem 1rem 0.75rem 0.85rem;
+    }
+
+    .disc-icon { grid-area: icon; width: 32px; height: 32px; }
+    .disc-row-main { grid-area: main; }
+
+    /* The side column folds into one line under the text. */
+    .disc-row-side {
+        grid-area: side;
+        flex-direction: row;
+        align-items: center;
+        min-width: 0;
+        gap: 0.6rem;
+    }
+
+    .disc-row-actions { margin-left: auto; }
+
+    .disc-toolbar { padding: 0 0.5rem; }
+    .disc-sort { width: 100%; padding-top: 0; justify-content: flex-end; }
+}

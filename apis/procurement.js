@@ -125,7 +125,6 @@ export async function cancelPurchaseRequest(requestId) {
 
         if (!response.ok) {
             const errorData = await response.json();
-            console.log(errorData);
             throw new Error(errorData.error || 'Talep iptal edilirken hata oluştu');
         }
 
@@ -281,7 +280,7 @@ export async function savePurchaseRequestDraft(draftData) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslak kaydedilirken hata oluştu');
         }
 
@@ -290,6 +289,45 @@ export async function savePurchaseRequestDraft(draftData) {
         console.error('Error saving purchase request draft:', error);
         throw error;
     }
+}
+
+// Overwrites an existing named draft. The thrown error carries `status` so a
+// 404 (draft deleted meanwhile) can fall back to creating a new one.
+export async function updatePurchaseRequestDraft(draftId, draftData) {
+    const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/${draftId}/`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(draftData)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const error = new Error(errorData.error || errorData.detail || 'Taslak güncellenirken hata oluştu');
+        error.status = response.status;
+        throw error;
+    }
+
+    return await response.json();
+}
+
+// Upserts the user's single rolling autosave draft (overwritten on every change).
+export async function autosavePurchaseRequestDraft(draftData) {
+    const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/autosave/`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(draftData)
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.detail || 'Otomatik kayıt başarısız');
+    }
+
+    return await response.json();
 }
 
 export async function getPurchaseRequestDrafts(filters = {}) {
@@ -308,7 +346,7 @@ export async function getPurchaseRequestDrafts(filters = {}) {
         const response = await authedFetch(url);
         
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslaklar yüklenirken hata oluştu');
         }
 
@@ -329,7 +367,7 @@ export async function deletePurchaseRequestDraft(draftId) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslak silinirken hata oluştu');
         }
 
@@ -345,7 +383,7 @@ export async function getPurchaseRequestDraft(draftId) {
         const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/${draftId}/`);
         
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.error || 'Taslak yüklenirken hata oluştu');
         }
 
@@ -621,6 +659,19 @@ export async function getSupplierEvaluations(supplierId) {
     const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/evaluations/`);
     if (!response.ok) {
         throw new Error(await readErrorMessage(response, 'Değerlendirmeler yüklenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
+/**
+ * GET /procurement/suppliers/{id}/purchase-history/
+ * Approved purchase requests the supplier won (one row per non-cancelled PO),
+ * each with its lines and its evaluation (or null).
+ */
+export async function getSupplierPurchaseHistory(supplierId) {
+    const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/purchase-history/`);
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Satın alma geçmişi yüklenirken hata oluştu'));
     }
     return await response.json();
 }
