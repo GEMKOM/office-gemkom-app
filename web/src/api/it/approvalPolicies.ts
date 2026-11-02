@@ -93,7 +93,10 @@ export function approvalPoliciesQueryOptions() {
     queryKey: approvalKeys.list(),
     queryFn: async ({ signal }) =>
       extractResults<ApprovalPolicy>(
-        await withMessage(apiFetch<unknown>('/approvals/policies/', { signal }), 'Politikalar yüklenemedi.'),
+        await withMessage(
+          apiFetch<unknown>('/approvals/policies/', { signal }),
+          'Politikalar yüklenemedi.',
+        ),
       ),
   });
 }
@@ -102,7 +105,10 @@ export function useApprovalPolicy(id: number | null) {
   return useQuery({
     queryKey: approvalKeys.detail(id ?? 0),
     queryFn: ({ signal }) =>
-      withMessage(apiFetch<ApprovalPolicy>(`/approvals/policies/${id}/`, { signal }), 'Politika yüklenemedi.'),
+      withMessage(
+        apiFetch<ApprovalPolicy>(`/approvals/policies/${id}/`, { signal }),
+        'Politika yüklenemedi.',
+      ),
     enabled: id !== null,
   });
 }
@@ -113,7 +119,10 @@ export function useApprovalSubjectTypes(enabled = true) {
     queryKey: approvalKeys.subjectTypes(),
     queryFn: async ({ signal }) =>
       extractResults<Record<string, unknown>>(
-        await withMessage(apiFetch<unknown>('/approvals/subject-types/', { signal }), 'Konu türleri yüklenemedi.'),
+        await withMessage(
+          apiFetch<unknown>('/approvals/subject-types/', { signal }),
+          'Konu türleri yüklenemedi.',
+        ),
       ),
     staleTime: 5 * 60_000,
     enabled,
@@ -125,10 +134,15 @@ export function useApprovalUserGroups() {
   return useQuery({
     queryKey: approvalKeys.userGroups(),
     queryFn: async ({ signal }) => {
-      const data = await apiFetch<unknown>('/organization/groups/', { params: { page_size: 1000 }, signal });
+      const data = await apiFetch<unknown>('/organization/groups/', {
+        params: { page_size: 1000 },
+        signal,
+      });
       return extractResults<Record<string, unknown>>(data)
         .filter(Boolean)
-        .map((group) => ({ ...group, id: group.id ?? group.pk ?? group.group_id }) as UserGroupOption)
+        .map(
+          (group) => ({ ...group, id: group.id ?? group.pk ?? group.group_id }) as UserGroupOption,
+        )
         .filter((group) => group.id !== undefined && group.id !== null && group.id !== '');
     },
     staleTime: 5 * 60_000,
@@ -161,7 +175,10 @@ export function useDeletePolicy() {
   const invalidate = useInvalidatePolicies();
   return useMutation({
     mutationFn: (id: number) =>
-      withMessage(apiFetch<void>(`/approvals/policies/${id}/`, { method: 'DELETE' }), 'Politika silinemedi.'),
+      withMessage(
+        apiFetch<void>(`/approvals/policies/${id}/`, { method: 'DELETE' }),
+        'Politika silinemedi.',
+      ),
     onSuccess: invalidate,
   });
 }
@@ -169,14 +186,28 @@ export function useDeletePolicy() {
 export function useSaveStage() {
   const invalidate = useInvalidatePolicies();
   return useMutation({
-    mutationFn: ({ policyId, stageId, data }: { policyId: number; stageId: number | null; data: StageInput }) =>
+    mutationFn: ({
+      policyId,
+      stageId,
+      data,
+    }: {
+      policyId: number;
+      stageId: number | null;
+      data: StageInput;
+    }) =>
       stageId === null
         ? withMessage(
-            apiFetch<ApprovalStage>(`/approvals/policies/${policyId}/stages/`, { method: 'POST', body: data }),
+            apiFetch<ApprovalStage>(`/approvals/policies/${policyId}/stages/`, {
+              method: 'POST',
+              body: data,
+            }),
             'Aşama oluşturulamadı.',
           )
         : withMessage(
-            apiFetch<ApprovalStage>(`/approvals/stages/${stageId}/`, { method: 'PATCH', body: data }),
+            apiFetch<ApprovalStage>(`/approvals/stages/${stageId}/`, {
+              method: 'PATCH',
+              body: data,
+            }),
             'Aşama güncellenemedi.',
           ),
     onSuccess: invalidate,
@@ -187,7 +218,10 @@ export function useDeleteStage() {
   const invalidate = useInvalidatePolicies();
   return useMutation({
     mutationFn: (stageId: number) =>
-      withMessage(apiFetch<void>(`/approvals/stages/${stageId}/`, { method: 'DELETE' }), 'Aşama silinemedi.'),
+      withMessage(
+        apiFetch<void>(`/approvals/stages/${stageId}/`, { method: 'DELETE' }),
+        'Aşama silinemedi.',
+      ),
     onSuccess: invalidate,
   });
 }

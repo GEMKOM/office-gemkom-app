@@ -1288,9 +1288,16 @@ export function processLabel(code) {
     return PROCESS_LABELS[code] || String(code || '').replace(/_/g, ' ');
 }
 
-/** A fact's sub line as tooltip text: tags dropped, and any stray angle bracket with them (escaped again by the caller). */
+/** A fact's sub line as tooltip text: everything between < and > dropped, no bracket kept (escaped again by the caller). */
 function plainText(html) {
-    return String(html).replace(/<[^>]*>/g, '').replace(/[<>]/g, '');
+    let out = '';
+    let inTag = false;
+    for (const ch of String(html)) {
+        if (ch === '<') inTag = true;
+        else if (ch === '>') inTag = false;
+        else if (!inTag) out += ch;
+    }
+    return out;
 }
 
 /** The weld list / manufacturing plan section of the card (`v`: the card's view state, `ws`: the weld schedule). */

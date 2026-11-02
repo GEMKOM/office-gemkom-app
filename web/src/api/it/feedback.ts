@@ -96,7 +96,10 @@ async function manageFetch<T>(request: Promise<T>, defaultMessage: string): Prom
   } catch (error) {
     if (!isApiError(error)) throw error;
     const detail = (error.data as { detail?: unknown } | undefined)?.detail;
-    throw new FeedbackError(typeof detail === 'string' && detail ? detail : defaultMessage, error.status);
+    throw new FeedbackError(
+      typeof detail === 'string' && detail ? detail : defaultMessage,
+      error.status,
+    );
   }
 }
 
@@ -108,7 +111,10 @@ export function feedbackStatsQueryOptions() {
   return queryOptions({
     queryKey: feedbackKeys.stats(),
     queryFn: ({ signal }) =>
-      manageFetch(apiFetch<FeedbackStats>('/feedback/reports/stats/', { signal }), 'İstatistikler yüklenemedi'),
+      manageFetch(
+        apiFetch<FeedbackStats>('/feedback/reports/stats/', { signal }),
+        'İstatistikler yüklenemedi',
+      ),
   });
 }
 
@@ -133,7 +139,10 @@ export function useFeedbackReport(id: number | null) {
   return useQuery({
     queryKey: feedbackKeys.detail(id ?? 0),
     queryFn: ({ signal }) =>
-      manageFetch(apiFetch<FeedbackReportDetail>(`/feedback/reports/${id}/`, { signal }), 'Bildirim yüklenemedi'),
+      manageFetch(
+        apiFetch<FeedbackReportDetail>(`/feedback/reports/${id}/`, { signal }),
+        'Bildirim yüklenemedi',
+      ),
     enabled: id !== null,
   });
 }

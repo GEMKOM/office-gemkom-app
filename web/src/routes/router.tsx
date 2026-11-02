@@ -76,6 +76,10 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/sales/customers/CustomersPage')).CustomersPage,
     }),
   },
+  {
+    path: '/sales/catalog',
+    lazy: async () => ({ Component: (await import('@/pages/sales/catalog/CatalogPage')).CatalogPage }),
+  },
   { path: '/manufacturing', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/cnc-cutting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/cnc-cutting/capacity', handle: hub, lazy: manufacturingHub },
@@ -224,11 +228,15 @@ export const appRoutes: RouteObject[] = [
   // Bilgi İşlem list pages (Phase 3b).
   {
     path: '/it/approvals',
-    lazy: async () => ({ Component: (await import('@/pages/it/approvals/ApprovalsPage')).ApprovalsPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/it/approvals/ApprovalsPage')).ApprovalsPage,
+    }),
   },
   {
     path: '/it/feedback',
-    lazy: async () => ({ Component: (await import('@/pages/it/feedback/FeedbackPage')).FeedbackPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/it/feedback/FeedbackPage')).FeedbackPage,
+    }),
   },
   {
     path: '/it/groups',
@@ -236,7 +244,9 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/it/inventory',
-    lazy: async () => ({ Component: (await import('@/pages/it/inventory/InventoryPage')).InventoryPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/it/inventory/InventoryPage')).InventoryPage,
+    }),
   },
   {
     path: '/it/neo',
@@ -244,7 +254,9 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/it/password-resets',
-    lazy: async () => ({ Component: (await import('@/pages/it/password-resets/PasswordResetsPage')).PasswordResetsPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/it/password-resets/PasswordResetsPage')).PasswordResetsPage,
+    }),
   },
   {
     path: '/it/permissions',
@@ -324,6 +336,41 @@ export const appRoutes: RouteObject[] = [
       Component: (
         await import('@/pages/accounting/subcontracting-statements/SubcontractingStatementsPage')
       ).SubcontractingStatementsPage,
+    }),
+  },
+  // ---- department task pages (components/department-tasks) ----
+  {
+    path: '/design/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/design/projects/DesignProjectsPage')).DesignProjectsPage,
+    }),
+  },
+  {
+    path: '/logistics/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/logistics/projects/LogisticsProjectsPage'))
+        .LogisticsProjectsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/projects/ManufacturingProjectsPage'))
+        .ManufacturingProjectsPage,
+    }),
+  },
+  {
+    path: '/planning/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/projects/PlanningProjectsPage'))
+        .PlanningProjectsPage,
+    }),
+  },
+  {
+    path: '/procurement/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/projects/ProcurementProjectsPage'))
+        .ProcurementProjectsPage,
     }),
   },
   {
@@ -700,8 +747,9 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/manufacturing/machining/tasks/create',
     lazy: async () => ({
-      Component: (await import('@/pages/manufacturing/machining/tasks/create/MachiningCreateTasksPage'))
-        .MachiningCreateTasksPage,
+      Component: (
+        await import('@/pages/manufacturing/machining/tasks/create/MachiningCreateTasksPage')
+      ).MachiningCreateTasksPage,
     }),
   },
   {
@@ -764,13 +812,15 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/procurement/payment-lists',
     lazy: async () => ({
-      Component: (await import('@/pages/procurement/payment-lists/PaymentListsPage')).PaymentListsPage,
+      Component: (await import('@/pages/procurement/payment-lists/PaymentListsPage'))
+        .PaymentListsPage,
     }),
   },
   {
     path: '/planning/task-templates',
     lazy: async () => ({
-      Component: (await import('@/pages/planning/task-templates/TaskTemplatesPage')).TaskTemplatesPage,
+      Component: (await import('@/pages/planning/task-templates/TaskTemplatesPage'))
+        .TaskTemplatesPage,
     }),
   },
   {

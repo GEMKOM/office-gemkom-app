@@ -27,7 +27,10 @@ function countQueryOptions(resource: 'qc-reviews' | 'ncrs', filter: Record<strin
 }
 
 /** How many QC reviews match (listQCReviews), from a one-row page. */
-export function qcReviewCountQueryOptions(filter: { status?: QCReviewStatus; status__in?: string }) {
+export function qcReviewCountQueryOptions(filter: {
+  status?: QCReviewStatus;
+  status__in?: string;
+}) {
   return countQueryOptions('qc-reviews', filter);
 }
 
