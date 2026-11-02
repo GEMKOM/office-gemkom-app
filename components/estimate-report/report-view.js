@@ -11,12 +11,12 @@
 import { renderMarkdown } from '../../utils/markdownLite.js';
 import { escapeHtml } from '../../utils/text.js';
 import {
-    BAND_STATUS, MACHINE_LABELS, MACHINING_KIND_LABELS, PART_KIND_LABELS, REFERENCE_ROUTE, SCHEMA_LABELS, SOURCE_LABELS,
+    BAND_STATUS, MACHINE_LABELS, MACHINING_KIND_LABELS, PART_KIND_LABELS, REFERENCE_ROUTE, REVIEW_LABELS, SCHEMA_LABELS, SOURCE_LABELS,
     STRUCTURE_CLASS_LABELS, SUB_ASSEMBLY_KIND_LABELS, TOLERANCE_LABELS, WORK_CENTRE_SHORT, machiningExclusionLabel,
 } from '../../apis/estimator.js';
 import {
     GEOMETRY_SOURCE_LABELS, UNIT_LABELS, bandInfo, distributionRows, exclusionLabel, fmt, hoursBreakdown, hoursInfo, planGroups,
-    planInfo, planParts, similarRow, withoutFirstTable,
+    planInfo, planParts, reportModel, similarRow, withoutFirstTable,
 } from './report-model.js';
 
 export const COST_ROW_LABELS = {
@@ -1276,4 +1276,154 @@ export function runMinutes(r) {
 export function formatDateTime(value) {
     if (!value) return '';
     return new Date(value).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ---------------------------------------------------------------- weld list, method (shared by the legacy card and the React report)
+
+// Weld process codes of the extraction schema (estimator weld_extraction.JointSchema).
+export const PROCESS_LABELS = {
+    TIG_root_fill: 'TIG kök + TIG dolgu', TIG_root_MAG_fill: 'TIG kök + MAG dolgu', MAG: 'MAG', TIG_copper: 'TIG (bakır)', other: 'Diğer',
+};
+export function processLabel(code) {
+    return PROCESS_LABELS[code] || String(code || '').replace(/_/g, ' ');
+}
+
+/** A fact's sub line as tooltip text: everything between < and > dropped, no bracket kept (escaped again by the caller). */
+function plainText(html) {
+    let out = '';
+    let inTag = false;
+    for (const ch of String(html)) {
+        if (ch === '<') inTag = true;
+        else if (ch === '>') inTag = false;
+        else if (!inTag) out += ch;
+    }
+    return out;
+}
+
+/** The weld list / manufacturing plan section of the card (`v`: the card's view state, `ws`: the weld schedule). */
+export function weldSectionHtml(v, ws) {
+    if (!ws) return '';
+    const t = ws.totals || {};
+    const byMat = Object.entries(t.weld_m_by_material || {}).map(([mat, val]) => `${MATERIAL_LABELS[mat] || escapeHtml(mat)} ${fmt(val, 1)} m`).join(', ');
+    const bu = ws.bottom_up || {};
+    const plan = bu.method === 'plan_v5' || Array.isArray(bu.work_centres);
+    const schema = Number(ws.schema_version ?? bu.schema_version ?? 1) || 1;
+    const metres = t.weld_m_drawn != null && t.weld_m_deduced != null
+        ? `çizim ${fmt(t.weld_m_drawn, 1)} + çıkarım ${fmt(t.weld_m_deduced, 1)} m${byMat ? ` · ${byMat}` : ''}`
+        : byMat;
+    const centres = plan ? (bu.work_centres || []).filter((wc) => Number(wc.hours)).map((wc) => `${escapeHtml(wc.label)} ${fmt(wc.hours, 0)}`).join(' + ') : '';
+    const facts = [
+        ['Birleşim', fmt(t.joints_total ?? 0, 0)],
+        ['Kaynak / adet', `${fmt(t.weld_m_total, 1)} m`, metres],
+        schema >= 2 && (ws.sub_assemblies || ws.parts)
+            ? ['Alt montaj · parça', `${fmt((ws.sub_assemblies || []).length, 0)} · ${fmt((ws.parts || []).length, 0)}`, `${fmt(ws.pieces_to_cut_per_unit ?? bu.parts_count ?? 0, 0)} kesilecek parça · ${fmt(ws.bends_per_unit ?? 0, 0)} büküm`]
+            : ['Parça · büküm', `${fmt(ws.pieces_to_cut_per_unit ?? 0, 0)} · ${fmt(ws.bends_per_unit ?? 0, 0)}`],
+        ['Birim kütle', `${fmt(ws.unit_mass_kg, 0)} kg`, ws.mass_basis ? escapeHtml(ws.mass_basis) : ''],
+        plan
+            ? ['Plan saati / adet', `${fmt(bu.total_h, 1)} h`, centres || `kaynak ${fmt(bu.welding_h, 1)} + diğer ${fmt(bu.non_welding_h, 1)}`]
+            : ['Standart saat / adet', `${fmt(bu.total_h, 1)} h`, `kaynak ${fmt(bu.welding_h, 1)} + diğer ${fmt(bu.non_welding_h, 1)}`],
+        plan && bu.structure_class
+            ? ['Yapı sınıfı', escapeHtml(bu.structure_class_label || STRUCTURE_CLASS_LABELS[bu.structure_class] || bu.structure_class), schemaBadge(schema)]
+            : null,
+        ['Güven', confidenceBadge(ws.confidence), plan && bu.plan_confidence != null ? `plan güveni %${fmt(Number(bu.plan_confidence) * 100, 0)}` : ''],
+    ].filter(Boolean).map(([label, value, sub]) => `<div class="est-fact"><span class="est-fact-label">${label}</span><span class="est-fact-value">${value}</span>${sub ? `<span class="est-fact-sub" title="${escapeHtml(plainText(sub))}">${sub}</span>` : ''}</div>`).join('');
+    const toggle = `<button type="button" class="btn btn-link btn-sm" data-est-action="weld-toggle">${v.weldOpen ? 'Listeyi gizle' : 'Listeyi göster'}</button>`;
+    const open = v.weldOpen ? `<div id="${v.uid}-weld" class="est-weld-table"></div>
+        ${(ws.open_questions || []).length ? `<div class="est-note-line"><i class="fas fa-circle-question"></i><span><strong>Çizimin söylemediği:</strong> ${ws.open_questions.map(escapeHtml).join(' · ')}</span></div>` : ''}
+        ${(ws.operations_hints || []).length ? `<div class="est-note-line"><i class="fas fa-clipboard-list"></i><span><strong>Çizimin işlem notları:</strong> ${ws.operations_hints.map((x) => escapeHtml(x.text || x.kind || '')).filter(Boolean).join(' · ')}</span></div>` : ''}
+        ${planPartsHtml(ws)}` : '';
+    const title = schema >= 2 ? 'İmalat planı ve kaynak listesi' : 'Kaynak listesi';
+    return section(v, 'kaynak', `${title} <span class="est-muted fw-normal">· 1 adet · v${escapeHtml(ws.version)}</span>`,
+        `<div class="est-facts is-compact">${facts}</div>${open}`, { tools: toggle });
+}
+
+/** "Nasıl çalışır?": `v.methodHtml` once loaded (GET /estimator/method/, rendered by markdownLite). */
+export function methodSectionHtml(v) {
+    let html = '<span class="est-muted small"><i class="fas fa-spinner fa-spin me-1"></i>Yükleniyor…</span>';
+    if (v.methodHtml) html = `<div class="est-md">${v.methodHtml}</div>`;
+    return section(v, 'yontem', 'Nasıl çalışır?', html, { icon: 'fa-circle-question', sub: 'kaynak listesi, birim süreler, referans seçimi ve faktör' });
+}
+
+export function costTableRows(costTable) {
+    return (costTable.rows || []).map((r) => ({
+        key: r.key,
+        label: costRowLabel(r),
+        in_low: r.in_house?.low ?? null, in_expected: r.in_house?.expected ?? null, in_high: r.in_house?.high ?? null,
+        sub_low: r.subcontract?.low ?? null, sub_expected: r.subcontract?.expected ?? null, sub_high: r.subcontract?.high ?? null,
+        basis: r.basis || '',
+    }));
+}
+
+// ---------------------------------------------------------------- print (PDF indir)
+
+/** Opens the printable report in a new window; `onBlocked` runs when a pop-up blocker stops it. */
+export function printReport(report, weldSchedule, { onBlocked } = {}) {
+    if (!report) return;
+    const title = `Tahmin raporu v${report.version} · ${report.subject_key}${report.title ? ` · ${report.title}` : ''}`;
+    const ct = report.cost_table || {};
+    const rows = costTableRows(ct);
+    const routes = ct.routes?.length ? ct.routes : ['in_house'];
+    const m = report.status === 'done' ? reportModel(report) : null;
+    const exp = ct.expected_total || {};
+    const kg = ct.eur_per_kg || {};
+    const summary = m ? `<table class="summary"><tbody>
+        ${m.price ? `<tr><th>Önerilen fiyat</th><td>${money(m.price.total ?? m.price.raw)}${m.price.perUnit != null ? ` · ${money(m.price.perUnit)}/adet` : ''}${m.price.perKg != null ? ` · ${fmt(m.price.perKg, 2)} €/kg` : ''}</td></tr>` : ''}
+        ${m.floor ? `<tr><th>Taban fiyat</th><td>${money(m.floor.total ?? m.floor.raw)}${m.floor.perUnit != null ? ` · ${money(m.floor.perUnit)}/adet` : ''}</td></tr>` : ''}
+        ${routes.filter((k) => exp[k] != null).map((k) => `<tr><th>Beklenen maliyet · ${ROUTE_LABELS[k] || k}</th><td>${money(exp[k])}${kg[k] != null ? ` · ${fmt(kg[k], 2)} €/kg` : ''}${k === m.basis?.key && routes.length > 1 ? ' (fiyat dayanağı)' : ''}</td></tr>`).join('')}
+        ${m.quantity != null ? `<tr><th>Adet · ağırlık</th><td>${fmt(m.quantity, 0)} adet${m.unitKg != null ? ` · ${fmt(m.unitKg, 0)} kg/adet` : ''}${m.totalKg != null ? ` · ${fmt(m.totalKg, 0)} kg toplam` : ''}</td></tr>` : ''}
+    </tbody></table>` : '';
+    const costHtml = rows.length ? `
+        <table class="cost">
+            <thead><tr><th>Kalem</th>
+                ${routes.includes('in_house') ? '<th>İç imalat Düşük</th><th>İç imalat Beklenen</th><th>İç imalat Yüksek</th>' : ''}
+                ${routes.includes('subcontract') ? '<th>Taşeron Düşük</th><th>Taşeron Beklenen</th><th>Taşeron Yüksek</th>' : ''}
+                <th>Dayanak</th></tr></thead>
+            <tbody>${rows.map((r) => `<tr class="${r.key === 'total' ? 'total' : ''}"><td>${escapeHtml(r.label)}</td>
+                ${routes.includes('in_house') ? [r.in_low, r.in_expected, r.in_high].map((v) => `<td class="n">${v == null ? '—' : fmt(v, r.key === 'eur_per_kg' ? 2 : 0)}</td>`).join('') : ''}
+                ${routes.includes('subcontract') ? [r.sub_low, r.sub_expected, r.sub_high].map((v) => `<td class="n">${v == null ? '—' : fmt(v, r.key === 'eur_per_kg' ? 2 : 0)}</td>`).join('') : ''}
+                <td class="basis">${escapeHtml(r.basis)}</td></tr>`).join('')}</tbody>
+        </table>` : '';
+    const hasSource = (weldSchedule?.joints || []).some((j) => j && j.source);
+    const SRC = { drawn: 'çizim', deduced: 'çıkarım', rule: 'kural' };
+    const weldHtml = weldSchedule ? `
+        <h2>Kaynak listesi (1 adet) · v${weldSchedule.version}</h2>
+        <table class="weld"><thead><tr><th>No</th><th>Birleşim</th><th>Tip</th><th>Malzeme</th><th>Ölçü</th><th>Proses</th><th class="n">Adet</th><th class="n">m/birleşim</th><th class="n">m toplam</th><th>NDT</th>${hasSource ? '<th>Kaynak</th>' : ''}</tr></thead>
+        <tbody>${(weldSchedule.joints || []).map((j) => `<tr><td>${escapeHtml(j.joint_id || '')}</td><td>${escapeHtml(j.description || '')}</td><td>${JOINT_TYPE_LABELS[j.joint_type] || escapeHtml(j.joint_type || '')}</td><td>${MATERIAL_LABELS[j.material] || escapeHtml(j.material || '')}</td><td>${escapeHtml(j.size || '')}</td><td>${escapeHtml(processLabel(j.process))}</td><td class="n">${j.count_per_unit ?? ''}</td><td class="n">${fmt(j.length_m_each, 3)}</td><td class="n">${fmt(j.total_m_per_unit, 2)}</td><td>${escapeHtml(j.ndt || '')}</td>${hasSource ? `<td>${escapeHtml(SRC[j.source] || j.source || '')}</td>` : ''}</tr>`).join('')}</tbody></table>` : '';
+    const u = report.usage?.report || {};
+    const html = `<!DOCTYPE html><html lang="tr"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+        <style>
+            body { font: 11pt/1.45 "Segoe UI", Arial, sans-serif; color: #111; margin: 18mm 16mm; }
+            h1 { font-size: 16pt; margin: 0 0 2mm; } h2 { font-size: 13pt; margin: 8mm 0 2mm; color: #3b1a8a; page-break-after: avoid; }
+            h3 { font-size: 11.5pt; margin: 5mm 0 1.5mm; } h4, h5, h6 { font-size: 11pt; margin: 4mm 0 1mm; }
+            .meta { color: #555; font-size: 9.5pt; margin-bottom: 4mm; }
+            table { border-collapse: collapse; width: 100%; font-size: 9pt; margin: 2mm 0 4mm; page-break-inside: auto; }
+            th, td { border: 1px solid #bbb; padding: 1.2mm 1.8mm; vertical-align: top; } th { background: #f1eafe; text-align: left; }
+            table.summary th { width: 38%; } table.summary td { font-weight: 600; }
+            td.n, th.n, .text-end { text-align: right; font-variant-numeric: tabular-nums; }
+            tr.total td { font-weight: 700; background: #f8f6ff; } td.basis { color: #555; }
+            tr { page-break-inside: avoid; } ul, ol { margin: 0 0 2mm; padding-left: 5mm; } p { margin: 0 0 2mm; }
+            blockquote { margin: 0 0 3mm; padding: 1mm 3mm; border-left: 2pt solid #c4b5fd; color: #444; font-size: 9.5pt; }
+            .foot { margin-top: 6mm; font-size: 8.5pt; color: #666; border-top: 1px solid #ddd; padding-top: 2mm; }
+            @page { size: A4; margin: 12mm; }
+        </style></head><body>
+        <h1>${escapeHtml(title)}</h1>
+        <div class="meta">${escapeHtml(report.customer || '')}${report.customer ? ' · ' : ''}${escapeHtml(formatDateTime(report.created_at))}${report.created_by_name ? ` · ${escapeHtml(report.created_by_name)}` : ''}
+            ${report.review_decision ? ` · ${REVIEW_LABELS[report.review_decision]?.label}${report.reviewed_by_name ? ` (${escapeHtml(report.reviewed_by_name)})` : ''}` : ''}</div>
+        ${summary}
+        ${costHtml ? `<h2>Maliyet tablosu (€, toplam adet)</h2>${costHtml}` : ''}
+        ${report.review_decision === 'correct' && report.review_note ? `<h2>Düzeltme notu</h2><p>${escapeHtml(report.review_note)}</p>` : ''}
+        ${renderMarkdown(report.markdown, { headingOffset: 0 })}
+        ${weldHtml}
+        <div class="foot">${escapeHtml(report.model || '')} · ${u.seconds ? `${Math.round(u.seconds / 60)} dk · ` : ''}${report.usage_usd != null ? `${fmt(Number(report.usage_usd), 2)} USD · ` : ''}Yapay zekâ tahminidir; fiyatları ve saatleri referans işlerle doğrulayın.</div>
+        </body></html>`;
+    const win = window.open('', '_blank');
+    if (!win) {
+        onBlocked?.();
+        return;
+    }
+    win.document.open();
+    win.document.write(html);
+    win.document.close();
+    win.focus();
+    setTimeout(() => { try { win.print(); } catch { /* the user can print from the window */ } }, 400);
 }

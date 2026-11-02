@@ -114,6 +114,26 @@ for people and groups, a raw-text view. Its value is the stored markdown-lite,
 so it drops into a form like a textarea. Pasted HTML goes through the
 serializer and the renderer, so nothing pasted survives as markup.
 
+### Exception: the Tahmin report (`EstimateHtml`)
+
+`renderRichText()` is not the only HTML string the app puts into the page.
+The Tahmin report card (`src/pages/projects/estimate-report/`) is React for
+its state, requests and actions, but a finished report's sections come from
+the legacy `components/estimate-report/report-view.js` builders through one
+`<EstimateHtml html>` component. The legacy offers and project-tracking
+modals mount the same card, and the report changes often; one source keeps
+both sides in step. The builders escape every payload value and send markdown
+through `utils/markdownLite.js` (escape first), the same contract as
+`renderRichText`. Rules:
+
+- Only report-view.js output goes into `EstimateHtml`; nothing else may use it.
+- Clicks inside it are handled by event delegation on `data-est-action` /
+  `data-est-goto`, as the legacy card did.
+- The few Bootstrap classes the markup uses are restyled in
+  `EstimateReport.module.css` under the card's root class only.
+- When offers and project tracking move to React, port the builders to JSX
+  and delete `EstimateHtml`.
+
 ## Rules
 
 - **No new features in a port.** Fix obvious bugs, say so in the PR, and leave

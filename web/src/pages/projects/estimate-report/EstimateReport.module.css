@@ -1,0 +1,266 @@
+/*
+ * The legacy report markup (report-view.js) uses a few Bootstrap utility
+ * classes and the badges.css status pills, which the React app does not load.
+ * These rules give them their Bootstrap look, but only inside the report
+ * container (.shim), so nothing leaks into the rest of the page. The report's
+ * own look is components/estimate-report/estimate-report.css (all .est-*).
+ */
+.shim :global(.btn) {
+  display: inline-block;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+  text-align: center;
+  cursor: pointer;
+}
+
+.shim :global(.btn-sm) {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.shim :global(.btn-link) {
+  border-color: transparent;
+  color: #0d6efd;
+  text-decoration: underline;
+}
+
+.shim :global(.btn-link:hover) {
+  color: #0a58ca;
+}
+
+.shim :global(.btn:disabled) {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.shim :global(.btn-outline-secondary) {
+  border-color: #6c757d;
+  color: #6c757d;
+}
+
+.shim :global(.btn-outline-secondary:hover) {
+  background: #6c757d;
+  color: #fff;
+}
+
+.shim :global(.btn-outline-success) {
+  border-color: #198754;
+  color: #198754;
+}
+
+.shim :global(.btn-outline-success:hover) {
+  background: #198754;
+  color: #fff;
+}
+
+.shim :global(.btn-outline-danger) {
+  border-color: #dc3545;
+  color: #dc3545;
+}
+
+.shim :global(.btn-outline-danger:hover) {
+  background: #dc3545;
+  color: #fff;
+}
+
+.shim :global(.form-select),
+.shim :global(.form-control) {
+  display: block;
+  width: 100%;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #dee2e6;
+  border-radius: 0.375rem;
+  background-color: #fff;
+  color: #212529;
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.shim :global(.form-select-sm) {
+  width: auto;
+  padding: 0.25rem 2rem 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  font-size: 0.875rem;
+}
+
+.shim :global(.form-control:focus),
+.shim :global(.form-select:focus) {
+  outline: none;
+  border-color: #86b7fe;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.shim :global(.btn-close) {
+  width: 1em;
+  height: 1em;
+  padding: 0.25em;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent
+    url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3e%3c/svg%3e")
+    center / 1em auto no-repeat;
+  opacity: 0.5;
+  cursor: pointer;
+}
+
+.shim :global(.btn-close-sm) {
+  width: 0.75em;
+  height: 0.75em;
+  background-size: 0.75em auto;
+}
+
+.shim :global(.small) {
+  font-size: 0.875em;
+}
+
+.shim :global(.text-muted) {
+  color: #6c757d;
+}
+
+.shim :global(.text-danger) {
+  color: #dc3545;
+}
+
+.shim :global(.text-end) {
+  text-align: right;
+}
+
+.shim :global(.text-center) {
+  text-align: center;
+}
+
+.shim :global(.text-start) {
+  text-align: left;
+}
+
+.shim :global(.fw-normal) {
+  font-weight: 400;
+}
+
+.shim :global(.p-0) {
+  padding: 0;
+}
+
+.shim :global(.align-baseline) {
+  vertical-align: baseline;
+}
+
+.shim :global(.me-1) {
+  margin-right: 0.25rem;
+}
+
+.shim :global(.ms-1) {
+  margin-left: 0.25rem;
+}
+
+.shim :global(.mt-1) {
+  margin-top: 0.25rem;
+}
+
+.shim :global(.mt-2) {
+  margin-top: 0.5rem;
+}
+
+.shim :global(.mb-0) {
+  margin-bottom: 0;
+}
+
+.shim :global(.mb-1) {
+  margin-bottom: 0.25rem;
+}
+
+.shim :global(.mb-2) {
+  margin-bottom: 0.5rem;
+}
+
+/* markdownLite tables: <div class="table-responsive md-table"><table class="table table-sm"> */
+.shim :global(.table-responsive) {
+  overflow-x: auto;
+}
+
+.shim :global(.table) {
+  width: 100%;
+  margin-bottom: 1rem;
+  border-collapse: collapse;
+}
+
+.shim :global(.table) th,
+.shim :global(.table) td {
+  padding: 0.5rem;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.shim :global(.table-sm) th,
+.shim :global(.table-sm) td {
+  padding: 0.25rem;
+}
+
+/* components/badges/badges.css status pills */
+.shim :global(.status-badge) {
+  display: inline-block;
+  min-width: 80px;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.shim :global(.status-grey) {
+  background-color: #e5e7eb;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.shim :global(.status-orange) {
+  background-color: #ffedd5;
+  color: #9a3412;
+  border: 1px solid #f97316;
+}
+
+.shim :global(.status-purple) {
+  background-color: #ede9fe;
+  color: #5b21b6;
+  border: 1px solid #8b5cf6;
+}
+
+.shim :global(.status-green) {
+  background-color: #d1fae5;
+  color: #065f46;
+  border: 1px solid #10b981;
+}
+
+.shim :global(.status-blue) {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border: 1px solid #3b82f6;
+}
+
+.shim :global(.status-red) {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #ef4444;
+}
+
+/* ---- the React-rendered parts of the card ---- */
+.headActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.reviewForm {
+  margin: 0 0 12px;
+}
