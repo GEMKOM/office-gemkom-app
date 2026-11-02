@@ -81,6 +81,10 @@
 .progress {
   position: relative;
   width: 100%;
+  /* The editable cell wraps its content in a shrink-to-fit span, and the bar
+     has no content width of its own (the label is absolute): without this it
+     collapses to nothing. */
+  min-width: 110px;
   height: 24px;
   border-radius: 6px;
   background: #e5e7eb;
