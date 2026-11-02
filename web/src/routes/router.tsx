@@ -211,6 +211,9 @@ export const appRoutes: RouteObject[] = [
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),
   },
+  // Phase 3b: CNC kesim, lineer kesim and talaşlı imalat lists and reports.
+  { path: '/manufacturing/cnc-cutting/reports', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing/machining/reports', handle: hub, lazy: manufacturingHub },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
