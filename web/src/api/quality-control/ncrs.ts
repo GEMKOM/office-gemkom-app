@@ -141,6 +141,8 @@ export interface NcrGroup {
 
 export type NcrListParams = {
   status__in?: string;
+  /** One department task's NCRs (the task modal's Uygunsuzluk Raporları tab). */
+  department_task?: number;
   assigned_team?: string;
   assigned_team__in?: string;
   severity?: string;

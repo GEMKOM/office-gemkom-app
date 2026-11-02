@@ -115,7 +115,10 @@ export function organizationGroupsQueryOptions() {
     queryKey: organizationGroupKeys.list(),
     queryFn: async ({ signal }) =>
       extractResults<OrganizationGroup>(
-        await withMessage(apiFetch<unknown>('/organization/groups/', { signal }), 'Gruplar yüklenemedi.'),
+        await withMessage(
+          apiFetch<unknown>('/organization/groups/', { signal }),
+          'Gruplar yüklenemedi.',
+        ),
       ),
   });
 }
@@ -138,7 +141,10 @@ export function usePositionsCatalog() {
     queryKey: organizationGroupKeys.positions(),
     queryFn: async ({ signal }) =>
       extractResults<GroupPosition>(
-        await withMessage(apiFetch<unknown>('/organization/positions/', { signal }), 'Pozisyonlar yüklenemedi.'),
+        await withMessage(
+          apiFetch<unknown>('/organization/positions/', { signal }),
+          'Pozisyonlar yüklenemedi.',
+        ),
       ),
     staleTime: 5 * 60_000,
   });
@@ -198,7 +204,10 @@ export function useDeleteOrganizationGroup() {
   const invalidate = useInvalidateGroups();
   return useMutation({
     mutationFn: (id: number) =>
-      withMessage(apiFetch<void>(`/organization/groups/${id}/`, { method: 'DELETE' }), 'Grup silinemedi.'),
+      withMessage(
+        apiFetch<void>(`/organization/groups/${id}/`, { method: 'DELETE' }),
+        'Grup silinemedi.',
+      ),
     onSuccess: invalidate,
   });
 }

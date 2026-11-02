@@ -17,7 +17,9 @@ export function pendingOverridesCountQueryOptions() {
   return queryOptions({
     queryKey: ['attendance', 'pendingOverrides', params] as const,
     queryFn: async ({ signal }) =>
-      toPaginated<unknown>(await apiFetch<unknown>('/attendance/hr/pending-overrides/', { params, signal })),
+      toPaginated<unknown>(
+        await apiFetch<unknown>('/attendance/hr/pending-overrides/', { params, signal }),
+      ),
     staleTime: ATTENDANCE_STALE_TIME,
     select: (page) => page.count,
   });

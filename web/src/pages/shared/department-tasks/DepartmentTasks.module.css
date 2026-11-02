@@ -1,0 +1,150 @@
+/* Tree column: one 20px step per level, a line to each ancestor, the toggle last. */
+.tree {
+  position: relative;
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+}
+
+.treeLineV {
+  position: absolute;
+  top: 0;
+  height: 50%;
+  width: 2px;
+  background: var(--gk-line-strong);
+  opacity: 0.45;
+}
+
+.treeLineH {
+  position: absolute;
+  top: 50%;
+  height: 2px;
+  background: var(--gk-line-strong);
+  opacity: 0.45;
+  transform: translateY(-50%);
+}
+
+.toggle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
+  border: 1.5px solid var(--mantine-color-blue-6);
+  background: var(--gk-surface);
+  color: var(--mantine-color-blue-6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 10px;
+  transition: transform 0.2s ease;
+}
+
+.toggle:hover {
+  transform: translateY(-50%) scale(1.1);
+}
+
+.toggle[aria-expanded='true'] {
+  background: var(--mantine-color-blue-6);
+  color: var(--gk-on-dark);
+}
+
+/* Request numbers and part keys: the mono "badge" link of the legacy table. */
+.keyLink {
+  display: inline-block;
+  white-space: nowrap;
+  font-family: var(--gk-font-mono);
+  font-weight: 700;
+  color: var(--mantine-color-blue-7);
+  background: rgba(13, 110, 253, 0.1);
+  border: 1px solid rgba(13, 110, 253, 0.2);
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  text-decoration: none;
+}
+
+.keyLink:hover {
+  background: rgba(13, 110, 253, 0.2);
+  text-decoration: underline;
+}
+
+.badges {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.progress {
+  position: relative;
+  width: 100%;
+  height: 24px;
+  border-radius: 6px;
+  background: #e5e7eb;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.6s ease;
+}
+
+.progressText {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-weight: 600;
+  font-size: 0.75rem;
+  color: #1f2937;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.muted {
+  color: var(--gk-muted);
+}
+
+.indent {
+  padding-left: 30px;
+}
+
+.tabsList {
+  min-width: 220px;
+  border-right: 1px solid var(--gk-line);
+  padding-right: 12px;
+}
+
+.tabPanel {
+  padding-left: 20px;
+  min-height: 400px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+  margin: 0;
+}
+
+.codes {
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 8px;
+  border-radius: 4px;
+  margin: 0 0 8px;
+  font-family: var(--gk-font-mono);
+}
+
+.gantt {
+  min-height: 300px;
+}

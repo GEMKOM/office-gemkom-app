@@ -18,8 +18,14 @@ export type PendingApprovalKind = keyof typeof PENDING_APPROVAL;
 export const PENDING_APPROVAL_STALE_TIME = 60_000;
 
 /** Port of getPendingOvertimeApprovalRequests / fetchPendingVacationApprovalRequests, counted. */
-export async function countPendingApprovals(kind: PendingApprovalKind, signal?: AbortSignal): Promise<number> {
-  const data = await apiFetch<unknown>(PENDING_APPROVAL[kind], { params: { page_size: 1 }, signal });
+export async function countPendingApprovals(
+  kind: PendingApprovalKind,
+  signal?: AbortSignal,
+): Promise<number> {
+  const data = await apiFetch<unknown>(PENDING_APPROVAL[kind], {
+    params: { page_size: 1 },
+    signal,
+  });
   return toPaginated(data).count;
 }
 

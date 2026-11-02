@@ -44,9 +44,6 @@ export function machinesQueryOptions(params: MachinesParams = {}) {
   });
 }
 
-export function useMachines(
-  params: MachinesParams = {},
-  options: ReferenceQueryOptions = {},
-) {
+export function useMachines(params: MachinesParams = {}, options: ReferenceQueryOptions = {}) {
   return useQuery({ ...machinesQueryOptions(params), ...options });
 }
