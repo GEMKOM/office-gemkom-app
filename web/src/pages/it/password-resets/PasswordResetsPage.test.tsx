@@ -10,10 +10,24 @@ vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ user: { id: 1, usernam
 
 const fetchMock = vi.mocked(authedFetch);
 
-const REQUESTS = [
-  { id: 7, username: 'ayse', first_name: 'Ayşe', last_name: 'Kaya', email: 'ayse@gemkom.com', team: 'machining', user_groups: ['Operatör'] },
-  { id: 8, username: 'mehmet', first_name: 'Mehmet', last_name: 'Demir', email: 'mehmet@gemkom.com', team: 'welding' },
-];
+// The real /users/forgot-password/list/ shape: an envelope, department_code (no team).
+const user = (id: number, username: string, first_name: string, last_name: string, department_code: string) => ({
+  id,
+  username,
+  first_name,
+  last_name,
+  email: `${username}@gemkom.com`,
+  is_superuser: false,
+  department_code,
+  reset_password_request: true,
+  must_reset_password: false,
+});
+const REQUESTS = {
+  count: 2,
+  next: null,
+  previous: null,
+  results: [user(7, 'ayse', 'Ayşe', 'Kaya', 'rollingmill'), user(8, 'mehmet', 'Mehmet', 'Demir', 'accounting')],
+};
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(body), { status }));
@@ -39,9 +53,11 @@ it('lists the requests with the legacy columns', async () => {
   expect(screen.getByText('Şifre Sıfırlama Talepleri')).toBeInTheDocument();
   expect(await screen.findByText('ayse')).toBeInTheDocument();
   expect(screen.getByText('mehmet@gemkom.com')).toBeInTheDocument();
-  for (const header of ['Kullanıcı Adı', 'Ad', 'Soyad', 'E-posta', 'Takım']) {
+  for (const header of ['Kullanıcı Adı', 'Ad', 'Soyad', 'E-posta', 'Departman']) {
     expect(screen.getByRole('columnheader', { name: header })).toBeInTheDocument();
   }
+  expect(screen.getByText('Haddehane')).toBeInTheDocument();
+  expect(screen.getByText('Muhasebe')).toBeInTheDocument();
   expect(within(document.getElementById('password-reset-count')!).getByText('2')).toBeInTheDocument();
 });
 
@@ -52,7 +68,6 @@ it('resets only after the confirm and shows the temporary password once', async 
   fireEvent.click(screen.getAllByRole('button', { name: 'Şifreyi Sıfırla' })[0]!);
   const dialog = await screen.findByRole('dialog', { name: 'Şifre Sıfırlama Onayı' });
   expect(within(dialog).getByText('Ayşe Kaya')).toBeInTheDocument();
-  expect(within(dialog).getByText('Operatör')).toBeInTheDocument();
   expect(calls().some((c) => c.method === 'POST')).toBe(false);
 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Şifreyi Sıfırla' }));
