@@ -22,6 +22,7 @@ const imalat = {
     duration_wd: 8,
     entered_duration_wd: 20,
     start_date: '2026-08-03',
+    entered_start_date: '2026-08-03',
     end_date: '2026-08-14',
 };
 
@@ -54,6 +55,27 @@ check('welding date edit never sends schedule keys', () => {
 });
 check('status-only dirty sends no schedule keys', () => {
     assert.deepEqual(deptSchedulePatch('manufacturing', new Set(['status']), imalat), {});
+});
+check('İmalat start edit sends the entered date, not a child-pin covering window', () => {
+    const patch = deptSchedulePatch(
+        'manufacturing',
+        new Set(['start_date']),
+        {
+            start_date: '2026-09-01',
+            entered_start_date: '2026-10-01',
+            duration_wd: 40,
+            entered_duration_wd: 40,
+        },
+    );
+    assert.deepEqual(patch, { start_date: '2026-10-01' });
+});
+check('İmalat start falls back to start_date when nothing was entered', () => {
+    const patch = deptSchedulePatch(
+        'manufacturing',
+        new Set(['start_date']),
+        { start_date: '2026-08-03', entered_start_date: null, duration_wd: 8 },
+    );
+    assert.deepEqual(patch, { start_date: '2026-08-03' });
 });
 
 if (failures) {

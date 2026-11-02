@@ -211,6 +211,31 @@ export const appRoutes: RouteObject[] = [
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),
   },
+  // Bilgi İşlem list pages (Phase 3b).
+  {
+    path: '/it/approvals',
+    lazy: async () => ({ Component: (await import('@/pages/it/approvals/ApprovalsPage')).ApprovalsPage }),
+  },
+  {
+    path: '/it/feedback',
+    lazy: async () => ({ Component: (await import('@/pages/it/feedback/FeedbackPage')).FeedbackPage }),
+  },
+  {
+    path: '/it/groups',
+    lazy: async () => ({ Component: (await import('@/pages/it/groups/GroupsPage')).GroupsPage }),
+  },
+  {
+    path: '/it/inventory',
+    lazy: async () => ({ Component: (await import('@/pages/it/inventory/InventoryPage')).InventoryPage }),
+  },
+  {
+    path: '/it/neo',
+    lazy: async () => ({ Component: (await import('@/pages/it/neo/NeoUsagePage')).NeoUsagePage }),
+  },
+  {
+    path: '/it/password-resets',
+    lazy: async () => ({ Component: (await import('@/pages/it/password-resets/PasswordResetsPage')).PasswordResetsPage }),
+  },
   // Phase 3b: quality control, HR and other list pages.
   {
     path: '/quality-control/cost-lines',

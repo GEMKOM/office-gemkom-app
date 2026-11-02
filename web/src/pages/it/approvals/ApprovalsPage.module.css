@@ -1,0 +1,52 @@
+/* Policies and the selected policy's stages side by side (legacy col-xl-7 / col-xl-5). */
+.layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .layout {
+    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  }
+}
+
+.stageCard {
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-sm);
+  background: var(--gk-surface-subtle);
+  margin-bottom: 8px;
+}
+
+.stageHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.stageBody {
+  padding: 8px 12px;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.orderPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gk-ink);
+  color: var(--gk-surface);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.count {
+  font-family: var(--gk-font-mono);
+  font-size: 13px;
+}
