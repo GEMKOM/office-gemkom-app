@@ -1,0 +1,223 @@
+/* Cash-flow page: in / out amounts, the drill-down drawer. */
+
+.in {
+  color: #11633d;
+  font-variant-numeric: tabular-nums;
+}
+
+.out {
+  color: #a31d1d;
+  font-variant-numeric: tabular-nums;
+}
+
+.await {
+  color: #8a5a00;
+  font-variant-numeric: tabular-nums;
+}
+
+.muted {
+  color: var(--gk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.net {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.net i {
+  font-size: 0.8em;
+}
+
+.net[data-tone='in'] {
+  color: #11633d;
+}
+
+.net[data-tone='out'] {
+  color: #a31d1d;
+}
+
+.net[data-tone='flat'] {
+  color: var(--gk-ink-2);
+}
+
+.footRow td {
+  font-weight: 700;
+  background: var(--gk-surface-subtle);
+  white-space: nowrap;
+}
+
+.crossMark {
+  margin-left: 6px;
+  color: #8a5a00;
+  font-size: 12px;
+}
+
+.undated {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.undatedAmount {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.undatedAmount small {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--gk-muted);
+}
+
+.hint {
+  margin: 0;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.util {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.util > div {
+  flex: 1;
+}
+
+.util small {
+  min-width: 36px;
+  text-align: right;
+  color: var(--gk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Drill-down --------------------------------------------------------- */
+
+.drillSummary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 12px 0 16px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.drillNet {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.groupHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  font-weight: 600;
+}
+
+.groupHead span:last-child {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.subgroupTitle {
+  margin: 12px 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+}
+
+.drillTable {
+  font-size: 13px;
+}
+
+.drillTable td,
+.drillTable th {
+  white-space: nowrap;
+}
+
+.drillTable td.wrap {
+  white-space: normal;
+  min-width: 160px;
+}
+
+.drillTable tr[data-paid] td {
+  color: var(--gk-muted);
+}
+
+.drillTable tr[data-overdue] td {
+  background: #fde8e8;
+}
+
+.overdue {
+  color: #a31d1d;
+  font-weight: 600;
+}
+
+.eurSub {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.drillFoot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.wages {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  padding: 4px 0;
+}
+
+.wagesLabel {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.wagesValue {
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--gk-muted);
+}
+
+.empty i {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 24px;
+}

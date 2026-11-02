@@ -114,3 +114,160 @@ export function suppliersReportQueryOptions(params: SuppliersReportParams) {
 export function staffReportQueryOptions(params: StaffReportParams) {
   return reportQuery<StaffReportRow>('staff', '/procurement/reports/staff', params);
 }
+
+// ---------------------------------------------------------------------------
+// Payment forecast (Nakit Akış Tablosu, Yönetici Özeti) and the month's
+// outflow detail. Ports of getPaymentForecastReport / getOutflowDetail.
+
+export interface PaymentForecastParams extends QueryParams {
+  created_gte?: string;
+  created_lte?: string;
+}
+
+/**
+ * Outflow figures. The cash-flow page reads the current names first
+ * (total_outflow_eur, procurement_*), the executive overview reads the
+ * procurement ones (total_spent_eur, paid_eur, ...): both are kept as sent.
+ */
+export interface PaymentForecastKpis {
+  total_outflow_eur?: ReportNumber;
+  total_spent_eur?: ReportNumber;
+  total_procurement_paid_eur?: ReportNumber;
+  total_paid_eur?: ReportNumber;
+  total_procurement_awaiting_eur?: ReportNumber;
+  total_awaiting_eur?: ReportNumber;
+  po_count?: number | null;
+  active_suppliers?: number | null;
+  mom_percent?: ReportNumber;
+  yoy_percent?: ReportNumber;
+  [key: string]: unknown;
+}
+
+export interface PaymentForecastMonth {
+  /** "YYYY-MM" */
+  month: string;
+  total_outflow_eur?: ReportNumber;
+  total_spent_eur?: ReportNumber;
+  procurement_paid_eur?: ReportNumber;
+  paid_eur?: ReportNumber;
+  procurement_awaiting_eur?: ReportNumber;
+  awaiting_eur?: ReportNumber;
+  po_count?: number | null;
+  active_suppliers?: number | null;
+  [key: string]: unknown;
+}
+
+export interface DbsSupplierRow {
+  supplier_name?: string;
+  dbs_bank?: string | null;
+  dbs_currency?: string | null;
+  dbs_used?: ReportNumber;
+  dbs_used_eur?: ReportNumber;
+  dbs_limit_eur?: ReportNumber;
+  dbs_available_eur?: ReportNumber;
+  /** "YYYY-MM-DD" */
+  dbs_expiry_date?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PaymentForecastReport {
+  kpis?: PaymentForecastKpis | null;
+  series?: PaymentForecastMonth[] | null;
+  dbs_summary?: { total_dbs_used_eur?: ReportNumber; suppliers?: DbsSupplierRow[] | null } | null;
+  undated_schedules?: {
+    total_outflow_eur?: ReportNumber;
+    total_eur?: ReportNumber;
+    po_count?: number | null;
+  } | null;
+}
+
+export interface OutflowProcurementRow {
+  supplier_name?: string | null;
+  supplier_code?: string | null;
+  pr_title?: string | null;
+  label?: string | null;
+  due_date?: string | null;
+  amount_eur?: ReportNumber;
+  is_paid?: boolean;
+}
+
+export interface OutflowExpenseRow {
+  category?: string | null;
+  description?: string | null;
+  recurrence?: string | null;
+  amount_eur?: ReportNumber;
+}
+
+export interface OutflowLoanRow {
+  loan_name?: string | null;
+  sequence?: number | null;
+  due_date?: string | null;
+  amount_eur?: ReportNumber;
+  is_paid?: boolean;
+}
+
+export interface OutflowTaxRow {
+  tax_type?: string | null;
+  period_label?: string | null;
+  due_date?: string | null;
+  amount_eur?: ReportNumber;
+  is_paid?: boolean;
+}
+
+export interface OutflowAdhocRow {
+  job_no?: string | null;
+  description?: string | null;
+  category?: string | null;
+  cost_date?: string | null;
+  amount_eur?: ReportNumber;
+}
+
+export interface OutflowDetail {
+  totals?: {
+    grand_total_eur?: ReportNumber;
+    procurement_eur?: ReportNumber;
+    wages_eur?: ReportNumber;
+    expenses_eur?: ReportNumber;
+    loans_eur?: ReportNumber;
+    taxes_eur?: ReportNumber;
+    adhoc_eur?: ReportNumber;
+  } | null;
+  procurement?: OutflowProcurementRow[] | null;
+  wages?: {
+    base_payroll_eur?: ReportNumber;
+    overtime_premium_eur?: ReportNumber;
+    total_eur?: ReportNumber;
+    employee_count?: number | null;
+  } | null;
+  expenses?: OutflowExpenseRow[] | null;
+  loans?: OutflowLoanRow[] | null;
+  taxes?: OutflowTaxRow[] | null;
+  adhoc_costs?: OutflowAdhocRow[] | null;
+}
+
+/** getPaymentForecastReport: GET /procurement/reports/payment-forecast?created_gte&created_lte */
+export function paymentForecastQueryOptions(params: PaymentForecastParams) {
+  return queryOptions({
+    queryKey: reportKeys.report('payment-forecast', params),
+    queryFn: ({ signal }) =>
+      apiFetch<PaymentForecastReport>('/procurement/reports/payment-forecast', {
+        params: { created_gte: params.created_gte, created_lte: params.created_lte },
+        signal,
+      }),
+    staleTime: REPORTS_STALE_TIME,
+  });
+}
+
+/** getOutflowDetail: GET /procurement/reports/outflow-detail/?month=YYYY-MM */
+export function outflowDetailQueryOptions(month: string) {
+  return queryOptions({
+    queryKey: reportKeys.report('outflow-detail', { month }),
+    queryFn: ({ signal }) =>
+      apiFetch<OutflowDetail | null>('/procurement/reports/outflow-detail/', {
+        params: { month },
+        signal,
+      }),
+    staleTime: REPORTS_STALE_TIME,
+    enabled: Boolean(month),
+  });
+}
