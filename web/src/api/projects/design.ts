@@ -145,3 +145,53 @@ export function useRejectRelease() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: releaseKeys.all }),
   });
 }
+
+// ---- release writes the department task pages make ----
+
+export interface ReleaseInput {
+  job_order: string;
+  folder_path: string;
+  changelog: string;
+  revision_code: string;
+  hardcopy_count?: number;
+  auto_complete_design_task?: boolean;
+}
+
+/** Port of createRelease. */
+export function createRelease(data: ReleaseInput) {
+  return apiFetch<DrawingRelease>('/projects/drawing-releases/', { method: 'POST', body: data });
+}
+
+/** Port of resubmitRelease: edits a rejected release and sends it back to review. */
+export function resubmitRelease(id: number, data: ReleaseInput) {
+  return apiFetch<unknown>(`/projects/drawing-releases/${id}/resubmit/`, { method: 'POST', body: data });
+}
+
+export interface CompleteRevisionInput {
+  folder_path: string;
+  revision_code: string;
+  changelog: string;
+  hardcopy_count?: number;
+  topic_content?: string;
+}
+
+/** Port of completeRevision. */
+export function completeRevision(releaseId: number, data: CompleteRevisionInput) {
+  return apiFetch<unknown>(`/projects/drawing-releases/${releaseId}/complete_revision/`, {
+    method: 'POST',
+    body: data,
+  });
+}
+
+/** Port of selfStartRevision: no body when there is no reason. */
+export function selfStartRevision(releaseId: number, reason?: string) {
+  return apiFetch<unknown>(`/projects/drawing-releases/${releaseId}/self_revision/`, {
+    method: 'POST',
+    body: reason ? { reason } : undefined,
+  });
+}
+
+/** Port of getDrawingRelease as a plain call (the resubmit form's values). */
+export function getDrawingRelease(id: number | string) {
+  return apiFetch<DrawingRelease>(`/projects/drawing-releases/${id}/`);
+}
