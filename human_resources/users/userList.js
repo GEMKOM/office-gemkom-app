@@ -265,6 +265,9 @@ function ensureUserEditTabs(editModal, user) {
     let attendanceLoaded = false;
     let permsLoaded = false;
     let positionDropdown = null;
+    // A position picked but not yet saved. Kept outside the dropdown because
+    // the panel rebuilds it on every reload (see loadPermissionsAndGroups).
+    let pendingPositionValue = null;
     let lastAttendancePayload = null;
     let attendanceExportTable = null;
 
@@ -1692,6 +1695,13 @@ function ensureUserEditTabs(editModal, user) {
                 positionDropdown.destroy();
                 positionDropdown = null;
             }
+            // Every portal-access or override click calls reload(), which
+            // re-renders this box and rebuilds the dropdown from scratch. That
+            // used to reset it to the stored value, so "pick a position ->
+            // toggle portal access -> Kaydet" sent position: null, and the
+            // backend accepted it as "remove the position" with a 200 and a
+            // success toast. Carry the pending pick across the rebuild.
+            if (pendingPositionValue === selectedPos) pendingPositionValue = null;
             const ddMount = box.querySelector(`#perm-position-dropdown-${user.id}`);
             positionDropdown = ddMount
                 ? new ModernDropdown(ddMount, { placeholder: 'Pozisyon seçin...', multiple: false, searchable: true })
@@ -1703,14 +1713,41 @@ function ensureUserEditTabs(editModal, user) {
                         text: `${p.title || '-'} (L${p.level || '-'})${p.department_name ? ` - ${p.department_name}` : ''}`
                     }))
                 );
-                if (selectedPos) positionDropdown.setValue(selectedPos);
+                const restore = pendingPositionValue !== null ? pendingPositionValue : selectedPos;
+                if (restore) positionDropdown.setValue(restore);
             }
+            ddMount?.addEventListener('dropdown:select', (e) => {
+                const picked = e?.detail?.value;
+                pendingPositionValue = picked ? String(picked) : '';
+            });
             box.querySelector(`#perm-position-save-btn-${user.id}`)?.addEventListener('click', async () => {
-                const next = positionDropdown?.getValue?.() ?? '';
+                const next = String(positionDropdown?.getValue?.() ?? '');
+                if (next === selectedPos) {
+                    showNotification('Pozisyon zaten güncel.', 'info');
+                    return;
+                }
+                // An empty box means "remove the position", which also drops the
+                // user out of every position-derived user group and clears their
+                // position permissions. Never send that implicitly.
+                if (!next) {
+                    if (!selectedPos) {
+                        showNotification('Önce bir pozisyon seçin.', 'warning');
+                        return;
+                    }
+                    const ok = confirm(
+                        'Kullanıcının pozisyonu kaldırılacak.\n\n' +
+                        'Pozisyondan gelen grup üyelikleri ve yetkiler de kalkar. Devam edilsin mi?'
+                    );
+                    if (!ok) return;
+                }
                 try {
                     await assignUserToPosition(user.id, next ? Number(next) : null);
-                    showNotification('Pozisyon güncellendi', 'success');
+                    pendingPositionValue = null;
+                    showNotification(next ? 'Pozisyon güncellendi' : 'Pozisyon kaldırıldı', 'success');
                     await reload();
+                    // Refresh the table behind the modal so the Pozisyon column
+                    // reflects the change without reopening the page.
+                    await loadUsers();
                 } catch (e) {
                     showNotification(e?.message || 'Pozisyon güncellenemedi', 'error');
                 }

@@ -302,11 +302,11 @@ body.pp-meeting-fullscreen .modules-section > .container-fluid {
     max-width: none;
 }
 
-/* The slide: strip / hero / panel grid, exactly one viewport tall */
+/* The slide: strip / hero / tiles / plan sheet, exactly one viewport tall */
 body.pp-meeting-fullscreen #pp-meeting-container {
     height: 100vh;
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr);
+    grid-template-rows: auto auto auto minmax(0, 1fr);
     gap: 12px;
     padding: 12px 22px 16px;
     background:

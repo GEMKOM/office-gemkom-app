@@ -583,6 +583,7 @@
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>Bilgi:</strong> Düzenlemek istediğiniz taslak talebi seçin. Seçilen talep mevcut sayfaya yüklenecektir.
+                        <strong>Oto</strong> etiketli satır, sayfadaki her değişiklikte otomatik olarak güncellenen tek kayıttır.
                     </div>
                     
                     <div class="table-responsive">
@@ -591,7 +592,7 @@
                                 <tr>
                                     <th>Talep No</th>
                                     <th>Başlık</th>
-                                    <th>Oluşturulma</th>
+                                    <th>Son Kayıt</th>
                                     <th>Malzeme Sayısı</th>
                                     <th>Tedarikçi Sayısı</th>
                                     <th>İşlemler</th>
@@ -613,6 +614,41 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Save Draft (overwrite or save as new) Modal -->
+    <div class="modal fade" id="saveDraftModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-save me-2"></i>
+                        Taslağı Kaydet
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Bu talep daha önce <strong id="save-draft-existing-name"></strong>
+                        (<span id="save-draft-existing-id"></span>) adıyla taslak olarak kaydedildi.
+                        Kaydederseniz bu taslağın üzerine yazılacak.
+                    </div>
+                    <label for="save-draft-name" class="form-label">Taslak Adı</label>
+                    <input type="text" class="form-control" id="save-draft-name" maxlength="200" autocomplete="off">
+                    <div class="form-text" id="save-draft-hint"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-outline-primary" id="save-draft-as-new-btn">
+                        <i class="fas fa-plus me-1"></i>Yeni Taslak Olarak Kaydet
+                    </button>
+                    <button type="button" class="btn btn-danger" id="save-draft-overwrite-btn">
+                        <i class="fas fa-save me-1"></i>Üzerine Yaz
+                    </button>
                 </div>
             </div>
         </div>

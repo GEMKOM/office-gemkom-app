@@ -100,6 +100,7 @@ function sectionLabel(section) {
     if (section === 'sales') return 'Satış';
     if (section === 'hr' || section === 'human_resources') return 'İK';
     if (section === 'it') return 'BT';
+    if (section === 'isg') return 'İSG';
     if (section === 'finance') return 'Finans';
     if (section === 'other') return 'Diğer';
     return section || '-';

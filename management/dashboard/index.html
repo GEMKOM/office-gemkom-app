@@ -3,20 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Yönetim Dashboard</title>
+    <title>GEMKOM - Yönetim Paneli</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <link rel="stylesheet" href="../../style.css">
     <link rel="stylesheet" href="../../components/navbar.css">
     <link rel="stylesheet" href="../../components/header/header.css">
-    <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../components/table/table.css">
     <link rel="stylesheet" href="../../components/notification/notification.css">
     <link rel="stylesheet" href="../../components/badges/badges.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
-    <link rel="stylesheet" href="../../pre-auth.css">
     <link rel="stylesheet" href="dashboard.css">
 </head>
-<body class="pre-auth">
+<body>
     <div id="navbar-container"></div>
 
     <div class="floating-element"></div>
@@ -24,12 +25,63 @@
     <div class="floating-element"></div>
 
     <section class="modules-section py-5">
-        <div class="container-fluid">
+        <div class="container-fluid dash-page">
             <div id="header-placeholder"></div>
-            <div id="kpi-cards-placeholder"></div>
-            <div id="content-placeholder"></div>
+
+            <!-- ROWS 1-2: the scorecard panel — RAG dots (phone), seven pillar cards, live strip -->
+            <div id="dash-panel-scorecard" class="dashboard-card compact dash-block dash-panel">
+                <div class="card-header dash-card-head">
+                    <h5><i class="fas fa-th-large text-primary"></i> Fabrika Karnesi <span class="dash-card-sub">yedi sütun · bu ay vs geçen ay · canlı şerit 60 sn</span></h5>
+                </div>
+                <div class="card-body dash-panel-body">
+                    <!-- Mobile RAG dot row (hidden >= 768 px) -->
+                    <nav id="dash-rag-dots" class="dash-rag-dots" aria-label="Sütun durumları"></nav>
+
+                    <!-- ROW 1: seven pillar cards -->
+                    <div id="dash-pillars" class="dash-pillars" data-state="loading"></div>
+
+                    <!-- ROW 2: live strip (own 60 s poll) -->
+                    <div id="dash-live" class="dash-live" data-state="loading"></div>
+                </div>
+            </div>
+
+            <!-- ROW 3: exceptions beside the decision queue -->
+            <div id="dash-queues" class="row g-3 dash-queues">
+                <div class="col-12 col-lg-7 dash-queues-exceptions">
+                    <div id="dash-exceptions" class="dashboard-card compact dash-block" data-state="loading"></div>
+                </div>
+                <div class="col-12 col-lg-5 dash-queues-decisions">
+                    <div id="dash-decisions" class="dashboard-card compact dash-block" data-state="loading"></div>
+                </div>
+            </div>
+
+            <!-- ROW 4: six trend charts (the renderer paints its own title) -->
+            <div id="dash-panel-trends" class="dashboard-card compact dash-block dash-panel">
+                <div class="card-body dash-panel-body">
+                    <div id="dash-trends" class="dash-trends" data-state="loading"></div>
+                </div>
+            </div>
+
+            <!-- ROW 5: Günlük Özet -->
+            <div id="dash-yesterday" class="dashboard-card compact dash-block" data-state="loading"></div>
+
+            <div id="dash-footer" class="dash-footer"></div>
         </div>
     </section>
+
+    <!-- 'Neden?' drawer: a body-level offcanvas (never inside the navbar's
+         backdrop-filter, which would trap position:fixed). -->
+    <div class="offcanvas offcanvas-end dash-drawer" id="dash-drawer" tabindex="-1"
+         data-bs-scroll="true" aria-labelledby="dash-drawer-title">
+        <div class="offcanvas-header dash-drawer-head">
+            <div class="dash-drawer-titles">
+                <h5 class="offcanvas-title" id="dash-drawer-title"></h5>
+                <span class="dash-drawer-stamp" id="dash-drawer-stamp"></span>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Kapat"></button>
+        </div>
+        <div class="offcanvas-body dash-drawer-body" id="dash-drawer-body"></div>
+    </div>
 
     <footer class="footer-section">
         <div class="container">

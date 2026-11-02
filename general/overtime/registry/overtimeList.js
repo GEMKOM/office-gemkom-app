@@ -22,6 +22,7 @@ import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
+import { nextRowIndex } from './participantIndex.js';
 import { 
     initializeModalComponents, 
     showOvertimeDetailsModal, 
@@ -872,7 +873,9 @@ function addParticipant(prefill = null) {
     if (!container) {
         return;
     }
-    const participantIndex = container.children.length;
+    const participantIndex = nextRowIndex(
+        [...container.querySelectorAll('.participant-row')].map((row) => row.dataset.index)
+    );
 
     const participantHtml = `
         <div class="participant-row mb-3" data-index="${participantIndex}">
@@ -1005,12 +1008,18 @@ function initializeUserDropdown(index, prefill = null) {
     });
 
     // Set user options - try ID first, fallback to username
-    const userItems = allUsers.map(user => ({
-        value: user.id || user.username, // Try ID first, fallback to username
-        text: (user.first_name && user.last_name) ?
+    const userItems = allUsers.map(user => {
+        const text = (user.first_name && user.last_name) ?
             `${user.first_name} ${user.last_name}` :
-            user.username
-    }));
+            user.username;
+        return {
+            value: user.id || user.username, // Try ID first, fallback to username
+            text,
+            // Match the username too, so ASCII searches like "sendogan"
+            // still find "Şendoğan Şirin".
+            searchText: user.username ? `${text} ${user.username}` : text,
+        };
+    });
 
     dropdown.setItems(userItems);
 
@@ -1083,11 +1092,12 @@ function setupJobOrderDropdown(container, participantIndex, prefill = null) {
 
 // Remove participant
 function removeParticipant(index) {
-    const participantRow = document.querySelector(`.participant-row[data-index="${index}"]`);
+    const container = document.getElementById('participants-container');
+    if (!container) return;
+    const participantRow = container.querySelector(`.participant-row[data-index="${index}"]`);
     if (participantRow) {
         // Don't remove if it's the only participant
-        const container = document.getElementById('participants-container');
-        if (container.children.length > 1) {
+        if (container.querySelectorAll('.participant-row').length > 1) {
             // Clean up dropdown references
             userDropdowns.delete(index);
             jobOrderDropdowns.delete(index);
@@ -1111,7 +1121,10 @@ async function submitOvertimeRequest(formData) {
         
         // Collect participants from the modal
         const participants = [];
-        const participantRows = document.querySelectorAll('.participant-row');
+        const participantsContainer = document.getElementById('participants-container');
+        const participantRows = participantsContainer
+            ? participantsContainer.querySelectorAll('.participant-row')
+            : [];
         
         for (const row of participantRows) {
             const participantIndex = parseInt(row.dataset.index);

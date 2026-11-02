@@ -4,6 +4,7 @@ import { createJobAllocationsEditor, formatSharePercent } from '../../../../comp
 import { hasPerm, isSuperuser } from '../../../../authService.js';
 import { getOperations, markOperationCompleted, unmarkOperationCompleted, createManualTimeEntry } from '../../../../apis/machining/operations.js';
 import { fetchMachinesDropdown } from '../../../../apis/machines.js';
+import { getMachiningOperators } from '../../../../apis/overtime.js';
 import { fetchAllUsers } from '../../../../apis/users.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
@@ -2503,8 +2504,28 @@ window.deletePartConfirm = function(partKey) {
     deleteModal.show();
 };
 
+// Machining operators (access_machining_tasks), loaded on first use of the
+// manual time modal and kept for the rest of the session.
+let machiningOperatorsPromise = null;
+
+async function populateManualTimeOperators() {
+    const select = document.getElementById('manual-time-operator');
+    if (!machiningOperatorsPromise) {
+        machiningOperatorsPromise = getMachiningOperators().catch(() => []);
+    }
+    const operators = await machiningOperatorsPromise;
+    const rows = Array.isArray(operators) ? operators : (operators?.results || []);
+    select.innerHTML = '<option value="">Operatör seçin...</option>'
+        + rows.map(u => `<option value="${u.id}">${escapeHtml(u.full_name || u.username)}</option>`).join('');
+    if (!rows.length) {
+        showNotification('Operatör listesi yüklenemedi', 'error');
+    }
+}
+
 function showManualTimeModal(operationKey, machineFk = '') {
     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('manualTimeModal'));
+    // Fills while the modal opens; the form reset below keeps it on "seçin".
+    populateManualTimeOperators();
     
     // Set operation key
     document.getElementById('manual-time-operation-key').value = operationKey;
@@ -2557,6 +2578,7 @@ async function saveManualTimeEntry() {
     }
     
     const operationKey = document.getElementById('manual-time-operation-key').value;
+    const operatorId = parseInt(document.getElementById('manual-time-operator').value);
     const machineFk = parseInt(document.getElementById('manual-time-machine').value);
     const startTime = document.getElementById('manual-time-start').value;
     const finishTime = document.getElementById('manual-time-finish').value;
@@ -2572,8 +2594,15 @@ async function saveManualTimeEntry() {
     const startTimestamp = new Date(startTime).getTime();
     const finishTimestamp = new Date(finishTime).getTime();
     
+    if (!operatorId) {
+        showNotification('Lütfen operatör seçin', 'error');
+        return;
+    }
+
     const timeData = {
         task_key: operationKey,
+        // The timer is booked to this operator, not to whoever is logged in.
+        user: operatorId,
         machine_fk: machineFk,
         start_time: startTimestamp,
         finish_time: finishTimestamp

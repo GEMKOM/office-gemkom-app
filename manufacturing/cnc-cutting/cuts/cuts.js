@@ -33,6 +33,7 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { parsePartsFromText } from './partsPasteParser.js';
+import { nextRowIndex } from './partIndex.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
@@ -417,9 +418,12 @@ function plateInfoText(row) {
 function plateSourceCellHtml(row) {
     if (row.planning_request_item) {
         const delivered = row.plate_item_is_delivered === true;
+        const partial = !delivered && Number(row.plate_item_delivered_quantity || 0) > 0;
         const badge = delivered
             ? '<span class="status-badge status-green">Teslim</span>'
-            : '<span class="status-badge status-orange">Malzeme Bekliyor</span>';
+            : partial
+                ? `<span class="status-badge status-purple" title="Kısmi teslim: ${row.plate_item_delivered_quantity} / ${row.plate_item_quantity} alındı">Kısmi Teslim</span>`
+                : '<span class="status-badge status-orange">Malzeme Bekliyor</span>';
         const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
         const tooltip = `${name}${row.plate_item_code ? ' (' + row.plate_item_code + ')' : ''}`;
         return `<div title="${tooltip}"><div>${name}</div>${badge}</div>`;
@@ -1560,7 +1564,10 @@ async function handleCreateCutSave(formData) {
 
 
     // Collect parts data from dynamic rows
-    const partRows = document.querySelectorAll('.part-row');
+    const partsContainer = document.getElementById('parts-container');
+    const partRows = partsContainer
+        ? partsContainer.querySelectorAll('.part-row')
+        : [];
     for (const row of partRows) {
         const partIndex = parseInt(row.dataset.index);
         // Get job_no from dropdown
@@ -3064,7 +3071,9 @@ function addPart() {
     if (!container) {
         return;
     }
-    const partIndex = container.children.length;
+    const partIndex = nextRowIndex(
+        [...container.querySelectorAll('.part-row')].map((row) => row.dataset.index)
+    );
     
     const partHtml = `
         <div class="part-row mb-3" data-index="${partIndex}">
@@ -3207,21 +3216,11 @@ function populatePartsFromParsed(parsedParts) {
 
 // Remove part
 function removePart(index) {
-    // Clean up dropdown reference
-    jobOrderDropdowns.delete(index);
-    
-    // Re-index dropdown references for remaining parts
-    const newDropdowns = new Map();
-    jobOrderDropdowns.forEach((dropdown, oldIndex) => {
-        if (oldIndex < index) {
-            newDropdowns.set(oldIndex, dropdown);
-        } else if (oldIndex > index) {
-            newDropdowns.set(oldIndex - 1, dropdown);
-        }
-    });
-    jobOrderDropdowns = newDropdowns;
-    const partRow = document.querySelector(`.part-row[data-index="${index}"]`);
+    const container = document.getElementById('parts-container');
+    if (!container) return;
+    const partRow = container.querySelector(`.part-row[data-index="${index}"]`);
     if (partRow) {
+        jobOrderDropdowns.delete(index);
         partRow.remove();
     }
 }
@@ -3383,7 +3382,11 @@ async function showCutDetails(cutData) {
         // Plate source (planning request item or remnant plate)
         if (taskData.plate_item) {
             const pi = taskData.plate_item;
-            const deliveredText = pi.is_delivered ? 'Teslim edildi' : 'Malzeme bekleniyor (satın alma)';
+            const deliveredText = pi.is_delivered
+                ? 'Teslim edildi'
+                : (Number(pi.delivered_quantity || 0) > 0
+                    ? `Kısmi teslim (${pi.delivered_quantity} / ${pi.quantity} alındı)`
+                    : 'Malzeme bekleniyor (satın alma)');
             const consumedText = pi.is_consumed ? ' · Kullanıldı' : '';
             detailsModal.addField({
                 id: 'cut-plate-item',
@@ -4534,10 +4537,14 @@ function updateSelectedPlanningItemDisplayFor(modal, suffix) {
         }
         if (deliveryText) {
             const delivered = selectedPlanningItem.is_delivered === true;
+            const partialQty = Number(selectedPlanningItem.delivered_quantity || 0);
+            const partial = !delivered && partialQty > 0;
             deliveryText.textContent = delivered
                 ? 'Malzeme teslim alındı.'
-                : 'Malzeme henüz teslim edilmedi — satın alma bekleniyor.';
-            deliveryText.className = `form-text d-block ${delivered ? 'text-success' : 'text-danger'}`;
+                : partial
+                    ? `Malzeme kısmen teslim alındı (${selectedPlanningItem.delivered_quantity} / ${selectedPlanningItem.quantity} ${selectedPlanningItem.item_unit || ''}).`
+                    : 'Malzeme henüz teslim edilmedi — satın alma bekleniyor.';
+            deliveryText.className = `form-text d-block ${delivered ? 'text-success' : partial ? 'text-primary' : 'text-danger'}`;
         }
         if (checkbox) checkbox.checked = !!markItemConsumed;
     } else {
@@ -4699,9 +4706,11 @@ function initializePlanningItemSelectionTable() {
                 label: 'Teslim',
                 sortable: false,
                 width: '8%',
-                formatter: (value) => value
+                formatter: (value, row) => value
                     ? '<span class="status-badge status-green">Teslim</span>'
-                    : '<span class="status-badge status-orange">Bekliyor</span>'
+                    : (Number(row.delivered_quantity || 0) > 0
+                        ? `<span class="status-badge status-purple" title="${row.delivered_quantity} / ${row.quantity} alındı">Kısmi</span>`
+                        : '<span class="status-badge status-orange">Bekliyor</span>')
             },
             {
                 field: 'cnc_cuts_count',

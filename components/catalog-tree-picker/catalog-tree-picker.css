@@ -223,3 +223,25 @@
     text-align: left;
     font-size: 0.8rem;
 }
+
+/* Scoped mode (options.scopeLoader) */
+.ctp-scope-hint {
+    font-size: 0.76rem;
+    color: #6c757d;
+    padding: 2px 6px 8px;
+}
+
+.ctp-template-head {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6c757d;
+    padding: 10px 6px 4px;
+    border-bottom: 1px solid #eef0f3;
+    margin-bottom: 2px;
+}
+
+.ctp-template-head:first-child {
+    padding-top: 2px;
+}

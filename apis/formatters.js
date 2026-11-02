@@ -367,3 +367,52 @@ export function formatRemainingHours(estimatedHours, baseHours, currentTimerStar
     const remaining = Math.max(0, estimated - spent);
     return `${remaining.toFixed(2)} saat`;
 }
+// ===== Management dashboard formatters =====
+
+function dashNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const n = typeof value === 'number' ? value : parseFloat(String(value).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Compact EUR amount in tr-TR style: '€1,2M' / '€38k' / '€9,8k' / '€410'.
+ * Returns '' for null/undefined/NaN so a hidden (money-gated) amount is never shown as '€0'.
+ * @param {number|string|null} value
+ * @returns {string}
+ */
+export function formatEurCompact(value) {
+    const n = dashNumber(value);
+    if (n === null) return '';
+    const abs = Math.abs(n);
+    const sign = n < 0 ? '-' : '';
+    const fmt = (v, d) => v.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+    if (abs >= 1_000_000) return `${sign}€${fmt(abs / 1_000_000, 1)}M`;
+    if (abs >= 10_000) return `${sign}€${fmt(abs / 1_000, 0)}k`;
+    if (abs >= 1_000) return `${sign}€${fmt(abs / 1_000, 1)}k`;
+    return `${sign}€${fmt(abs, 0)}`;
+}
+
+/**
+ * Kilograms → tons with tr-TR grouping: formatTons('1412300.0') → '1.412,3 t'.
+ * @param {number|string|null} kg
+ * @param {number} [decimals=1]
+ * @returns {string} '' when the value is not a number
+ */
+export function formatTons(kg, decimals = 1) {
+    const n = dashNumber(kg);
+    if (n === null) return '';
+    return `${(n / 1000).toLocaleString('tr-TR', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })} t`;
+}
+
+/**
+ * Working days: formatWd(16) → '16 iş günü'. Decimals are kept only when present (12,5 iş günü).
+ * @param {number|string|null} n
+ * @returns {string} '' when the value is not a number
+ */
+export function formatWd(n) {
+    const v = dashNumber(n);
+    if (v === null) return '';
+    const d = Number.isInteger(v) ? 0 : 1;
+    return `${v.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d })} iş günü`;
+}

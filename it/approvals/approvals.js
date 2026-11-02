@@ -36,7 +36,8 @@ const SUBJECT_TYPE_LABELS = {
     'planning.planningrequest': 'Planlama Talebi',
     'subcontracting.subcontractorstatement': 'Taşeron Hakediş',
     'quality_control.ncr': 'UYR',
-    'quality_control.qcreview': 'KK İncelemesi'
+    'quality_control.qcreview': 'KK İncelemesi',
+    'procurement.paymentlist': 'Ödeme Listesi'
 };
 
 // ---------------------------------------------------------------------------
