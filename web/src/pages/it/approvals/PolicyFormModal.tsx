@@ -98,6 +98,7 @@ export function PolicyFormModal({ policy, onClose }: PolicyFormModalProps) {
               data={options}
               searchable
               withAsterisk
+              allowDeselect={false}
               nothingFoundMessage="Sonuç bulunamadı"
               {...form.getInputProps('subject_type')}
               onChange={(value) => {
