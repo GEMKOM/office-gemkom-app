@@ -608,6 +608,67 @@ export const appRoutes: RouteObject[] = [
       ).StaffReportPage,
     }),
   },
+  // Phase 3b: planning and procurement lists.
+  {
+    path: '/planning/inventory/cards',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/inventory/cards/InventoryCardsPage'))
+        .InventoryCardsPage,
+    }),
+  },
+  {
+    path: '/planning/inventory/equipment',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/inventory/equipment/EquipmentPage')).EquipmentPage,
+    }),
+  },
+  {
+    path: '/planning/items',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/items/PlanningItemsPage')).PlanningItemsPage,
+    }),
+  },
+  {
+    path: '/procurement/critical-items',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/critical-items/CriticalItemsPage'))
+        .CriticalItemsPage,
+    }),
+  },
+  {
+    path: '/procurement/reports/items',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/reports/items/ItemsReportPage'))
+        .ItemsReportPage,
+    }),
+  },
+  {
+    path: '/procurement/reports/staff',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/reports/staff/StaffReportPage'))
+        .StaffReportPage,
+    }),
+  },
+  {
+    path: '/procurement/reports/suppliers',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/reports/suppliers/SuppliersReportPage'))
+        .SuppliersReportPage,
+    }),
+  },
+  {
+    path: '/procurement/suppliers/list',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/suppliers/list/SuppliersPage')).SuppliersPage,
+    }),
+  },
+  {
+    path: '/procurement/suppliers/payment-terms',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/suppliers/payment-terms/PaymentTermsPage'))
+        .PaymentTermsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

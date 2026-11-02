@@ -97,5 +97,14 @@
   "/manufacturing/maintenance/fault-requests",
   "/manufacturing/maintenance/reports/faults",
   "/manufacturing/maintenance/reports/monthly-metrics",
-  "/manufacturing/maintenance/reports/staff-report"
+  "/manufacturing/maintenance/reports/staff-report",
+  "/planning/inventory/cards",
+  "/planning/inventory/equipment",
+  "/planning/items",
+  "/procurement/critical-items",
+  "/procurement/reports/items",
+  "/procurement/reports/staff",
+  "/procurement/reports/suppliers",
+  "/procurement/suppliers/list",
+  "/procurement/suppliers/payment-terms"
 ]
