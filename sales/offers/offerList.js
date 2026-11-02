@@ -49,11 +49,12 @@ import {
 } from '../../apis/sales/offers.js';
 import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren, searchOfferTemplateNodes } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
-import { initCustomerEditModal, openCustomerEditModal, getMissingCustomerFieldsForConversion } from '../customers/customerEditModal.js';
+import { initCustomerEditModal, openCustomerEditModal, getMissingCustomerFieldsForConversion } from '../shared/customerEditModal.js';
 import { getPaymentTerms } from '../../apis/procurement.js';
 import { createComment, getTopicComments } from '../../apis/projects/topics.js';
 import { fetchUsersDropdown } from '../../apis/users.js';
-import { getUser } from '../../authService.js';
+import { getUser, isAdmin, hasPerm } from '../../authService.js';
+import { mountEstimateReport } from '../../components/estimate-report/estimate-report.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../components/file-attachments/file-attachments.js';
 
@@ -146,6 +147,17 @@ let isLoading = false;
 let offersStats = null;
 let offersFilters = null;
 let offersTable = null;
+// The Tahmin card of the open offer modal (components/estimate-report).
+let offerEstimateHandle = null;
+
+function canViewEstimates() {
+    try {
+        return isAdmin() || hasPerm('view_estimates');
+    } catch (error) {
+        console.warn('Failed to check estimate permission:', error);
+        return false;
+    }
+}
 let createOfferModal = null;
 let viewOfferModal = null;
 let approvalConfirmModal = null;
@@ -912,8 +924,22 @@ window.viewOffer = async function (id, options = {}) {
             customContent: `<div class="offer-tab-content">${buildApprovalTab()}</div>`
         });
 
+        // Tahmin: the drawing-based cost estimate from the offer's customer
+        // drawings (estimator app). Only `view_estimates` holders see the tab.
+        if (canViewEstimates()) {
+            viewOfferModal.addTab({
+                id: 'tahmin',
+                label: 'Tahmin',
+                icon: 'fas fa-calculator',
+                iconColor: 'text-primary',
+                customContent: '<div class="offer-tab-content"><div id="offer-estimate-container"></div></div>'
+            });
+        }
+
         viewOfferModal.render();
         attachOfferModalListeners();
+        offerEstimateHandle?.destroy();
+        offerEstimateHandle = null;
 
         // Reset files component so it binds to the current modal instance
         offerFilesComponent = null;
@@ -1032,6 +1058,14 @@ async function loadTabData(tabId) {
 
         pane.innerHTML = `<div class="offer-tab-content">${buildPricingTab()}</div>`;
         attachPricingTabListeners();
+        return;
+    }
+
+    if (tabId === 'tahmin') {
+        const host = pane.querySelector('#offer-estimate-container');
+        if (host && !offerEstimateHandle) {
+            offerEstimateHandle = mountEstimateReport(host, { offerId });
+        }
         return;
     }
 
@@ -4876,7 +4910,7 @@ function renderPricingV3Totals() {
     if (weightEl) weightEl.textContent = totalWeight > 0 ? `${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg` : '—';
     const avgKgEl = document.getElementById('pricing-avg-kg-price');
     const avgKg = totalWeight > 0 ? (itemsTotal / totalWeight) : null;
-    if (avgKgEl) avgKgEl.textContent = avgKg != null ? formatPricingV3Money(avgKg) : '—';
+    if (avgKgEl) avgKgEl.textContent = avgKg != null ? formatPricingV3Money2(avgKg) : '—';
 }
 
 function markPricingV3Unsaved(hasChanges) {
@@ -5033,6 +5067,8 @@ function attachOfferModalListeners() {
     const modalEl = viewOfferModal.modal;
     if (modalEl) {
         modalEl.addEventListener('hidden.bs.modal', () => {
+            offerEstimateHandle?.destroy();
+            offerEstimateHandle = null;
             // When detail modal closes, remove offer-specific params from URL
             try {
                 const url = new URL(window.location.href);
@@ -5149,7 +5185,7 @@ function showEditModal(onSuccess) {
             modal.hide();
             showNotification('Teklif güncellendi', 'success');
             await onSuccess();
-        } catch (e) { showNotification('Güncelleme hatası', 'error'); }
+        } catch (e) { showNotification(parseError(e, 'Güncelleme hatası'), 'error'); }
     });
     modal.render();
     modal.show();
@@ -6120,6 +6156,37 @@ function toDateInputValue(val) {
     return '';
 }
 
+// Toolbar with select-all / clear-all for a list of file checkboxes.
+// `scope` is the container the checkboxes live in; they may be rendered after
+// this call, so the list is queried lazily on every use.
+function buildFileSelectionToolbar(scope, cbSelector) {
+    const bar = document.createElement('div');
+    bar.className = 'd-flex align-items-center gap-2 mb-2';
+    bar.innerHTML = `
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-file-select="all"><i class="fas fa-check-double me-1"></i>Tümünü Seç</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-file-select="none"><i class="fas fa-eraser me-1"></i>Seçimi Temizle</button>
+        <small class="text-muted ms-auto" data-file-select-count></small>
+    `;
+    const boxes = () => Array.from(scope.querySelectorAll(cbSelector));
+    const updateCount = () => {
+        const all = boxes();
+        const checked = all.filter(cb => cb.checked).length;
+        bar.querySelector('[data-file-select-count]').textContent = `${checked} / ${all.length} dosya seçili`;
+    };
+    bar.querySelectorAll('[data-file-select]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const select = btn.dataset.fileSelect === 'all';
+            boxes().forEach(cb => { cb.checked = select; });
+            updateCount();
+        });
+    });
+    scope.addEventListener('change', (e) => {
+        if (e.target.matches(cbSelector)) updateCount();
+    });
+    return { bar, updateCount };
+}
+
 async function showConsultationModal(onSuccess) {
     const modal = new EditModal('consultation-modal-container', { title: 'Departman Görüşü Gönder', icon: 'fas fa-paper-plane', size: 'lg', showEditButton: false });
     modal.clearAll();
@@ -6190,6 +6257,8 @@ async function showConsultationModal(onSuccess) {
             const filesContainer = document.createElement('div');
             filesContainer.className = 'consultation-files-selection';
             filesContainer.innerHTML = '<p class="text-muted small mb-2">Departmanın görmesini istediğiniz dosyaları işaretleyin.</p>';
+            const selectToolbar = buildFileSelectionToolbar(filesSection, '.consultation-file-cb');
+            filesContainer.appendChild(selectToolbar.bar);
             const listDiv = document.createElement('div');
             listDiv.className = 'row g-2';
             offerFiles.forEach(f => {
@@ -6220,6 +6289,7 @@ async function showConsultationModal(onSuccess) {
             });
             filesContainer.appendChild(listDiv);
             filesSection.appendChild(filesContainer);
+            selectToolbar.updateCount();
             filesSection.querySelectorAll('.preview-consultation-file').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();
@@ -6326,6 +6396,8 @@ async function showEditConsultationModal(taskId, onSuccess) {
             p.className = 'text-muted small mb-2';
             p.textContent = 'Departmanın görmesini istediğiniz dosyaları işaretleyin. Mevcut setin yerine seçtiğiniz set geçer.';
             filesSection.appendChild(p);
+            const selectToolbar = buildFileSelectionToolbar(filesSection, '.edit-consultation-file-cb');
+            filesSection.appendChild(selectToolbar.bar);
             const listDiv = document.createElement('div');
             listDiv.className = 'row g-2';
             offerFiles.forEach(f => {
@@ -6356,6 +6428,7 @@ async function showEditConsultationModal(taskId, onSuccess) {
                 listDiv.appendChild(col);
             });
             filesSection.appendChild(listDiv);
+            selectToolbar.updateCount();
             filesSection.querySelectorAll('.preview-edit-consultation-file').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.preventDefault();

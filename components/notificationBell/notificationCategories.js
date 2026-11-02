@@ -13,6 +13,7 @@ export const CATEGORY_META = {
     sales:           { icon: 'fa-handshake',        color: '#7c3aed', bg: '#f1eafe', label: 'Satış' },
     planning:        { icon: 'fa-calendar-days',    color: '#ea580c', bg: '#fdeee4', label: 'Planlama' },
     topics:          { icon: 'fa-comments',         color: '#0891b2', bg: '#e3f4f8', label: 'Konular' },
+    isg:             { icon: 'fa-helmet-safety',    color: '#b45309', bg: '#fdf0e3', label: 'İSG' },
     general:         { icon: 'fa-bell',             color: '#64748b', bg: '#eef1f5', label: 'Genel' },
 };
 

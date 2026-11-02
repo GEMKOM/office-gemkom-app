@@ -86,9 +86,11 @@ function initializeModalComponents() {
 
         if (currentRequest && currentRequest.pending_revision_request && currentRequest.pending_revision_request.release_id) {
             try {
-                await rejectRevision(currentRequest.pending_revision_request.release_id, {
-                    reason: formData.reason.trim()
-                });
+                const rejectionData = { reason: formData.reason.trim() };
+                if (currentRequest.pending_revision_request.topic_id) {
+                    rejectionData.topic_id = currentRequest.pending_revision_request.topic_id;
+                }
+                await rejectRevision(currentRequest.pending_revision_request.release_id, rejectionData);
                 showNotification('Revizyon talebi başarıyla reddedildi', 'success');
                 rejectModal.hide();
                 detailsModal.hide();
@@ -260,7 +262,7 @@ async function showRevisionRequestDetails(request) {
     if (!detailsModal) return;
 
     currentRequest = request;
-    detailsModal.clearAll();
+    detailsModal.clearData();
 
     // Add general information section
     detailsModal.addSection({

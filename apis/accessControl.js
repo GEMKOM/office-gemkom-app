@@ -8,10 +8,22 @@ import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authS
  * - Dashes in path segments are converted to underscores.
  */
 
-// '/general/notifications' is personal rather than departmental: it only ever
-// shows the signed-in user's own notifications, so it needs no page permission.
+// '/general/notifications' and '/general/discussions' are personal rather than
+// departmental: they only ever show the signed-in user's own notifications,
+// topics and comments, so they need no page permission.
+//
+// The İSG pages are open by design: a safety finding concerns everyone in the
+// plant, and anyone can be assigned one. Raising or closing an issue still
+// needs `create_isg_issues`, which the API enforces (isg/views.py) and the
+// page reads from /isg/issues/my-permissions/ to hide the buttons.
+//
+// İSG Bildirimleri now hangs off Genel in the menus, so '/general' is open too
+// — otherwise the entry would disappear for anyone without an access_general
+// grant. Both Genel landing pages filter their cards by route access, so this
+// only opens the hub, not the pages under it.
 const ALWAYS_ALLOWED_ROUTES = new Set([
-    '/', '/login', '/login/', '/general/notifications',
+    '/', '/login', '/login/', '/general', '/general/notifications', '/general/discussions',
+    '/isg', '/isg/issues',
 ]);
 
 // Routes that are additionally unlocked by a non-page permission codename.
@@ -29,12 +41,17 @@ const ROUTE_EXTRA_CODENAMES = {
 // base page can also open the derived page. The derived page can still be
 // granted independently via its own "Page:" permission — this is an OR.
 const ROUTE_ACCESS_INHERITS = {
+    // Puantaj Formları are printed by whoever keys the welding time entries;
+    // the backend page grant (users 0062) mirrors the same rule.
+    '/manufacturing/welding/timesheets': ['/manufacturing/welding/time-entries'],
     // Kritik Malzemeler is a companion view of Malzeme Takibi and the PR
     // create flow — whoever marks or buys critical items can monitor them.
     '/procurement/critical-items': [
         '/manufacturing/material-tracking',
         '/procurement/purchase-requests/create',
     ],
+    // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
+    '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking'],
 };
 
 function normalizePath(path) {

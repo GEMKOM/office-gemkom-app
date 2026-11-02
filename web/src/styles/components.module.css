@@ -1,0 +1,78 @@
+/* Mantine component overrides wired up in theme.ts. */
+
+.button {
+  font-weight: 500;
+  transition:
+    background 150ms ease-out,
+    border-color 150ms ease-out,
+    color 150ms ease-out,
+    box-shadow 150ms ease-out;
+}
+
+.button[data-variant='default'] {
+  border-color: var(--gk-line-strong);
+  color: var(--gk-ink);
+}
+
+.button[data-variant='default']:hover {
+  background: var(--gk-surface-subtle);
+  border-color: var(--gk-ink);
+}
+
+.button:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.inputLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gk-muted);
+  margin-bottom: 4px;
+}
+
+.input {
+  border-color: var(--gk-line-strong);
+}
+
+.input::placeholder {
+  color: var(--gk-muted);
+}
+
+.input:focus,
+.input:focus-within {
+  border-color: var(--gk-red-700);
+  box-shadow: var(--gk-focus-ring);
+}
+
+.table {
+  font-size: 14px;
+  --table-border-color: var(--gk-line);
+}
+
+.tableTh {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gk-muted);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+/* Cells never wrap; a wide table scrolls sideways inside its panel. */
+.tableTd {
+  white-space: nowrap;
+}
+
+.tableTr {
+  transition: background 120ms ease-out;
+}
+
+.table[data-hover] tbody .tableTr:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.dropdown {
+  border-color: var(--gk-line);
+  border-radius: var(--gk-radius-lg);
+  box-shadow: var(--gk-shadow-popover);
+}

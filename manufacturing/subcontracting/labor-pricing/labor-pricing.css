@@ -1,0 +1,105 @@
+/* Taşeron işçilik fiyatı — only the cost-composition bar needs styles of its
+   own; everything else on the page is a shared component. */
+
+.lp-bar {
+    display: flex;
+    height: 34px;
+    border-radius: 4px;
+    overflow: hidden;
+    border: 1px solid #dee2e6;
+}
+
+.lp-bar > span {
+    display: block;
+    min-width: 2px;
+}
+
+.lp-bar-key {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem 1.25rem;
+    margin-top: 0.65rem;
+    font-size: 0.82rem;
+    color: #495057;
+}
+
+.lp-bar-key > div {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.lp-bar-key i {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+    flex: none;
+    transform: translateY(1px);
+}
+
+.lp-bar-key b {
+    font-weight: 600;
+    color: #2c3e50;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Rate threshold bar — sits directly on top of the lines table, so it is
+   styled to read as that card's toolbar rather than a separate block. */
+.lp-thresholds {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.25rem;
+    padding: 0.6rem 1rem;
+    background: #f6f8fa;
+    border: 1px solid #e3e6ea;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    font-size: 0.82rem;
+    color: #495057;
+}
+
+.lp-thresholds .lp-th-group {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+
+.lp-thresholds input {
+    width: 5.5rem;
+    padding: 0.15rem 0.4rem;
+    font-size: 0.82rem;
+    text-align: right;
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    font-variant-numeric: tabular-nums;
+}
+
+.lp-swatch {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, .18);
+    flex: none;
+}
+
+.lp-swatch-green { background: rgba(39, 107, 76, .22); }
+.lp-swatch-red { background: rgba(176, 46, 46, .22); }
+
+/* The threshold bar is glued to the table card below it. */
+#thresholds-placeholder:not(:empty) + #lines-placeholder .dashboard-card {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+}
+
+/* Numeric columns line up; the table component styles everything else. */
+.lp-num {
+    font-variant-numeric: tabular-nums;
+}
+
+.lp-rate {
+    font-weight: 600;
+    color: #c4470f;
+    font-variant-numeric: tabular-nums;
+}

@@ -1,0 +1,993 @@
+/* Sunum Modu slide, plan-sheet edition.
+   Rows: strip / hero / tiles / sheet. The sheet is the İmalat Planlama grid
+   (../../planning/project-planning/grid.css) rendered
+   read-only; this file is the chrome around it plus the sheet's own cell
+   styles (ps-*). Colours are the house palette — never yellow. */
+
+/* ---- hero ---------------------------------------------------------------- */
+
+.pp-hero-ps {
+    background: #ffffff;
+    border: 1px solid #e2e6ec;
+    border-left: 6px solid #6c757d;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+    padding: 12px 18px 10px;
+    display: grid;
+    /* The id keeps a readable title; the chain takes the rest and caps
+       itself, so on a wide projector it does not stretch across the room. */
+    grid-template-columns: minmax(240px, 420px) minmax(0, 1fr);
+    grid-template-areas:
+        "id figures"
+        "progress progress";
+    column-gap: 18px;
+    row-gap: 6px;
+    align-items: center;
+    min-height: 0;
+}
+
+.pp-hero-ps.ps-theme-green { border-left-color: #198754; }
+.pp-hero-ps.ps-theme-orange { border-left-color: #fd7e14; }
+.pp-hero-ps.ps-theme-red { border-left-color: #dc3545; }
+.pp-hero-ps.ps-theme-grey { border-left-color: #6c757d; }
+
+.ps-hero-id {
+    grid-area: id;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.ps-hero-jobno {
+    font-size: 1.9rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: #1f2530;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.ps-hero-title {
+    font-size: 1.02rem;
+    font-weight: 600;
+    color: #2b3240;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ps-hero-customer {
+    font-size: 0.82rem;
+    color: #6c757d;
+}
+
+.ps-fig-late { color: #c62839; }
+.ps-fig-early { color: #1f8a4c; }
+.ps-fig-ok { color: #1f8a4c; }
+.ps-fig-muted { color: #9aa1ab; }
+
+/* ---- the date chain -----------------------------------------------------
+   Four figures in one fixed row — Başlangıç, Termin, Plan bitişi, Öngörülen —
+   so the eye finds each date in the same place on every slide. The
+   connectors carry the comparisons (plan vs termin, öngörülen vs plan) and
+   the bracket above the termin-to-öngörülen total; each number appears once.
+   An arrow means "compared with", never "later than": a plan that ends
+   before its termin shows a green −N on the same connector. Markup comes
+   from heroChain.js. Rows: 1 bracket · 2 labels · 3 values + connectors ·
+   4 baseline. */
+
+.ps-chain {
+    grid-area: figures;
+    justify-self: end;
+    width: 100%;
+    max-width: 1180px;
+    min-width: 0;
+    display: grid;
+    /* A connector is never narrower than its pill plus the arrowhead room
+       (the pill's margins); the fr share soaks up any extra width. The
+       bracket row is reserved even when there is no bracket, so the hero
+       does not jump when the sheet arrives or between slides. */
+    grid-template-columns: auto minmax(28px, 0.6fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto;
+    grid-template-rows: minmax(25px, auto) auto auto auto;
+    align-items: end;
+    text-align: center;
+}
+
+/* A figure is two grid items (label, value) in one column */
+.ps-cf { display: contents; }
+.ps-cf-start { --ps-col: 1; }
+.ps-cf-termin { --ps-col: 3; }
+.ps-cf-plan { --ps-col: 5; }
+.ps-cf-proj { --ps-col: 7; }
+
+.ps-cf label {
+    grid-column: var(--ps-col);
+    grid-row: 2;
+    margin: 0;
+    padding: 0 6px 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    color: #8a919c;
+    white-space: nowrap;
+}
+
+.ps-cf-value {
+    grid-column: var(--ps-col);
+    grid-row: 3;
+    position: relative;
+    padding: 0 6px;
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #1f2530;
+    white-space: nowrap;
+}
+
+/* The dot on the baseline under each date */
+.ps-cf-value::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -11px;
+    width: 7px;
+    height: 7px;
+    margin-left: -3.5px;
+    border-radius: 50%;
+    background: #1f2530;
+    box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* Başlangıç is context, Öngörülen is the answer */
+.ps-cf-start .ps-cf-value { font-size: 1rem; font-weight: 600; color: #6c757d; }
+.ps-cf-start .ps-cf-value::after { background: #9aa3b2; }
+.ps-cf-plan.is-late .ps-cf-value::after { background: #fd7e14; }
+.ps-cf-plan.is-early .ps-cf-value::after,
+.ps-cf-plan.is-ok .ps-cf-value::after { background: #198754; }
+.ps-cf-proj .ps-cf-value { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; }
+.ps-cf-proj.is-late .ps-cf-value { color: #c62839; }
+.ps-cf-proj.is-late .ps-cf-value::after { background: #dc3545; }
+.ps-cf-proj.is-early .ps-cf-value,
+.ps-cf-proj.is-ok .ps-cf-value { color: #1f8a4c; }
+.ps-cf-proj.is-early .ps-cf-value::after,
+.ps-cf-proj.is-ok .ps-cf-value::after { background: #198754; }
+.ps-theme-red .ps-cf-proj label { color: #dc3545; }
+.ps-theme-orange .ps-cf-proj label { color: #fd7e14; }
+.ps-theme-green .ps-cf-proj label { color: #198754; }
+
+/* Connectors: a line with an arrowhead, the comparison in a pill on it */
+.ps-ck {
+    --ps-lc: #d3d9e1;
+    grid-row: 3;
+    align-self: end;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 1.55rem;
+    min-width: 0;
+}
+
+.ps-ck-1 { grid-column: 2; }
+.ps-ck-2 { grid-column: 4; }
+.ps-ck-3 { grid-column: 6; }
+
+.ps-ck::before {
+    content: "";
+    position: absolute;
+    left: 4px;
+    right: 9px;
+    top: 50%;
+    margin-top: -1px;
+    border-top: 2px solid var(--ps-lc);
+}
+
+.ps-ck::after {
+    content: "";
+    position: absolute;
+    right: 3px;
+    top: 50%;
+    margin-top: -4px;
+    border-left: 7px solid var(--ps-lc);
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+}
+
+.ps-ck span {
+    position: relative;
+    font-size: 14px;
+    font-weight: 800;
+    line-height: 1;
+    padding: 4px 9px;
+    margin: 0 14px 0 8px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px #ffffff;
+    white-space: nowrap;
+}
+
+/* Late: the plan past its termin is orange, the forecast past its plan is
+   red (the sheet's own vocabulary). Early and on time are green. */
+.ps-ck-2.is-late { --ps-lc: #fd7e14; }
+.ps-ck-2.is-late span { background: #fff1e3; color: #b5500a; }
+.ps-ck-3.is-late { --ps-lc: #dc3545; }
+.ps-ck-3.is-late span { background: #fde2e5; color: #a71d2a; }
+.ps-ck.is-early,
+.ps-ck.is-ok { --ps-lc: #198754; }
+.ps-ck.is-early span,
+.ps-ck.is-ok span { background: #d9f2e3; color: #146c43; }
+
+/* The bracket: termin to öngörülen, the one number the room asks for */
+.ps-chain-brk {
+    --ps-bc: #dc3545;
+    --ps-bbg: #fde2e5;
+    --ps-bfg: #a71d2a;
+    grid-column: 3 / -1;
+    grid-row: 1;
+    position: relative;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    height: 18px;
+    margin: 0 8px 7px;
+    padding-right: 14px;
+}
+
+.ps-chain-brk::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 8px;
+    margin-top: -1px;
+    border: 2px solid var(--ps-bc);
+    border-bottom: 0;
+    border-radius: 3px 3px 0 0;
+}
+
+.ps-chain-brk span {
+    position: relative;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--ps-bfg);
+    background: var(--ps-bbg);
+    padding: 3px 10px;
+    border-radius: 999px;
+    box-shadow: 0 0 0 3px #ffffff;
+    white-space: nowrap;
+}
+
+.ps-chain-brk b { font-size: 14px; font-weight: 800; }
+
+.ps-chain-brk.is-early,
+.ps-chain-brk.is-ok { --ps-bc: #198754; --ps-bbg: #d9f2e3; --ps-bfg: #146c43; }
+
+/* The baseline the dots sit on: a chain, not a scale */
+.ps-chain-base {
+    grid-column: 1 / -1;
+    grid-row: 4;
+    height: 1px;
+    margin-top: 7px;
+    background: linear-gradient(90deg, rgba(211, 217, 225, 0), #d3d9e1 6%, #d3d9e1 94%, rgba(211, 217, 225, 0));
+}
+
+/* Short screens (laptop 768p): one size step down. This block comes BEFORE
+   the width steps so that a screen that is both short and narrow takes the
+   narrower step (same specificity, later rule wins). */
+@media (max-height: 860px) {
+    .ps-cf label { padding: 0 4px 4px; }
+    .ps-cf-value { padding: 0 4px; font-size: 1.15rem; }
+    .ps-cf-start .ps-cf-value { font-size: 0.9rem; }
+    .ps-cf-proj .ps-cf-value { font-size: 1.5rem; }
+    .ps-ck { height: 1.4rem; }
+    .ps-ck span { font-size: 12.5px; padding: 3px 7px; }
+    .ps-chain { grid-template-rows: minmax(21px, auto) auto auto auto; }
+    .ps-chain-brk { height: 16px; margin-bottom: 5px; }
+}
+
+/* Width steps. The base layout needs about 1090px of chain for the longest
+   month ("23 Temmuz 2026" three times over); each step first takes width
+   from the id, then shrinks the figures, so the row survives down to the
+   1240px stacking point. */
+@media (max-width: 1640px) {
+    .pp-hero-ps { grid-template-columns: minmax(240px, 360px) minmax(0, 1fr); }
+    .ps-cf label { padding: 0 4px 4px; }
+    .ps-cf-value { padding: 0 4px; font-size: 1.15rem; }
+    .ps-cf-start .ps-cf-value { font-size: 0.9rem; }
+    .ps-cf-proj .ps-cf-value { font-size: 1.5rem; }
+    .ps-ck span { font-size: 12.5px; padding: 3px 7px; }
+}
+
+@media (max-width: 1400px) {
+    .pp-hero-ps { grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); }
+    .ps-chain { grid-template-columns: auto minmax(16px, 0.5fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto; }
+    .ps-cf label { font-size: 0.68rem; }
+    .ps-cf-value { font-size: 1.1rem; }
+    .ps-cf-start .ps-cf-value { font-size: 0.85rem; }
+    .ps-cf-proj .ps-cf-value { font-size: 1.4rem; }
+    .ps-ck span { font-size: 12px; padding: 3px 6px; margin: 0 12px 0 6px; }
+}
+
+/* Below this the row cannot hold four dates beside the id: stack them */
+@media (max-width: 1240px) {
+    .pp-hero-ps {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: "id" "figures" "progress";
+    }
+    .ps-chain { justify-self: start; max-width: none; }
+}
+
+.ps-hero-lines {
+    grid-area: lines;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    font-size: 0.9rem;
+    color: #3a4150;
+    min-width: 0;
+}
+
+.ps-hero-lines .ps-line-plan { font-weight: 600; }
+.ps-theme-red .ps-line-plan { color: #a71d2a; }
+.ps-theme-orange .ps-line-plan { color: #b5500a; }
+.ps-theme-green .ps-line-plan { color: #146c43; }
+
+.ps-hero-progress {
+    grid-area: progress;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.74rem;
+    color: #6c757d;
+}
+
+.ps-hero-progress-bar {
+    flex: 1;
+    height: 7px;
+    border-radius: 4px;
+    background: #eef1f5;
+    overflow: hidden;
+}
+
+.ps-hero-progress-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: #198754;
+}
+
+.ps-theme-red .ps-hero-progress-fill { background: #dc3545; }
+.ps-theme-orange .ps-hero-progress-fill { background: #fd7e14; }
+.ps-theme-grey .ps-hero-progress-fill { background: #6c757d; }
+
+.ps-hero-progress-pct {
+    font-weight: 700;
+    color: #1f2530;
+}
+
+/* ---- tiles --------------------------------------------------------------- */
+
+.pp-tiles {
+    display: flex;
+    gap: 10px;
+    min-height: 0;
+}
+
+.pp-tile {
+    flex: 1 1 0;
+    min-width: 0;
+    background: #ffffff;
+    border: 1px solid #e2e6ec;
+    border-top: 3px solid #cdd3db;
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+    padding: 9px 12px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.pp-tile-click {
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.pp-tile-click:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(31, 37, 48, 0.14);
+}
+
+.pp-tile-green { border-top-color: #198754; }
+.pp-tile-orange { border-top-color: #fd7e14; }
+.pp-tile-red { border-top-color: #dc3545; }
+.pp-tile-blue { border-top-color: #0d6efd; }
+.pp-tile-purple { border-top-color: #6f42c1; }
+.pp-tile-grey { border-top-color: #cdd3db; }
+
+/* The only glow: quality problems must pop */
+.pp-tile-alert {
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06), 0 0 18px rgba(239, 68, 68, 0.14);
+}
+
+.pp-tile-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.64rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8a919c;
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.pp-tile-head i { color: #b6bcc6; }
+
+.pp-tile-hint {
+    margin-left: auto;
+    color: #c9d0d9;
+    font-size: 0.62rem;
+}
+
+.pp-tile-click:hover .pp-tile-hint { color: #6c757d; }
+
+.pp-tile-big {
+    font-size: 1.55rem;
+    font-weight: 800;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+    color: #1f2530;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-tile-big-dim {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #9aa1ab;
+}
+
+.pp-tile-big .pp-num-red { color: #c62839; }
+.pp-tile-big .pp-num-orange { color: #d9670b; }
+.pp-tile-big .pp-num-green { color: #1f8a4c; }
+
+.pp-tile-label,
+.pp-tile-sub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-tile-label {
+    font-size: 0.74rem;
+    color: #6c757d;
+}
+
+.pp-tile-sub {
+    font-size: 0.72rem;
+    color: #4b5563;
+}
+
+.pp-tile-sub .pp-num-red { color: #c62839; font-weight: 600; }
+.pp-tile-sub .pp-num-orange { color: #d9670b; font-weight: 600; }
+.pp-tile-sub .pp-num-green { color: #1f8a4c; font-weight: 600; }
+
+.pp-tile-skeleton .pp-skeleton { margin: 5px 0; }
+
+/* ---- sheet card ---------------------------------------------------------- */
+
+.pp-sheet {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #e2e6ec;
+    border-radius: 14px;
+    box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+    overflow: hidden;
+}
+
+.pp-sheet-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 14px;
+    border-bottom: 1px solid #eef1f5;
+    font-size: 0.74rem;
+    color: #6c757d;
+}
+
+.pp-sheet-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8a919c;
+    white-space: nowrap;
+}
+
+.pp-sheet-title i { color: #b6bcc6; }
+
+.pp-sheet-chips {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+
+.pp-sheet-legend {
+    display: inline-flex;
+    gap: 10px;
+    align-items: center;
+    white-space: nowrap;
+    margin-left: auto;
+}
+
+.pp-sheet-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pp-sheet-legend i {
+    width: 12px;
+    height: 8px;
+    border-radius: 2px;
+    display: inline-block;
+}
+
+.pp-sheet-legend .lg-ontime { background: #34ad51; }
+.pp-sheet-legend .lg-late { background: #e2515f; }
+.pp-sheet-legend .lg-hold { background: #d99e00; }
+.pp-sheet-legend .lg-termin { background: #6f42c1; width: 3px; height: 12px; }
+.pp-sheet-legend .lg-today { background: #dc3545; width: 3px; height: 12px; }
+.pp-sheet-legend .lg-ext { background: repeating-linear-gradient(135deg, rgba(220, 53, 69, 0.6) 0 3px, rgba(220, 53, 69, 0.2) 3px 6px); }
+
+/* Projected overrun: a hatched tail behind the plan bar, from the plan end
+   to the projected end. Red = the row's own loss, grey = chain only. */
+.pp-sheet .ps-bar-ext {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    height: calc(var(--pg-row-h) - 16px);
+    min-height: 8px;
+    border: 1px solid rgba(189, 33, 48, 0.6);
+    border-left: 0;
+    border-radius: 0 3px 3px 0;
+    background: repeating-linear-gradient(135deg, rgba(220, 53, 69, 0.55) 0 4px, rgba(220, 53, 69, 0.18) 4px 8px);
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 3px;
+    font-size: 0.62rem;
+    font-weight: 700;
+    color: #7a1420;
+    white-space: nowrap;
+    overflow: hidden;
+    pointer-events: auto;
+}
+
+.pp-sheet .ps-bar-ext-chain {
+    border-color: rgba(73, 80, 87, 0.5);
+    background: repeating-linear-gradient(135deg, rgba(108, 117, 125, 0.5) 0 4px, rgba(108, 117, 125, 0.16) 4px 8px);
+    color: #343a40;
+}
+
+.pp-sheet-zoom {
+    display: inline-flex;
+    gap: 2px;
+}
+
+.pp-sheet-zoom .btn {
+    font-size: 0.68rem;
+    padding: 1px 9px;
+    border-color: #d5dae1;
+    color: #495057;
+}
+
+.pp-sheet-zoom .btn.active {
+    background: #1f2530;
+    border-color: #1f2530;
+    color: #ffffff;
+}
+
+.pp-sheet-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.pp-sheet-body > .pg {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border: 0;
+    border-radius: 0;
+}
+
+.pp-sheet-body .pg-scroll {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+}
+
+/* Column picker is the planner's tool; the slide has fixed columns */
+.pp-sheet-body .pg-columns-btn { display: none; }
+
+.pp-sheet-empty,
+.pp-sheet-error {
+    padding: 28px;
+    text-align: center;
+    color: #6c757d;
+}
+
+.pp-sheet-error { color: #b02a37; }
+
+.pp-sheet-skeleton {
+    padding: 14px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+/* Row washes: late on its own = red, late only because of the chain = grey.
+   OPAQUE on purpose: .pg-row-grid is the sticky left pane that hides the bars
+   scrolled under it; a translucent wash let July's bars bleed through
+   October's cells on exactly these rows. */
+.pp-sheet .ps-row-late .pg-row-grid { background: #fdf3f4; }
+.pp-sheet .ps-row-chain .pg-row-grid { background: #f2f3f5; }
+.pp-sheet .pg-row-group .pg-row-grid { background: #f3f5f8; }
+
+/* ---- sheet cells --------------------------------------------------------- */
+
+.ps-chip {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 10px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    line-height: 1.4;
+}
+
+.ps-chip-late { background: #fde2e5; color: #a71d2a; }
+.ps-chip-chain { background: #e9ecef; color: #495057; }
+.ps-chip-early { background: #d9f2e3; color: #146c43; }
+.ps-chip-ok { background: #d9f2e3; color: #146c43; }
+.ps-chip-muted { background: #f1f3f5; color: #9aa1ab; font-weight: 500; }
+
+.ps-date { white-space: nowrap; }
+.ps-date-default { color: #7c8590; font-style: italic; }
+.ps-proj-late { color: #c62839; font-weight: 700; }
+.ps-proj-early { color: #1f8a4c; font-weight: 700; }
+
+.ps-default {
+    margin-left: 6px;
+    font-size: 0.6rem;
+    color: #7c8590;
+    border: 1px dashed #c9ced4;
+    border-radius: 8px;
+    padding: 0 5px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.ps-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.ps-progress-track {
+    position: relative;
+    flex: 1;
+    height: 7px;
+    background: #eef1f5;
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.ps-progress-expected {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: rgba(13, 110, 253, 0.18);
+}
+
+.ps-progress-fill {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    background: #198754;
+    border-radius: 4px;
+}
+
+.ps-progress-behind .ps-progress-fill { background: #dc3545; }
+
+.ps-progress-text {
+    font-size: 0.7rem;
+    color: #4b5563;
+    white-space: nowrap;
+    min-width: 58px;
+    text-align: right;
+}
+
+.ps-cause {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.76rem;
+    color: #3a4150;
+}
+
+.pp-sheet .col-progress { padding: 0 6px; }
+.pp-sheet .col-status { padding: 0 4px; }
+
+/* Status badges: the house classes for colour, sized for the cell. The
+   component's 80px minimum and 0.75rem uppercase overran the column
+   ("DEVAM EDİYOR" clipped). */
+.pp-sheet .pg-cell .status-badge {
+    font-size: 0.6rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    line-height: 1.5;
+    padding: 1px 6px;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-sheet .pg-cell .status-badge:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+/* ---- short screens (laptop 768p) ---------------------------------------- */
+
+@media (max-height: 860px) {
+    .pp-hero-ps { padding: 9px 16px 8px; row-gap: 4px; }
+    .ps-hero-jobno { font-size: 1.55rem; }
+    .ps-hero-title { font-size: 0.94rem; }
+    .ps-hero-lines { font-size: 0.82rem; }
+    .pp-tile { padding: 6px 10px 6px; gap: 1px; }
+    .pp-tile-big { font-size: 1.25rem; }
+}
+
+@media (max-width: 1200px) {
+    .pp-tiles { flex-wrap: wrap; }
+    .pp-tile { flex: 1 1 calc(25% - 10px); }
+}
+
+/* ---- v13: the dates ARE the hero --------------------------------------- */
+
+/* No sentences above the sheet any more: the date chain (above) carries the
+   distances, once each. */
+
+/* The slide must never grow past the viewport: the sheet's canvas is wider
+   than any screen, and a grid item's minimum width is its content unless
+   told otherwise (061-60's April–November timeline pushed the whole slide to
+   2150px). */
+body.pp-meeting-fullscreen #pp-meeting-container { grid-template-columns: minmax(0, 1fr); }
+.pp-hero-ps,
+.pp-tiles,
+.pp-sheet,
+.pp-sheet-body,
+.pp-sheet-body > .pg { min-width: 0; }
+.pp-sheet-head { flex-wrap: wrap; row-gap: 4px; }
+
+/* The termin gap pill sits just past the projection's end on job rows; bold
+   so it reads from the back of the room. Late = red on rose, early = green. */
+.pp-sheet .ps-gap-pill {
+    font-weight: 700;
+    font-size: 11px;
+    margin-left: 6px;
+}
+.pp-sheet .ps-gap-pill.is-late { color: #a71d2a; background: #fde2e5; border-color: rgba(189, 33, 48, 0.45); }
+.pp-sheet .ps-gap-pill.is-early { color: #146c43; background: #d9f2e3; border-color: rgba(20, 108, 67, 0.4); }
+
+/* Finans seal: a coloured disc with the verdict's icon, the word beside it;
+   Riskli / Kritik pulse a sonar ring so the eye lands on them. */
+.pp-tile-fin {
+    --fin-color: #6c757d;
+    --fin-halo: rgba(108, 117, 125, 0.16);
+    --fin-tint: #f4f5f7;
+    background: linear-gradient(135deg, #ffffff 30%, var(--fin-tint) 100%);
+}
+.pp-tile-fin.pp-tile-green { --fin-color: #198754; --fin-halo: rgba(25, 135, 84, 0.18); --fin-tint: #e6f5ec; }
+.pp-tile-fin.pp-tile-orange { --fin-color: #fd7e14; --fin-halo: rgba(253, 126, 20, 0.18); --fin-tint: #fff1e3; }
+.pp-tile-fin.pp-tile-red { --fin-color: #dc3545; --fin-halo: rgba(220, 53, 69, 0.18); --fin-tint: #fde8ea; }
+
+.pp-fin-seal {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 2px 0;
+    min-width: 0;
+}
+
+.pp-fin-seal i {
+    position: relative;
+    flex: 0 0 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.1rem;
+    color: #ffffff;
+    background: var(--fin-color);
+    box-shadow: 0 0 0 4px var(--fin-halo);
+}
+
+.pp-fin-word {
+    font-size: 1.35rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    color: var(--fin-color);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pp-tile-fin.pp-tile-orange .pp-fin-seal i::after,
+.pp-tile-fin.pp-tile-red .pp-fin-seal i::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid var(--fin-color);
+    opacity: 0;
+    animation: pp-fin-ping 2s ease-out infinite;
+}
+
+@keyframes pp-fin-ping {
+    0% { transform: scale(1); opacity: 0.6; }
+    70%, 100% { transform: scale(1.7); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pp-fin-seal i::after { animation: none; }
+}
+
+@media (max-height: 860px) {
+    .pp-fin-seal i { flex-basis: 30px; width: 30px; height: 30px; font-size: 0.95rem; }
+    .pp-fin-word { font-size: 1.15rem; }
+}
+
+/* ---- Plan ve Sapmalar → PDF ---------------------------------------------- */
+
+.pp-sheet-pdf-btn {
+    font-size: 0.68rem;
+    padding: 1px 9px;
+    margin-left: 6px;
+    border-color: #d5dae1;
+    color: #495057;
+    white-space: nowrap;
+}
+
+.pp-sheet-pdf-btn:hover {
+    background: #1f2530;
+    border-color: #1f2530;
+    color: #ffffff;
+}
+
+/* The column picker: a narrow dialog, without the modal's own PDF button
+   (that one prints the modal). */
+.pp-modal.pp-modal-sheet-pdf { width: min(560px, 94vw); }
+.pp-modal-sheet-pdf .pp-modal-pdf { display: none; }
+
+.pp-sheetpdf { padding: 4px 2px 2px; }
+
+.pp-sheetpdf-hint {
+    font-size: 0.86rem;
+    color: #6c757d;
+    margin: 0 0 12px;
+}
+
+.pp-sheetpdf-cols {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 22px;
+    margin-bottom: 14px;
+}
+
+.pp-sheetpdf-col,
+.pp-sheetpdf-opt {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    cursor: pointer;
+    color: #2b3240;
+}
+
+.pp-sheetpdf-col { font-size: 0.92rem; }
+.pp-sheetpdf-col.is-locked { color: #8a919c; cursor: default; }
+.pp-sheetpdf-col small { font-size: 0.68rem; color: #9aa1ab; }
+
+.pp-sheetpdf-col input,
+.pp-sheetpdf-opt input {
+    width: 16px;
+    height: 16px;
+    accent-color: #8b0000;
+    flex: 0 0 auto;
+}
+
+.pp-sheetpdf-opt {
+    font-size: 0.88rem;
+    padding-top: 10px;
+    border-top: 1px solid #eef1f5;
+    margin-bottom: 14px;
+}
+
+.pp-sheetpdf-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+/* Three actions side by side: one line each, wrapping as a whole button */
+.pp-sheetpdf-actions .btn { white-space: nowrap; }
+
+.pp-sheetpdf-opt-tight { padding-top: 0; border-top: 0; margin-top: -6px; }
+.pp-sheetpdf-row-tight { margin-top: -6px; }
+
+.pp-sheetpdf-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.88rem;
+    color: #3a4150;
+    margin-bottom: 14px;
+}
+
+.pp-sheetpdf-row label { margin: 0; }
+.pp-sheetpdf-row .form-select { width: auto; }
+
+/* The link, once issued: the URL to copy and a door to open it. */
+.pp-sheetpdf-link {
+    background: #f4f5f7;
+    border: 1px solid #e2e6ec;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+}
+
+.pp-sheetpdf-link-head {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #146c43;
+    margin-bottom: 8px;
+}
+
+.pp-sheetpdf-link-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.pp-sheetpdf-link-row .form-control {
+    flex: 1;
+    font-size: 0.8rem;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

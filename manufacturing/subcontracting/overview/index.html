@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="../../../../components/table/table.css">
     <link rel="stylesheet" href="../../../../components/notification/notification.css">
     <link rel="stylesheet" href="../../../../components/badges/badges.css">
+    <link rel="stylesheet" href="overview.css">
     <link rel="icon" type="image/png" href="../../../../images/gemkom.png">
 </head>
 <body>
@@ -34,12 +35,10 @@
             <!-- Filters Section -->
             <div id="filters-placeholder"></div>
 
-            <!-- Overview Table -->
+            <!-- Monthly report (tree table rendered by overview.js) -->
             <div class="row">
                 <div class="col-12">
-                    <div id="overview-table-container">
-                        <!-- Table component will be rendered here -->
-                    </div>
+                    <div id="overview-report"></div>
                 </div>
             </div>
         </div>
@@ -65,8 +64,6 @@
     <script src="../../../../components/header/header.js"></script>
     <!-- Statistics Cards Component -->
     <script src="../../../../components/statistics-cards/statistics-cards.js"></script>
-    <!-- Table Component -->
-    <script src="../../../../components/table/table.js"></script>
     <!-- Notification Component -->
     <script type="module" src="../../../../components/notification/notification.js"></script>
     <!-- Page Script -->

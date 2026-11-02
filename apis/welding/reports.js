@@ -77,6 +77,7 @@ export async function getWeldingJobCostTotals(params = {}) {
  * @param {string} params.job_no - Required. Job number
  * @param {string} params.date_after - Optional. Only include entries on/after this work date (YYYY-MM-DD)
  * @param {string} params.date_before - Optional. Only include entries on/before this work date (YYYY-MM-DD)
+ * @param {boolean} params.include_descendants - Optional. Also include every job order below job_no
  * @returns {Promise<Object>} Report data with job_no, summary, and entries
  */
 export async function getWeldingJobCostDetail(params) {
@@ -91,6 +92,9 @@ export async function getWeldingJobCostDetail(params) {
     }
     if (params.date_before) {
         queryParams.append('date_before', params.date_before);
+    }
+    if (params.include_descendants) {
+        queryParams.append('include_descendants', 'true');
     }
 
     const url = `${backendBase}/welding/reports/job-entries/?${queryParams.toString()}`;

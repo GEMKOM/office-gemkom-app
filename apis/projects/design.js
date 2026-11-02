@@ -180,6 +180,7 @@ export async function approveRevision(releaseId, approvalData = {}) {
  * @param {number} releaseId - Release ID
  * @param {Object} rejectionData - Rejection data
  * @param {string} rejectionData.reason - Reason for rejection (required)
+ * @param {number} [rejectionData.topic_id] - Pending revision-request topic ID (backend falls back to the release's single pending request when omitted)
  * @returns {Promise<Object>} Response with status, message, and updated release
  */
 export async function rejectRevision(releaseId, rejectionData) {

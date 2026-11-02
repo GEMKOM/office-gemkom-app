@@ -29,6 +29,7 @@ import { showNotification } from '../../../components/notification/notification.
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 import { escapeHtml } from '../../utils/text.js';
+import { nextItemIndex, shiftAttachTargets } from './itemIndex.js';
 
 // Same strict pass as escapeHtml (all five entities); the name documents
 // that the value lands in an attribute.
@@ -3347,12 +3348,18 @@ async function setupItemsSection() {
 }
 
 // Add item to planning request form
+function existingPlanningItemIndices(container) {
+    return [...container.querySelectorAll('.planning-item-row')]
+        .map(row => parseInt(row.dataset.index, 10))
+        .filter(Number.isFinite);
+}
+
 function addPlanningItem() {
     const container = document.getElementById('planning-items-container');
     if (!container) {
         return;
     }
-    const itemIndex = container.children.length;
+    const itemIndex = nextItemIndex(existingPlanningItemIndices(container));
     
     const itemHtml = `
         <div class="planning-item-row mb-2" data-index="${itemIndex}">
@@ -3469,9 +3476,9 @@ function setupJobOrderDropdown(container, itemIndex) {
 
 // Remove item from planning request form
 function removePlanningItem(index) {
-    const itemRow = document.querySelector(`.planning-item-row[data-index="${index}"]`);
+    const container = document.getElementById('planning-items-container');
+    const itemRow = (container || document).querySelector(`.planning-item-row[data-index="${index}"]`);
     if (itemRow) {
-        // Clean up dropdown reference
         jobOrderDropdowns.delete(index);
         itemRow.remove();
     }
@@ -3636,7 +3643,6 @@ function renderFilesList() {
 
     // Get current items for attachment targets
     const itemRows = document.querySelectorAll('.planning-item-row');
-    const itemsCount = itemRows.length;
 
     const filesHtml = fileAttachments.map((attachment, fileIndex) => {
         const fileName = attachment.file.name;
@@ -3664,11 +3670,12 @@ function renderFilesList() {
                     </div>
         `;
 
-        // Add checkboxes for each item
-        for (let i = 0; i < itemsCount; i++) {
-            const itemSpecifications = document.querySelector(`.planning-item-row[data-index="${i}"] input[name="item_specifications"]`)?.value?.trim() || '';
-            const itemCode = document.querySelector(`.planning-item-row[data-index="${i}"] input[name="item_code"]`)?.value?.trim() || '';
-            const itemName = document.querySelector(`.planning-item-row[data-index="${i}"] input[name="item_name"]`)?.value?.trim() || '';
+        // Positional index (DOM order) — same numbering Kaydet uses for attach_to.
+        // Do not look up by data-index: a middle-row delete leaves gaps there.
+        itemRows.forEach((row, i) => {
+            const itemSpecifications = row.querySelector('input[name="item_specifications"]')?.value?.trim() || '';
+            const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim() || '';
+            const itemName = row.querySelector('input[name="item_name"]')?.value?.trim() || '';
             const displayName = itemSpecifications || itemCode || itemName || `Ürün ${i + 1}`;
             
             targetsHtml += `
@@ -3683,7 +3690,7 @@ function renderFilesList() {
                         </label>
                     </div>
             `;
-        }
+        });
 
         targetsHtml += `
                 </div>
@@ -3845,21 +3852,7 @@ removePlanningItem = function(index) {
     originalRemovePlanningItem(index);
     // Update attachTo arrays to remove references to deleted item and adjust indices
     fileAttachments.forEach(attachment => {
-        attachment.attachTo = attachment.attachTo
-            .filter(t => {
-                // Remove reference to deleted item
-                if (typeof t === 'number' && t === index) {
-                    return false;
-                }
-                return true;
-            })
-            .map(t => {
-                // Decrement indices greater than deleted index
-                if (typeof t === 'number' && t > index) {
-                    return t - 1;
-                }
-                return t;
-            });
+        attachment.attachTo = shiftAttachTargets(attachment.attachTo, index);
     });
     // Changing items changes attachment mapping; treat as attachments update.
     attachmentsDirty = true;
@@ -4938,7 +4931,7 @@ function importExcelItems() {
     let addedCount = 0;
     
     excelImportData.processedItems.forEach(item => {
-        const itemIndex = container.children.length;
+        const itemIndex = nextItemIndex(existingPlanningItemIndices(container));
         
         const itemHtml = `
             <div class="planning-item-row mb-2" data-index="${itemIndex}">

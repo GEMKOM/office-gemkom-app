@@ -744,6 +744,38 @@ async function showTaskModal(taskKey) {
     }
 }
 
+// Plan fields (server-side machine plan; read-only in the modal)
+function formatIsoDate(isoDate) {
+    // "2026-09-30" -> "30.09.2026" (string split; no timezone drift through Date)
+    if (!isoDate || typeof isoDate !== 'string') return '';
+    const [year, month, day] = isoDate.split('-');
+    if (!year || !month || !day) return isoDate;
+    return `${day}.${month}.${year}`;
+}
+
+function formatPlanStamp(ms) {
+    if (!ms) return '';
+    const date = new Date(ms);
+    if (Number.isNaN(date.getTime())) return '';
+    return date.toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function formatDueDateField(operation) {
+    const due = formatIsoDate(operation.due_date);
+    if (!due) return '-';
+    const source = operation.due_source === 'part' ? ' (parça)' : (operation.due_source === 'job_order' ? ' (iş emri)' : '');
+    const lateChip = operation.projected_late ? ' <span class="status-badge status-red" title="Tahmini bitiş termini aşıyor">Geç</span>' : '';
+    return `${due}${source}${lateChip}`;
+}
+
+function formatPlanWindowField(operation) {
+    const start = formatPlanStamp(operation.planned_start_ms);
+    const end = formatPlanStamp(operation.planned_end_ms);
+    if (!start && !end) return '-';
+    const lockIcon = operation.plan_locked ? ' <i class="fas fa-lock text-secondary ms-1" title="Sıra kilitli"></i>' : '';
+    return `${start || '?'} → ${end || '?'}${lockIcon}`;
+}
+
 // Create task details modal using DisplayModal component
 function createTaskModal(operation) {
     // Get current timer duration if this operation is being worked on
@@ -881,6 +913,18 @@ function createTaskModal(operation) {
             {
                 label: 'Durum',
                 value: operation.has_active_timer ? '<span class="badge bg-success">Aktif Timer</span>' : (operation.completion_date ? '<span class="badge bg-primary">Tamamlandı</span>' : '<span class="badge bg-warning">Beklemede</span>'),
+                type: 'html',
+                colSize: 6
+            },
+            {
+                label: 'Termin',
+                value: formatDueDateField(operation),
+                type: 'html',
+                colSize: 6
+            },
+            {
+                label: 'Plan',
+                value: formatPlanWindowField(operation),
                 type: 'html',
                 colSize: 6
             }
