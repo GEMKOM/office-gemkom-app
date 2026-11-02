@@ -164,9 +164,14 @@ it('filters and sorting go to the URL and the request', async () => {
   fireEvent.click(
     within(screen.getByRole('columnheader', { name: /Makine Tipi/ })).getByRole('button'),
   );
+  // The backend orders by machine_type; machine_type_label would be ignored.
   await waitFor(() =>
-    expect(listCalls().at(-1)!.url.searchParams.get('ordering')).toBe('machine_type_label'),
+    expect(listCalls().at(-1)!.url.searchParams.get('ordering')).toBe('machine_type'),
   );
+  // Nor can it order by these, so they offer no sort.
+  for (const name of ['Kullanım Alanı', 'Aktif', 'Bakımda']) {
+    expect(within(screen.getByRole('columnheader', { name })).queryByRole('button')).toBeNull();
+  }
 });
 
 it('does not crash on empty responses', async () => {

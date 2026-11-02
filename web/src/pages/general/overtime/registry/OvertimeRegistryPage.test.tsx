@@ -156,6 +156,11 @@ it('filters and sorting go to the URL and the request', async () => {
   expect(
     new URLSearchParams(screen.getByTestId('location').textContent ?? '').get('ordering'),
   ).toBe('start_at');
+
+  // OvertimeRequestViewSet orders by start_at, end_at, status and created_at only.
+  for (const name of ['Talep No', 'Talep Eden', 'Departman', 'Süre', 'Katılımcı']) {
+    expect(within(screen.getByRole('columnheader', { name })).queryByRole('button')).toBeNull();
+  }
 });
 
 it('sends the date range as OvertimeRequestFilter reads it', async () => {
