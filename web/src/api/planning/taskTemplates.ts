@@ -91,15 +91,21 @@ const itemsPath = (id: number) => `${BASE}${id}/items/`;
 
 export const taskTemplateKeys = {
   all: ['taskTemplates'] as const,
-  list: (params: TaskTemplatesParams) => ['taskTemplates', 'list', cleanParams(params as QueryParams)] as const,
+  list: (params: TaskTemplatesParams) =>
+    ['taskTemplates', 'list', cleanParams(params as QueryParams)] as const,
   detail: (id: number) => ['taskTemplates', 'detail', id] as const,
   items: (id: number) => ['taskTemplates', 'items', id] as const,
   departments: ['taskTemplates', 'departmentChoices'] as const,
   taskTypes: ['taskTemplates', 'taskTypeChoices'] as const,
 };
 
-export function listTaskTemplates(params: TaskTemplatesParams = {}, signal?: AbortSignal): Promise<Paginated<TaskTemplate>> {
-  return apiFetch<unknown>(BASE, { params: params as QueryParams, signal }).then((data) => toPaginated<TaskTemplate>(data));
+export function listTaskTemplates(
+  params: TaskTemplatesParams = {},
+  signal?: AbortSignal,
+): Promise<Paginated<TaskTemplate>> {
+  return apiFetch<unknown>(BASE, { params: params as QueryParams, signal }).then((data) =>
+    toPaginated<TaskTemplate>(data),
+  );
 }
 
 export function taskTemplatesQueryOptions(params: TaskTemplatesParams) {
@@ -136,7 +142,9 @@ export function deleteTaskTemplate(id: number): Promise<void> {
 }
 
 export function getTemplateItems(id: number, signal?: AbortSignal): Promise<TemplateItem[]> {
-  return apiFetch<unknown>(itemsPath(id), { signal }).then((data) => extractResults<TemplateItem>(data));
+  return apiFetch<unknown>(itemsPath(id), { signal }).then((data) =>
+    extractResults<TemplateItem>(data),
+  );
 }
 
 export function templateItemsQueryOptions(id: number) {
@@ -147,23 +155,44 @@ export function templateItemsQueryOptions(id: number) {
   });
 }
 
-export function addTemplateItem(templateId: number, data: TemplateItemInput): Promise<TemplateItem> {
+export function addTemplateItem(
+  templateId: number,
+  data: TemplateItemInput,
+): Promise<TemplateItem> {
   return apiFetch<TemplateItem>(itemsPath(templateId), { method: 'POST', body: data });
 }
 
-export function updateTemplateItem(templateId: number, itemId: number, data: TemplateItemInput): Promise<TemplateItem> {
-  return apiFetch<TemplateItem>(`${itemsPath(templateId)}${itemId}/`, { method: 'PATCH', body: data });
+export function updateTemplateItem(
+  templateId: number,
+  itemId: number,
+  data: TemplateItemInput,
+): Promise<TemplateItem> {
+  return apiFetch<TemplateItem>(`${itemsPath(templateId)}${itemId}/`, {
+    method: 'PATCH',
+    body: data,
+  });
 }
 
 export function removeTemplateItem(templateId: number, itemId: number): Promise<void> {
   return apiFetch<void>(`${itemsPath(templateId)}${itemId}/`, { method: 'DELETE' });
 }
 
-export function addTemplateItemChild(templateId: number, itemId: number, data: TemplateItemInput): Promise<TemplateItem> {
-  return apiFetch<TemplateItem>(`${itemsPath(templateId)}${itemId}/children/`, { method: 'POST', body: data });
+export function addTemplateItemChild(
+  templateId: number,
+  itemId: number,
+  data: TemplateItemInput,
+): Promise<TemplateItem> {
+  return apiFetch<TemplateItem>(`${itemsPath(templateId)}${itemId}/children/`, {
+    method: 'POST',
+    body: data,
+  });
 }
 
-function choices(path: string, fallback: ChoiceOption[], signal?: AbortSignal): Promise<ChoiceOption[]> {
+function choices(
+  path: string,
+  fallback: ChoiceOption[],
+  signal?: AbortSignal,
+): Promise<ChoiceOption[]> {
   return apiFetch<unknown>(path, { signal }).then((data) => {
     const list = extractResults<ChoiceOption>(data);
     return list.length ? list : fallback;
@@ -194,7 +223,12 @@ export function taskTypeChoicesQueryOptions() {
  * value of it joined with ', ', else the fallback.
  */
 export function taskTemplateErrorMessage(error: unknown, fallback: string): string {
-  if (isApiError(error) && error.data && typeof error.data === 'object' && !Array.isArray(error.data)) {
+  if (
+    isApiError(error) &&
+    error.data &&
+    typeof error.data === 'object' &&
+    !Array.isArray(error.data)
+  ) {
     const messages = Object.values(error.data as Record<string, unknown>)
       .flat()
       .filter((v) => v !== null && v !== undefined && v !== '')

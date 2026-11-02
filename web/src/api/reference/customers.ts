@@ -76,10 +76,7 @@ export function customersQueryOptions(params: CustomersParams = {}) {
   });
 }
 
-export function useCustomers(
-  params: CustomersParams = {},
-  options: ReferenceQueryOptions = {},
-) {
+export function useCustomers(params: CustomersParams = {}, options: ReferenceQueryOptions = {}) {
   return useQuery({ ...customersQueryOptions(params), ...options });
 }
 
@@ -95,7 +92,10 @@ export function customerQueryOptions(id: string | number) {
   });
 }
 
-export function useCustomer(id: string | number | null | undefined, options: ReferenceQueryOptions = {}) {
+export function useCustomer(
+  id: string | number | null | undefined,
+  options: ReferenceQueryOptions = {},
+) {
   return useQuery({
     ...customerQueryOptions(id ?? ''),
     ...options,
@@ -113,7 +113,10 @@ export function updateCustomer(id: string | number, data: CustomerInput): Promis
 }
 
 /** Partial update (PATCH); what the legacy edit modal uses. */
-export function patchCustomer(id: string | number, data: Partial<CustomerInput>): Promise<Customer> {
+export function patchCustomer(
+  id: string | number,
+  data: Partial<CustomerInput>,
+): Promise<Customer> {
   return apiFetch<Customer>(detailPath(id), { method: 'PATCH', body: data });
 }
 
@@ -139,7 +142,8 @@ export function useCreateCustomer() {
 export function useUpdateCustomer() {
   const invalidate = useInvalidateCustomers();
   return useMutation({
-    mutationFn: ({ id, data }: { id: string | number; data: CustomerInput }) => updateCustomer(id, data),
+    mutationFn: ({ id, data }: { id: string | number; data: CustomerInput }) =>
+      updateCustomer(id, data),
     onSuccess: (saved) => invalidate(saved),
   });
 }

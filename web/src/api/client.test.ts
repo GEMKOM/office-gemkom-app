@@ -66,7 +66,8 @@ describe('apiFetch URL and params', () => {
     expect(url.searchParams.get('zero')).toBe('0');
     expect(url.searchParams.get('no')).toBe('false');
     expect(url.searchParams.getAll('ids')).toEqual(['1', '2']);
-    for (const key of ['empty', 'nil', 'undef', 'none']) expect(url.searchParams.has(key)).toBe(false);
+    for (const key of ['empty', 'nil', 'undef', 'none'])
+      expect(url.searchParams.has(key)).toBe(false);
   });
 
   it('appends to a URL that already has a query string', async () => {
@@ -127,7 +128,12 @@ describe('apiFetch errors', () => {
     ['error before message', 400, { message: 'm', error: 'e' }, 'e'],
     ['non_field_errors', 400, { non_field_errors: ['Zaten var.'] }, 'Zaten var.'],
     ['non_field_errors before fields', 400, { name: ['x'], non_field_errors: ['nf'] }, 'nf'],
-    ['first field error', 400, { name: ['Bu alan zorunludur.'], code: ['y'] }, 'name: Bu alan zorunludur.'],
+    [
+      'first field error',
+      400,
+      { name: ['Bu alan zorunludur.'], code: ['y'] },
+      'name: Bu alan zorunludur.',
+    ],
     ['nested field error', 400, { items: [{ qty: ['Pozitif olmalı'] }] }, 'items: Pozitif olmalı'],
     ['bare list', 400, ['Liste hatası'], 'Liste hatası'],
     ['empty JSON', 500, {}, 'HTTP 500'],
@@ -200,8 +206,10 @@ describe('pagination helpers', () => {
 });
 
 describe('apiUpload', () => {
-  type Listener = ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null;
-  const sent: { method: string; url: string; headers: Record<string, string>; body: unknown }[] = [];
+  type Listener =
+    ((event: { lengthComputable: boolean; loaded: number; total: number }) => void) | null;
+  const sent: { method: string; url: string; headers: Record<string, string>; body: unknown }[] =
+    [];
   let respond: { status: number; body: string } = { status: 201, body: '{"id":5}' };
 
   class FakeXhr {
@@ -211,7 +219,12 @@ describe('apiUpload', () => {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
     onabort: (() => void) | null = null;
-    private request = { method: '', url: '', headers: {} as Record<string, string>, body: undefined as unknown };
+    private request = {
+      method: '',
+      url: '',
+      headers: {} as Record<string, string>,
+      body: undefined as unknown,
+    };
     open(method: string, url: string) {
       this.request.method = method;
       this.request.url = url;

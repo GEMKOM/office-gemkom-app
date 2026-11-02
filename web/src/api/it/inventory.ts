@@ -85,7 +85,9 @@ type RawMachineType = { value?: unknown; id?: unknown; label?: unknown; name?: u
 
 /** Port of fetchMachineTypes (`results` envelope or a bare array). */
 export async function fetchMachineTypes(signal?: AbortSignal): Promise<MachineTypeOption[]> {
-  const rows = extractResults<RawMachineType>(await apiFetch<unknown>('/machines/types/', { signal }));
+  const rows = extractResults<RawMachineType>(
+    await apiFetch<unknown>('/machines/types/', { signal }),
+  );
   return rows
     .map((type) => ({
       value: String(type.value ?? type.id ?? ''),
@@ -115,7 +117,8 @@ export async function updateItDevice(id: number | string, data: ItDeviceUpdate):
 export function useUpdateItDevice() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: number | string; data: ItDeviceUpdate }) => updateItDevice(id, data),
+    mutationFn: ({ id, data }: { id: number | string; data: ItDeviceUpdate }) =>
+      updateItDevice(id, data),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: itInventoryKeys.all });
       // Machine pickers elsewhere show the name too.

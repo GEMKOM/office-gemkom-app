@@ -1,4 +1,10 @@
-import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  keepPreviousData,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { ApiError, apiFetch, isApiError } from '../client';
 import { toPaginated, type Paginated } from '../types';
 
@@ -150,7 +156,11 @@ export interface NeoQuestionsParams {
  * `error` (the run endpoints answer a failed generation with 500 {status,
  * error}); otherwise the call's default message. `status` is kept.
  */
-async function withMessage<T>(request: Promise<T>, fallback: string, keys: readonly string[]): Promise<T> {
+async function withMessage<T>(
+  request: Promise<T>,
+  fallback: string,
+  keys: readonly string[],
+): Promise<T> {
   try {
     return await request;
   } catch (error) {
@@ -159,7 +169,9 @@ async function withMessage<T>(request: Promise<T>, fallback: string, keys: reado
       error.data && typeof error.data === 'object' && !Array.isArray(error.data)
         ? (error.data as Record<string, unknown>)
         : {};
-    const found = keys.map((key) => body[key]).find((v): v is string => typeof v === 'string' && v !== '');
+    const found = keys
+      .map((key) => body[key])
+      .find((v): v is string => typeof v === 'string' && v !== '');
     throw new ApiError(error.status, error.data, found ?? fallback);
   }
 }
@@ -183,7 +195,10 @@ export const neoKeys = {
 // ---------------------------------------------------------------- assistant analytics
 
 /** Port of getAnalyticsSummary(days). */
-export function getNeoAnalyticsSummary(days = 30, signal?: AbortSignal): Promise<NeoAnalyticsSummary> {
+export function getNeoAnalyticsSummary(
+  days = 30,
+  signal?: AbortSignal,
+): Promise<NeoAnalyticsSummary> {
   return withMessage(
     apiFetch<NeoAnalyticsSummary>(`${BASE}/analytics/summary/`, { params: { days }, signal }),
     'Kullanım özeti yüklenemedi',
@@ -219,7 +234,10 @@ export function getNeoConversation(id: number, signal?: AbortSignal): Promise<Ne
 // ---------------------------------------------------------------- daily summaries (analytics)
 
 /** Port of getAnalyticsDailySummaries: all statuses with the cost ledger. */
-export async function getDailySummaryRows(days = 90, signal?: AbortSignal): Promise<DailySummaryRow[]> {
+export async function getDailySummaryRows(
+  days = 90,
+  signal?: AbortSignal,
+): Promise<DailySummaryRow[]> {
   const data = await withMessage(
     apiFetch<unknown>(`${BASE}/analytics/daily-summaries/`, { params: { days }, signal }),
     'Özet kayıtları yüklenemedi',
@@ -232,9 +250,14 @@ export async function getDailySummaryRows(days = 90, signal?: AbortSignal): Prom
 }
 
 /** Port of getAnalyticsDailySummary(id). */
-export function getDailySummaryDetail(id: number, signal?: AbortSignal): Promise<DailySummaryDetail> {
+export function getDailySummaryDetail(
+  id: number,
+  signal?: AbortSignal,
+): Promise<DailySummaryDetail> {
   return withMessage(
-    apiFetch<DailySummaryDetail>(`${BASE}/analytics/daily-summaries/${encodeURIComponent(id)}/`, { signal }),
+    apiFetch<DailySummaryDetail>(`${BASE}/analytics/daily-summaries/${encodeURIComponent(id)}/`, {
+      signal,
+    }),
     'Özet kaydı yüklenemedi',
     SUMMARY_KEYS,
   );
@@ -246,21 +269,30 @@ export function regenerateDailySummary(
   { resetReads = false }: { resetReads?: boolean } = {},
 ): Promise<DailySummaryRunResult> {
   return withMessage(
-    apiFetch<DailySummaryRunResult>(`${BASE}/analytics/daily-summaries/${encodeURIComponent(id)}/regenerate/`, {
-      method: 'POST',
-      body: { reset_reads: !!resetReads },
-    }),
+    apiFetch<DailySummaryRunResult>(
+      `${BASE}/analytics/daily-summaries/${encodeURIComponent(id)}/regenerate/`,
+      {
+        method: 'POST',
+        body: { reset_reads: !!resetReads },
+      },
+    ),
     'Özet yeniden üretilemedi',
     SUMMARY_KEYS,
   );
 }
 
 /** Port of runDailySummary: same body as the scheduler's task call. */
-export function runDailySummary({ date = '', force = false }: { date?: string; force?: boolean } = {}): Promise<DailySummaryRunResult> {
+export function runDailySummary({
+  date = '',
+  force = false,
+}: { date?: string; force?: boolean } = {}): Promise<DailySummaryRunResult> {
   const body: { force: boolean; date?: string } = { force: !!force };
   if (date) body.date = date;
   return withMessage(
-    apiFetch<DailySummaryRunResult>(`${BASE}/analytics/daily-summaries/run/`, { method: 'POST', body }),
+    apiFetch<DailySummaryRunResult>(`${BASE}/analytics/daily-summaries/run/`, {
+      method: 'POST',
+      body,
+    }),
     'Özet üretilemedi',
     SUMMARY_KEYS,
   );

@@ -87,6 +87,8 @@ export interface QCReview {
 
 export interface QCReviewsParams {
   status?: string;
+  /** One department task's reviews (the task modal's KK İncelemeleri tab). */
+  task?: number;
   task__job_order?: string;
   task__department?: string;
   search?: string;
@@ -164,5 +166,21 @@ export function useCreateDiscussionComment() {
   return useMutation({
     mutationFn: (data: { topic: number; content: string }) =>
       apiFetch<DiscussionComment>('/projects/discussion-comments/', { method: 'POST', body: data }),
+  });
+}
+
+export interface QCReviewInput {
+  location?: string;
+  quantity_inspected?: number | null;
+  position_no?: string;
+  drawing_no?: string;
+  notes?: string;
+}
+
+/** Port of bulkSubmitQCReviews: { task_id, reviews }. */
+export function bulkSubmitQCReviews(taskId: number, reviews: QCReviewInput[]) {
+  return apiFetch<unknown>('/quality-control/qc-reviews/bulk_submit/', {
+    method: 'POST',
+    body: { task_id: taskId, reviews },
   });
 }
