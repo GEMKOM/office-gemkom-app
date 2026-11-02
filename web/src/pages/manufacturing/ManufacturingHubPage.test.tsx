@@ -143,3 +143,25 @@ it('renders the CNC and machining report hubs (inline MenuComponent in legacy)',
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+it('renders the two report hubs that were inline MenuComponents', () => {
+  const { unmount } = renderWithProviders(<ManufacturingHubPage />, {
+    route: '/manufacturing/maintenance/reports/',
+  });
+  expect(screen.getByRole('heading', { name: 'Bakım Raporları' })).toBeInTheDocument();
+  expect(cardTitles()).toEqual([
+    'Arızalar Özeti',
+    'Kullanıcı Çözüm Raporu',
+    'Personel Faaliyet Raporu',
+    'Aylık Metrikler',
+  ]);
+  unmount();
+
+  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/reports' });
+  expect(screen.getByRole('heading', { name: 'Raporlar' })).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'İş Maliyeti' })).toHaveAttribute(
+    'href',
+    '/manufacturing/reports/combined-job-costs',
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
+});

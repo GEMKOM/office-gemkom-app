@@ -88,6 +88,8 @@ export const appRoutes: RouteObject[] = [
   { path: '/manufacturing/subcontracting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/welding', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/welding/reports', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing/maintenance/reports', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing/reports', handle: hub, lazy: manufacturingHub },
   {
     path: '/procurement',
     handle: hub,
@@ -503,6 +505,107 @@ export const appRoutes: RouteObject[] = [
       Component: (
         await import('@/pages/manufacturing/machining/reports/cost-analysis/CostAnalysisPage')
       ).CostAnalysisPage,
+    }),
+  },
+  // Manufacturing shop-floor lists and reports (Phase 3b).
+  {
+    path: '/manufacturing/subcontracting/adjustments',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/subcontracting/adjustments/AdjustmentsPage'))
+        .AdjustmentsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/subcontracting/subcontractors',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/subcontracting/subcontractors/SubcontractorsPage')
+      ).SubcontractorsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/reports/cost-analysis',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/welding/reports/cost-analysis/CostAnalysisPage')
+      ).CostAnalysisPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/reports/user-work-hours',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/welding/reports/user-work-hours/UserWorkHoursPage')
+      ).UserWorkHoursPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/teams',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/welding/teams/WeldingTeamsPage'))
+        .WeldingTeamsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/reports/combined-job-costs',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/reports/combined-job-costs/CombinedJobCostsPage')
+      ).CombinedJobCostsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/material-tracking',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/material-tracking/MaterialTrackingPage'))
+        .MaterialTrackingPage,
+    }),
+  },
+  {
+    path: '/manufacturing/material-tracking/pull-requests',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/material-tracking/pull-requests/PullRequestsPage')
+      ).PullRequestsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/dashboard',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/dashboard/MaintenanceDashboardPage')
+      ).MaintenanceDashboardPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/fault-requests',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/fault-requests/FaultRequestsPage')
+      ).FaultRequestsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/reports/faults',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/maintenance/reports/faults/FaultsReportPage'))
+        .FaultsReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/reports/monthly-metrics',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/reports/monthly-metrics/MonthlyMetricsPage')
+      ).MonthlyMetricsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/maintenance/reports/staff-report',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/maintenance/reports/staff-report/StaffReportPage')
+      ).StaffReportPage,
     }),
   },
 ];

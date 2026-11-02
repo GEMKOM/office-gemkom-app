@@ -21,6 +21,8 @@
   "/manufacturing/subcontracting",
   "/manufacturing/welding",
   "/manufacturing/welding/reports",
+  "/manufacturing/maintenance/reports",
+  "/manufacturing/reports",
   "/procurement",
   "/procurement/purchase-requests",
   "/procurement/reports",
@@ -82,5 +84,18 @@
   "/manufacturing/machining/reports/user-report",
   "/manufacturing/cnc-cutting/remnants",
   "/manufacturing/cnc-cutting/reports/parts-search",
-  "/manufacturing/machining/reports/cost-analysis"
+  "/manufacturing/machining/reports/cost-analysis",
+  "/manufacturing/subcontracting/adjustments",
+  "/manufacturing/subcontracting/subcontractors",
+  "/manufacturing/welding/reports/cost-analysis",
+  "/manufacturing/welding/reports/user-work-hours",
+  "/manufacturing/welding/teams",
+  "/manufacturing/reports/combined-job-costs",
+  "/manufacturing/material-tracking",
+  "/manufacturing/material-tracking/pull-requests",
+  "/manufacturing/maintenance/dashboard",
+  "/manufacturing/maintenance/fault-requests",
+  "/manufacturing/maintenance/reports/faults",
+  "/manufacturing/maintenance/reports/monthly-metrics",
+  "/manufacturing/maintenance/reports/staff-report"
 ]
