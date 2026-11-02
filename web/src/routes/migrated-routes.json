@@ -37,5 +37,11 @@
   "/human_resources/attendance",
   "/quality-control",
   "/projects",
-  "/design"
+  "/design",
+  "/it/approvals",
+  "/it/feedback",
+  "/it/groups",
+  "/it/inventory",
+  "/it/neo",
+  "/it/password-resets"
 ]
