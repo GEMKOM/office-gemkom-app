@@ -548,7 +548,9 @@ function GroupRow<T>({
             )}
           </Table.Td>
         ))}
-        {hasActions ? <Table.Td style={{ textAlign: 'right' }}>{content.cells._actions}</Table.Td> : null}
+        {hasActions ? (
+          <Table.Td style={{ textAlign: 'right' }}>{content.cells._actions}</Table.Td>
+        ) : null}
       </Table.Tr>
     );
   }
@@ -712,6 +714,7 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
   // ---- grouping ----
   const [groupOpen, setGroupOpen] = useState<Record<string, boolean>>({});
   const collapsible = grouping?.collapsible ?? true;
+  const hasGroupFooter = Boolean(grouping?.footer);
   const groupTree = useMemo<GroupNode<T>[] | null>(
     () => (grouping ? buildGroupTree(rows, groupKeys(grouping), grouping.sort ?? 'asc') : null),
     // The tree depends on the keys and sort, not on the header/footer functions.
@@ -744,16 +747,10 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
       }
       return defaultExpanded;
     };
-    return flattenGroups(groupTree, isExpanded, Boolean(grouping.footer));
+    return flattenGroups(groupTree, isExpanded, hasGroupFooter);
+    // The items depend on these options, not on the header/footer functions' identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    groupTree,
-    rows,
-    groupOpen,
-    collapsible,
-    grouping?.defaultExpanded,
-    Boolean(grouping?.footer),
-  ]);
+  }, [groupTree, rows, groupOpen, collapsible, grouping?.defaultExpanded, hasGroupFooter]);
   const bodyRows = useMemo(
     () =>
       items.filter((item): item is Extract<DisplayItem<T>, { kind: 'row' }> => item.kind === 'row'),
@@ -1207,10 +1204,15 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
   // Keyboard focus follows the active cell; a virtualized row is scrolled in first.
   useEffect(() => {
     if (!focusRequest) return;
-    const find = () =>
-      [...(scrollRef.current?.querySelectorAll<HTMLElement>('tr[data-row-id]') ?? [])]
-        .find((tr) => tr.dataset.rowId === focusRequest.rowId)
-        ?.querySelector<HTMLElement>(`td[data-col="${focusRequest.col.replace(/"/g, '\\"')}"]`);
+    // Compare attributes instead of building a selector from the ids.
+    const find = () => {
+      const tr = [
+        ...(scrollRef.current?.querySelectorAll<HTMLElement>('tr[data-row-id]') ?? []),
+      ].find((el) => el.dataset.rowId === focusRequest.rowId);
+      return [...(tr?.querySelectorAll<HTMLElement>('td[data-col]') ?? [])].find(
+        (td) => td.dataset.col === focusRequest.col,
+      );
+    };
     const el = find();
     if (el) {
       el.focus();
