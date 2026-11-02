@@ -243,6 +243,38 @@ export const appRoutes: RouteObject[] = [
         .MachiningDashboardPage,
     }),
   },
+  {
+    path: '/manufacturing/cnc-cutting/reports/finished-timers',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/cnc-cutting/reports/finished-timers/CncFinishedTimersPage')
+      ).CncFinishedTimersPage,
+    }),
+  },
+  {
+    path: '/manufacturing/cnc-cutting/reports/user-report',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/cnc-cutting/reports/user-report/CncUserReportPage')
+      ).CncUserReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/finished-timers',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/finished-timers/MachiningFinishedTimersPage')
+      ).MachiningFinishedTimersPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/user-report',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/user-report/MachiningUserReportPage')
+      ).MachiningUserReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
