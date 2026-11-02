@@ -3,8 +3,7 @@ import { apiFetch, isApiError, type QueryParams } from '../client';
 import { extractResults, toPaginated, type Paginated } from '../types';
 
 // Port of the apis/overtime.js functions the overtime pages (pending,
-// registry, users, welding-report) call. The cost and machining reports are
-// still legacy and keep using apis/overtime.js.
+// registry, users, welding-report, machining-report, cost-report) call.
 
 const BASE = '/overtime/requests/';
 
@@ -17,6 +16,9 @@ const keys = {
   costImpact: (id: number | string) => ['overtime', 'costImpact', String(id)] as const,
   usersForDate: (date: string) => ['overtime', 'usersForDate', date] as const,
   weldingReport: (params: object) => ['overtime', 'weldingReport', params] as const,
+  machiningReport: (params: object) => ['overtime', 'machiningReport', params] as const,
+  machiningSummary: (params: object) => ['overtime', 'machiningSummary', params] as const,
+  costReport: (params: object) => ['overtime', 'costReport', params] as const,
   weldingOperators: ['overtime', 'weldingOperators'] as const,
   machiningOperators: ['overtime', 'machiningOperators'] as const,
   operationsForJob: (jobNo: string) => ['overtime', 'operationsForJob', jobNo] as const,
@@ -454,6 +456,238 @@ export function weldingOperatorsQueryOptions() {
       }
     },
     staleTime: 5 * 60_000,
+  });
+}
+
+// ---------- machining report ----------
+
+type Num = number | string | null | undefined;
+
+export interface MachiningTimer {
+  start_at?: string | null;
+  finish_at?: string | null;
+  total_hours?: Num;
+  in_window_hours?: Num;
+  outside_window_hours?: Num;
+}
+
+/** One row of machining_report: talep × operatör × gün × operasyon. */
+export interface MachiningReportRow {
+  date?: string | null;
+  request_id?: number | null;
+  user_id?: number | null;
+  user_full_name?: string | null;
+  job_no?: string | null;
+  operation_key?: string | null;
+  operation_name?: string | null;
+  part_name?: string | null;
+  worked?: boolean;
+  worked_hours?: Num;
+  overtime_window_hours?: Num;
+  outside_window_hours?: Num;
+  timer_hours?: Num;
+  timers?: MachiningTimer[];
+}
+
+export interface MachiningSummaryOperator {
+  user_id?: number | null;
+  full_name?: string | null;
+  requested_hours?: Num;
+  worked_hours?: Num;
+  no_timer_hours?: Num;
+}
+
+export interface MachiningSummary {
+  requested_hours?: Num;
+  worked_hours?: Num;
+  selected_operation_hours?: Num;
+  other_work_hours?: Num;
+  downtime_hours?: Num;
+  no_timer_hours?: Num;
+  operator_count?: number;
+  request_count?: number;
+  entry_count?: number;
+  day_count?: number;
+  operators?: MachiningSummaryOperator[];
+}
+
+/**
+ * Filters of the machining report. Legacy appended the İş No picks as one
+ * value, so several go out comma-joined (`job_no=RM269,270-01`).
+ */
+export interface MachiningReportParams {
+  start_date?: string;
+  end_date?: string;
+  job_no?: string;
+  user?: string;
+}
+
+/** The legacy message: the body's `detail`, else the fallback. */
+function detailError(error: unknown, fallback: string): unknown {
+  if (!isApiError(error)) return error;
+  const data = error.data as { detail?: unknown } | undefined;
+  const detail = data && typeof data === 'object' ? data.detail : undefined;
+  return new Error(typeof detail === 'string' && detail ? detail : fallback);
+}
+
+async function withDetail<T>(request: Promise<T>, fallback: string): Promise<T> {
+  try {
+    return await request;
+  } catch (error) {
+    throw detailError(error, fallback);
+  }
+}
+
+/** Port of getOvertimeMachiningReport. */
+export function machiningReportQueryOptions(params: MachiningReportParams) {
+  return queryOptions({
+    queryKey: keys.machiningReport(params),
+    queryFn: async ({ signal }): Promise<MachiningReportRow[]> => {
+      const data = await withDetail(
+        apiFetch<unknown>(`${BASE}machining_report/`, { params: params as QueryParams, signal }),
+        'Mesai raporu yüklenirken hata oluştu',
+      );
+      return Array.isArray(data) ? (data as MachiningReportRow[]) : [];
+    },
+  });
+}
+
+/** Port of getOvertimeMachiningSummary; same filters as the report. */
+export function machiningSummaryQueryOptions(params: MachiningReportParams) {
+  return queryOptions({
+    queryKey: keys.machiningSummary(params),
+    queryFn: async ({ signal }): Promise<MachiningSummary | null> => {
+      const data = await withDetail(
+        apiFetch<MachiningSummary | undefined>(`${BASE}machining_report_summary/`, {
+          params: params as QueryParams,
+          signal,
+        }),
+        'Mesai özeti yüklenirken hata oluştu',
+      );
+      return data && typeof data === 'object' ? data : null;
+    },
+  });
+}
+
+// ---------- cost report ----------
+
+export interface CostFields {
+  cost_eur?: Num;
+  wage_cost_eur?: Num;
+  employer_cost_eur?: Num;
+}
+
+export interface CostBucket extends CostFields {
+  hours?: Num;
+}
+
+export type CostBucketKey = 'weekday' | 'saturday' | 'sunday' | 'holiday';
+
+export interface CostReportEntry extends CostFields {
+  id?: number;
+  user_id?: number | null;
+  username?: string | null;
+  full_name?: string | null;
+  job_no?: string | null;
+  description?: string | null;
+  status?: string | null;
+  hours?: Num;
+  unpriced_hours?: Num;
+  estimated_wage?: boolean;
+}
+
+export interface CostReportRequest extends CostFields {
+  id: number;
+  team?: string | null;
+  requester_name?: string | null;
+  start_at?: string | null;
+  end_at?: string | null;
+  counted_start_at?: string | null;
+  counted_end_at?: string | null;
+  duration_hours?: Num;
+  entry_count?: number;
+  hours?: Num;
+  status?: string | null;
+  is_partial?: boolean;
+  reason?: string | null;
+  buckets?: Partial<Record<CostBucketKey, CostBucket>> | null;
+  entries?: CostReportEntry[];
+}
+
+export interface CostReportGroupRow extends CostFields {
+  team?: string | null;
+  user_id?: number | null;
+  username?: string | null;
+  full_name?: string | null;
+  job_no?: string | null;
+  estimated_wage?: boolean;
+  request_count?: number;
+  entry_count?: number;
+  hours?: Num;
+}
+
+export interface CostReportSummary {
+  total_cost_eur?: Num;
+  total_wage_cost_eur?: Num;
+  total_employer_cost_eur?: Num;
+  employer_overhead_rate?: Num;
+  total_hours?: Num;
+  avg_cost_per_hour_eur?: Num;
+  user_count?: number;
+  request_count?: number;
+  estimated_wage_entry_count?: number;
+  unpriced_hours?: Num;
+}
+
+export interface CostReport {
+  meta?: unknown;
+  summary: CostReportSummary;
+  by_bucket: Partial<Record<CostBucketKey, CostBucket>>;
+  by_team: CostReportGroupRow[];
+  by_user: CostReportGroupRow[];
+  by_job: CostReportGroupRow[];
+  requests: CostReportRequest[];
+}
+
+/** Each İş No pick goes out as its own `job_no` (legacy appended arrays one by one). */
+export interface CostReportParams {
+  start_date?: string;
+  end_date?: string;
+  status?: string;
+  team?: string;
+  job_no?: string[];
+  user?: string;
+}
+
+/**
+ * Port of getOvertimeCostReport: `null` on 403 (no `view_job_costs`) so the
+ * page shows the permission notice instead of an error toast.
+ */
+export function costReportQueryOptions(params: CostReportParams) {
+  return queryOptions({
+    queryKey: keys.costReport(params),
+    queryFn: async ({ signal }): Promise<CostReport | null> => {
+      let data: Partial<CostReport> | undefined;
+      try {
+        data = await apiFetch<Partial<CostReport> | undefined>(`${BASE}cost_report/`, {
+          params: params as QueryParams,
+          signal,
+        });
+      } catch (error) {
+        if (isApiError(error) && error.status === 403) return null;
+        throw detailError(error, 'Mesai maliyet raporu yüklenirken hata oluştu');
+      }
+      return {
+        meta: data?.meta,
+        summary: data?.summary ?? {},
+        by_bucket: data?.by_bucket ?? {},
+        by_team: Array.isArray(data?.by_team) ? data.by_team : [],
+        by_user: Array.isArray(data?.by_user) ? data.by_user : [],
+        by_job: Array.isArray(data?.by_job) ? data.by_job : [],
+        requests: Array.isArray(data?.requests) ? data.requests : [],
+      };
+    },
+    retry: false,
   });
 }
 

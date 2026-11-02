@@ -676,6 +676,20 @@ export const appRoutes: RouteObject[] = [
         .ProcurementLinesPage,
     }),
   },
+  {
+    path: '/general/overtime/cost-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/cost-report/CostReportPage'))
+        .CostReportPage,
+    }),
+  },
+  {
+    path: '/general/overtime/machining-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/machining-report/MachiningReportPage'))
+        .MachiningReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

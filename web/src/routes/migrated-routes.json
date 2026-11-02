@@ -107,5 +107,7 @@
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
   "/procurement/suppliers/payment-terms",
-  "/planning/procurement-lines"
+  "/planning/procurement-lines",
+  "/general/overtime/cost-report",
+  "/general/overtime/machining-report"
 ]
