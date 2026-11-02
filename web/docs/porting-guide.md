@@ -124,3 +124,104 @@ serializer and the renderer, so nothing pasted survives as markup.
 - **Parallel by default.** Requests that don't depend on each other are
   separate queries; mutations invalidate the keys they change instead of
   reloading the page.
+
+## DataTable: editing, grouping, reordering
+
+The legacy table's `editable`, `groupBy` and `draggable` options have
+DataTable equivalents, so a page using them ports line by line. Unit tests:
+`src/ui/DataTable/{editing,grouping,reorder}.test.tsx`; live demos at
+`/react-preview/ui` (dev only). Screenshots:
+[editing](img/datatable-editing.png), [saving](img/datatable-edit-saving.png),
+[grouped report](img/datatable-grouping.png), [group footers](img/datatable-group-footers.png),
+[reorder](img/datatable-reorder.png).
+
+### Inline cell editing
+
+| Legacy | React |
+|---|---|
+| `editable: true` + `editableColumns: ['note']` | `editable` on each editable column |
+| column `type: 'number'`, `min`, `max`, `step` | `editable: { type: 'number', min, max, step }` |
+| column `type: 'select'`, `options` | `editable: { type: 'select', options }` (options may be `(row) => [...]`) |
+| column `type: 'date'` | `editable: { type: 'date' }` (value `'YYYY-MM-DD'`) |
+| column `validate(value, row)` | `editable: { validate }`: return a message to refuse |
+| `isRowEditable(row)` | `isRowEditable={(row, index) => ...}`; per column `editable: { enabled: (row) => ... }` |
+| `onEdit(row, field, newValue, oldValue)` | `onCellEdit={({ row, rowId, columnKey, value, oldValue }) => promise}` |
+
+```tsx
+const columns = useMemo<DataTableColumn<Item>[]>(() => [
+  { key: 'note', header: 'Not', editable: true },
+  { key: 'qty', header: 'Miktar', editable: { type: 'number', min: 0, step: 0.5 } },
+], []);
+
+<DataTable
+  data={rows}
+  columns={columns}
+  getRowId={(r) => String(r.id)}
+  isRowEditable={(r) => !r.is_paid}
+  onCellEdit={({ row, columnKey, value }) =>
+    patchItem.mutateAsync({ id: row.id, [columnKey]: value })}
+/>
+```
+
+- **Values are typed**: number editors hand over a number (`null` when
+  emptied; `1,5` and `1.234,5` are read the Turkish way), dates a
+  `'YYYY-MM-DD'` string or `null`, text and select a string. Legacy `onEdit`
+  got the raw input string; drop the `parseFloat` when porting.
+- **Click** a cell (or focus it and press **Enter**/**F2**) to edit. **Enter**
+  saves, **Escape** cancels, **Tab**/**Shift+Tab** save and open the next or
+  previous editable cell, leaving the cell (blur) saves, like legacy. Arrow
+  keys move between editable cells; the table is one tab stop.
+- **Optimistic**: while the returned promise runs the cell shows the new value
+  and a spinner (`data-cell-state="saving"`). If it rejects, the old value
+  comes back, the cell turns red with the message in a tooltip
+  (`data-cell-state="error"`) and an error toast shows (legacy
+  `showNotification`). On success the new value stays until the page hands
+  over a new row object, so invalidate or `setQueryData` as usual. An
+  unchanged value does not call `onCellEdit`.
+- **Optimistic display**: the cell renders the row with `accessor` (or `key`)
+  set to the value. For a function accessor or nested field, give
+  `editable: { apply: (row, value) => ({ ...row, ... }) }`.
+- **Draft editors** that save later with a button (multi-row create forms):
+  keep the rows in state, update them in `onCellEdit` (no promise), and mark
+  changed cells with `isCellDirty={(row, key) => ...}` (`data-cell-state="dirty"`).
+- An editable cell's click does not fire `onRowClick` (legacy stopped it too).
+  A select column without `render` shows the option label.
+
+### Grouped rows
+
+| Legacy | React |
+|---|---|
+| `groupBy: 'user_id'` | `grouping={{ by: 'user_id' }}`, or a function, or several keys `by: ['month', 'user']` (nested) |
+| `groupHeaderFormatter(value, rows)` returning HTML | `header: (group) => <node />` (`group.value`, `group.rows`, `group.depth`) |
+| `groupHeaderFormatter` returning `{ field: html, _actions }` | `header: (group) => ({ cells: { field: node, _actions: node } })` |
+| `groupCollapsible` | `collapsible` (default **true**; or `(group) => boolean`: a group without a toggle stays as `defaultExpanded` set it, like legacy) |
+| `defaultGroupExpanded` | `defaultExpanded` (boolean or `(group) => boolean`) |
+| `groupSortDirection` | `sort: 'asc' \| 'desc' \| false \| (a, b) => n` (natural order, empties last) |
+| (none) | `footer: (group) => ({ cells: { hours: sum(group.rows) } })`: a totals row after each group |
+
+- Sorting a column sorts rows **inside** their groups; the groups keep their
+  own order.
+- With client pagination the groups are built from the current page; grouped
+  reports normally have `pagination` off.
+- The whole-table `footer` still works for a grand total.
+- A column the export needs but the screen doesn't (the group's user, say)
+  gets `exportOnly: true` (legacy pages patched `prepareExportData` for this).
+
+### Drag to reorder
+
+`draggable: true` + `onReorder(draggedKey, targetKey, position)` becomes
+`reorder={{ onReorder: (ids, move) => ... }}`. `ids` is every row id of
+`data` in the new order; `move` has `id`, `targetId`, `position`
+(`'before' | 'after'`), `from` and `to`, so legacy handlers port as
+`onReorder: (_, m) => handle(m.id, m.targetId, m.position)`.
+
+- A grip column comes first. Drag it with the mouse, or focus it and press
+  **Space** to pick the row up, **↑/↓** to move it (the table previews the
+  new order), **Space** to drop, **Escape** to cancel. Moves are announced to
+  screen readers.
+- The page owns the order: save it, then pass the reordered `data`.
+- Rows move only within their group. `isRowDraggable(row)` pins rows; the
+  handles are off while a column sort is active.
+
+All three work with `virtualize`: groups and footers are virtual rows, and
+keyboard moves scroll the target cell into view.
