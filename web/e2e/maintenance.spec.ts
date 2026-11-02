@@ -81,7 +81,7 @@ test('admin filters the fault requests and reports a new fault', async ({
   await dialog.getByLabel('Ekipman Adı').fill('Kompresör');
   await dialog.getByLabel('Konum').fill('Bahçe');
   await dialog.getByLabel('Açıklama').fill('Basınç düşük');
-  await dialog.getByRole('textbox', { name: 'Tür' }).click();
+  await dialog.getByPlaceholder('Tür seçin...').click();
   await page.getByRole('option', { name: 'Arıza', exact: true }).click();
   await dialog.getByRole('button', { name: 'Gönder' }).click();
 
