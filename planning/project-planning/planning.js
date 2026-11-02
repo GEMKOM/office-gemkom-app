@@ -365,6 +365,7 @@ function stageVM(s) {
         forecast_date: s.forecast_date || null,
         forecast_kind: s.forecast_kind || null,
         forecast_elapsed_wd: s.forecast_elapsed_wd ?? null,
+        forecast_head_start_pct: s.forecast_head_start_pct ?? null,
         note: s.note || '',
         deleted: false,
     };
@@ -406,6 +407,7 @@ function blockVM(b, res) {
             forecast_date: b.subtask.forecast_date || null,
             forecast_kind: b.subtask.forecast_kind || null,
             forecast_elapsed_wd: b.subtask.forecast_elapsed_wd ?? null,
+            forecast_head_start_pct: b.subtask.forecast_head_start_pct ?? null,
             projected_start_date: b.subtask.projected_start_date || null,
             projected_end_date: b.subtask.projected_end_date || null,
         },
@@ -544,6 +546,7 @@ function deptVM(row) {
         forecast_date: row.forecast_date || null,
         forecast_kind: row.forecast_kind || null,
         forecast_elapsed_wd: row.forecast_elapsed_wd ?? null,
+        forecast_head_start_pct: row.forecast_head_start_pct ?? null,
         has_subtasks: !!row.has_subtasks,
         // Which parts the planner did not type: the date may be first real
         // progress, the duration a weight share, the window widened to cover a
@@ -615,15 +618,35 @@ function updateSaveState() {
     renderTabs();
 }
 
-// kg assigned to a welding task across ALL resources in the working copy.
+// kg assigned to a welding task across ALL resources in the working copy,
+// plus what is held off the sheet.
 function allocatedForTask(weldingTaskId) {
-    let total = 0;
+    let total = offSheetKg(weldingTaskId);
     resources.forEach(res => res.blocks.forEach(b => {
         if (!b.deleted && b.welding_task_id === Number(weldingTaskId)) {
             total += Number(b.allocated_weight_kg || 0);
         }
     }));
     return round2(total);
+}
+
+// kg the sheet cannot show: a retired assignment (the "Eski Taşeron (Devir)"
+// carry-overs) or one held by a deactivated subcontractor/team, which has no
+// tab. It is still taken — the server counts it on every save — so the totals
+// here must count it too, or 273-02-01's welded 206 t reads as "Atanmamış"
+// (2026-10-05). Nobody can move it from this page: fixed for the session.
+function offSheetKg(weldingTaskId) {
+    const t = weldingTasks.find(x => x.welding_task_id === Number(weldingTaskId));
+    return Number((t && t.off_sheet_kg) || 0);
+}
+
+function offSheetHolders(weldingTaskId) {
+    const t = weldingTasks.find(x => x.welding_task_id === Number(weldingTaskId));
+    return ((t && t.off_sheet_holders) || []).map(h => ({
+        name: `${h.name} (pasif)`,
+        type: h.resource_type,
+        kg: Number(h.allocated_weight_kg || 0),
+    }));
 }
 
 // ---- filters -------------------------------------------------------------
@@ -938,6 +961,10 @@ function renderWarnings() {
             kg: Number(b.allocated_weight_kg || 0),
         });
     }));
+    weldingTasks.forEach(t => {
+        const off = offSheetHolders(t.welding_task_id);
+        if (off.length) (holdersByTask[t.welding_task_id] ||= []).push(...off);
+    });
 
     const lines = [];
     weldingTasks.forEach(t => {
@@ -2604,7 +2631,8 @@ function rederiveEngineDates() {
             ? Number(vm.forecast_elapsed_wd)
             : (anchor <= today ? calendar.workingDaysInclusive(anchor, today) : 0);
         let end = calendar.spanEnd(
-            nextWorkday(today), forecastRemainingWd(p, elapsed, d));
+            nextWorkday(today),
+            forecastRemainingWd(p, elapsed, d, vm.forecast_head_start_pct));
         if (end < today) end = today;
         vm.projected_start_date = anchor;
         vm.projected_end_date = end;
@@ -2741,6 +2769,10 @@ function buildAllRows() {
     resources.forEach(res => res.blocks.forEach(b => {
         if (!b.deleted) assigned.add(b.job_no);
     }));
+    // kg held off the sheet (offSheetKg) is assigned all the same.
+    weldingTasks.forEach(t => {
+        if (offSheetKg(t.welding_task_id) > 0) assigned.add(t.job_no);
+    });
     // The pending section lists the İMALAT DEPARTMENT TASK, not a bare job
     // number (user decision 2026-08-29): its start and duration edit the real
     // task, its weight is the job order's, and a job stays listed while any
@@ -3731,7 +3763,7 @@ function remainingForTask(weldingTaskId, totalWeightKg) {
 
 /** Who currently holds kg on a welding task, from the working copy. */
 function holdersForTask(weldingTaskId) {
-    const holders = [];
+    const holders = offSheetHolders(weldingTaskId);
     resources.forEach(res => res.blocks.forEach(b => {
         if (b.deleted || b.welding_task_id !== Number(weldingTaskId)) return;
         holders.push({

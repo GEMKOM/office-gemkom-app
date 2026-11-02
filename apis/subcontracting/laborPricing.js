@@ -24,8 +24,14 @@ import { authedFetch } from "../../authService.js";
  * @param {number|string} params.alpha - Weight exponent, 0..1
  * @param {number|string} params.factor_min - Size factor floor
  * @param {number|string} params.factor_max - Size factor ceiling
+ * @param {number|string} params.support_days - Yevmiye (1 = 1 day = 9 hours)
+ *   paid on top of the kg price; comes out of the labor pool before the split.
+ *   Never saved onto the job orders.
+ * @param {number|string} params.support_day_rate_try - Price of one yevmiye, TRY
  * @param {Object} difficulty - { [jobNo]: multiplier } per-line overrides
- * @returns {Promise<Object>} { params, totals, lines, skipped, selection }
+ * @returns {Promise<Object>} { params, totals, lines, skipped, selection }.
+ *   TRY figures (`labor_per_kg_try`, `totals.eur_try_rate`, `totals.fx_date`)
+ *   use the latest exchange-rate snapshot up to today, and are null if none.
  */
 export async function fetchLaborPricing(jobNos = [], params = {}, difficulty = {}) {
     const query = new URLSearchParams();

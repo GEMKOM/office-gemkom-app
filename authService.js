@@ -2,8 +2,16 @@ import { backendBase } from './base.js';
 
 const API_URL = backendBase;
 
-let accessToken = localStorage.getItem('accessToken');
-let refreshToken = localStorage.getItem('refreshToken');
+// localStorage is the only copy of the tokens. Every tab shares it; a tab that
+// kept its own copy from page load would keep sending -- and, once rejected,
+// wipe -- tokens another tab has since refreshed or replaced with a new login.
+function currentAccessToken() {
+    return localStorage.getItem('accessToken');
+}
+
+function currentRefreshToken() {
+    return localStorage.getItem('refreshToken');
+}
 
 // Cached permissions dictionary for the current user
 let cachedPermissions = null;
@@ -101,6 +109,7 @@ export async function fetchAndStorePermissions() {
         cachedPermissions = perms;
         cachedGrantedPageRoutes = null; // recompute lazily
         localStorage.setItem('permissions', JSON.stringify(perms));
+        localStorage.setItem(PERMISSIONS_FETCHED_AT_KEY, String(Date.now()));
         return perms;
     } catch (error) {
         console.error('Failed to fetch permissions from API:', error);
@@ -198,16 +207,116 @@ export async function ensurePermissions() {
     }
 }
 
+// --- Background permission refresh -----------------------------------------
+//
+// The payload used to be fetched at login only, and rotating refresh tokens
+// keep a session alive for weeks, so a page granted later (by a migration or
+// via IT > Yetkiler) stayed invisible -- no menu entry, no landing card, route
+// guard refusing -- until the user signed out and back in. The cache is now
+// refreshed in the background: on every page load (initNavbar kicks it off,
+// throttled so rapid navigation does not refetch each time), after every
+// successful token refresh (a busy page gets one every ~5 minutes), and when
+// another tab stores a fresh payload. The first paint still comes from the
+// cache; PERMISSIONS_REFRESHED_EVENT tells listeners when the grants changed so
+// they can re-render. A failed refetch (5xx, network blip) leaves the old
+// cache in place: an outage is not a logout, and nothing is revoked on a guess.
+export const PERMISSIONS_REFRESHED_EVENT = 'permissions:refreshed';
+const PERMISSIONS_FETCHED_AT_KEY = 'permissionsFetchedAt';
+const PERMISSIONS_MAX_AGE_MS = 60 * 1000;
+
+let permissionsRefreshInFlight = null;
+
+// Everything the UI derives from the payload, order-independent: which
+// codenames are granted and the "Page: /route/" names the menus are built from.
+function permissionSignature(perms) {
+    if (!perms || typeof perms !== 'object') return '';
+    const granted = [];
+    for (const [codename, v] of Object.entries(perms)) {
+        if (v === true) {
+            granted.push(codename);
+        } else if (v && typeof v === 'object' && v.granted === true) {
+            granted.push(`${codename}=${v.name || ''}`);
+        }
+    }
+    return granted.sort().join('|');
+}
+
+function permissionsFetchedAt() {
+    const raw = Number(localStorage.getItem(PERMISSIONS_FETCHED_AT_KEY));
+    return Number.isFinite(raw) ? raw : 0;
+}
+
+function announcePermissionsRefreshed(detail) {
+    try {
+        window.dispatchEvent(new CustomEvent(PERMISSIONS_REFRESHED_EVENT, { detail }));
+    } catch (error) {
+        console.warn('Permission refresh listeners failed:', error);
+    }
+}
+
+/**
+ * Refetch the signed-in user's permissions in the background and swap the
+ * cache when they arrive. Never throws and never signs the user out on its
+ * own; a failed fetch leaves the cached payload untouched.
+ *
+ * @param {object} [options]
+ * @param {number} [options.maxAgeMs] skip the fetch while the cache is younger
+ *   than this (default one minute); 0 forces it.
+ * @returns {Promise<{refreshed: boolean, changed: boolean}>} `refreshed` is
+ *   false when the fetch was skipped or failed; `changed` says whether the
+ *   granted set differs from what this page was rendered with.
+ */
+export function refreshPermissions({ maxAgeMs = PERMISSIONS_MAX_AGE_MS } = {}) {
+    if (!isLoggedIn()) return Promise.resolve({ refreshed: false, changed: false });
+    if (permissionsRefreshInFlight) return permissionsRefreshInFlight;
+    if (localStorage.getItem('permissions') && Date.now() - permissionsFetchedAt() < maxAgeMs) {
+        return Promise.resolve({ refreshed: false, changed: false });
+    }
+
+    permissionsRefreshInFlight = (async () => {
+        const before = permissionSignature(getPermissions());
+        const perms = await fetchAndStorePermissions(); // null on failure: old cache stays
+        if (!perms) return { refreshed: false, changed: false };
+        const changed = permissionSignature(perms) !== before;
+        announcePermissionsRefreshed({ changed, source: 'fetch' });
+        return { refreshed: true, changed };
+    })().finally(() => {
+        permissionsRefreshInFlight = null;
+    });
+    return permissionsRefreshInFlight;
+}
+
+// Fire-and-forget variant for code paths that must not wait on it (the token
+// refresh). The in-flight guard above makes it a no-op when the permissions
+// fetch is the very request that triggered the token refresh.
+function schedulePermissionsRefresh() {
+    setTimeout(() => {
+        refreshPermissions({ maxAgeMs: 0 }).catch(() => {});
+    }, 0);
+}
+
+// Another tab stored a fresh payload (or dropped it on logout / a new login):
+// this tab's in-memory copy is stale, so re-read it and let the menus follow.
+// The storage event only fires in the tabs that did not do the write.
+window.addEventListener('storage', (event) => {
+    if (event.key !== 'permissions') return;
+    const before = permissionSignature(cachedPermissions || {});
+    cachedPermissions = null;
+    cachedGrantedPageRoutes = null;
+    const changed = permissionSignature(getPermissions()) !== before;
+    announcePermissionsRefreshed({ changed, source: 'storage' });
+});
+
 // Helper function to clear cached user data (useful for logout)
 export function clearCachedUser() {
     localStorage.removeItem('user');
     localStorage.removeItem('userTeam');
     localStorage.removeItem('permissions');
+    localStorage.removeItem(PERMISSIONS_FETCHED_AT_KEY);
     cachedPermissions = null;
     cachedGrantedPageRoutes = null;
     inFlightUserPromise = null;
     localStorage.removeItem('purchaseRequestDraft');
-    console.log('Cached user data cleared');
 }
 
 // Helper function to get user team specifically
@@ -226,8 +335,6 @@ export async function getUserTeam() {
 }
 
 function setTokens(newAccessToken, newRefreshToken) {
-    accessToken = newAccessToken;
-    refreshToken = newRefreshToken;
     localStorage.setItem('accessToken', newAccessToken);
     if (newRefreshToken) {
         localStorage.setItem('refreshToken', newRefreshToken);
@@ -235,8 +342,6 @@ function setTokens(newAccessToken, newRefreshToken) {
 }
 
 function clearTokens() {
-    accessToken = null;
-    refreshToken = null;
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
 }
@@ -603,46 +708,84 @@ export function enforceAuth() {
     return guardRoute();
 }
 
-async function refreshAccessToken() {
-    if (!refreshToken) {
+// One refresh per tab at a time: when the access token lapses, every request in
+// flight gets a 401, and they should all wait on the same refresh.
+let refreshInFlight = null;
+
+function refreshAccessToken() {
+    if (!refreshInFlight) {
+        refreshInFlight = requestNewAccessToken().finally(() => {
+            refreshInFlight = null;
+        });
+    }
+    return refreshInFlight;
+}
+
+// Only a refresh token the server actually rejects (401/400) ends the session.
+// A network blip or a 5xx used to log the user out as well; now just this
+// request fails and the next one tries again.
+async function requestNewAccessToken() {
+    const sentRefresh = currentRefreshToken();
+    if (!sentRefresh) {
         logout({ rememberReturn: true });
         throw new Error('No refresh token available');
     }
 
-    try {
-        const response = await fetch(`${API_URL}/token/refresh/`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' ,
-                'X-Subdomain': "ofis.gemcore.com.tr"
-            },
-            body: JSON.stringify({ refresh: refreshToken }),
-        });
+    const response = await fetch(`${API_URL}/token/refresh/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' ,
+            'X-Subdomain': "ofis.gemcore.com.tr"
+        },
+        body: JSON.stringify({ refresh: sentRefresh }),
+    });
 
-        if (!response.ok) {
-           throw new Error('Failed to refresh token');
+    if (response.status === 401 || response.status === 400) {
+        // Another tab may have logged in again while this was out -- typically
+        // right after the same expiry sent it to the login screen. Carry on
+        // with its tokens instead of wiping them.
+        const latestRefresh = currentRefreshToken();
+        if (latestRefresh && latestRefresh !== sentRefresh) {
+            return requestNewAccessToken();
         }
-
-        const data = await response.json();
-        setTokens(data.access, refreshToken); // Keep the same refresh token
-        return accessToken;
-    } catch(e) {
         logout({ rememberReturn: true });
-        throw e;
+        throw new Error('Session expired');
     }
+    if (!response.ok) {
+        throw new Error(`Token refresh failed (${response.status})`);
+    }
+
+    const data = await response.json();
+    if (!currentRefreshToken()) {
+        // Signed out in another tab while this was out: don't revive the session.
+        logout();
+        throw new Error('Not authenticated');
+    }
+    // The backend hands back a new refresh token on every refresh; keeping it is
+    // what lets an active session outlive the refresh token's 7-day lifetime.
+    setTokens(data.access, data.refresh || sentRefresh);
+    // A renewed session is the natural moment to pick up permission changes
+    // made since the last fetch; it never delays the request that needed the
+    // token.
+    schedulePermissionsRefresh();
+    return data.access;
 }
 
 export async function authedFetch(url, options = {}) {
-    if (!accessToken) {
+    if (!currentRefreshToken()) {
        logout({ rememberReturn: true });
        throw new Error('Not authenticated');
     }
 
+    // No access token (stopImpersonation can store an empty one) just means
+    // the request has to wait for a refresh first.
+    const sentAccess = currentAccessToken() || await refreshAccessToken();
+
     options.headers = {
         ...options.headers,
-        'Authorization': `Bearer ${accessToken}`,
+        'Authorization': `Bearer ${sentAccess}`,
         'X-Subdomain': "ofis.gemcore.com.tr"
     };
-    
+
     // Only set Content-Type if not already provided and not using FormData
     if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
         options.headers['Content-Type'] = 'application/json';
@@ -651,8 +794,13 @@ export async function authedFetch(url, options = {}) {
     let response = await fetch(url, options);
 
     if (response.status === 401) {
-        await refreshAccessToken();
-        options.headers['Authorization'] = `Bearer ${accessToken}`;
+        // A parallel request or another tab may already have replaced the token
+        // this one went out with; use that rather than refreshing again.
+        const latestAccess = currentAccessToken();
+        const freshAccess = latestAccess && latestAccess !== sentAccess
+            ? latestAccess
+            : await refreshAccessToken();
+        options.headers['Authorization'] = `Bearer ${freshAccess}`;
         response = await fetch(url, options); // Retry the request with the new token
     }
 

@@ -126,6 +126,20 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Proje Takibi',
                 icon: 'fas fa-tasks',
                 children: {}
+            },
+            // Tahmin raporları (estimator app); a sub-entry, so the navbar's
+            // 7-section limit is untouched. Page permission: users/0066.
+            '/projects/estimates': {
+                label: 'Tahminler',
+                icon: 'fas fa-calculator',
+                children: {}
+            },
+            // Tahmin referansları (reference profiles, review, unit times).
+            // Page permission: users/0067.
+            '/projects/references': {
+                label: 'Referanslar',
+                icon: 'fas fa-book-open',
+                children: {}
             }
         }
     },
@@ -244,6 +258,11 @@ export const NAVIGATION_STRUCTURE = {
                     '/manufacturing/welding/time-entries': {
                         label: 'Zaman Kayıtları',
                         icon: 'fas fa-clock',
+                        children: {}
+                    },
+                    '/manufacturing/welding/timesheets': {
+                        label: 'Puantaj Onayı',
+                        icon: 'fas fa-clipboard-check',
                         children: {}
                     },
                     '/manufacturing/welding/teams': {
@@ -513,6 +532,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Malzeme Takibi',
                 icon: 'fas fa-box',
                 children: {}
+            },
+            '/manufacturing/material-tracking/pull-requests': {
+                label: 'Depo Çekme Talepleri',
+                icon: 'fas fa-dolly',
+                children: {}
             }
 
 
@@ -584,6 +608,11 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            '/procurement/payment-lists': {
+                label: 'Ödeme Listeleri',
+                icon: 'fas fa-money-check-dollar',
+                children: {}
             },
             '/procurement/reports': {
                 label: 'Raporlar',

@@ -1,2 +1,9 @@
 # graphify knowledge graph (generated; rebuild with `graphify update .`)
 graphify-out/
+
+# React app (web/)
+web/node_modules/
+web/dist/
+_site/
+web/test-results/
+web/playwright-report/
