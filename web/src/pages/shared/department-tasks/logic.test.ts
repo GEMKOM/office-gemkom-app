@@ -354,6 +354,8 @@ describe('legacyErrorText', () => {
 });
 
 describe('Gantt model', () => {
+  // Importing GanttView pulls in Mantine and the Gantt, which can take longer
+  // than the default 5s when the whole suite runs in parallel.
   it('task rows get one bar, user rows a bar per segment', async () => {
     const { toGanttModel } = await import('./GanttView');
     const task = toGanttTask(
@@ -379,5 +381,5 @@ describe('Gantt model', () => {
     const byUser = toGanttModel(users);
     expect(byUser.rows.map((r) => r.label)).toEqual(['Ali']);
     expect(byUser.bars[0]).toMatchObject({ rowId: 'user-1', taskId: 5 });
-  });
+  }, 20_000);
 });
