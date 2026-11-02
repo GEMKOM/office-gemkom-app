@@ -669,6 +669,14 @@ export const appRoutes: RouteObject[] = [
         .PaymentTermsPage,
     }),
   },
+  // Management and finance dashboards (charts load with these pages only).
+  {
+    path: '/management/reports/overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/overview/OverviewReportPage'))
+        .OverviewReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
