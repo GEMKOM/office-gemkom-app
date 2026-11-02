@@ -1,4 +1,4 @@
-import { renderRichText } from '@legacy/utils/richText.js';
+import { renderRichText } from '@/ui/RichText/renderRichText';
 import { UnstyledButton } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import {

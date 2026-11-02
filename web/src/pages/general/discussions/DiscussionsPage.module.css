@@ -1,0 +1,325 @@
+/* Tartışmalarım: tab rail with the sort toggle, dated rows, pager. Rows
+   echo Bildirimlerim: a row waiting on the user carries the unread tint. */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 4px 12px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 11px 12px;
+  border-bottom: 2px solid transparent;
+  border-radius: var(--gk-radius-sm) var(--gk-radius-sm) 0 0;
+  color: var(--gk-muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    color 150ms ease-out,
+    border-color 150ms ease-out,
+    background 150ms ease-out;
+}
+
+.tab:hover {
+  color: var(--gk-ink);
+  background: var(--gk-surface-subtle);
+}
+
+.tab[data-active] {
+  color: var(--gk-red-700);
+  border-bottom-color: var(--gk-red-700);
+  background: transparent;
+}
+
+.tab:focus-visible,
+.sortButton:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.tabCount {
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--gk-surface-subtle);
+  border: 1px solid var(--gk-line);
+  color: var(--gk-ink-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.tab[data-active] .tabCount {
+  background: var(--gk-red-700);
+  border-color: var(--gk-red-700);
+  color: #fff;
+}
+
+.sort {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 0;
+}
+
+.sortLabel {
+  margin-right: 2px;
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.sortButton {
+  padding: 4px 10px;
+  border: 1px solid var(--gk-line-strong);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface);
+  color: var(--gk-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+  transition:
+    background 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.sortButton:hover:not([data-active]) {
+  background: var(--gk-surface-subtle);
+  color: var(--gk-ink);
+}
+
+.sortButton[data-active] {
+  border-color: var(--gk-red-700);
+  background: var(--gk-red-700);
+  color: #fff;
+}
+
+.list[data-fetching] {
+  opacity: 0.6;
+  transition: opacity 150ms ease-out;
+}
+
+.day {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 20px;
+  background: var(--gk-surface-subtle);
+  border-bottom: 1px solid var(--gk-line);
+  color: var(--gk-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--gk-line);
+  border-left: 3px solid transparent;
+  transition: background 120ms ease-out;
+}
+
+.row:hover {
+  background: var(--gk-surface-subtle);
+}
+
+/* Someone else has had the last word: that is what the page is for. */
+.row[data-awaiting] {
+  border-left-color: var(--gk-red-700);
+  background: color-mix(in srgb, var(--gk-red-050) 60%, var(--gk-surface));
+}
+
+.row[data-awaiting]:hover {
+  background: var(--gk-red-050);
+}
+
+.icon {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: var(--gk-radius-md);
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+  font-size: 15px;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.main:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+  border-radius: var(--gk-radius-sm);
+}
+
+.title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+.titleText {
+  min-width: 0;
+  color: var(--gk-ink);
+  font-size: 14px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.row[data-awaiting] .titleText {
+  font-weight: 700;
+}
+
+/* One quiet line: the job, where the topic lives, the counts. */
+.facts {
+  margin-top: 2px;
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.factJob {
+  font-weight: 700;
+  color: var(--gk-ink-2);
+  font-family: var(--gk-font-mono);
+}
+
+.sep {
+  margin: 0 6px;
+  opacity: 0.7;
+}
+
+.line {
+  display: -webkit-box;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--gk-muted);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow-wrap: anywhere;
+}
+
+.line[data-kind='reply'] {
+  color: var(--gk-ink-2);
+  -webkit-line-clamp: 2;
+}
+
+.line[data-kind='own'] {
+  padding-left: 10px;
+  border-left: 3px solid var(--gk-line);
+  color: var(--gk-ink-2);
+  -webkit-line-clamp: 2;
+}
+
+.replyIcon {
+  margin-right: 5px;
+  color: var(--gk-red-700);
+  font-size: 11px;
+}
+
+.who {
+  margin-right: 4px;
+  color: var(--gk-ink);
+  font-weight: 700;
+}
+
+.side {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.time {
+  color: var(--gk-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stateText {
+  color: var(--gk-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.actions {
+  display: flex;
+  gap: 2px;
+}
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 48px 20px;
+  color: var(--gk-muted);
+  text-align: center;
+  font-size: 13px;
+}
+
+.stateIcon {
+  font-size: 26px;
+  opacity: 0.6;
+}
+
+.stateTitle {
+  color: var(--gk-ink-2);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  width: 100%;
+  color: var(--gk-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .row {
+    padding: 12px 14px;
+    flex-wrap: wrap;
+  }
+
+  .side {
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    padding-left: 46px;
+  }
+
+  .actions {
+    margin-left: auto;
+  }
+}

@@ -96,7 +96,8 @@
 
 .figures {
   display: flex;
-  gap: 28px;
+  flex-wrap: wrap;
+  gap: 12px 28px;
   margin: 0;
 }
 

@@ -66,11 +66,12 @@ function person(value: string | null | undefined) {
   return !value || value === '-' ? '-' : <StatusBadge color="grey">{value}</StatusBadge>;
 }
 
+// Sortable = QCReviewViewSet.ordering_fields (submitted_at, status).
 export const reviewColumns: DataTableColumn<QCReview>[] = [
   {
     key: 'id',
     header: 'ID',
-    sortable: true,
+    sortable: false,
     width: 100,
     render: (row) => (
       <Anchor
@@ -88,7 +89,7 @@ export const reviewColumns: DataTableColumn<QCReview>[] = [
   {
     key: 'job_order',
     header: 'İş Emri',
-    sortable: true,
+    sortable: false,
     width: 140,
     render: (row) =>
       row.job_order ? <span className={uiClasses.code}>{row.job_order}</span> : '-',
