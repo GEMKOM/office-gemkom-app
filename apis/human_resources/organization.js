@@ -45,11 +45,6 @@ export async function fetchPositions(filters = {}) {
     return parseJsonOrThrow(response, 'Pozisyonlar yüklenemedi.');
 }
 
-export async function fetchPositionTree() {
-    const response = await authedFetch(`${backendBase}/organization/positions/tree/`);
-    return parseJsonOrThrow(response, 'Organizasyon şeması yüklenemedi.');
-}
-
 export async function fetchPositionById(positionId) {
     const response = await authedFetch(`${backendBase}/organization/positions/${positionId}/`);
     return parseJsonOrThrow(response, 'Pozisyon detayı yüklenemedi.');
@@ -71,15 +66,6 @@ export async function patchPosition(positionId, payload) {
         body: JSON.stringify(payload || {})
     });
     return parseJsonOrThrow(response, 'Pozisyon güncellenemedi.');
-}
-
-export async function patchPositionPermissions(positionId, codenames = []) {
-    const response = await authedFetch(`${backendBase}/organization/positions/${positionId}/permissions/`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ codenames: Array.isArray(codenames) ? codenames : [] })
-    });
-    return parseJsonOrThrow(response, 'Pozisyon yetkileri güncellenemedi.');
 }
 
 export async function fetchPositionHolders(positionId) {
@@ -149,11 +135,6 @@ export async function deleteOrganizationGroup(groupId) {
     }
     if (response.status === 204) return null;
     return response.json().catch(() => null);
-}
-
-export async function fetchPermissionsCatalog() {
-    const response = await authedFetch(`${backendBase}/users/permissions/`);
-    return parseJsonOrThrow(response, 'Yetki listesi yüklenemedi.');
 }
 
 // Users ↔ positions

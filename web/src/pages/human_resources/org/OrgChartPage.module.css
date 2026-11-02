@@ -1,0 +1,328 @@
+/* The chart and the "Pozisyon Detayı" card side by side on wide screens. */
+.layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+
+  .detail {
+    position: sticky;
+    top: 80px;
+  }
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--gk-line);
+  background: var(--gk-surface-subtle);
+}
+
+.search {
+  flex: 1 1 220px;
+  min-width: 200px;
+  max-width: 320px;
+}
+
+.empty {
+  margin: 24px;
+  padding: 32px;
+  border: 1px dashed var(--gk-line-strong);
+  border-radius: var(--gk-radius-md);
+  color: var(--gk-muted);
+  text-align: center;
+}
+
+/* ---- chart (components/organization-tree) ---- */
+.viewport {
+  --org-line: #b7c0cb;
+  --org-line-width: 1.5px;
+  --org-step: 28px;
+  position: relative;
+  width: 100%;
+  overflow: auto;
+  padding: 24px 16px 32px;
+  background: radial-gradient(circle at 10px 10px, #eef1f5 1px, transparent 1px);
+  background-size: 22px 22px;
+  background-color: #fafbfc;
+}
+
+.canvas {
+  display: inline-block;
+  min-width: 100%;
+  text-align: center;
+}
+
+.tree {
+  position: relative;
+  display: table;
+  margin: 0 auto;
+  padding: var(--org-step) 0 0;
+  list-style: none;
+}
+
+/* Vertical connector from the parent card down into the children's row. */
+.tree::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 0;
+  height: var(--org-step);
+  border-left: var(--org-line-width) solid var(--org-line);
+}
+
+.root {
+  padding-top: 0;
+}
+
+.root::before,
+.root > .node::before,
+.root > .node::after {
+  display: none;
+}
+
+.root > .node {
+  padding-top: 0;
+}
+
+.node {
+  position: relative;
+  display: table-cell;
+  vertical-align: top;
+  text-align: center;
+  padding: var(--org-step) 14px 0;
+  list-style: none;
+}
+
+/* Horizontal half-lines at the top of every item. */
+.node::before,
+.node::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 50%;
+  width: 50%;
+  height: var(--org-step);
+  border-top: var(--org-line-width) solid var(--org-line);
+}
+
+/* The right half also draws the drop to its card. */
+.node::after {
+  right: auto;
+  left: 50%;
+  border-left: var(--org-line-width) solid var(--org-line);
+}
+
+.node:only-child::before,
+.node:only-child::after {
+  display: none;
+}
+
+.node:only-child {
+  padding-top: 0;
+}
+
+.node:first-child::before,
+.node:last-child::after {
+  border: 0 none;
+}
+
+.node:last-child::before {
+  border-right: var(--org-line-width) solid var(--org-line);
+  border-radius: 0 6px 0 0;
+}
+
+.node:first-child::after {
+  border-radius: 6px 0 0 0;
+}
+
+.card {
+  position: relative;
+  display: inline-block;
+  width: 200px;
+  padding: 10px;
+  background: #f4f5f1;
+  border: 1px solid #b8b6a8;
+  border-radius: 4px;
+  text-align: center;
+  color: var(--gk-ink);
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.04),
+    0 1px 3px rgba(0, 0, 0, 0.06);
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(9, 30, 66, 0.12);
+  border-color: #8a8a78;
+}
+
+.card:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.card[data-selected] {
+  border-color: var(--gk-red-700);
+  box-shadow: 0 0 0 2px rgba(139, 0, 0, 0.18);
+}
+
+.card[data-vacant] {
+  background: #fbfbf8;
+  border-style: dashed;
+  color: var(--gk-muted);
+}
+
+.card[data-dimmed] {
+  opacity: 0.35;
+  filter: saturate(0.6);
+}
+
+.card[data-match] {
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+
+.title {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  line-height: 1.25;
+  word-break: break-word;
+}
+
+.sub {
+  margin-top: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #fff;
+  border: 1px solid #d5d9df;
+  font-size: 11px;
+  color: #475467;
+  line-height: 1;
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--org-dept-color, #6c757d);
+}
+
+.badge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: #0d6efd;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 22px;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.card[data-vacant] .badge {
+  background: #adb5bd;
+}
+
+.accent {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-radius: 4px 4px 0 0;
+  background: var(--org-dept-color, transparent);
+}
+
+.toggle {
+  position: absolute;
+  left: 50%;
+  bottom: -12px;
+  z-index: 2;
+  transform: translateX(-50%);
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: #fff;
+  border: 1px solid var(--org-line);
+  color: #5f6c7b;
+  font-size: 11px;
+  line-height: 20px;
+  cursor: pointer;
+}
+
+.toggle:hover {
+  color: var(--gk-red-700);
+  border-color: var(--gk-red-700);
+}
+
+/* ---- detail card ---- */
+.detailTitle {
+  font-weight: 700;
+}
+
+.detailMeta {
+  color: var(--gk-muted);
+  font-size: 13px;
+}
+
+.sectionTitle {
+  margin-bottom: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+}
+
+.holders {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.holders li {
+  margin-bottom: 2px;
+}
+
+.code {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid #dee2e6;
+  border-radius: var(--gk-radius-sm);
+  background: #f1f3f5;
+  font-size: 12px;
+}

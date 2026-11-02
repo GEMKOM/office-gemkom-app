@@ -242,6 +242,14 @@ export const appRoutes: RouteObject[] = [
     path: '/it/password-resets',
     lazy: async () => ({ Component: (await import('@/pages/it/password-resets/PasswordResetsPage')).PasswordResetsPage }),
   },
+  {
+    path: '/it/permissions',
+    lazy: async () => ({ Component: (await import('@/pages/it/permissions/PermissionsPage')).PermissionsPage }),
+  },
+  {
+    path: '/it/job-completion',
+    lazy: async () => ({ Component: (await import('@/pages/it/job-completion/JobCompletionPage')).JobCompletionPage }),
+  },
   // Phase 3b: quality control, HR and other list pages.
   {
     path: '/quality-control/cost-lines',
@@ -279,6 +287,10 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/human_resources/org/positions/PositionsPage'))
         .PositionsPage,
     }),
+  },
+  {
+    path: '/human_resources/org',
+    lazy: async () => ({ Component: (await import('@/pages/human_resources/org/OrgChartPage')).OrgChartPage }),
   },
   {
     path: '/human_resources/attendance/pending-overrides',
@@ -762,6 +774,12 @@ export const appRoutes: RouteObject[] = [
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/welding/time-entries/TimeEntriesPage'))
         .TimeEntriesPage,
+    }),
+  },
+  {
+    path: '/manufacturing/welding/timesheets',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/welding/timesheets/TimesheetsPage')).TimesheetsPage,
     }),
   },
   {
