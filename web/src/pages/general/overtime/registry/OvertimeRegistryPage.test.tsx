@@ -163,6 +163,18 @@ it('filters and sorting go to the URL and the request', async () => {
   }
 });
 
+it('sends the date range as OvertimeRequestFilter reads it', async () => {
+  // The backend ignores start_date/end_date; it filters start_at__gte / start_at__lte.
+  renderPage('/general/overtime/registry?start_date=2026-10-01&end_date=2026-10-31');
+  await screen.findByText('mehmet');
+  expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({
+    start_at__gte: '2026-10-01',
+    start_at__lte: '2026-10-31T23:59:59',
+    page: '1',
+    page_size: '20',
+  });
+});
+
 it('cancelling asks first and posts to cancel/', async () => {
   renderPage();
   await screen.findByText('mehmet');

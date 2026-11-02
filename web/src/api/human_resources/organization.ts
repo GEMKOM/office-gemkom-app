@@ -56,7 +56,8 @@ export interface PositionHolder {
   [key: string]: unknown;
 }
 
-export type PositionsParams = { department?: string; level?: string };
+/** The backend filters on department_code; a `department` param is ignored. */
+export type PositionsParams = { department_code?: string; level?: string };
 
 export interface PositionInput {
   title: string;
