@@ -236,6 +236,8 @@
 
 /* ---- Delta and KPI tiles ------------------------------------------------- */
 .delta {
+  /* Anchors the visually hidden direction word, so it never widens a scroll box. */
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 4px;
