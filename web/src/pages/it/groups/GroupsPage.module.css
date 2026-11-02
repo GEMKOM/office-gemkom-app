@@ -1,0 +1,67 @@
+/* The list and the "Grup İşlemleri" card side by side on wide screens (legacy org-layout). */
+.layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 400px;
+  }
+
+  .detail {
+    position: sticky;
+    top: 80px;
+  }
+}
+
+.miniStats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.miniStat {
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  padding: 8px 12px;
+}
+
+.miniStatLabel,
+.sectionTitle {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+}
+
+.sectionTitle {
+  margin-bottom: 6px;
+}
+
+.miniStatValue {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-sm);
+  padding: 2px 8px;
+}
+
+.listRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.listRow:last-child {
+  border-bottom: 0;
+}
