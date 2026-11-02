@@ -106,5 +106,7 @@
   "/procurement/reports/staff",
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
-  "/procurement/suppliers/payment-terms"
+  "/procurement/suppliers/payment-terms",
+  "/manufacturing/machining/tasks/list",
+  "/manufacturing/machining/tasks/create"
 ]

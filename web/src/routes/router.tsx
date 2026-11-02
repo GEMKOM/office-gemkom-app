@@ -668,6 +668,20 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/procurement/suppliers/payment-terms/PaymentTermsPage'))
         .PaymentTermsPage,
     }),
+  },  // Talaşlı İmalat tasks
+  {
+    path: '/manufacturing/machining/tasks/list',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/machining/tasks/list/MachiningPartsPage'))
+        .MachiningPartsPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/tasks/create',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/machining/tasks/create/MachiningCreateTasksPage'))
+        .MachiningCreateTasksPage,
+    }),
   },
 ];
 

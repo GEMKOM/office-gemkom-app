@@ -1,0 +1,141 @@
+.partKey {
+  font-family: var(--gk-font-mono);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.countPill {
+  display: inline-block;
+  min-width: 26px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--gk-line);
+  background: var(--gk-surface-subtle);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+/* İş No / Adet open the job allocation editor. */
+.allocCell {
+  all: unset;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: var(--gk-radius-sm);
+  padding: 1px 4px;
+  margin: -1px -4px;
+}
+
+.allocCell:hover {
+  background: var(--gk-surface-subtle);
+  box-shadow: inset 0 0 0 1px var(--gk-line-strong);
+}
+
+.allocCell:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--gk-red-700);
+}
+
+/* A figure on the band that applies its filter. */
+.figureButton {
+  all: unset;
+  cursor: pointer;
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+
+.figureButton:focus-visible {
+  outline: 2px solid var(--gk-on-dark);
+  outline-offset: 2px;
+}
+
+.allocEditor {
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  padding: 8px 12px 12px;
+  background: var(--gk-surface);
+}
+
+.allocHeader,
+.allocRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 64px 40px;
+  gap: 8px;
+  align-items: center;
+}
+
+.allocHeader {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--gk-muted);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--gk-line);
+  margin-bottom: 8px;
+}
+
+.allocRow + .allocRow {
+  margin-top: 8px;
+}
+
+.allocShare {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.costStats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.costStat {
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-sm);
+  padding: 8px 10px;
+  background: var(--gk-surface-subtle);
+}
+
+.costStatLabel {
+  font-size: 0.72rem;
+  color: var(--gk-muted);
+}
+
+.costStatValue {
+  font-weight: 700;
+}
+
+.fileNames {
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fileName {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  max-width: 170px;
+}
+
+.fileNameText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.submitting {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.preLine {
+  white-space: pre-line;
+}
