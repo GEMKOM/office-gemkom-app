@@ -1,6 +1,7 @@
 import type { NavItem, NavTree } from '@legacy/navigationStructure.js';
 import { Menu, ScrollArea, Tooltip, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router';
+import { NeoEntry, NeoRule } from '@/neo';
 import { AppLink } from './AppLink';
 import { AttendanceButton } from './AttendanceButton';
 import { FaIcon } from './FaIcon';
@@ -74,6 +75,9 @@ function RailEntry({ path, item, onOpen, currentPath }: { path: string; item: Na
       offset={14}
       width={280}
       withinPortal
+      // A hover flyout must not pull focus back when the pointer leaves: the
+      // user may be typing elsewhere (Neo's question box).
+      returnFocus={false}
       classNames={railMenuClassNames}
     >
       <Menu.Target>{button}</Menu.Target>
@@ -141,6 +145,8 @@ export function Rail({ expanded, onToggle }: { expanded: boolean; onToggle: () =
         </span>
         {expanded && <span className={classes.wordmark}>GEMKOM</span>}
       </AppLink>
+      <NeoEntry variant={expanded ? 'row' : 'icon'} />
+      <NeoRule expanded={expanded} />
       <ScrollArea className={classes.railScroll} type={expanded ? 'hover' : 'never'} scrollbarSize={6}>
         {expanded ? (
           <RailRows tree={tree} onOpen={open} currentPath={currentPath} />

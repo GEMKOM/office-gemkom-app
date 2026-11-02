@@ -1,6 +1,7 @@
 import { categoryMeta } from '@legacy/components/notificationBell/notificationCategories.js';
 import { Loader, Popover, ScrollArea, Tooltip, UnstyledButton, VisuallyHidden, type FloatingPosition } from '@mantine/core';
 import { useState } from 'react';
+import { neoLinkTarget, openNeo } from '@/neo';
 import { AppLink, useAppNavigate } from './AppLink';
 import { FaIcon } from './FaIcon';
 import {
@@ -49,6 +50,13 @@ function NotificationPanel({ count, onClose }: { count: number; onClose: () => v
 
   const open = (item: AppNotification) => {
     if (!item.is_read) markRead.mutate(item.id);
+    // Neo's questions on a report open its thread in the panel, on this page.
+    const neo = neoLinkTarget(item.link);
+    if (neo) {
+      onClose();
+      openNeo(neo);
+      return;
+    }
     if (item.link && item.link !== '#') {
       onClose();
       navigate(item.link);
