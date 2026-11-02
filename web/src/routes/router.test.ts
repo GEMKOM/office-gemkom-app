@@ -7,9 +7,7 @@ import { appRoutes, publicRoutes } from './router';
 // route would publish an SPA page that only shows "Sayfa bulunamadı".
 describe('migrated routes', () => {
   it('lists every app route in migrated-routes.json and nothing else', () => {
-    const routerPaths = [...publicRoutes, ...appRoutes]
-      .map((r) => normalizeRoute(r.path ?? ''))
-      .sort();
+    const routerPaths = [...publicRoutes, ...appRoutes].map((r) => normalizeRoute(r.path ?? '')).sort();
     const listed = migratedRoutes.map(normalizeRoute).sort();
     expect(routerPaths).toEqual(listed);
   });
