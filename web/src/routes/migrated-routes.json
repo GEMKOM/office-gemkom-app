@@ -133,5 +133,15 @@
   "/logistics/projects",
   "/manufacturing/projects",
   "/planning/projects",
-  "/procurement/projects"
+  "/procurement/projects",
+  "/manufacturing/cnc-cutting/capacity/planning",
+  "/manufacturing/linear-cutting/capacity/planning",
+  "/manufacturing/machining/capacity/planning",
+  "/manufacturing/machining/reports/history",
+  "/manufacturing/machining/reports/production-plan",
+  "/management/reports/overview",
+  "/finance/reports/executive-overview",
+  "/management/reports/cash-flow",
+  "/management/dashboard",
+  "/management/analytics"
 ]

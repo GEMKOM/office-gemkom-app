@@ -855,6 +855,82 @@ export const appRoutes: RouteObject[] = [
         .ReleaseApprovalsPage,
     }),
   },
+  // Capacity planning and machining reports on the React Gantt.
+  {
+    path: '/manufacturing/cnc-cutting/capacity/planning',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/cnc-cutting/capacity/planning/CncPlanningPage')
+      ).CncPlanningPage,
+    }),
+  },
+  {
+    path: '/manufacturing/linear-cutting/capacity/planning',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/linear-cutting/capacity/planning/LinearPlanningPage')
+      ).LinearPlanningPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/capacity/planning',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/capacity/planning/MachiningPlanningPage')
+      ).MachiningPlanningPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/history',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/history/MachiningHistoryPage')
+      ).MachiningHistoryPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/production-plan',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/production-plan/ProductionPlanPage')
+      ).ProductionPlanPage,
+    }),
+  },
+  // Management and finance dashboards (charts load with these pages only).
+  {
+    path: '/management/reports/overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/overview/OverviewReportPage'))
+        .OverviewReportPage,
+    }),
+  },
+  {
+    path: '/finance/reports/executive-overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/reports/executive-overview/ExecutiveOverviewPage'))
+        .ExecutiveOverviewPage,
+    }),
+  },
+  {
+    path: '/management/reports/cash-flow',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/cash-flow/CashFlowReportPage'))
+        .CashFlowReportPage,
+    }),
+  },
+  {
+    path: '/management/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/dashboard/ManagementDashboardPage'))
+        .ManagementDashboardPage,
+    }),
+  },
+  {
+    path: '/management/analytics',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/analytics/AnalyticsPage')).AnalyticsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
@@ -866,6 +942,10 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
       {
         path: '/react-preview/ui',
         lazy: async () => ({ Component: (await import('@/pages/dev/UiPreview')).UiPreview }),
+      },
+      {
+        path: '/react-preview/gantt',
+        lazy: async () => ({ Component: (await import('@/pages/dev/GanttPreview')).GanttPreview }),
       },
     ]
   : [];

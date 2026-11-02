@@ -28,20 +28,3 @@ export async function getRevenueReport(params = {}) {
 
     return resp.json();
 }
-
-/**
- * GET /sales/reports/inflow-detail/?month=YYYY-MM
- */
-export async function getInflowDetail(month) {
-    const params = new URLSearchParams({ month });
-    const url = `${backendBase}/sales/reports/inflow-detail/?${params.toString()}`;
-    const resp = await authedFetch(url, {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' }
-    });
-    if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || err.error || 'Giriş detayı yüklenirken hata oluştu');
-    }
-    return resp.json();
-}

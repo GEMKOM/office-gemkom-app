@@ -1,0 +1,240 @@
+/* Overview report: stat grids, key/value lists, comparison tables. */
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr));
+  gap: 12px;
+}
+
+.stat {
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--gk-surface-subtle);
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+}
+
+.statLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gk-muted);
+}
+
+.statValue {
+  margin-top: 2px;
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--gk-ink);
+  overflow-wrap: anywhere;
+}
+
+.statSub {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  margin: 0;
+  font-size: 14px;
+}
+
+.kv dt,
+.kv dd {
+  margin: 0;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.kv dt {
+  color: var(--gk-ink-2);
+  padding-right: 12px;
+}
+
+.kv dd {
+  text-align: right;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.kv dt:last-of-type,
+.kv dd:last-of-type {
+  border-bottom: 0;
+}
+
+.good {
+  color: #11633d;
+}
+
+.bad {
+  color: var(--gk-danger);
+}
+
+.hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gk-line);
+  vertical-align: middle;
+}
+
+.table tbody th {
+  text-align: left;
+}
+
+.table thead th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-muted);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: 0;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-right: 0;
+}
+
+.table tbody tr:last-child td,
+.table tbody tr:last-child th {
+  border-bottom: 0;
+}
+
+.num {
+  text-align: right !important;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank {
+  width: 2rem;
+  color: var(--gk-muted);
+}
+
+.muted {
+  color: var(--gk-muted);
+}
+
+.scroll {
+  overflow-x: auto;
+}
+
+.periodLabel {
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.periodLabel[data-prev] {
+  color: var(--gk-muted);
+}
+
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 16px;
+}
+
+.badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.badge {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--gk-surface-subtle);
+  border: 1px solid var(--gk-line);
+  font-size: 12px;
+  color: var(--gk-ink-2);
+}
+
+.footnote {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--gk-line);
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.footnote strong {
+  color: var(--gk-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.toolbar {
+  padding: 14px 20px 0;
+}
+
+.tabs {
+  padding: 0 12px;
+}
+
+.pane {
+  margin-top: 16px;
+}
+
+.state {
+  padding: 48px 16px;
+  text-align: center;
+  color: var(--gk-muted);
+  font-size: 13px;
+}
+
+.sectionTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gk-ink);
+}
+
+.sectionLead {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
