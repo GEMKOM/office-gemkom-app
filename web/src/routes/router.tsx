@@ -271,6 +271,35 @@ export const appRoutes: RouteObject[] = [
         .AttendanceSummaryPage,
     }),
   },
+  {
+    path: '/accounting/subcontracting-statements',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/accounting/subcontracting-statements/SubcontractingStatementsPage')
+      ).SubcontractingStatementsPage,
+    }),
+  },
+  {
+    path: '/design/revision-requests',
+    lazy: async () => ({
+      Component: (await import('@/pages/design/revision-requests/RevisionRequestsPage'))
+        .RevisionRequestsPage,
+    }),
+  },
+  {
+    path: '/logistics/cost-lines',
+    lazy: async () => ({
+      Component: (await import('@/pages/logistics/cost-lines/ShippingCostLinesPage'))
+        .ShippingCostLinesPage,
+    }),
+  },
+  {
+    path: '/finance/reports/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/reports/projects/ProjectsReportPage'))
+        .ProjectsReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

@@ -46,5 +46,9 @@
   "/human_resources/org/positions",
   "/human_resources/attendance/pending-overrides",
   "/human_resources/attendance/shift-rules",
-  "/human_resources/attendance/summary"
+  "/human_resources/attendance/summary",
+  "/accounting/subcontracting-statements",
+  "/design/revision-requests",
+  "/logistics/cost-lines",
+  "/finance/reports/projects"
 ]
