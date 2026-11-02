@@ -108,5 +108,6 @@
   "/procurement/suppliers/list",
   "/procurement/suppliers/payment-terms",
   "/management/reports/overview",
-  "/finance/reports/executive-overview"
+  "/finance/reports/executive-overview",
+  "/management/reports/cash-flow"
 ]
