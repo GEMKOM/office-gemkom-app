@@ -236,6 +236,95 @@ export const appRoutes: RouteObject[] = [
     path: '/it/password-resets',
     lazy: async () => ({ Component: (await import('@/pages/it/password-resets/PasswordResetsPage')).PasswordResetsPage }),
   },
+  // Phase 3b: quality control, HR and other list pages.
+  {
+    path: '/quality-control/cost-lines',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/cost-lines/CostLinesPage')).CostLinesPage,
+    }),
+  },
+  {
+    path: '/quality-control/documents',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/documents/DocumentsPage')).DocumentsPage,
+    }),
+  },
+  {
+    path: '/quality-control/ncrs',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/ncrs/NcrsPage')).NcrsPage,
+    }),
+  },
+  {
+    path: '/quality-control/qc-reviews',
+    lazy: async () => ({
+      Component: (await import('@/pages/quality-control/qc-reviews/QcReviewsPage')).QcReviewsPage,
+    }),
+  },
+  {
+    path: '/human_resources/users',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/users/UsersPage')).UsersPage,
+    }),
+  },
+  {
+    path: '/human_resources/org/positions',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/org/positions/PositionsPage'))
+        .PositionsPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/pending-overrides',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/human_resources/attendance/pending-overrides/PendingOverridesPage')
+      ).PendingOverridesPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/shift-rules',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/shift-rules/ShiftRulesPage'))
+        .ShiftRulesPage,
+    }),
+  },
+  {
+    path: '/human_resources/attendance/summary',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/attendance/summary/AttendanceSummaryPage'))
+        .AttendanceSummaryPage,
+    }),
+  },
+  {
+    path: '/accounting/subcontracting-statements',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/accounting/subcontracting-statements/SubcontractingStatementsPage')
+      ).SubcontractingStatementsPage,
+    }),
+  },
+  {
+    path: '/design/revision-requests',
+    lazy: async () => ({
+      Component: (await import('@/pages/design/revision-requests/RevisionRequestsPage'))
+        .RevisionRequestsPage,
+    }),
+  },
+  {
+    path: '/logistics/cost-lines',
+    lazy: async () => ({
+      Component: (await import('@/pages/logistics/cost-lines/ShippingCostLinesPage'))
+        .ShippingCostLinesPage,
+    }),
+  },
+  {
+    path: '/finance/reports/projects',
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/reports/projects/ProjectsReportPage'))
+        .ProjectsReportPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

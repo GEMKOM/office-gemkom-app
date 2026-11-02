@@ -43,5 +43,18 @@
   "/it/groups",
   "/it/inventory",
   "/it/neo",
-  "/it/password-resets"
+  "/it/password-resets",
+  "/quality-control/cost-lines",
+  "/quality-control/documents",
+  "/quality-control/ncrs",
+  "/quality-control/qc-reviews",
+  "/human_resources/users",
+  "/human_resources/org/positions",
+  "/human_resources/attendance/pending-overrides",
+  "/human_resources/attendance/shift-rules",
+  "/human_resources/attendance/summary",
+  "/accounting/subcontracting-statements",
+  "/design/revision-requests",
+  "/logistics/cost-lines",
+  "/finance/reports/projects"
 ]
