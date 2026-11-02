@@ -106,5 +106,8 @@
   "/procurement/reports/staff",
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
-  "/procurement/suppliers/payment-terms"
+  "/procurement/suppliers/payment-terms",
+  "/manufacturing/machining/reports/daily-efficiency",
+  "/manufacturing/machining/reports/performance",
+  "/manufacturing/machining/reports/sum-report"
 ]
