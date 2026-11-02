@@ -102,8 +102,9 @@ export interface OvertimeRequest {
 export interface OvertimeRequestsParams {
   status?: string;
   team?: string;
-  start_date?: string;
-  end_date?: string;
+  /** OvertimeRequestFilter's names; it ignores start_date/end_date. */
+  start_at__gte?: string;
+  start_at__lte?: string;
   search?: string;
   ordering?: string;
   page?: number;

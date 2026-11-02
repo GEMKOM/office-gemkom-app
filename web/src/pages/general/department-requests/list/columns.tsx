@@ -29,20 +29,22 @@ function RequestKeys({ keys }: { keys: string[] | null | undefined }) {
   );
 }
 
-// Module scope so DataTable rows stay memoized. Sortable set = legacy table.
+// Module scope so DataTable rows stay memoized. Sortable = DepartmentRequestViewSet
+// .ordering_fields (id, created_at, needed_date, priority); legacy also offered
+// title, department, items_count and status, which the backend ignores.
 export const departmentRequestColumns: DataTableColumn<DepartmentRequest>[] = [
   { key: 'id', header: 'Talep No', sortable: true, render: (row) => <RequestNo id={row.id} /> },
   {
     key: 'title',
     header: 'Başlık',
-    sortable: true,
+    sortable: false,
     render: (row) => (
       <Text fw={500} size="sm">
         {row.title || '-'}
       </Text>
     ),
   },
-  { key: 'department', header: 'Departman', sortable: true, render: (row) => departmentLabel(row) },
+  { key: 'department', header: 'Departman', sortable: false, render: (row) => departmentLabel(row) },
   {
     key: 'priority',
     header: 'Öncelik',
@@ -58,13 +60,13 @@ export const departmentRequestColumns: DataTableColumn<DepartmentRequest>[] = [
   {
     key: 'items_count',
     header: 'Ürün Sayısı',
-    sortable: true,
+    sortable: false,
     render: (row) => `${itemsCount(row)} ürün`,
   },
   {
     key: 'status',
     header: 'Durum',
-    sortable: true,
+    sortable: false,
     render: (row) => <RequestStatusBadge row={row} />,
   },
   {

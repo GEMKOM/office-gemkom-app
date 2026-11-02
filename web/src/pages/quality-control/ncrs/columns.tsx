@@ -55,12 +55,14 @@ function PendingAction({ row, user, groups }: { row: Ncr; user: LegacyUser; grou
 }
 
 /** Port of the ncrs.js table; the pending-action and team columns need the user and the groups. */
+// Sortable = NCRViewSet.ordering_fields (created_at, severity, status); other
+// orderings are silently ignored by the backend.
 export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColumn<Ncr>[] {
   return [
     {
       key: 'ncr_number',
       header: 'NCR No',
-      sortable: true,
+      sortable: false,
       width: 100,
       // NCR-2026-0001 → 2026-0001: the header already says "NCR".
       render: (row) =>
@@ -75,7 +77,7 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
     {
       key: 'job_order',
       header: 'İş Emri',
-      sortable: true,
+      sortable: false,
       width: 110,
       render: (row) =>
         row.job_order ? (
@@ -89,7 +91,7 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
     {
       key: 'title',
       header: 'Başlık',
-      sortable: true,
+      sortable: false,
       render: (row) =>
         row.title ? (
           <Text size="sm" fw={600}>
@@ -149,7 +151,7 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
     {
       key: 'submission_count',
       header: 'Gönd.',
-      sortable: true,
+      sortable: false,
       width: 65,
       align: 'center',
       render: (row) => {

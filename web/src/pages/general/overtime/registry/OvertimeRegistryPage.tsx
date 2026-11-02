@@ -96,7 +96,11 @@ const EMPTY_FILTERS: FilterState = {
   end_date: '',
 };
 const EMPTY_ROWS: OvertimeRequest[] = [];
-const columns = requestColumns({ withCreatedAt: true });
+// The registry sorts on the server, and OvertimeRequestViewSet orders by these only.
+const SERVER_SORTABLE = new Set(['start_at', 'end_at', 'status', 'created_at']);
+const columns = requestColumns({ withCreatedAt: true }).map((column) =>
+  SERVER_SORTABLE.has(column.key) ? column : { ...column, sortable: false },
+);
 
 function positiveInt(value: string, fallback: number): number {
   const n = Number.parseInt(value, 10);
@@ -130,8 +134,13 @@ export function OvertimeRegistryPage() {
   const pageSize = positiveInt(values.page_size, 20);
   const sort = fromOrdering(values.ordering);
 
+  // The date pills filter on the request's start; the end date counts the whole day.
   const params: OvertimeRequestsParams = {
-    ...filters,
+    search: filters.search,
+    status: filters.status,
+    team: filters.team,
+    start_at__gte: filters.start_date || undefined,
+    start_at__lte: filters.end_date ? `${filters.end_date}T23:59:59` : undefined,
     ordering: values.ordering || undefined,
     page,
     page_size: pageSize,
