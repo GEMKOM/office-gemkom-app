@@ -128,5 +128,10 @@
   "/manufacturing/subcontracting/statements",
   "/general/discussions",
   "/isg/issues",
-  "/design/release-approvals"
+  "/design/release-approvals",
+  "/manufacturing/cnc-cutting/capacity/planning",
+  "/manufacturing/linear-cutting/capacity/planning",
+  "/manufacturing/machining/capacity/planning",
+  "/manufacturing/machining/reports/history",
+  "/manufacturing/machining/reports/production-plan"
 ]

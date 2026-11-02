@@ -809,6 +809,47 @@ export const appRoutes: RouteObject[] = [
         .ReleaseApprovalsPage,
     }),
   },
+  // Capacity planning and machining reports on the React Gantt.
+  {
+    path: '/manufacturing/cnc-cutting/capacity/planning',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/cnc-cutting/capacity/planning/CncPlanningPage')
+      ).CncPlanningPage,
+    }),
+  },
+  {
+    path: '/manufacturing/linear-cutting/capacity/planning',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/linear-cutting/capacity/planning/LinearPlanningPage')
+      ).LinearPlanningPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/capacity/planning',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/capacity/planning/MachiningPlanningPage')
+      ).MachiningPlanningPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/history',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/history/MachiningHistoryPage')
+      ).MachiningHistoryPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/reports/production-plan',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/machining/reports/production-plan/ProductionPlanPage')
+      ).ProductionPlanPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
