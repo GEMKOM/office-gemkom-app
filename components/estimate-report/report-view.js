@@ -1288,6 +1288,11 @@ export function processLabel(code) {
     return PROCESS_LABELS[code] || String(code || '').replace(/_/g, ' ');
 }
 
+/** A fact's sub line as tooltip text: tags dropped, and any stray angle bracket with them (escaped again by the caller). */
+function plainText(html) {
+    return String(html).replace(/<[^>]*>/g, '').replace(/[<>]/g, '');
+}
+
 /** The weld list / manufacturing plan section of the card (`v`: the card's view state, `ws`: the weld schedule). */
 export function weldSectionHtml(v, ws) {
     if (!ws) return '';
@@ -1314,7 +1319,7 @@ export function weldSectionHtml(v, ws) {
             ? ['Yapı sınıfı', escapeHtml(bu.structure_class_label || STRUCTURE_CLASS_LABELS[bu.structure_class] || bu.structure_class), schemaBadge(schema)]
             : null,
         ['Güven', confidenceBadge(ws.confidence), plan && bu.plan_confidence != null ? `plan güveni %${fmt(Number(bu.plan_confidence) * 100, 0)}` : ''],
-    ].filter(Boolean).map(([label, value, sub]) => `<div class="est-fact"><span class="est-fact-label">${label}</span><span class="est-fact-value">${value}</span>${sub ? `<span class="est-fact-sub" title="${escapeHtml(String(sub).replace(/<[^>]+>/g, ''))}">${sub}</span>` : ''}</div>`).join('');
+    ].filter(Boolean).map(([label, value, sub]) => `<div class="est-fact"><span class="est-fact-label">${label}</span><span class="est-fact-value">${value}</span>${sub ? `<span class="est-fact-sub" title="${escapeHtml(plainText(sub))}">${sub}</span>` : ''}</div>`).join('');
     const toggle = `<button type="button" class="btn btn-link btn-sm" data-est-action="weld-toggle">${v.weldOpen ? 'Listeyi gizle' : 'Listeyi göster'}</button>`;
     const open = v.weldOpen ? `<div id="${v.uid}-weld" class="est-weld-table"></div>
         ${(ws.open_questions || []).length ? `<div class="est-note-line"><i class="fas fa-circle-question"></i><span><strong>Çizimin söylemediği:</strong> ${ws.open_questions.map(escapeHtml).join(' · ')}</span></div>` : ''}
