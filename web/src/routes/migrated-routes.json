@@ -39,5 +39,9 @@
   "/projects",
   "/design",
   "/manufacturing/cnc-cutting/reports",
-  "/manufacturing/machining/reports"
+  "/manufacturing/machining/reports",
+  "/manufacturing/cnc-cutting/dashboard",
+  "/manufacturing/linear-cutting/dashboard",
+  "/manufacturing/linear-cutting/tasks",
+  "/manufacturing/machining/dashboard"
 ]

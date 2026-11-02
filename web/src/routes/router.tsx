@@ -214,6 +214,35 @@ export const appRoutes: RouteObject[] = [
   // Phase 3b: CNC kesim, lineer kesim and talaşlı imalat lists and reports.
   { path: '/manufacturing/cnc-cutting/reports', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/machining/reports', handle: hub, lazy: manufacturingHub },
+  {
+    path: '/manufacturing/cnc-cutting/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/cnc-cutting/dashboard/CncDashboardPage'))
+        .CncDashboardPage,
+    }),
+  },
+  {
+    path: '/manufacturing/linear-cutting/dashboard',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/linear-cutting/dashboard/LinearCuttingDashboardPage')
+      ).LinearCuttingDashboardPage,
+    }),
+  },
+  {
+    path: '/manufacturing/linear-cutting/tasks',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/linear-cutting/tasks/LinearCuttingTasksPage'))
+        .LinearCuttingTasksPage,
+    }),
+  },
+  {
+    path: '/manufacturing/machining/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/machining/dashboard/MachiningDashboardPage'))
+        .MachiningDashboardPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
