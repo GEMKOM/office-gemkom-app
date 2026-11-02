@@ -850,6 +850,41 @@ export const appRoutes: RouteObject[] = [
       ).ProductionPlanPage,
     }),
   },
+  // Management and finance dashboards (charts load with these pages only).
+  {
+    path: '/management/reports/overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/overview/OverviewReportPage'))
+        .OverviewReportPage,
+    }),
+  },
+  {
+    path: '/finance/reports/executive-overview',
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/reports/executive-overview/ExecutiveOverviewPage'))
+        .ExecutiveOverviewPage,
+    }),
+  },
+  {
+    path: '/management/reports/cash-flow',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/reports/cash-flow/CashFlowReportPage'))
+        .CashFlowReportPage,
+    }),
+  },
+  {
+    path: '/management/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/dashboard/ManagementDashboardPage'))
+        .ManagementDashboardPage,
+    }),
+  },
+  {
+    path: '/management/analytics',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/analytics/AnalyticsPage')).AnalyticsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
