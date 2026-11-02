@@ -8,6 +8,7 @@ import { TableComponent } from '../../../../components/table/table.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 import { fetchLaborPricing, saveLaborPricingParams } from '../../../../apis/subcontracting/laborPricing.js';
+import { asJobNos, resolveSaveJobNos } from './laborPricingSelection.js';
 
 // filter id -> querystring key expected by the endpoint
 const PARAM_KEYS = {
@@ -103,7 +104,7 @@ async function initFilters() {
         // backend ignores any that are not in the new selection. Only Sıfırla
         // throws them away.
         onApply: () => {
-            selected = asArray(filters.getFilterValues()['job-orders']);
+            selected = asJobNos(filters.getFilterValues()['job-orders']);
             recompute();
         },
         onClear: () => {
@@ -273,12 +274,17 @@ function calculationParams() {
 }
 
 async function saveParams() {
-    if (!selected.length) {
+    const jobNos = resolveSaveJobNos({
+        filterJobNos: filters ? filters.getFilterValues()['job-orders'] : [],
+        computedJobNos: selected,
+    });
+    if (!jobNos.length) {
         showNotification('Önce iş emri seçin', 'warning');
         return;
     }
     try {
-        const result = await saveLaborPricingParams(selected, currentParams());
+        const result = await saveLaborPricingParams(jobNos, currentParams());
+        selected = jobNos;
         showNotification(`${result.saved.length} iş emrine kaydedildi`, 'success');
     } catch (error) {
         showNotification(error.message, 'error');
@@ -684,11 +690,6 @@ async function recompute({ quiet = false } = {}) {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function asArray(value) {
-    if (Array.isArray(value)) return value.filter(Boolean);
-    return value ? [value] : [];
-}
 
 function fmt(value, digits) {
     if (!Number.isFinite(value)) return '—';
