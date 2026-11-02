@@ -3,8 +3,19 @@
 export { DataTable } from './DataTable/DataTable';
 export { toOrdering, fromOrdering, nextSort, compareValues } from './DataTable/sorting';
 export type {
+  CellEdit,
+  CellEditorType,
+  CellValue,
   ClientPagination,
+  ColumnEditor,
   DataTableColumn,
+  DataTableGrouping,
+  DataTableReorder,
+  EditOption,
+  GroupCells,
+  GroupKey,
+  RowGroup,
+  RowMove,
   DataTableExport,
   DataTableFooterContext,
   DataTableProps,
