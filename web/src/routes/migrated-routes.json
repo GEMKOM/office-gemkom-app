@@ -48,6 +48,8 @@
   "/it/inventory",
   "/it/neo",
   "/it/password-resets",
+  "/it/permissions",
+  "/it/job-completion",
   "/quality-control/cost-lines",
   "/quality-control/documents",
   "/quality-control/ncrs",

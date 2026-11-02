@@ -1,0 +1,124 @@
+/* A list and the selected record's card side by side (legacy col-xl-8 / col-xl-4). */
+.layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+
+@media (min-width: 1200px) {
+  .layout {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  }
+
+  .detail {
+    position: sticky;
+    top: 80px;
+  }
+}
+
+.levelPill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: var(--gk-radius-sm);
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.sectionTitle {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+  margin-bottom: 6px;
+}
+
+.code {
+  font-family: var(--gk-font-mono);
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+/* The detail card's tables scroll inside the card, as legacy did. */
+.scroll {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-sm);
+}
+
+.scroll.small {
+  max-height: 180px;
+}
+
+.miniTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.miniTable th {
+  position: sticky;
+  top: 0;
+  background: var(--gk-surface-subtle);
+  text-align: left;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gk-line);
+  z-index: 1;
+}
+
+.miniTable td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gk-line);
+  vertical-align: middle;
+}
+
+.miniTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.holders {
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+.permRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.permRow:last-child {
+  border-bottom: 0;
+}
+
+.sections {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+.sectionControl {
+  display: flex;
+  align-items: center;
+}
+
+.sectionCheck {
+  padding: 0 12px;
+  border-left: 1px solid var(--gk-line);
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
