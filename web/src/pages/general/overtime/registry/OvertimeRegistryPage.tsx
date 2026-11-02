@@ -130,8 +130,13 @@ export function OvertimeRegistryPage() {
   const pageSize = positiveInt(values.page_size, 20);
   const sort = fromOrdering(values.ordering);
 
+  // The date pills filter on the request's start; the end date counts the whole day.
   const params: OvertimeRequestsParams = {
-    ...filters,
+    search: filters.search,
+    status: filters.status,
+    team: filters.team,
+    start_at__gte: filters.start_date || undefined,
+    start_at__lte: filters.end_date ? `${filters.end_date}T23:59:59` : undefined,
     ordering: values.ordering || undefined,
     page,
     page_size: pageSize,
