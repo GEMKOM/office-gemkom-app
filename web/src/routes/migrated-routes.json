@@ -45,5 +45,7 @@
   "/manufacturing/welding/reports/cost-analysis",
   "/manufacturing/welding/reports/user-work-hours",
   "/manufacturing/welding/teams",
-  "/manufacturing/reports/combined-job-costs"
+  "/manufacturing/reports/combined-job-costs",
+  "/manufacturing/material-tracking",
+  "/manufacturing/material-tracking/pull-requests"
 ]

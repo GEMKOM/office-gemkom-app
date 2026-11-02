@@ -260,6 +260,21 @@ export const appRoutes: RouteObject[] = [
       ).CombinedJobCostsPage,
     }),
   },
+  {
+    path: '/manufacturing/material-tracking',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/material-tracking/MaterialTrackingPage'))
+        .MaterialTrackingPage,
+    }),
+  },
+  {
+    path: '/manufacturing/material-tracking/pull-requests',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/material-tracking/pull-requests/PullRequestsPage')
+      ).PullRequestsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
