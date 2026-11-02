@@ -100,14 +100,14 @@ export function UserDetailModal({ module, user, dates, onClose }: UserDetailModa
   const detail = useQuery(userTaskDetailQueryOptions(module, userId, dates));
 
   useEffect(() => {
-    if (!detail.isError) return;
+    if (!detail.isError || detail.isFetching) return;
     notify.error(
       isApiError(detail.error) && detail.error.status === 404
         ? NOT_IN_TEAM[module]
         : 'Detay verisi yüklenirken hata oluştu',
     );
     onClose();
-  }, [detail.isError, detail.error, module, onClose]);
+  }, [detail.isError, detail.isFetching, detail.error, module, onClose]);
 
   const tables = useMemo(() => {
     const list = days(detail.data);

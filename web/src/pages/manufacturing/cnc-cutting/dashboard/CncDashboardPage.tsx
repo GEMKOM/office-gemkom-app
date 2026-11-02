@@ -139,10 +139,10 @@ function CutModal({
   const task = useQuery(cncTaskQueryOptions(taskKey));
 
   useEffect(() => {
-    if (!task.isError) return;
+    if (!task.isError || task.isFetching) return;
     notify.error('Kesim detayları yüklenirken hata oluştu');
     onClose();
-  }, [task.isError, onClose]);
+  }, [task.isError, task.isFetching, onClose]);
 
   const data = task.data;
   const running = data ? timers.find((t) => t.issue_key === data.key) : undefined;

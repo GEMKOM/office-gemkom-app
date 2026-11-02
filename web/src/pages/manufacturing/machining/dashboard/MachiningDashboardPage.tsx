@@ -226,10 +226,10 @@ function OperationModal({
   const operation = useQuery(operationQueryOptions(operationKey));
 
   useEffect(() => {
-    if (!operation.isError) return;
+    if (!operation.isError || operation.isFetching) return;
     notify.error(operation.error, { fallback: 'Görev detayları yüklenirken hata oluştu' });
     onClose();
-  }, [operation.isError, operation.error, onClose]);
+  }, [operation.isError, operation.isFetching, operation.error, onClose]);
 
   const data = operation.data;
   const running = data ? timers.find((t) => t.issue_key === data.key) : undefined;
