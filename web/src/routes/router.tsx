@@ -325,6 +325,99 @@ export const appRoutes: RouteObject[] = [
         .ProjectsReportPage,
     }),
   },
+  // ---- Genel list pages (Phase 3b) ----
+  {
+    path: '/general/crane-requests/list',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/crane-requests/list/CraneRequestsListPage'))
+        .CraneRequestsListPage,
+    }),
+  },
+  {
+    path: '/general/crane-requests/pending',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/crane-requests/pending/CraneRequestsPendingPage'))
+        .CraneRequestsPendingPage,
+    }),
+  },
+  {
+    path: '/general/crane-requests/prices',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/crane-requests/prices/CranePricesPage'))
+        .CranePricesPage,
+    }),
+  },
+  {
+    path: '/general/department-requests/list',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/general/department-requests/list/DepartmentRequestsListPage')
+      ).DepartmentRequestsListPage,
+    }),
+  },
+  {
+    path: '/general/department-requests/pending',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/general/department-requests/pending/PendingDepartmentRequestsPage')
+      ).PendingDepartmentRequestsPage,
+    }),
+  },
+  {
+    path: '/general/overtime/pending',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/pending/OvertimePendingPage'))
+        .OvertimePendingPage,
+    }),
+  },
+  {
+    path: '/general/overtime/registry',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/registry/OvertimeRegistryPage'))
+        .OvertimeRegistryPage,
+    }),
+  },
+  {
+    path: '/general/overtime/users',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/users/OvertimeUsersPage'))
+        .OvertimeUsersPage,
+    }),
+  },
+  {
+    path: '/general/overtime/welding-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/overtime/welding-report/WeldingReportPage'))
+        .WeldingReportPage,
+    }),
+  },
+  {
+    path: '/general/vacation/pending',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/vacation/pending/VacationPendingPage'))
+        .VacationPendingPage,
+    }),
+  },
+  {
+    path: '/general/vacation/requests',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/vacation/requests/VacationRequestsPage'))
+        .VacationRequestsPage,
+    }),
+  },
+  {
+    path: '/general/machines',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/machines/MachinesPage')).MachinesPage,
+    }),
+  },
+  {
+    path: '/general/notifications',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/notifications/NotificationsPage'))
+        .NotificationsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV

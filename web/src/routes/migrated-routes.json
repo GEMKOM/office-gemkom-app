@@ -56,5 +56,18 @@
   "/accounting/subcontracting-statements",
   "/design/revision-requests",
   "/logistics/cost-lines",
-  "/finance/reports/projects"
+  "/finance/reports/projects",
+  "/general/crane-requests/list",
+  "/general/crane-requests/pending",
+  "/general/crane-requests/prices",
+  "/general/department-requests/list",
+  "/general/department-requests/pending",
+  "/general/overtime/pending",
+  "/general/overtime/registry",
+  "/general/overtime/users",
+  "/general/overtime/welding-report",
+  "/general/vacation/pending",
+  "/general/vacation/requests",
+  "/general/machines",
+  "/general/notifications"
 ]
