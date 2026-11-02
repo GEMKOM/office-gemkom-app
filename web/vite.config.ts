@@ -11,6 +11,10 @@ const legacyRoot = fileURLToPath(new URL('..', import.meta.url));
 const srcRoot = fileURLToPath(new URL('./src', import.meta.url));
 const routesFile = fileURLToPath(new URL('./src/routes/migrated-routes.json', import.meta.url));
 
+// Recharts and the packages only it pulls in; see the chunk groups below.
+const CHART_PACKAGES =
+  /node_modules[\\/](@mantine[\\/]charts|recharts|@reduxjs|immer|react-redux|reselect|redux|redux-thunk|decimal\.js-light|es-toolkit|eventemitter3|tiny-invariant|victory-vendor|d3-[^\\/]+|internmap)[\\/]/;
+
 export default defineConfig(({ command }) => ({
   // Built files are published under /app-assets/; in dev the SPA is served at /.
   base: command === 'build' ? '/app-assets/' : '/',
@@ -43,14 +47,20 @@ export default defineConfig(({ command }) => ({
               name: 'react',
               test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/,
             },
-            // Charts (Recharts and its deps) only load with the dashboards that
-            // draw them, never with the shared vendor chunks.
+            // The shared chunks claim their modules first (equal priority goes
+            // by order, and a claimed module leaves the later groups), so the
+            // charts chunk keeps only what the dashboards alone use and no
+            // other page loads it.
             {
-              name: 'charts',
-              test: /node_modules[\\/](@mantine[\\/]charts|recharts|@reduxjs|immer|react-redux|reselect|redux|redux-thunk|decimal\.js-light|es-toolkit|eventemitter3|tiny-invariant|victory-vendor|d3-[^\\/]+|internmap)[\\/]/,
+              name: 'mantine',
+              test: (id: string) =>
+                /node_modules[\\/]@mantine[\\/]/.test(id) && !CHART_PACKAGES.test(id),
             },
-            { name: 'mantine', test: /node_modules[\\/]@mantine[\\/]/ },
-            { name: 'vendor', test: /node_modules[\\/]/ },
+            {
+              name: 'vendor',
+              test: (id: string) => /node_modules[\\/]/.test(id) && !CHART_PACKAGES.test(id),
+            },
+            { name: 'charts', test: CHART_PACKAGES },
           ],
         },
       },
