@@ -669,6 +669,13 @@ export const appRoutes: RouteObject[] = [
         .PaymentTermsPage,
     }),
   },
+  {
+    path: '/planning/procurement-lines',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/procurement-lines/ProcurementLinesPage'))
+        .ProcurementLinesPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
