@@ -96,7 +96,11 @@ const EMPTY_FILTERS: FilterState = {
   end_date: '',
 };
 const EMPTY_ROWS: OvertimeRequest[] = [];
-const columns = requestColumns({ withCreatedAt: true });
+// The registry sorts on the server, and OvertimeRequestViewSet orders by these only.
+const SERVER_SORTABLE = new Set(['start_at', 'end_at', 'status', 'created_at']);
+const columns = requestColumns({ withCreatedAt: true }).map((column) =>
+  SERVER_SORTABLE.has(column.key) ? column : { ...column, sortable: false },
+);
 
 function positiveInt(value: string, fallback: number): number {
   const n = Number.parseInt(value, 10);
