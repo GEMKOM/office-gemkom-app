@@ -20,6 +20,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { useMemo, useState, type ReactNode } from 'react';
 import { z } from 'zod';
+import { FileAttachmentsDemo, RichTextDemo } from './FilesAndTextPreview';
 import {
   formatCurrency,
   formatDate,
@@ -506,6 +507,103 @@ function ClientTableDemo() {
   );
 }
 
+// ---------- editing, grouping, reordering ----------
+
+const EDIT_STATUS_OPTIONS = STATUSES.map((value) => ({ value, label: STATUS_LABELS[value] }));
+
+const editColumns: DataTableColumn<Order>[] = [
+  { key: 'code', header: 'Sipariş No', width: 120 },
+  { key: 'customer', header: 'Müşteri', editable: { validate: (v) => (v ? true : 'Müşteri boş olamaz') } },
+  { key: 'status', header: 'Durum', editable: { type: 'select', options: EDIT_STATUS_OPTIONS } },
+  {
+    key: 'amount',
+    header: 'Tutar',
+    align: 'right',
+    render: (row) => formatCurrency(row.amount, 'EUR'),
+    editable: { type: 'number', min: 0 },
+  },
+  {
+    key: 'created_at',
+    header: 'Tarih',
+    render: (row) => formatDate(row.created_at),
+    editable: { type: 'date' },
+  },
+];
+
+function EditingDemo() {
+  const [rows, setRows] = useState(() => ALL_ORDERS.slice(0, 6));
+  return (
+    <DataTable
+      title="Satır içi düzenleme ('hata' yazınca kayıt başarısız olur)"
+      data={rows}
+      columns={editColumns}
+      getRowId={(row) => String(row.id)}
+      isRowEditable={(row) => row.status !== 'cancelled'}
+      onCellEdit={async ({ rowId, columnKey, value }) => {
+        await delay(700);
+        if (value === 'hata') throw new Error('Sunucu değeri reddetti');
+        setRows((prev) => prev.map((r) => (String(r.id) === rowId ? { ...r, [columnKey]: value } : r)));
+      }}
+    />
+  );
+}
+
+const groupColumns: DataTableColumn<Order>[] = [
+  { key: 'code', header: 'Sipariş No', sortable: true },
+  { key: 'status', header: 'Durum', render: (row) => STATUS_LABELS[row.status] },
+  { key: 'amount', header: 'Tutar', align: 'right', sortable: true, render: (row) => formatCurrency(row.amount, 'EUR') },
+  { key: 'weight_kg', header: 'Ağırlık (kg)', align: 'right', render: (row) => formatNumber(row.weight_kg, 1) },
+];
+const GROUP_ORDERS = ALL_ORDERS.slice(0, 40);
+const sumOf = (rows: Order[], pick: (row: Order) => number) => rows.reduce((total, row) => total + pick(row), 0);
+
+function GroupingDemo() {
+  return (
+    <DataTable
+      title="Müşteriye göre gruplu"
+      data={GROUP_ORDERS}
+      columns={groupColumns}
+      getRowId={(row) => String(row.id)}
+      grouping={{
+        by: 'customer',
+        defaultExpanded: (group) => group.value !== 'Vestel',
+        footer: (group) => ({
+          cells: {
+            code: 'Ara toplam',
+            amount: formatCurrency(sumOf(group.rows, (r) => r.amount), 'EUR'),
+            weight_kg: formatNumber(sumOf(group.rows, (r) => r.weight_kg), 1),
+          },
+        }),
+      }}
+      footer={({ allRows }) => (
+        <Table.Tr>
+          <Table.Th colSpan={2}>Genel toplam</Table.Th>
+          <Table.Th style={{ textAlign: 'right' }}>{formatCurrency(sumOf(allRows, (r) => r.amount), 'EUR')}</Table.Th>
+          <Table.Th style={{ textAlign: 'right' }}>{formatNumber(sumOf(allRows, (r) => r.weight_kg), 1)}</Table.Th>
+        </Table.Tr>
+      )}
+    />
+  );
+}
+
+function ReorderDemo() {
+  const [rows, setRows] = useState(() => ALL_ORDERS.slice(0, 6));
+  return (
+    <DataTable
+      title="Sürükleyerek sırala (veya tutamaçta Boşluk + oklar)"
+      data={rows}
+      columns={smallColumns}
+      getRowId={(row) => String(row.id)}
+      reorder={{
+        onReorder: (ids) => {
+          const byId = new Map(rows.map((r) => [String(r.id), r]));
+          setRows(ids.map((id) => byId.get(id)!));
+        },
+      }}
+    />
+  );
+}
+
 function SelectRemoteDemo() {
   const [single, setSingle] = useState<string | null>('3');
   const [many, setMany] = useState<string[]>([]);
@@ -606,8 +704,28 @@ export function UiPreview() {
           <ClientTableDemo />
         </Section>
 
+        <Section title="DataTable: satır içi düzenleme">
+          <EditingDemo />
+        </Section>
+
+        <Section title="DataTable: gruplu satırlar">
+          <GroupingDemo />
+        </Section>
+
+        <Section title="DataTable: sürükle-bırak sıralama">
+          <ReorderDemo />
+        </Section>
+
         <Section title="SelectRemote">
           <SelectRemoteDemo />
+        </Section>
+
+        <Section title="RichText / RichTextEditor">
+          <RichTextDemo />
+        </Section>
+
+        <Section title="FileAttachments + FileViewer (adı “hata” ile başlayan dosya yüklenemez)">
+          <FileAttachmentsDemo />
         </Section>
 
         <Section title="confirm / notify">

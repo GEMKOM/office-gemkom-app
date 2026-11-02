@@ -1,129 +1,225 @@
+import { authedFetch } from '@legacy/authService.js';
 import { queryOptions } from '@tanstack/react-query';
-import { apiFetch } from '../client';
+import { ApiError, apiFetch, buildUrl, cleanParams, errorMessage } from '../client';
+import { REFERENCE_STALE_TIME } from '../reference/shared';
+import { extractResults } from '../types';
 
-// The machining capacity reports (apis/machining/capacityPlanning.js
-// getMachineTimeline, getProductionPlanOverview, getMachineProductionPlan and
-// apis/tasks.js fetchTaskById).
+// Machining reports that read the task reports and the timer summary:
+// apis/machining/reports.js (fetchDailyEfficiencyReport, fetchPerformanceReport)
+// and manufacturing/machining/reports/sum-report/sumReport.js (timer-report).
 
-export interface TimelineSegment {
-  start_ms: number;
-  end_ms: number;
-  /** 'work' | 'hold' | 'idle' */
-  category?: string | null;
+const REPORTS_KEY = 'reports:machining';
+
+// ---- daily efficiency -------------------------------------------------------
+
+export interface DailyEfficiencyTask {
   task_key?: string | null;
   task_name?: string | null;
-  is_hold?: boolean;
-  timer_id?: number | null;
-  machine_name?: string | null;
-  machine_id?: number | string | null;
-}
-
-export interface TimelineTotals {
-  productive_seconds?: number;
-  hold_seconds?: number;
-  idle_seconds?: number;
-}
-
-export interface TimelineMachine {
-  machine_id: number | string;
-  machine_name?: string | null;
-  segments?: TimelineSegment[];
-  totals?: TimelineTotals;
-}
-
-/** `/machining/analytics/machine-timeline/`; older servers sent `segments` or a task array. */
-export type MachineTimelineResponse =
-  | { machines: TimelineMachine[]; overall_totals?: TimelineTotals | null }
-  | { segments: TimelineSegment[]; totals?: TimelineTotals; overall_totals?: TimelineTotals | null }
-  | { key: string; name?: string; total_hours_spent?: number }[];
-
-/** getMachineTimeline(machine_fk ('all' for every machine), start_after, start_before). */
-export function machineTimelineQueryOptions(
-  machineId: string,
-  startAfter: number,
-  startBefore: number,
-) {
-  return queryOptions({
-    queryKey: ['machiningReports', 'timeline', machineId, startAfter, startBefore] as const,
-    queryFn: ({ signal }) =>
-      apiFetch<MachineTimelineResponse>('/machining/analytics/machine-timeline/', {
-        params: { machine_fk: machineId, start_after: startAfter, start_before: startBefore },
-        signal,
-      }),
-    enabled: Boolean(machineId),
-  });
-}
-
-export interface ProductionPlanMachine {
-  machine_id: number;
-  machine_name?: string | null;
-  machine_type_label?: string | null;
-  totals?: {
-    total_estimated_hours?: number | null;
-    latest_planned_end_ms?: number | null;
-    task_count?: number | null;
-  };
-}
-
-export interface ProductionPlanOverview {
-  machines: ProductionPlanMachine[];
-  overall_totals?: {
-    total_estimated_hours?: number | null;
-    latest_planned_end_ms?: number | null;
-    task_count?: number | null;
-  } | null;
-}
-
-/** getProductionPlanOverview(): GET /machining/planning/overview/ */
-export function productionPlanOverviewQueryOptions() {
-  return queryOptions({
-    queryKey: ['machiningReports', 'overview'] as const,
-    queryFn: ({ signal }) =>
-      apiFetch<ProductionPlanOverview>('/machining/planning/overview/', { signal }),
-  });
-}
-
-/** A task of `/machining/reports/production-plan/` (and `/machining/tasks/<key>/`). */
-export interface ProductionPlanTask {
-  key: string;
-  name?: string | null;
-  title?: string | null;
-  planned_start_ms?: number | null;
-  planned_end_ms?: number | null;
-  actual_start_ms?: number | null;
-  completion_date?: number | string | null;
-  estimated_hours?: number | string | null;
-  total_hours_spent?: number | null;
-  is_hold?: boolean;
-  category?: string | null;
-  plan_order?: number | null;
   job_no?: string | null;
-  image_no?: string | null;
-  position_no?: string | null;
-  quantity?: number | string | null;
   machine_name?: string | null;
-  completed_by_username?: string | null;
-  finish_time?: string | null;
+  daily_duration_hours?: number | null;
+  estimated_hours?: number | null;
+  total_hours_spent?: number | null;
+  efficiency?: number | null;
+  /** Only with include_worked. */
+  completed_on_date?: boolean | null;
   [key: string]: unknown;
 }
 
-/** getMachineProductionPlan(machine_id): GET /machining/reports/production-plan/?machine_fk= */
-export function machineProductionPlanQueryOptions(machineId: number | string) {
+export interface DailyEfficiencyUser {
+  user_id: number;
+  username: string;
+  first_name?: string;
+  last_name?: string;
+  total_daily_hours?: number | null;
+  tasks?: DailyEfficiencyTask[];
+  [key: string]: unknown;
+}
+
+interface DailyEfficiencyResponse {
+  users?: DailyEfficiencyUser[];
+  [key: string]: unknown;
+}
+
+export interface DailyEfficiencyReport extends DailyEfficiencyResponse {
+  /** Added here: whether include_worked was asked (legacy reportIncludeWorked). */
+  _includeWorked: boolean;
+}
+
+export type DailyEfficiencyParams = {
+  /** YYYY-MM-DD. */
+  date: string;
+  /** Every task worked that day, not only the ones completed. */
+  include_worked?: boolean;
+};
+
+/** Port of fetchDailyEfficiencyReport: include_worked is sent only when true. */
+export function dailyEfficiencyQueryOptions({ date, include_worked }: DailyEfficiencyParams) {
+  const params = { date, include_worked: include_worked ? 'true' : undefined };
   return queryOptions({
-    queryKey: ['machiningReports', 'productionPlan', String(machineId)] as const,
-    queryFn: ({ signal }) =>
-      apiFetch<ProductionPlanTask[]>('/machining/reports/production-plan/', {
-        params: { machine_fk: machineId },
+    queryKey: [REPORTS_KEY, 'daily-efficiency', cleanParams(params)] as const,
+    queryFn: async ({ signal }): Promise<DailyEfficiencyReport> => ({
+      ...(await apiFetch<DailyEfficiencyResponse>('/machining/reports/daily-efficiency/', {
+        params,
         signal,
-      }),
+      })),
+      _includeWorked: Boolean(include_worked),
+    }),
   });
 }
 
-/** fetchTaskById(key): GET /machining/tasks/<key>/ */
-export function machiningTaskQueryOptions(key: string) {
+// ---- performance ------------------------------------------------------------
+
+export interface PerformanceTask {
+  task_key?: string | null;
+  task_name?: string | null;
+  job_no?: string | null;
+  machine_name?: string | null;
+  hours_in_period?: number | null;
+  estimated_hours?: number | null;
+  total_hours_spent?: number | null;
+  efficiency?: number | null;
+  completed_in_period?: boolean | null;
+  on_time?: boolean | null;
+  deadline?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PerformanceUser {
+  user_id: number;
+  username: string;
+  first_name?: string;
+  last_name?: string;
+  total_hours?: number | null;
+  avg_daily_hours?: number | null;
+  tasks_worked?: number | null;
+  tasks_completed?: number | null;
+  avg_efficiency?: number | null;
+  on_time_rate?: number | null;
+  tasks?: PerformanceTask[];
+  [key: string]: unknown;
+}
+
+export interface PerformanceSummary {
+  total_users?: number | null;
+  total_hours?: number | null;
+  tasks_completed?: number | null;
+  total_tasks_worked?: number | null;
+  avg_efficiency?: number | null;
+  on_time_rate?: number | null;
+}
+
+export interface PerformanceReport {
+  users?: PerformanceUser[];
+  summary?: PerformanceSummary;
+  [key: string]: unknown;
+}
+
+export type PerformanceParams = {
+  /** YYYY-MM-DD, both required. */
+  start_date: string;
+  end_date: string;
+};
+
+/** Port of fetchPerformanceReport (the page never passed user_ids). */
+export function performanceReportQueryOptions(params: PerformanceParams) {
   return queryOptions({
-    queryKey: ['machiningReports', 'task', key] as const,
+    queryKey: [REPORTS_KEY, 'performance', cleanParams(params)] as const,
     queryFn: ({ signal }) =>
-      apiFetch<ProductionPlanTask>(`/machining/tasks/${encodeURIComponent(key)}/`, { signal }),
+      apiFetch<PerformanceReport>('/machining/reports/performance/', { params, signal }),
+  });
+}
+
+// ---- timer summary (sum report) ---------------------------------------------
+
+export type TimerReportGroupBy = 'user' | 'machine' | 'job_no' | 'issue_key';
+
+/** A `/machining/timer-report/` row. */
+export interface TimerReportRow {
+  /** Username, machine id, job no or TI key. */
+  group_val?: string | number | null;
+  /** job_no and issue_key groupings answer with `group`. */
+  group?: string | number | null;
+  total_hours?: number | null;
+  timer_count?: number | null;
+  avg_duration?: number | null;
+  [key: string]: unknown;
+}
+
+export type TimerReportParams = {
+  group_by: TimerReportGroupBy;
+  /** Epoch ms. */
+  start_after?: number;
+  /** Epoch ms. */
+  start_before?: number;
+  /** Sent only as 'true'. */
+  manual_only?: 'true';
+};
+
+export function timerReportQueryOptions(params: TimerReportParams) {
+  return queryOptions({
+    queryKey: [REPORTS_KEY, 'timer-report', cleanParams(params)] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<TimerReportRow>(
+        await apiFetch<unknown>('/machining/timer-report/', { params, signal }),
+      ),
+  });
+}
+
+/**
+ * `/machining/timer-report/export/` with the report's filters, saved as
+ * `fileName`. Legacy pointed a plain link at it, which carries no token.
+ */
+export async function downloadTimerReportExport(
+  params: TimerReportParams,
+  fileName: string,
+): Promise<void> {
+  const response = await authedFetch(buildUrl('/machining/timer-report/export/', params));
+  if (!response.ok) {
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch {
+      data = undefined;
+    }
+    throw new ApiError(response.status, data, errorMessage(response.status, data));
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+/** A `/users/` row, as the sum report labels user groups. */
+export interface TeamUser {
+  id: number;
+  username: string;
+  display_name?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * apis/users.js fetchUsers(group, { is_active: 'all' }): the group's users,
+ * former staff included. Like legacy, a failed request gives [] (the report
+ * then labels rows by username).
+ */
+export function teamUsersQueryOptions(group: string) {
+  const params = { group, is_active: 'all' };
+  return queryOptions({
+    queryKey: ['users', 'team', cleanParams(params)] as const,
+    queryFn: async ({ signal }) => {
+      try {
+        return extractResults<TeamUser>(await apiFetch<unknown>('/users/', { params, signal }));
+      } catch (error) {
+        if (signal.aborted) throw error;
+        return [];
+      }
+    },
+    staleTime: REFERENCE_STALE_TIME,
   });
 }

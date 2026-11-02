@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { machineCalendarQueryOptions } from '@/api/manufacturing/capacityPlanning';
 import { timerQueryOptions, type FinishedTimer } from '@/api/manufacturing/finishedTimers';
-import { machineTimelineQueryOptions } from '@/api/manufacturing/machiningReports';
+import { machineTimelineQueryOptions } from '@/api/manufacturing/machiningCapacityReports';
 import { machinesQueryOptions } from '@/api/reference/machines';
 import {
   DetailModal,

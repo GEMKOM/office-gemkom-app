@@ -75,3 +75,31 @@ export function userLabel(user: Pick<UserOption, 'username' | 'full_name' | 'fir
   const name = user.full_name || [user.first_name, user.last_name].filter(Boolean).join(' ');
   return name ? `${name} (${user.username})` : user.username;
 }
+
+/** One member of an organization group, as GET /organization/groups/{id}/members/ lists it. */
+export interface MentionGroupMember {
+  username: string;
+  full_name?: string;
+  position?: string;
+  [key: string]: unknown;
+}
+
+export interface MentionGroupMembers {
+  id?: number | string;
+  name?: string;
+  members?: MentionGroupMember[];
+  [key: string]: unknown;
+}
+
+/**
+ * Port of apis/users.js fetchUserGroupMembers: who a group @mention notifies.
+ * The server notifies from the same list, so the two cannot disagree.
+ */
+export function groupMembersQueryOptions(groupId: number | string) {
+  return queryOptions({
+    queryKey: [...qk.teams.detail(groupId), 'members'] as const,
+    queryFn: ({ signal }) => apiFetch<MentionGroupMembers>(`/organization/groups/${groupId}/members/`, { signal }),
+    // Memberships barely change within a visit, and one badge is often clicked twice.
+    staleTime: SLOW_REFERENCE_STALE_TIME,
+  });
+}

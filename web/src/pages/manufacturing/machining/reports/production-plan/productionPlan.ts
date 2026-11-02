@@ -1,4 +1,4 @@
-import type { ProductionPlanTask } from '@/api/manufacturing/machiningReports';
+import type { ProductionPlanTask } from '@/api/manufacturing/machiningCapacityReports';
 import type { GanttBar, GanttRow, GanttTone } from '@/ui/Gantt';
 
 // Legacy processTasksForProgress + the Gantt / completion-modal maths of

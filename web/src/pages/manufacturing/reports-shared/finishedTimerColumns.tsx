@@ -89,7 +89,8 @@ export const cncTimerColumns: DataTableColumn<FinishedTimer>[] = [
   {
     key: 'nesting_id',
     header: 'Nesting ID',
-    sortable: true,
+    // nesting_id lives on the task; ordering=nesting_id is a backend 500.
+    sortable: false,
     render: (row) => {
       if (!row.nesting_id) return '-';
       if (!row.issue_key) return <span className={uiClasses.code}>{row.nesting_id}</span>;
@@ -122,6 +123,8 @@ export const machiningTimerColumns: DataTableColumn<FinishedTimer>[] = [
     key: 'issue_key',
     header: 'TI No',
     sortable: true,
+    // issue_key is a generic FK (ordering=issue_key is a backend 500); its column is object_id.
+    sortKey: 'object_id',
     width: '12%',
     render: (row) =>
       row.issue_key

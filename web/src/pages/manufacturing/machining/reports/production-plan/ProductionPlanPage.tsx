@@ -8,7 +8,7 @@ import {
   productionPlanOverviewQueryOptions,
   type ProductionPlanMachine,
   type ProductionPlanTask,
-} from '@/api/manufacturing/machiningReports';
+} from '@/api/manufacturing/machiningCapacityReports';
 import { formatDate } from '@/lib/format';
 import {
   DataTable,

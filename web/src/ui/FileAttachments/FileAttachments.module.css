@@ -1,0 +1,289 @@
+/* FileAttachments: rows (or cards) of files, the upload queue and the
+   dropzone. Icon tiles take the status family of the file type. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+}
+
+.title > i {
+  color: var(--gk-muted);
+  font-size: 12px;
+}
+
+.count {
+  padding: 0 7px;
+  border-radius: 999px;
+  background: var(--gk-surface-subtle);
+  border: 1px solid var(--gk-line);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gk-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.headActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 2px;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.state[data-tone='error'] {
+  color: var(--gk-danger);
+}
+
+/* ---- the files ---- */
+
+.files {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.files[data-layout='grid'] {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface);
+  transition:
+    background 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.file:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.thumbButton {
+  flex: none;
+  padding: 0;
+  border: 0;
+  border-radius: var(--gk-radius-sm);
+  background: none;
+  cursor: zoom-in;
+}
+
+.thumbButton:focus-visible,
+.nameButton:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.thumb {
+  display: block;
+  border-radius: var(--gk-radius-sm);
+  border: 1px solid var(--gk-line);
+  object-fit: cover;
+  background: var(--gk-surface-subtle);
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--gk-radius-sm);
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+  font-size: 17px;
+}
+
+.fileMain {
+  flex: 1;
+  min-width: 0;
+}
+
+.nameButton {
+  display: block;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 2px;
+  background: none;
+  color: var(--gk-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.nameButton:hover {
+  color: var(--gk-red-700);
+  text-decoration: underline;
+}
+
+.name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gk-ink);
+}
+
+.meta {
+  font-size: 12px;
+  color: var(--gk-muted);
+  overflow-wrap: anywhere;
+}
+
+.fileActions {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+
+.fileActions :global(.mantine-ActionIcon-root) {
+  color: var(--gk-muted);
+}
+
+.fileActions :global(.mantine-ActionIcon-root:hover) {
+  color: var(--gk-red-700);
+}
+
+.fileActions .danger:hover {
+  color: var(--gk-danger);
+}
+
+/* ---- the upload queue ---- */
+
+.queue {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.queueItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface-subtle);
+}
+
+.queueItem[data-status='error'] {
+  border-color: #f3c4c4;
+  background: #fde8e8;
+}
+
+.queueMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.queueRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.queueRow .meta {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.queueError {
+  font-size: 12px;
+  color: #a31d1d;
+}
+
+.queueActions {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+
+/* ---- the dropzone ---- */
+
+.dropzone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px 10px;
+  padding: 18px 16px;
+  border: 1px dashed var(--gk-line-strong);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface-subtle);
+  color: var(--gk-muted);
+  font-size: 13px;
+  text-align: center;
+  transition:
+    background 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.dropzone[data-compact] {
+  padding: 10px 14px;
+}
+
+.dropzone[data-over] {
+  border-color: var(--gk-red-700);
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+}
+
+.dropzone[data-disabled] {
+  opacity: 0.6;
+}
+
+.dropIcon {
+  font-size: 16px;
+}
+
+.dropHint {
+  color: inherit;
+}

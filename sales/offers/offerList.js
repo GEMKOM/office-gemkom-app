@@ -842,7 +842,25 @@ function initModals() {
             }
             if (e.target.closest('#upload-file-btn')) { showFileUploadModal(refreshOffer); return; }
             if (e.target.closest('#send-consultations-btn')) { showConsultationModal(refreshOffer); return; }
-            if (e.target.closest('#save-prices-btn')) { await saveAllPrices(); await refreshOffer('pricing'); return; }
+            if (e.target.closest('#save-prices-btn')) {
+                // A save on a submitted/approved offer cancels its approval on the backend,
+                // so never send one without changes, and confirm before cancelling.
+                if (!pricingV3State?.hasUnsavedChanges) {
+                    showNotification('Kaydedilecek değişiklik yok.', 'info');
+                    return;
+                }
+                const save = async () => { await saveAllPrices(); await refreshOffer('pricing'); };
+                if (['pending_approval', 'approved', 'submitted_customer'].includes(offer.status)) {
+                    showActionConfirm({
+                        title: 'Fiyatları Kaydet',
+                        message: 'Fiyatları kaydetmek teklifin mevcut onayını iptal eder; teklifi tekrar onaya göndermeniz gerekir. Devam etmek istiyor musunuz?',
+                        onConfirm: save
+                    });
+                    return;
+                }
+                await save();
+                return;
+            }
             if (e.target.closest('#submit-approval-from-pricing-btn')) {
                 if (pricingV3State?.hasUnsavedChanges) {
                     showNotification('Kaydedilmemiş değişiklikler var. Önce "Fiyatları Kaydet" ile kaydedin.', 'warning');

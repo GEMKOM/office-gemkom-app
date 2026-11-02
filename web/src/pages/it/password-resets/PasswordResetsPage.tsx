@@ -1,6 +1,7 @@
 import { Center, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { departmentLabel } from '@/api/human_resources/organization';
 import { passwordResetsQueryOptions, type PasswordResetRequest } from '@/api/it/passwordResets';
 import { useAuth } from '@/auth/AuthProvider';
 import { DataTable, notify, PageHeader, type DataTableColumn, type RowAction } from '@/ui';
@@ -14,7 +15,13 @@ const columns: DataTableColumn<PasswordResetRequest>[] = [
   { key: 'first_name', header: 'Ad', width: '15%' },
   { key: 'last_name', header: 'Soyad', width: '15%' },
   { key: 'email', header: 'E-posta', width: '20%' },
-  { key: 'team', header: 'Takım', width: '10%' },
+  // Legacy read `team`; the backend now sends `department_code` instead.
+  {
+    key: 'department_code',
+    header: 'Departman',
+    width: '10%',
+    accessor: (row) => departmentLabel(row.department_code),
+  },
 ];
 
 /** Port of it/password-resets (password-resets.js). Admins only, as legacy. */

@@ -2,7 +2,7 @@ import type {
   MachineTimelineResponse,
   TimelineSegment,
   TimelineTotals,
-} from '@/api/manufacturing/machiningReports';
+} from '@/api/manufacturing/machiningCapacityReports';
 import type { GanttBar, GanttRow, GanttTone } from '@/ui/Gantt';
 
 // Legacy loadMachineTimelineForPeriod + updateGanttChart of
