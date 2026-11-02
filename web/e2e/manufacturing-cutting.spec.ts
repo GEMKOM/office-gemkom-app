@@ -85,7 +85,7 @@ test('admin: the machining dashboard lists timers, opens a task and stops a time
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Operasyon Bilgileri')).toBeVisible();
   await expect(dialog.getByText('Mil')).toBeVisible();
-  await dialog.getByRole('button', { name: 'Kapat' }).click();
+  await dialog.getByRole('button', { name: 'Kapat' }).last().click();
   await expect(dialog).toHaveCount(0);
 
   // Stop the productive timer; the list reloads without it.
