@@ -106,5 +106,8 @@
   "/procurement/reports/staff",
   "/procurement/reports/suppliers",
   "/procurement/suppliers/list",
-  "/procurement/suppliers/payment-terms"
+  "/procurement/suppliers/payment-terms",
+  "/general/discussions",
+  "/isg/issues",
+  "/design/release-approvals"
 ]

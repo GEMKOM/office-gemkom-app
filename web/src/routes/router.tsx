@@ -669,6 +669,26 @@ export const appRoutes: RouteObject[] = [
         .PaymentTermsPage,
     }),
   },
+  // Attachments, file preview and rich text (discussions)
+  {
+    path: '/general/discussions',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/discussions/DiscussionsPage')).DiscussionsPage,
+    }),
+  },
+  {
+    path: '/isg/issues',
+    lazy: async () => ({
+      Component: (await import('@/pages/isg/issues/IsgIssuesPage')).IsgIssuesPage,
+    }),
+  },
+  {
+    path: '/design/release-approvals',
+    lazy: async () => ({
+      Component: (await import('@/pages/design/release-approvals/ReleaseApprovalsPage'))
+        .ReleaseApprovalsPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
