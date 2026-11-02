@@ -23,6 +23,11 @@ export interface DataTableColumn<T> {
   width?: number | string;
   align?: 'left' | 'center' | 'right';
   hidden?: boolean;
+  /**
+   * In the Excel export but not on screen, e.g. the group column of a grouped
+   * report (legacy pages patched prepareExportData for this).
+   */
+  exportOnly?: boolean;
   /** Excel value; numbers and Dates stay typed in the sheet. */
   exportValue?: (row: T) => unknown;
   /** Excel header text when `header` is not a string. */
@@ -31,6 +36,140 @@ export interface DataTableColumn<T> {
   exportFormat?: string;
   /** false leaves the column out of the export. */
   exportable?: boolean;
+  /**
+   * Inline editing (legacy `editable` + `editableColumns`): true is a text
+   * editor. Needs `onCellEdit` on the table.
+   */
+  editable?: boolean | ColumnEditor<T>;
+}
+
+// ---- inline editing ----------------------------------------------------------
+
+export type CellEditorType = 'text' | 'number' | 'select' | 'date';
+
+/**
+ * What an editor hands back: text and select give a string, number gives a
+ * number (null when emptied), date gives 'YYYY-MM-DD' (null when emptied).
+ */
+export type CellValue = string | number | null;
+
+export interface EditOption {
+  value: string;
+  label: string;
+}
+
+export interface ColumnEditor<T> {
+  /** Default 'text'. */
+  type?: CellEditorType;
+  /** Select choices; a function for per-row choices. */
+  options?: readonly EditOption[] | ((row: T) => readonly EditOption[]);
+  /** Number limits (legacy column min/max/step). */
+  min?: number;
+  max?: number;
+  step?: number;
+  placeholder?: string;
+  /** Value the editor opens with. Default: the column value. */
+  value?: (row: T) => unknown;
+  /**
+   * Legacy column.validate: return a message (or false) to refuse the value;
+   * true, null or undefined accept it.
+   */
+  validate?: (value: CellValue, row: T) => string | boolean | null | undefined;
+  /** Per-row switch on top of the table's `isRowEditable`. */
+  enabled?: (row: T) => boolean;
+  /**
+   * The row shown while the save is in flight (optimistic value). Default:
+   * the row with `accessor` (or `key`) set to the value. Needed only when the
+   * column reads the value through a function accessor or a nested field.
+   */
+  apply?: (row: T, value: CellValue) => T;
+}
+
+export interface CellEdit<T> {
+  row: T;
+  rowId: string;
+  /** The column's key. */
+  columnKey: string;
+  value: CellValue;
+  oldValue: CellValue;
+}
+
+// ---- grouping ---------------------------------------------------------------
+
+/** A field of the row, or a function returning the group value. */
+export type GroupKey<T> = keyof T | ((row: T) => unknown);
+
+export interface RowGroup<T> {
+  /** Unique id: the group values from the top level down, joined. */
+  id: string;
+  /** The raw group value (from the first row). */
+  value: unknown;
+  /** 0 for the outer level. */
+  depth: number;
+  /** Every row in the group, nested groups included, in display order. */
+  rows: T[];
+  expanded: boolean;
+}
+
+/**
+ * Cells aligned to the table's columns, keyed by column key. '_actions' fills
+ * the actions column; missing keys render empty cells (legacy object form of
+ * groupHeaderFormatter).
+ */
+export type GroupCells = Partial<Record<string, ReactNode>>;
+
+export interface DataTableGrouping<T> {
+  /** Legacy groupBy. Several keys nest the groups, outer first. */
+  by: GroupKey<T> | readonly GroupKey<T>[];
+  /**
+   * Legacy groupHeaderFormatter. A node spans the row next to the toggle;
+   * cells ({ [columnKey]: node }) line up with the columns. Default: the value
+   * and a count.
+   */
+  header?: (group: RowGroup<T>) => ReactNode | { cells: GroupCells };
+  /** A row after each group, e.g. sums. Same forms as `header`. */
+  footer?: (group: RowGroup<T>) => ReactNode | { cells: GroupCells };
+  /**
+   * Legacy groupCollapsible. Default true. A function decides per group. A
+   * group that cannot collapse has no toggle and stays as `defaultExpanded`
+   * set it (legacy did the same).
+   */
+  collapsible?: boolean | ((group: RowGroup<T>) => boolean);
+  /** Legacy defaultGroupExpanded. Default true. */
+  defaultExpanded?: boolean | ((group: RowGroup<T>) => boolean);
+  /**
+   * Legacy groupSortDirection. 'asc' (default) and 'desc' order groups by
+   * value (numbers numerically, text Turkish-aware); false keeps the order
+   * the groups first appear in the data; a function compares group values.
+   */
+  sort?: 'asc' | 'desc' | false | ((a: unknown, b: unknown) => number);
+  /** Text of the default header for empty values. Default '-'. */
+  emptyLabel?: string;
+}
+
+// ---- reordering -------------------------------------------------------------
+
+export interface RowMove {
+  /** The moved row. */
+  id: string;
+  /** The row it was dropped next to (legacy targetRowKey). */
+  targetId: string;
+  /** Legacy insertPosition. */
+  position: 'before' | 'after';
+  /** Positions in `data`. */
+  from: number;
+  to: number;
+}
+
+export interface DataTableReorder<T> {
+  /**
+   * Legacy onReorder(draggedKey, targetKey, insertPosition). `ids` is every
+   * row id of `data` in the new order; the page saves it and passes the
+   * reordered rows back.
+   */
+  onReorder: (ids: string[], move: RowMove) => void;
+  /** Rows that cannot be picked up. */
+  isRowDraggable?: (row: T) => boolean;
 }
 
 export interface RowAction<T> {
@@ -140,6 +279,30 @@ export interface DataTableProps<T extends RowData> {
   toolbar?: ReactNode;
   /** Shows a Yenile button. */
   onRefresh?: () => void;
+
+  /**
+   * Inline edit save (legacy onEdit). Return a promise: the cell shows the
+   * new value while it runs, rolls back and shows the error if it rejects.
+   * Update `data` (setQueryData, invalidate, or local state) on success.
+   */
+  onCellEdit?: (edit: CellEdit<T>) => void | Promise<unknown>;
+  /** Legacy isRowEditable. */
+  isRowEditable?: (row: T, index: number) => boolean;
+  /**
+   * Draft editors that save later: cells to mark as changed but not saved.
+   * Read on row render, like `rowStyle` (put what it reads in `extraData`).
+   */
+  isCellDirty?: (row: T, columnKey: string) => boolean;
+
+  /** Legacy groupBy and friends. Sorting applies inside groups. */
+  grouping?: DataTableGrouping<T>;
+
+  /**
+   * Legacy draggable/onReorder: a handle column; drag with the mouse, or
+   * focus the handle, Space to pick up, arrows to move, Space to drop,
+   * Escape to cancel. Off while a column sort is active.
+   */
+  reorder?: DataTableReorder<T>;
 
   striped?: boolean;
   withColumnBorders?: boolean;

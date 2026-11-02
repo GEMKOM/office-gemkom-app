@@ -1,0 +1,166 @@
+/* Ödeme Listeleri (was procurement/payment-lists/payment-lists.css) */
+
+.sub {
+  font-size: 0.75rem;
+  color: var(--gk-muted);
+  line-height: 1.2;
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.over {
+  color: var(--gk-danger);
+  font-weight: 600;
+}
+
+.danger {
+  color: var(--gk-danger);
+}
+
+.switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* Info strip (budget / FX / approval) */
+.strip {
+  display: grid;
+  grid-template-columns: 2fr 1.4fr 1.8fr;
+  gap: 1rem;
+}
+
+@media (max-width: 991.98px) {
+  .strip {
+    grid-template-columns: 1fr;
+  }
+}
+
+.blockTitle {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gk-muted);
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+}
+
+.big {
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.budgetBar {
+  height: 8px;
+  background: var(--gk-line);
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 0.4rem 0;
+}
+
+.budgetBar > div {
+  height: 100%;
+  background: var(--mantine-color-blue-6);
+  transition: width 0.3s ease;
+}
+
+.budgetBar[data-over] > div {
+  background: var(--mantine-color-red-6);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.urgentDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mantine-color-red-6);
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.stage {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin-bottom: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.stageName {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.decision {
+  font-size: 0.8rem;
+  color: var(--gk-ink-2);
+  padding-left: 0.25rem;
+}
+
+.decisionComment {
+  color: var(--gk-muted);
+  font-style: italic;
+}
+
+/* Bulk action bar (pool) */
+.bulkBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  background: var(--gk-surface);
+  border-top: 1px solid var(--gk-line);
+  box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+  padding: 0.6rem 1rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+  border-radius: var(--gk-radius-md) var(--gk-radius-md) 0 0;
+  margin-top: 12px;
+}
+
+.note {
+  background: var(--gk-surface-subtle);
+  border-radius: var(--gk-radius-sm);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.footerRow td {
+  font-weight: 600;
+  background: var(--gk-surface-subtle);
+}
+
+@media print {
+  .noPrint {
+    display: none !important;
+  }
+
+  .strip {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
