@@ -691,6 +691,13 @@ export const appRoutes: RouteObject[] = [
         .CashFlowReportPage,
     }),
   },
+  {
+    path: '/management/dashboard',
+    lazy: async () => ({
+      Component: (await import('@/pages/management/dashboard/ManagementDashboardPage'))
+        .ManagementDashboardPage,
+    }),
+  },
 ];
 
 const devRoutes: RouteObject[] = import.meta.env.DEV
