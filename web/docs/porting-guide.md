@@ -74,7 +74,11 @@ The pilot pages are the worked examples:
 
 The legacy table's `editable`, `groupBy` and `draggable` options have
 DataTable equivalents, so a page using them ports line by line. Unit tests:
-`src/ui/DataTable/{editing,grouping,reorder}.test.tsx`.
+`src/ui/DataTable/{editing,grouping,reorder}.test.tsx`; live demos at
+`/react-preview/ui` (dev only). Screenshots:
+[editing](img/datatable-editing.png), [saving](img/datatable-edit-saving.png),
+[grouped report](img/datatable-grouping.png), [group footers](img/datatable-group-footers.png),
+[reorder](img/datatable-reorder.png).
 
 ### Inline cell editing
 
