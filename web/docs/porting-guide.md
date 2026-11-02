@@ -126,7 +126,10 @@ both sides in step. The builders escape every payload value and send markdown
 through `utils/markdownLite.js` (escape first), the same contract as
 `renderRichText`. Rules:
 
-- Only report-view.js output goes into `EstimateHtml`; nothing else may use it.
+- Only report-view.js output (and the estimator's method text, which
+  `loadMethodHtml()` renders with markdownLite) goes into `EstimateHtml`;
+  nothing else may use it. Referanslar uses it for the plan tables and the
+  "Nasıl çalışır?" text.
 - Clicks inside it are handled by event delegation on `data-est-action` /
   `data-est-goto`, as the legacy card did.
 - The few Bootstrap classes the markup uses are restyled in

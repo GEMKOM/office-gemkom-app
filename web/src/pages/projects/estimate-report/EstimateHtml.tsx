@@ -1,7 +1,7 @@
 import { forwardRef, type HTMLAttributes } from 'react';
 
 export interface EstimateHtmlProps extends Omit<HTMLAttributes<HTMLDivElement>, 'dangerouslySetInnerHTML' | 'children'> {
-  /** Markup from the legacy report-view.js builders, and nothing else. */
+  /** Markup from the legacy report-view.js builders or loadMethodHtml() (markdownLite), and nothing else. */
   html: string;
 }
 
@@ -15,7 +15,9 @@ export interface EstimateHtmlProps extends Omit<HTMLAttributes<HTMLDivElement>, 
  * means a change to the report shows on both sides at once. Its builders
  * escape every payload value (utils/text.js escapeHtml) and pass markdown
  * through utils/markdownLite.js, which escapes first and only adds its own
- * tags, the same contract as renderRichText. Never pass anything else here.
+ * tags, the same contract as renderRichText. The estimator's method text
+ * (loadMethodHtml, markdownLite) is the one other allowed input. Never pass
+ * anything else here.
  * When offers and project tracking move to React, port the builders to JSX
  * and delete this component.
  */

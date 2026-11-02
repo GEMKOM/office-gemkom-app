@@ -27,12 +27,9 @@ import {
 } from '../../apis/estimator.js';
 import { fmt, progressModel, remainingLabel, reportModel } from './report-model.js';
 import {
-    COST_ROW_LABELS, DEFAULT_COLLAPSED, JOINT_TYPE_LABELS, MATERIAL_LABELS, PROCESS_LABELS,
-    costTableHtml, costTableRows, doneReportHtml, formatDateTime, gotoResolver, methodSectionHtml, printReport, processLabel, runMinutes,
-    sourceBadge, weldSectionHtml,
+    DEFAULT_COLLAPSED, JOINT_TYPE_LABELS, MATERIAL_LABELS, costTableHtml, doneReportHtml, formatDateTime, gotoResolver,
+    methodSectionHtml, printReport, processLabel, runMinutes, sourceBadge, weldSectionHtml,
 } from './report-view.js';
-
-export { COST_ROW_LABELS, JOINT_TYPE_LABELS, MATERIAL_LABELS, PROCESS_LABELS, costTableRows, fmt, printReport, processLabel };
 
 const POLL_MS = 5000;
 const POLL_MAX = 360;           // 30 minutes; a run is 6-15, the server gives up at 30

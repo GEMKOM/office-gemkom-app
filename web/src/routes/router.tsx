@@ -213,6 +213,10 @@ export const appRoutes: RouteObject[] = [
     lazy: async () => ({ Component: (await import('@/pages/projects/estimates/EstimatesPage')).EstimatesPage }),
   },
   {
+    path: '/projects/references',
+    lazy: async () => ({ Component: (await import('@/pages/projects/references/ReferencesPage')).ReferencesPage }),
+  },
+  {
     path: '/design',
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/design/DesignHubPage')).DesignHubPage }),

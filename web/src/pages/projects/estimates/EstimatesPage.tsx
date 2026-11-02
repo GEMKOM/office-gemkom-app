@@ -21,9 +21,9 @@ import {
   useUrlFilters,
   type DataTableColumn,
   type FilterConfig,
-  type StatusFamily,
 } from '@/ui';
 import { EstimateReport } from '../estimate-report/EstimateReport';
+import { badgeFamily } from '../estimate-report/LegacyBadge';
 
 interface Row extends EstimateRow {
   in_house: number | null;
@@ -32,12 +32,6 @@ interface Row extends EstimateRow {
 }
 
 const EMPTY_ROWS: Row[] = [];
-
-/** "status-green" → "green": the legacy badge classes as StatusBadge families. */
-function family(badge: string | undefined): StatusFamily {
-  const f = String(badge || '').replace('status-', '');
-  return (['green', 'blue', 'yellow', 'orange', 'red', 'purple', 'grey'] as const).find((x) => x === f) ?? 'grey';
-}
 
 const FILTERS: FilterConfig<'q' | 'status' | 'reviewed' | 'kind'>[] = [
   { key: 'q', type: 'text', placeholder: 'İş emri, teklif no, başlık…' },
@@ -91,7 +85,7 @@ const columns: DataTableColumn<Row>[] = [
     width: 110,
     render: (row) => {
       const s = ESTIMATE_STATUS[row.status];
-      return <StatusBadge color={family(s?.badge)}>{s?.label ?? row.status}</StatusBadge>;
+      return <StatusBadge color={badgeFamily(s?.badge)}>{s?.label ?? row.status}</StatusBadge>;
     },
     exportValue: (row) => ESTIMATE_STATUS[row.status]?.label ?? row.status,
   },
@@ -113,7 +107,7 @@ const columns: DataTableColumn<Row>[] = [
       const r = REVIEW_LABELS[row.review_decision || ''] ?? REVIEW_LABELS['']!;
       return (
         <span title={row.reviewed_by_name || undefined}>
-          <StatusBadge color={family(r.badge)}>{r.label}</StatusBadge>
+          <StatusBadge color={badgeFamily(r.badge)}>{r.label}</StatusBadge>
         </span>
       );
     },

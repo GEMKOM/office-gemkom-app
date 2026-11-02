@@ -26,6 +26,8 @@ declare module '@legacy/components/estimate-report/report-model.js' {
   export function progressModel(progress: unknown, now?: number): ProgressModel | null;
   export function remainingLabel(model: ProgressModel | null): string;
   export function isPlanBottomUp(bottomUp: unknown): boolean;
+  /** Why a reference was left out of the in-house calibration, in Turkish. */
+  export function exclusionLabel(reason: string | null | undefined, row?: unknown): string;
 }
 
 declare module '@legacy/components/estimate-report/report-view.js' {
@@ -71,4 +73,12 @@ declare module '@legacy/apis/estimator.js' {
   export const ESTIMATE_STATUS: Record<string, { label: string; badge: string; icon: string }>;
   export const REVIEW_LABELS: Record<string, { label: string; badge: string }>;
   export const SOURCE_LABELS: Record<string, { label: string; badge: string; title: string }>;
+  export const SCHEMA_LABELS: Record<number, { label: string; badge: string; title: string }>;
+  export const REFERENCE_REVIEW: Record<string, { label: string; badge: string }>;
+  export const REFERENCE_ROUTE: Record<string, { label: string; badge: string }>;
+  export const REFERENCE_RELIABILITY: Record<string, { label: string; badge: string }>;
+  export const REFERENCE_FAMILY: Record<string, string>;
+  export const STRUCTURE_CLASS_LABELS: Record<string, string>;
+  export const WORK_CENTRE_LABELS: Record<string, string>;
+  export function machiningExclusionLabel(reason: string | null | undefined): string;
 }
