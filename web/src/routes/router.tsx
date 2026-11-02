@@ -804,7 +804,23 @@ const devRoutes: RouteObject[] = import.meta.env.DEV
     ]
   : [];
 
+// Signed-out pages: outside RootLayout, so no session check, rail or band.
+// They are listed in migrated-routes.json like the app routes.
+export const publicRoutes: RouteObject[] = [
+  {
+    path: '/login',
+    lazy: async () => ({ Component: (await import('@/pages/auth/LoginPage')).LoginPage }),
+  },
+  {
+    path: '/login/reset-password',
+    lazy: async () => ({
+      Component: (await import('@/pages/auth/ResetPasswordPage')).ResetPasswordPage,
+    }),
+  },
+];
+
 export const routeTree: RouteObject[] = [
+  ...publicRoutes,
   {
     Component: RootLayout,
     children: [...appRoutes, ...devRoutes, { path: '*', Component: NotFound }],

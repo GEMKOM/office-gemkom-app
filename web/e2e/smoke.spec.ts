@@ -44,14 +44,20 @@ async function expectSpa(page: import('@playwright/test').Page) {
 }
 
 test.describe('session guard', () => {
-  test('signed out: a migrated page redirects to /login/ and remembers where it was', async ({
+  test('signed out: a migrated page redirects to the React login page and remembers where it was', async ({
     page,
+    consoleErrors,
   }) => {
     await mockBackend(page);
     await page.goto(CUSTOMERS);
     await expect(page).toHaveURL(/\/login\/$/);
+    await expect(page.getByRole('heading', { name: 'Ofis Çalışanları' })).toBeVisible();
+    await expectSpa(page);
+    // Outside the signed-in shell: no rail.
+    await expect(page.getByRole('navigation', { name: 'Ana menü' })).toHaveCount(0);
     const returnUrl = await page.evaluate(() => sessionStorage.getItem('postLoginReturnUrl'));
     expect(returnUrl).toBe(CUSTOMERS);
+    consoleErrors.expectNone();
   });
 });
 
@@ -206,8 +212,11 @@ test.describe('route permissions', () => {
   });
 });
 
+// The signed-out pages send a signed-in visitor on; e2e/login.spec.ts covers them.
+const PUBLIC_ROUTES = new Set(['/login', '/login/reset-password']);
+
 test.describe('every migrated route loads as admin', () => {
-  const routes = migratedRoutes();
+  const routes = migratedRoutes().filter((route) => !PUBLIC_ROUTES.has(route));
   test('migrated-routes.json is not empty', () => {
     expect(routes.length).toBeGreaterThan(0);
   });
