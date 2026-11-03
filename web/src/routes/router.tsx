@@ -12,6 +12,11 @@ const manufacturingHub = async () => ({
   Component: (await import('@/pages/manufacturing/ManufacturingHubPage')).ManufacturingHubPage,
 });
 
+// Every report hub is the Rapor Merkezi filtered to its departments.
+const reportHub = async () => ({
+  Component: (await import('@/pages/reports/ReportHubPage')).ReportHubPage,
+});
+
 /**
  * The old URL of a report that was merged into another: forwards there with
  * the view preset, keeping the rest of the query (deep links such as ?edit=).
@@ -36,6 +41,13 @@ export const appRoutes: RouteObject[] = [
     path: '/',
     handle: hub,
     lazy: async () => ({ Component: (await import('@/pages/home/HomePage')).HomePage }),
+  },
+  {
+    // Rapor Merkezi: opens for anyone who can open one of its reports (accessControl.js).
+    path: '/reports',
+    lazy: async () => ({
+      Component: (await import('@/pages/reports/ReportCenterPage')).ReportCenterPage,
+    }),
   },
   {
     path: '/general',
@@ -123,9 +135,9 @@ export const appRoutes: RouteObject[] = [
   { path: '/manufacturing/maintenance', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/subcontracting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/welding', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/welding/reports', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/maintenance/reports', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/reports', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing/welding/reports', handle: hub, lazy: reportHub },
+  { path: '/manufacturing/maintenance/reports', handle: hub, lazy: reportHub },
+  { path: '/manufacturing/reports', handle: hub, lazy: reportHub },
   {
     path: '/procurement',
     handle: hub,
@@ -144,10 +156,7 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/procurement/reports',
     handle: hub,
-    lazy: async () => ({
-      Component: (await import('@/pages/procurement/ProcurementReportsHubPage'))
-        .ProcurementReportsHubPage,
-    }),
+    lazy: reportHub,
   },
   {
     path: '/procurement/suppliers',
@@ -194,9 +203,7 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/finance/reports',
     handle: hub,
-    lazy: async () => ({
-      Component: (await import('@/pages/finance/FinanceReportsHubPage')).FinanceReportsHubPage,
-    }),
+    lazy: reportHub,
   },
   {
     path: '/management',
@@ -208,10 +215,7 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/management/reports',
     handle: hub,
-    lazy: async () => ({
-      Component: (await import('@/pages/management/reports/ManagementReportsHubPage'))
-        .ManagementReportsHubPage,
-    }),
+    lazy: reportHub,
   },
   {
     path: '/human_resources',
@@ -551,8 +555,8 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   // Phase 3b: CNC kesim, lineer kesim and talaşlı imalat lists and reports.
-  { path: '/manufacturing/cnc-cutting/reports', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/machining/reports', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing/cnc-cutting/reports', handle: hub, lazy: reportHub },
+  { path: '/manufacturing/machining/reports', handle: hub, lazy: reportHub },
   {
     path: '/manufacturing/cnc-cutting/dashboard',
     lazy: async () => ({

@@ -2,6 +2,7 @@ import { authedFetch } from '@legacy/authService.js';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
+import { REPORT_HUBS } from '@legacy/reportCatalog.js';
 import { appRoutes } from '@/routes/router';
 import { MANUFACTURING_HUBS } from './hubs';
 import { ManufacturingHubPage } from './ManufacturingHubPage';
@@ -63,10 +64,12 @@ beforeEach(() => {
 });
 
 it('has a hub for every manufacturing hub route', () => {
-  // List pages under /manufacturing are their own routes, without the hub handle.
+  // List pages under /manufacturing are their own routes, without the hub handle;
+  // the report hubs are views of the Rapor Merkezi (REPORT_HUBS).
   const routes = appRoutes
     .filter((route) => route.path?.startsWith('/manufacturing') && route.handle?.access === 'hub')
-    .map((route) => route.path!);
+    .map((route) => route.path!)
+    .filter((path) => !(path in REPORT_HUBS));
   expect(Object.keys(MANUFACTURING_HUBS).sort()).toEqual(routes.sort());
 });
 
@@ -158,7 +161,6 @@ it('shows the maintenance hub with open and stopped counts', async () => {
   const reports = screen.getByRole('heading', { name: 'Raporlar' }).closest('article')!;
   expect([...reports.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
     'Arızalar Özeti',
-    'Kullanıcı Çözüm Raporu',
     'Personel Faaliyet Raporu',
     'Aylık Metrikler',
   ]);
@@ -182,60 +184,3 @@ it('hides ungranted cards and fetches nothing for figures the user cannot open',
   );
 });
 
-it('renders a hub without figures from its path', () => {
-  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/welding/reports/' });
-
-  expect(screen.getByRole('heading', { name: 'Kaynak Raporları' })).toBeInTheDocument();
-  expect(cardTitles()).toEqual(['Çalışan Çalışma Saatleri Raporu', 'Maliyet Analizi Raporu']);
-  expect(screen.getByRole('link', { name: 'Maliyet Analizi Raporu' })).toHaveAttribute(
-    'href',
-    '/manufacturing/reports/job-costs?breakdown=welding',
-  );
-  expect(fetchMock).not.toHaveBeenCalled();
-});
-
-it('renders the CNC and machining report hubs (inline MenuComponent in legacy)', () => {
-  const { unmount } = renderWithProviders(<ManufacturingHubPage />, {
-    route: '/manufacturing/cnc-cutting/reports/',
-  });
-  expect(screen.getByRole('heading', { name: 'CNC Kesim Raporlar' })).toBeInTheDocument();
-  expect(cardTitles()).toEqual(['Biten Zamanlayıcılar', 'Kullanıcı Raporu', 'Parça Arama']);
-  unmount();
-
-  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/machining/reports' });
-  expect(screen.getByRole('heading', { name: 'Raporlar', level: 1 })).toBeInTheDocument();
-  expect(cardTitles()).toEqual([
-    'Kullanıcı Raporu',
-    'Günlük Verimlilik Raporu',
-    'Performans Raporu',
-    'Biten Zamanlayıcılar',
-    'Toplam Raporu',
-    'Maliyet Analizi',
-    'Makine Çalışma Geçmişi',
-    'Üretim Planı',
-  ]);
-  expect(fetchMock).not.toHaveBeenCalled();
-});
-
-it('renders the two report hubs that were inline MenuComponents', () => {
-  const { unmount } = renderWithProviders(<ManufacturingHubPage />, {
-    route: '/manufacturing/maintenance/reports/',
-  });
-  expect(screen.getByRole('heading', { name: 'Bakım Raporları' })).toBeInTheDocument();
-  expect(cardTitles()).toEqual([
-    'Arızalar Özeti',
-    'Kullanıcı Çözüm Raporu',
-    'Personel Faaliyet Raporu',
-    'Aylık Metrikler',
-  ]);
-  unmount();
-
-  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/reports' });
-  expect(screen.getByRole('heading', { name: 'Raporlar' })).toBeInTheDocument();
-  expect(cardTitles()).toEqual(['İş Maliyeti', 'Biten Zamanlayıcılar', 'Kullanıcı Raporu']);
-  expect(screen.getByRole('link', { name: 'İş Maliyeti' })).toHaveAttribute(
-    'href',
-    '/manufacturing/reports/job-costs',
-  );
-  expect(fetchMock).not.toHaveBeenCalled();
-});

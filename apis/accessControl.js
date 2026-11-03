@@ -1,4 +1,5 @@
 import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authService.js';
+import { REPORT_CATALOG } from '../reportCatalog.js';
 
 /**
  * Permission-based access control
@@ -75,6 +76,8 @@ export function inheritedAccessRoutes() {
     return Object.keys(ROUTE_ACCESS_INHERITS);
 }
 
+const REPORT_CENTER_ROUTE = '/reports';
+
 function normalizePath(path) {
     if (!path) return '/';
     const noQuery = String(path).split('?')[0].split('#')[0];
@@ -118,6 +121,12 @@ export function hasRouteAccess(route) {
 
         // Admin users have access to everything
         if (isAdmin()) return true;
+
+        // The Rapor Merkezi lists only the reports the user can open, so it
+        // opens for anyone who can open one of them (reportCatalog.js).
+        if (normalized === REPORT_CENTER_ROUTE) {
+            return REPORT_CATALOG.some((report) => hasRouteAccess(report.route));
+        }
         // New permission payload includes "name": "Page: /some/route/"
         // Use that mapping (and allow subroutes under granted base routes).
         if (routeIsAllowedByGrantedPages(normalized)) return true;

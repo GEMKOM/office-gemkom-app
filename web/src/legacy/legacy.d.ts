@@ -84,6 +84,39 @@ declare module '@legacy/apis/accessControl.js' {
   export function inheritedAccessRoutes(): string[];
 }
 
+declare module '@legacy/reportCatalog.js' {
+  export const REPORT_TOPICS: Record<string, string>;
+  export const REPORT_DEPARTMENTS: Record<string, string>;
+
+  export interface ReportView {
+    /** Query preset of the department's view, e.g. "module=machining". */
+    query: string;
+    /** The old page whose grant opens this view. */
+    route: string;
+  }
+
+  export interface ReportEntry {
+    route: string;
+    title: string;
+    question: string;
+    topic: string;
+    icon: string;
+    departments: string[];
+    views?: Record<string, ReportView>;
+    keywords?: string[];
+  }
+
+  export const REPORT_CATALOG: ReportEntry[];
+
+  export interface ReportHub {
+    title: string;
+    departments: string[];
+    backTo: string;
+  }
+
+  export const REPORT_HUBS: Record<string, ReportHub>;
+}
+
 declare module '@legacy/navigationStructure.js' {
   export interface NavItem {
     label: string;
