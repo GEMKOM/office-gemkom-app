@@ -135,9 +135,10 @@ test('a user with some grants sees only those cards, and no hub without one', as
 
   await page.goto('/accounting/');
   await expect(main.getByRole('heading', { name: 'Erişim yetkiniz yok' })).toBeVisible();
-  // Only the procurement hub asked for the figure.
+  // The hubs without access ask for nothing themselves: each full load adds
+  // only the menu badge's one request for the approvals count.
   expect(backend.callsTo('/procurement/purchase-requests/pending_approval/')).toHaveLength(
-    pendingCalls,
+    pendingCalls + 2,
   );
   consoleErrors.expectNone();
 });
