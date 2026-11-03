@@ -1,5 +1,5 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
-import { apiFetch, cleanParams } from '../client';
+import { ApiError, apiFetch, cleanParams } from '../client';
 import { toPaginated } from '../types';
 
 // apis/projects/design.js and apis/projects/departmentTasks.js, as much as the
@@ -217,4 +217,48 @@ export function selfStartRevision(releaseId: number, reason?: string) {
 /** Port of getDrawingRelease as a plain call (the resubmit form's values). */
 export function getDrawingRelease(id: number | string) {
   return apiFetch<DrawingRelease>(`/projects/drawing-releases/${id}/`);
+}
+
+// ---- a job order's releases (Proje Takibi detail modal, Dizayn tab) ----
+
+/** Port of listDrawingReleases(jobOrder): every release of one job order. */
+export function jobOrderReleasesQueryOptions(jobNo: string) {
+  return queryOptions({
+    queryKey: [...releaseKeys.all, 'jobOrder', jobNo] as const,
+    queryFn: async ({ signal }) =>
+      toPaginated<DrawingRelease>(
+        await apiFetch<unknown>('/projects/drawing-releases/', {
+          params: { job_order: jobNo },
+          signal,
+        }),
+      ).results,
+    staleTime: 30_000,
+  });
+}
+
+/** Port of getCurrentRelease(jobOrder): the job's active release, null on 404. */
+export function currentReleaseQueryOptions(jobNo: string) {
+  return queryOptions({
+    queryKey: [...releaseKeys.all, 'current', jobNo] as const,
+    queryFn: async ({ signal }) => {
+      try {
+        return await apiFetch<DrawingRelease | null>('/projects/drawing-releases/current/', {
+          params: { job_order: jobNo },
+          signal,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 404) return null;
+        throw error;
+      }
+    },
+    staleTime: 30_000,
+  });
+}
+
+/** Port of requestRevision: ask design to revise a released drawing set. */
+export function requestReleaseRevision(releaseId: number, data: { reason: string }) {
+  return apiFetch<unknown>(`/projects/drawing-releases/${releaseId}/request_revision/`, {
+    method: 'POST',
+    body: data,
+  });
 }

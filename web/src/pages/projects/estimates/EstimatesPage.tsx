@@ -1,10 +1,8 @@
-import { ESTIMATE_STATUS, REVIEW_LABELS } from '@legacy/apis/estimator.js';
-import { fmt } from '@legacy/components/estimate-report/report-model.js';
 import { Button, Modal, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
-import { estimatesQueryOptions, estimatorKeys, type EstimateRow } from '@/api/projects/estimator';
+import { ESTIMATE_STATUS, estimatesQueryOptions, estimatorKeys, REVIEW_LABELS, type EstimateRow } from '@/api/projects/estimator';
 import { customersQueryOptions, useCustomer } from '@/api/reference/customers';
 import { formatDateTime } from '@/lib/format';
 import {
@@ -24,6 +22,7 @@ import {
 } from '@/ui';
 import { EstimateReport } from '../estimate-report/EstimateReport';
 import { badgeFamily } from '../estimate-report/LegacyBadge';
+import { fmt } from '../estimate-report/reportModel';
 
 interface Row extends EstimateRow {
   in_house: number | null;

@@ -136,6 +136,24 @@ export function unmarkPlanningItemConsumed(itemId: string | number): Promise<Pla
   );
 }
 
+/** POST /planning/items/{id}/mark_critical/ (imalat bu kalem olmadan devam edemez). */
+export function markPlanningRequestItemCritical(itemId: string | number): Promise<PlanningItem> {
+  return legacyFetch<PlanningItem>(
+    `${BASE}${itemId}/mark_critical/`,
+    { method: 'POST', headers: JSON_HEADERS },
+    'Kalem kritik olarak işaretlenirken hata oluştu',
+  );
+}
+
+/** POST /planning/items/{id}/unmark_critical/ */
+export function unmarkPlanningRequestItemCritical(itemId: string | number): Promise<PlanningItem> {
+  return legacyFetch<PlanningItem>(
+    `${BASE}${itemId}/unmark_critical/`,
+    { method: 'POST', headers: JSON_HEADERS },
+    'Kritik işareti kaldırılırken hata oluştu',
+  );
+}
+
 /** Marks (consumed: true) or unmarks an item, then reloads every planning item list. */
 export function useSetPlanningItemConsumed() {
   const queryClient = useQueryClient();

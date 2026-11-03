@@ -1,7 +1,7 @@
 import { expect, mockBackend, seedSession, test } from './fixtures';
 
-// /projects/estimates/ (Tahminler) and the React estimate report, which renders
-// a finished report's sections with the legacy report-view.js builders.
+// /projects/estimates/ (Tahminler) and the React estimate report (a finished
+// report's sections: estimate-report/ReportSections.tsx).
 // Contracts used here:
 //   GET /estimator/estimates/?limit=500[&q&customer&status&reviewed]   {count, results}
 //   GET /estimator/estimates/<id>/                                      the full report
@@ -119,16 +119,16 @@ test('Tahminler: open a report, read its sections, open the weld list', async ({
   const dialog = page.getByRole('dialog');
   const card = dialog.getByTestId('estimate-report');
   await expect(card.locator('.est-head-title')).toContainText('Tahmin raporu');
-  // The legacy builders' sections, styled by estimate-report.css.
+  // The report's sections, styled by EstimateReport.module.css.
   await expect(card.locator('[data-est-nav]')).toBeVisible();
   await expect(card.locator('.est-price-value')).toContainText('98.000 €');
   await expect(card.locator('section[data-sec="maliyet"] table.est-cost')).toBeVisible();
 
   // Karşılaştır swaps the cost table in place.
-  await card.locator('[data-est-action="route"][data-route="compare"]').click();
+  await card.locator('.est-seg [data-route="compare"]').click();
   await expect(card.locator('table.est-cost.is-compare')).toBeVisible();
 
-  // The weld list: a DataTable inside the legacy section.
+  // The weld list: a DataTable inside its section.
   await card.getByRole('button', { name: 'Listeyi göster' }).click();
   await expect(card.getByRole('cell', { name: 'Gövde boyuna dikiş' })).toBeVisible();
 

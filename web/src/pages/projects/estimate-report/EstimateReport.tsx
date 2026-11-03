@@ -1,35 +1,17 @@
-import '@legacy/components/estimate-report/estimate-report.css';
-import { ESTIMATE_STATUS, REVIEW_LABELS } from '@legacy/apis/estimator.js';
-import { loadMethodHtml } from '@legacy/components/estimator-method/estimator-method.js';
-import {
-  fmt,
-  progressModel,
-  remainingLabel,
-  reportModel,
-} from '@legacy/components/estimate-report/report-model.js';
-import {
-  costTableHtml,
-  DEFAULT_COLLAPSED,
-  doneReportHtml,
-  formatDateTime,
-  gotoResolver,
-  methodSectionHtml,
-  printReport,
-  runMinutes,
-  weldSectionHtml,
-  type EstimateViewState,
-} from '@legacy/components/estimate-report/report-view.js';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { isApiError } from '@/api/client';
 import {
   cancelEstimate,
   createEstimate,
+  ESTIMATE_STATUS,
   estimatorKeys,
+  estimatorMethodQueryOptions,
   getEstimate,
   getLatestEstimate,
   getWeldSchedule,
+  REVIEW_LABELS,
   reviewEstimate,
   type EstimateReport as Report,
   type EstimateScope,
@@ -37,14 +19,23 @@ import {
   type WeldSchedule,
 } from '@/api/projects/estimator';
 import { confirm, errorMessage, notify } from '@/ui';
-import { EstimateHtml } from './EstimateHtml';
 import css from './EstimateReport.module.css';
-import { WeldTable } from './WeldTable';
+import { printReport } from './printReport';
+import { fmt, progressModel, remainingLabel, reportModel } from './reportModel';
+import {
+  DEFAULT_COLLAPSED,
+  formatDateTime,
+  ReportContext,
+  runMinutes,
+  type ReportActions,
+  type ReportContextValue,
+} from './reportParts';
+import { DoneReport, gotoResolver, MethodSection, WeldSection } from './ReportSections';
 
 // Port of components/estimate-report/estimate-report.js (mountEstimateReport):
-// the Tahmin card of a job order, an offer or one fixed report. The state,
-// requests and actions are React; a finished report's sections come from the
-// legacy report-view.js builders (see EstimateHtml).
+// the Tahmin card of a job order, an offer or one fixed report. A finished
+// report's sections are ReportSections.tsx; this file owns the state, the
+// requests, the actions and the section nav's scroll spy.
 
 const POLL_MS = 5000;
 /** A run takes 6–15 minutes and the server gives up at 30: so does the card. */
@@ -114,6 +105,12 @@ function StatusPill({ status }: { status: string }) {
   );
 }
 
+interface NavState {
+  active: string;
+  stuck: boolean;
+  top: number | null;
+}
+
 export interface EstimateReportProps {
   subject: EstimateSubject;
   /** Fires after every load and after a review (legacy `onChange`). */
@@ -136,18 +133,14 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
   const [weldOpen, setWeldOpen] = useState(() => readFlag(WELD_OPEN_KEY));
   const [confOpen, setConfOpen] = useState(false);
   const [similarAll, setSimilarAll] = useState(false);
-  const [methodHtml, setMethodHtml] = useState<string | null>(null);
   const [pollExpired, setPollExpired] = useState(false);
   const [seenId, setSeenId] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  // Toggled straight in the DOM like legacy (no re-render), read when the markup is rebuilt.
-  const collapsed = useRef(new Set(readList(COLLAPSED_KEY) ?? DEFAULT_COLLAPSED));
-  const costRoute = useRef<{ id: number | null; route: string | null }>({ id: null, route: null });
-  const detailsOpen = useRef(new Map<string, boolean>());
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set(readList(COLLAPSED_KEY) ?? DEFAULT_COLLAPSED));
+  // The cost table's route, per shown report (null: its basis route).
+  const [costRoute, setCostRoute] = useState<{ id: number | null; route: string | null }>({ id: null, route: null });
+  const [nav, setNav] = useState<NavState>({ active: 'ozet', stuck: false, top: null });
   const rootRef = useRef<HTMLDivElement>(null);
-  const htmlRef = useRef<HTMLDivElement>(null);
-  const activeNav = useRef<string | null>(null);
-  const [weldHost, setWeldHost] = useState<HTMLElement | null>(null);
 
   const reportQuery = useQuery({
     queryKey: reportId !== null ? estimatorKeys.report(reportId) : estimatorKeys.latest(owner ?? {}),
@@ -165,6 +158,9 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
     retry: false,
   });
   const weldSchedule: WeldSchedule | null = report?.weld_schedule ?? weldQuery.data ?? null;
+
+  // "Nasıl çalışır?": loaded the first time its section is open, then kept.
+  const methodQuery = useQuery({ ...estimatorMethodQueryOptions(), enabled: !collapsed.has('yontem') });
 
   const error = reportQuery.error;
   const hidden = isApiError(error) && error.status === 403;
@@ -214,10 +210,16 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
   }, [report, reportQuery.isFetched]);
 
   const model = useMemo(() => (report?.status === 'done' ? reportModel(report) : null), [report]);
-  if (model && costRoute.current.id !== report!.id) {
-    const routes = model.routes;
+  const resolve = useMemo(() => (model ? gotoResolver(model) : () => null), [model]);
+  let route: string | null = null;
+  if (model && report) {
     const basis = model.basis?.key;
-    costRoute.current = { id: report!.id, route: basis && routes.includes(basis) ? basis : (routes[0] ?? 'in_house') };
+    route =
+      costRoute.id === report.id
+        ? costRoute.route
+        : basis && model.routes.includes(basis)
+          ? basis
+          : (model.routes[0] ?? 'in_house');
   }
 
   const createTarget = useMemo<{ jobNo?: string; offerId?: number } | null>(() => {
@@ -229,65 +231,16 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
   }, [owner, report]);
   const currentScope: EstimateScope = scope ?? (report?.hours?.scope === 'programme' ? 'programme' : 'unit');
 
-  const ensureMethod = useCallback(() => {
-    if (methodHtml) return;
-    loadMethodHtml()
-      .then(setMethodHtml)
-      .catch((e: unknown) =>
-        setMethodHtml(`<span class="text-danger">${escapeText(errorMessage(e, 'Açıklama yüklenemedi'))}</span>`),
-      );
-  }, [methodHtml]);
-
-  useEffect(() => {
-    if (!collapsed.current.has('yontem')) ensureMethod();
-  }, [ensureMethod]);
-
-  // ------------------------------------------------------------ markup from report-view.js
-
-  const view: EstimateViewState = {
-    uid,
-    collapsed: collapsed.current,
-    costRoute: costRoute.current.route,
-    similarAll,
-    confOpen,
-    weldOpen,
-    methodHtml,
-  };
-  const weldHtml = weldSchedule ? weldSectionHtml(view, weldSchedule) : '';
-  const bodyHtml =
-    report?.status === 'done' && model
-      ? `${doneReportHtml(report, model, view, weldHtml)}${methodSectionHtml(view)}`
-      : `${weldHtml}${methodSectionHtml(view)}`;
-
-  // After the markup changes: restore <details>, find the weld table's host, refresh the nav.
-  useLayoutEffect(() => {
-    const root = htmlRef.current;
-    if (!root) return;
-    detailsKeyed(root).forEach(([k, d]) => {
-      const open = detailsOpen.current.get(k);
-      if (open !== undefined) d.open = open;
-    });
-    setWeldHost(root.querySelector<HTMLElement>(`#${uid}-weld`));
-    activeNav.current = null;
-    updateNav();
-    // updateNav reads the DOM only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bodyHtml, uid]);
-
-  // <details> toggles do not bubble: catch them on the way down.
-  useEffect(() => {
-    const root = htmlRef.current;
-    if (!root) return;
-    const onToggle = (event: Event) => {
-      const d = event.target as HTMLDetailsElement;
-      const key = detailsKeyed(root).find(([, el]) => el === d)?.[0];
-      if (key) detailsOpen.current.set(key, d.open);
-    };
-    root.addEventListener('toggle', onToggle, true);
-    return () => root.removeEventListener('toggle', onToggle, true);
-  });
-
   // ------------------------------------------------------------ sections, nav, scrolling (legacy)
+
+  const setSectionsCollapsed = (keys: string[], value: boolean) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      keys.forEach((k) => (value ? next.add(k) : next.delete(k)));
+      writeList(COLLAPSED_KEY, [...next]);
+      return next;
+    });
+  };
 
   const scrollRoot = (): HTMLElement => {
     let el = rootRef.current?.parentElement ?? null;
@@ -325,63 +278,35 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
     (isPage ? window : root).scrollTo?.({ top: Math.max(0, top), behavior: 'smooth' });
   };
 
-  const setActiveNav = (key: string) => {
-    const root = rootRef.current;
-    if (!root || activeNav.current === key) return;
-    activeNav.current = key;
-    const items = root.querySelector<HTMLElement>('.est-nav-items');
-    root.querySelectorAll<HTMLElement>('[data-nav-key]').forEach((b) => {
-      const on = b.dataset.navKey === key;
-      b.classList.toggle('is-active', on);
-      if (on && items && items.scrollWidth > items.clientWidth) {
-        items.scrollLeft = Math.max(0, b.offsetLeft - items.clientWidth / 2 + b.offsetWidth / 2);
-      }
-    });
-  };
-
-  const setSectionCollapsed = (key: string, value: boolean) => {
-    if (value) collapsed.current.add(key);
-    else collapsed.current.delete(key);
-    writeList(COLLAPSED_KEY, [...collapsed.current]);
-    const sec = rootRef.current?.querySelector(`section[data-sec="${key}"]`);
-    if (sec) {
-      sec.classList.toggle('is-collapsed', value);
-      sec.querySelector('.est-sec-toggle')?.setAttribute('aria-expanded', value ? 'false' : 'true');
-    }
-    if (key === 'yontem' && !value) ensureMethod();
-  };
+  const setActiveNav = (key: string) => setNav((prev) => (prev.active === key ? prev : { ...prev, active: key }));
 
   const goto = (key: string) => {
     const root = rootRef.current;
-    const sec = root?.querySelector(`section[data-sec="${key}"]`);
-    if (!root || !sec) return;
-    if (collapsed.current.has(key)) setSectionCollapsed(key, false);
-    const nav = root.querySelector<HTMLElement>('[data-est-nav]');
+    if (!root) return;
+    // Open it first, so the nav and the section are measured as shown.
+    if (collapsed.has(key)) flushSync(() => setSectionsCollapsed([key], false));
+    const sec = root.querySelector(`section[data-sec="${key}"]`);
+    if (!sec) return;
+    const navEl = root.querySelector<HTMLElement>('[data-est-nav]');
     const above = stickyAbove(scrollRoot());
-    const offset = above + (key === 'ozet' ? 12 : (nav ? nav.offsetHeight : 0) + 8);
+    const offset = above + (key === 'ozet' ? 12 : (navEl ? navEl.offsetHeight : 0) + 8);
     scrollToY(sec.getBoundingClientRect().top - offset);
     setActiveNav(key);
   };
 
   /** Scroll spy: highlight the section under the nav; mark the nav once it sticks. */
-  function updateNav() {
+  const updateNav = () => {
     const root = rootRef.current;
-    const nav = root?.querySelector<HTMLElement>('[data-est-nav]');
-    if (!root || !nav || !nav.offsetParent) return;
+    const navEl = root?.querySelector<HTMLElement>('[data-est-nav]');
+    if (!root || !navEl || !navEl.offsetParent) return;
     const sr = scrollRoot();
     const isPage = sr === document.scrollingElement || sr === document.documentElement;
     const pad = isPage ? 0 : parseFloat(getComputedStyle(sr).paddingTop) || 0;
     const above = isPage ? 0 : stickyAbove(sr);
-    const top = String(above - pad);
-    if (nav.dataset.top !== top) {
-      nav.style.top = `${above - pad}px`;
-      nav.dataset.top = top;
-    }
-    const navRect = nav.getBoundingClientRect();
+    const navRect = navEl.getBoundingClientRect();
     const rootTop = (isPage ? 0 : sr.getBoundingClientRect().top) + above;
     const hero = root.querySelector('section[data-sec="ozet"]');
     const past = !hero || hero.getBoundingClientRect().bottom < rootTop + navRect.height * 1.5;
-    nav.classList.toggle('is-stuck', past);
     let active = 'ozet';
     if (past) {
       root.querySelectorAll<HTMLElement>('section[data-sec]').forEach((sec) => {
@@ -389,8 +314,18 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
         if (sec.getBoundingClientRect().top - 12 <= navRect.bottom) active = sec.dataset.sec!;
       });
     }
-    setActiveNav(active);
-  }
+    const top = above - pad;
+    setNav((prev) => (prev.active === active && prev.stuck === past && prev.top === top ? prev : { active, stuck: past, top }));
+  };
+  const updateNavRef = useRef(updateNav);
+  useLayoutEffect(() => {
+    updateNavRef.current = updateNav;
+  });
+
+  // After the sections change (another report, a section opened or closed): refresh the nav.
+  useLayoutEffect(() => {
+    updateNavRef.current();
+  }, [report, collapsed, weldOpen, similarAll, confOpen]);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -398,7 +333,7 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
       if (timer) return;
       timer = setTimeout(() => {
         timer = null;
-        updateNav();
+        updateNavRef.current();
       }, 80);
     };
     document.addEventListener('scroll', onScroll, true);
@@ -408,7 +343,16 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
       document.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onScroll);
     };
-  });
+  }, []);
+
+  // The highlighted nav item stays in view when the nav scrolls sideways.
+  useEffect(() => {
+    const items = rootRef.current?.querySelector<HTMLElement>('.est-nav-items');
+    const item = items?.querySelector<HTMLElement>(`[data-nav-key="${nav.active}"]`);
+    if (items && item && items.scrollWidth > items.clientWidth) {
+      items.scrollLeft = Math.max(0, item.offsetLeft - items.clientWidth / 2 + item.offsetWidth / 2);
+    }
+  }, [nav.active]);
 
   // ------------------------------------------------------------ actions
 
@@ -477,75 +421,55 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
     void reportQuery.refetch();
   };
 
-  /** Clicks inside the legacy markup (event delegation, as the legacy card did). */
-  const onClick = (event: MouseEvent<HTMLDivElement>) => {
-    const target = event.target as HTMLElement;
-    const root = rootRef.current;
-    if (!root) return;
-    const jump = target.closest<HTMLElement>('[data-est-goto]');
-    if (jump && root.contains(jump)) {
-      event.preventDefault();
-      goto(jump.dataset.estGoto!);
-      return;
-    }
-    const el = target.closest<HTMLElement>('[data-est-action]');
-    if (!el || !root.contains(el)) return;
-    switch (el.dataset.estAction) {
-      case 'toggle': {
-        const key = el.dataset.secKey!;
-        setSectionCollapsed(key, !collapsed.current.has(key));
-        break;
-      }
-      case 'expand-all':
-      case 'collapse-all':
-        root.querySelectorAll<HTMLElement>('section[data-sec]').forEach((sec) => {
-          if (sec.dataset.sec !== 'ozet') setSectionCollapsed(sec.dataset.sec!, el.dataset.estAction === 'collapse-all');
-        });
-        break;
-      case 'top':
-        scrollToY(root.getBoundingClientRect().top - 12);
-        break;
-      case 'conf-help':
-        setConfOpen((v) => !v);
-        break;
-      case 'similar-all':
-        setSimilarAll((v) => !v);
-        break;
-      case 'weld-toggle':
-        setWeldOpen((v) => {
-          writeFlag(WELD_OPEN_KEY, !v);
-          return !v;
-        });
-        break;
-      case 'text-all': {
-        const parts = [...root.querySelectorAll<HTMLDetailsElement>('section[data-sec="metin"] details.est-text-part')];
-        const open = parts.some((d) => !d.open);
-        parts.forEach((d) => {
-          d.open = open;
-        });
-        el.textContent = open ? 'Hepsini kapat' : 'Hepsini aç';
-        break;
-      }
-      case 'route': {
-        if (!report || !model) break;
-        costRoute.current = { id: report.id, route: el.dataset.route ?? null };
-        const host = root.querySelector('[data-est-cost]');
-        if (host) host.innerHTML = costTableHtml(report.cost_table ?? {}, costRoute.current.route, gotoResolver(model));
-        el.parentElement?.querySelectorAll<HTMLElement>('[data-route]').forEach((b) => {
-          const on = b.dataset.route === costRoute.current.route;
-          b.classList.toggle('is-active', on);
-          b.setAttribute('aria-pressed', on ? 'true' : 'false');
-        });
-        break;
-      }
-      default:
-        break;
-    }
+  /** Every section shown but the summary (legacy expand-all / collapse-all walk the DOM the same way). */
+  const shownSections = () =>
+    [...(rootRef.current?.querySelectorAll<HTMLElement>('section[data-sec]') ?? [])]
+      .map((sec) => sec.dataset.sec!)
+      .filter((key) => key !== 'ozet');
+
+  const actions: ReportActions = {
+    toggle: (key) => setSectionsCollapsed([key], !collapsed.has(key)),
+    goto,
+    expandAll: () => setSectionsCollapsed(shownSections(), false),
+    collapseAll: () => setSectionsCollapsed(shownSections(), true),
+    top: () => {
+      const root = rootRef.current;
+      if (root) scrollToY(root.getBoundingClientRect().top - 12);
+    },
+    confHelp: () => setConfOpen((v) => !v),
+    similarAll: () => setSimilarAll((v) => !v),
+    weldToggle: () =>
+      setWeldOpen((v) => {
+        writeFlag(WELD_OPEN_KEY, !v);
+        return !v;
+      }),
+    route: (r) => {
+      if (report) setCostRoute({ id: report.id, route: r });
+    },
+  };
+
+  const context: ReportContextValue = {
+    view: {
+      uid,
+      collapsed,
+      costRoute: route,
+      similarAll,
+      confOpen,
+      weldOpen,
+      navActive: nav.active,
+      navStuck: nav.stuck,
+      navTop: nav.top,
+    },
+    actions,
+    resolve,
   };
 
   // ------------------------------------------------------------ render
 
   if (hidden) return null;
+
+  const weldSection = weldSchedule ? <WeldSection ws={weldSchedule} /> : null;
+  const methodError = methodQuery.isError ? errorMessage(methodQuery.error, 'Açıklama yüklenemedi') : null;
 
   let content: ReactNode;
   if (error && !report && !(notFound && !fixed)) {
@@ -592,10 +516,7 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
               onBlocked: () => notify.warning('Yazdırma penceresi açılamadı (açılır pencere engellenmiş olabilir).'),
             })
           }
-          onMethod={() => {
-            setSectionCollapsed('yontem', false);
-            goto('yontem');
-          }}
+          onMethod={() => goto('yontem')}
         />
         {actionError ? (
           <div className="est-alert" role="alert">
@@ -627,7 +548,16 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
               onCancel={() => setNoteOpen(false)}
             />
           ) : null}
-          {fixed && !report ? null : <EstimateHtml ref={htmlRef} html={bodyHtml} />}
+          {fixed && !report ? null : (
+            <div>
+              {report?.status === 'done' && model ? (
+                <DoneReport key={report.id} r={report} m={model} weld={weldSection} />
+              ) : (
+                weldSection
+              )}
+              <MethodSection markdown={methodQuery.data ?? null} error={methodError} />
+            </div>
+          )}
         </div>
         {report?.status === 'done' ? (
           <div className="est-foot">
@@ -640,34 +570,20 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
   }
 
   return (
-    // Clicks inside the legacy markup reach their buttons through here (event delegation).
-    <div
-      ref={rootRef}
-      className={`${css.shim} est-report${report?.status === 'done' ? ' is-done' : ''}`}
-      onClick={onClick}
-      data-testid="estimate-report"
-    >
-      {content}
-      {weldHost && weldSchedule ? createPortal(<WeldTable joints={weldSchedule.joints ?? []} />, weldHost) : null}
-    </div>
+    <ReportContext.Provider value={context}>
+      <div
+        ref={rootRef}
+        className={`${css.scope} est-report${report?.status === 'done' ? ' is-done' : ''}`}
+        data-testid="estimate-report"
+      >
+        {content}
+      </div>
+    </ReportContext.Provider>
   );
 }
 
 function queryKeyOf(reportId: number | null, owner: { jobNo?: string; offerId?: number } | null) {
   return reportId !== null ? estimatorKeys.report(reportId) : estimatorKeys.latest(owner ?? {});
-}
-
-function escapeText(text: string): string {
-  return text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-}
-
-/** `<details>` keyed by section + position, so their open state survives a re-render. */
-function detailsKeyed(root: HTMLElement): [string, HTMLDetailsElement][] {
-  const out: [string, HTMLDetailsElement][] = [];
-  root.querySelectorAll<HTMLElement>('section[data-sec]').forEach((sec) => {
-    sec.querySelectorAll('details').forEach((d, i) => out.push([`${sec.dataset.sec}:${i}`, d]));
-  });
-  return out;
 }
 
 // ------------------------------------------------------------ head

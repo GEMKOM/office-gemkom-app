@@ -7,9 +7,6 @@ import { EstimateReport } from './EstimateReport';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
-vi.mock('@legacy/components/estimator-method/estimator-method.js', () => ({
-  loadMethodHtml: () => Promise.resolve('<p>Yöntem metni</p>'),
-}));
 
 const fetchMock = vi.mocked(authedFetch);
 
@@ -99,13 +96,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('renders a finished report through the legacy builders, escaped', async () => {
+it('renders a finished report, escaped', async () => {
   routes['GET /estimator/estimates/7/'] = () => json(DONE);
   render({ reportId: 7 });
   const card = await screen.findByTestId('estimate-report');
   expect(await within(card).findByText('Tahmin raporu')).toBeInTheDocument();
   expect(within(card).getByRole('combobox', { name: 'Sürüm' })).toHaveValue('7');
-  // Sections from report-view.js: the nav and the risk list.
+  // The sections: the nav and the risk list.
   expect(card.querySelector('[data-est-nav]')).not.toBeNull();
   // (the report text section repeats it)
   expect(within(card).getAllByText('Bakır fiyatı').length).toBeGreaterThan(0);
@@ -134,7 +131,7 @@ it('a section header collapses its section and the choice is remembered', async 
   await within(card).findAllByText('Bakır fiyatı');
   const section = card.querySelector('section[data-sec="maliyet"]')!;
   expect(section.classList.contains('is-collapsed')).toBe(false);
-  fireEvent.click(section.querySelector('[data-est-action="toggle"]')!);
+  fireEvent.click(within(section as HTMLElement).getByRole('button', { name: /Maliyet tablosu/ }));
   expect(section.classList.contains('is-collapsed')).toBe(true);
   expect(JSON.parse(localStorage.getItem('estimateSectionsCollapsed')!)).toContain('maliyet');
 });
@@ -191,4 +188,24 @@ it('a user without access sees nothing (403)', async () => {
   const { container } = render({ jobNo: '270-01' });
   await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   await waitFor(() => expect(container.querySelector('[data-testid="estimate-report"]')).toBeNull());
+});
+
+it('Nasıl çalışır? opens the method section and loads its text; the route buttons switch the cost table', async () => {
+  routes['GET /estimator/estimates/7/'] = () =>
+    json({
+      ...DONE,
+      cost_table: { ...DONE.cost_table, routes: ['in_house', 'subcontract'], expected_total: { in_house: 80000, subcontract: 70000 } },
+    });
+  routes['GET /estimator/method/'] = () => json({ markdown: '## Yöntem\nBirim **süreler**.' });
+  render({ reportId: 7 });
+  const card = await screen.findByTestId('estimate-report');
+  await within(card).findAllByText('Bakır fiyatı');
+  const method = card.querySelector('section[data-sec="yontem"]')!;
+  expect(method.classList.contains('is-collapsed')).toBe(true);
+  fireEvent.click(card.querySelector('.est-help-link')!);
+  expect(method.classList.contains('is-collapsed')).toBe(false);
+  expect(await within(method as HTMLElement).findByText('süreler', { selector: 'strong' })).toBeInTheDocument();
+  expect(card.querySelector('table.est-cost.is-compare')).toBeNull();
+  fireEvent.click(within(card).getByRole('button', { name: /Karşılaştır/ }));
+  expect(card.querySelector('table.est-cost.is-compare')).not.toBeNull();
 });

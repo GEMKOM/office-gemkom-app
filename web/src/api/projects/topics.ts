@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { MentionedGroup, MentionedUser } from '@/ui/RichText/renderRichText';
-import { apiFetch, apiUpload, type ApiUploadOptions } from '../client';
+import { apiFetch, apiUpload, cleanParams, type ApiUploadOptions } from '../client';
 import { extractResults } from '../types';
 
 /**
@@ -178,4 +178,46 @@ export function useEditComment(topicId: number) {
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: topicKeys.comments(topicId) }),
   });
+}
+
+/** A row of the topic list (listTopics): the topic plus its counts and links. */
+export interface DiscussionTopicListItem extends DiscussionTopic {
+  comment_count?: number;
+  participant_count?: number;
+  /** Job order number, when the topic hangs off one. */
+  job_order?: string | null;
+  job_order_no?: string | null;
+  /** release_review topics: the drawing release under review. */
+  linked_release_id?: number | null;
+}
+
+export interface TopicListParams {
+  job_order?: string;
+  priority?: string;
+  priority__in?: string;
+  created_by?: number;
+  search?: string;
+  ordering?: string;
+}
+
+/** Port of listTopics: results unwrapped. */
+export function topicListQueryOptions(params: TopicListParams) {
+  return queryOptions({
+    queryKey: [...topicKeys.all, 'list', cleanParams({ ...params })] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<DiscussionTopicListItem>(
+        await apiFetch<unknown>('/projects/discussion-topics/', { params: { ...params }, signal }),
+      ),
+    staleTime: DISCUSSION_STALE_TIME,
+  });
+}
+
+/** Port of createTopic. The server resolves @mentions and notifies. */
+export function createTopic(data: {
+  job_order?: string;
+  title: string;
+  content: string;
+  priority: string;
+}) {
+  return apiFetch<DiscussionTopic>('/projects/discussion-topics/', { method: 'POST', body: data });
 }

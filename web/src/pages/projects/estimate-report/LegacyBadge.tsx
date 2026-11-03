@@ -1,10 +1,10 @@
-import { fmt } from '@legacy/components/estimate-report/report-model.js';
 import { Text } from '@mantine/core';
 import { StatusBadge, type StatusFamily } from '@/ui';
+import { fmt } from './reportModel';
 
 const FAMILIES: readonly StatusFamily[] = ['green', 'blue', 'yellow', 'orange', 'red', 'purple', 'grey'];
 
-/** "status-green" (the legacy badges.css class in apis/estimator.js labels) → "green". */
+/** "status-green" (the legacy badges.css class in the api/projects/estimator.ts labels) → "green". */
 export function badgeFamily(badge: string | null | undefined): StatusFamily {
   const f = String(badge || '').replace('status-', '');
   return FAMILIES.find((x) => x === f) ?? 'grey';

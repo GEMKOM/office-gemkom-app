@@ -398,6 +398,40 @@ export function bulkCreateSubtasks(parentId: number, tasks: BulkSubtaskNode[]) {
   );
 }
 
+/** One new task of a bulk_plan plan; ids are negative and local to the plan. */
+export interface BulkPlanTask {
+  temp_id: number;
+  department: string;
+  title: string;
+  sequence: number;
+  weight: number;
+  /** temp_id of the parent task in the same plan. */
+  parent?: number;
+  task_type?: string;
+  description?: string;
+}
+
+export interface BulkPlanDependency {
+  task: number;
+  depends_on: number[];
+}
+
+export interface BulkPlanPayload {
+  plans: { job_order: string; tasks: BulkPlanTask[]; dependencies: BulkPlanDependency[] }[];
+}
+
+/**
+ * Görev Planlama (project tracking): every job order's new tasks in one
+ * atomic request. A failure carries `{message|detail, job_order, temp_id,
+ * errors}` in the ApiError's `data`.
+ */
+export function bulkPlanDepartmentTasks(payload: BulkPlanPayload) {
+  return apiFetch<{ message?: string; [key: string]: unknown }>(`${BASE}/bulk_plan/`, {
+    method: 'POST',
+    body: payload,
+  });
+}
+
 // Consultation (sales_consult) tasks: apis/sales/departmentTasks.js.
 
 export function startConsultTask(id: number) {

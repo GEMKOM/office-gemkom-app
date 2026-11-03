@@ -1,5 +1,5 @@
-import { REFERENCE_FAMILY, STRUCTURE_CLASS_LABELS } from '@legacy/apis/estimator.js';
-import { fmt } from '@legacy/components/estimate-report/report-model.js';
+import { REFERENCE_FAMILY, STRUCTURE_CLASS_LABELS } from '@/api/projects/estimator';
+import { fmt } from '../estimate-report/reportModel';
 import type { ReactNode } from 'react';
 import type { Distribution, ReferenceSummary } from '@/api/projects/references';
 import css from './ReferencesPage.module.css';
