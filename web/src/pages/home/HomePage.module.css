@@ -1,0 +1,236 @@
+/* The personal home page: two columns of panels, then the work areas. */
+.column {
+  min-width: 0;
+}
+
+.note {
+  margin: 0;
+  padding: 16px 20px;
+  font-size: 14px;
+  color: var(--gk-muted);
+}
+
+.calm {
+  margin: 0;
+  font-size: 14px;
+  color: var(--gk-ink-2);
+}
+
+.retry {
+  border: 0;
+  padding: 0;
+  background: none;
+  font: inherit;
+  color: var(--gk-red-700);
+  cursor: pointer;
+}
+
+.retry:hover {
+  text-decoration: underline;
+}
+
+.mono {
+  font-family: var(--gk-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Bugün ------------------------------------------------------------------ */
+.today {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.today > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 14px;
+}
+
+.today dt {
+  color: var(--gk-muted);
+}
+
+.today dd {
+  margin: 0;
+  color: var(--gk-ink);
+  font-weight: 500;
+  text-align: right;
+}
+
+.todayLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gk-red-700);
+  text-decoration: none;
+}
+
+.todayLink:hover {
+  text-decoration: underline;
+}
+
+/* ---- Son Bildirimler ---------------------------------------------------------- */
+.notifs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.notifs li + li {
+  border-top: 1px solid var(--gk-line);
+}
+
+.notifs li:last-child .notif {
+  border-radius: 0 0 var(--gk-radius-lg) var(--gk-radius-lg);
+}
+
+.notif {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 16px;
+  text-align: left;
+  transition: background 150ms ease-out;
+}
+
+.notif:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.notif:focus-visible {
+  outline: none;
+  box-shadow: inset var(--gk-focus-ring);
+}
+
+.notifIcon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--gk-radius-md);
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 13px;
+}
+
+.notifText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.notifTitle {
+  font-size: 14px;
+  color: var(--gk-ink-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notif[data-unread] .notifTitle {
+  color: var(--gk-ink);
+  font-weight: 600;
+}
+
+.notifMeta {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.notifDot {
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--gk-red-700);
+  flex: none;
+}
+
+/* ---- Kısayollar ----------------------------------------------------------------- */
+.shortcuts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.shortcut {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  color: var(--gk-ink);
+  text-decoration: none;
+  transition:
+    background 150ms ease-out,
+    border-color 150ms ease-out;
+}
+
+.shortcut:hover {
+  background: var(--gk-surface-subtle);
+  border-color: var(--gk-line-strong);
+}
+
+.shortcut:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.shortcutIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--gk-radius-sm);
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 13px;
+  color: var(--gk-red-700);
+  background: var(--gk-red-050);
+}
+
+.shortcutText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.shortcutLabel,
+.shortcutSection {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shortcutLabel {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.shortcutSection {
+  font-size: 11px;
+  color: var(--gk-muted);
+}
+
+/* ---- Çalışma Alanları ------------------------------------------------------------ */
+.areas {
+  margin-top: 28px;
+}
+
+.areasTitle {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gk-ink);
+}
