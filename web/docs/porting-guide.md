@@ -167,6 +167,7 @@ DataTable equivalents, so a page using them ports line by line. Unit tests:
 | column `type: 'number'`, `min`, `max`, `step` | `editable: { type: 'number', min, max, step }` |
 | column `type: 'select'`, `options` | `editable: { type: 'select', options }` (options may be `(row) => [...]`) |
 | column `type: 'date'` | `editable: { type: 'date' }` (value `'YYYY-MM-DD'`) |
+| a `<textarea>` editor (Ctrl+Enter saves) | `editable: { type: 'textarea' }` (Enter is a new line, Ctrl/Cmd+Enter saves) |
 | column `validate(value, row)` | `editable: { validate }`: return a message to refuse |
 | `isRowEditable(row)` | `isRowEditable={(row, index) => ...}`; per column `editable: { enabled: (row) => ... }` |
 | `onEdit(row, field, newValue, oldValue)` | `onCellEdit={({ row, rowId, columnKey, value, oldValue }) => promise}` |

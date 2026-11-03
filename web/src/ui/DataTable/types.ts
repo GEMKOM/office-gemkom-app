@@ -45,7 +45,8 @@ export interface DataTableColumn<T> {
 
 // ---- inline editing ----------------------------------------------------------
 
-export type CellEditorType = 'text' | 'number' | 'select' | 'date';
+/** 'textarea': multi-line text; Ctrl+Enter saves, Enter is a new line. */
+export type CellEditorType = 'text' | 'textarea' | 'number' | 'select' | 'date';
 
 /**
  * What an editor hands back: text and select give a string, number gives a
