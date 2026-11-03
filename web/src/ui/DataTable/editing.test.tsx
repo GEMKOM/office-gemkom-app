@@ -77,6 +77,22 @@ describe('parsing helpers', () => {
     });
   });
 
+  it('reads number text with a column parser when given one', () => {
+    const parse = (raw: string) => (raw ? Number(raw.replace(/\./g, '')) : null);
+    expect(parseEditorText({ type: 'number', parse }, '305.000', {})).toEqual({
+      ok: true,
+      value: 305000,
+    });
+    expect(parseEditorText({ type: 'number', parse, min: 0 }, '-1', {})).toEqual({
+      ok: false,
+      error: 'Değer en az 0 olmalıdır',
+    });
+    expect(parseEditorText({ type: 'number', parse }, 'x', {})).toEqual({
+      ok: false,
+      error: 'Geçerli bir sayı girin',
+    });
+  });
+
   it('formats editor text', () => {
     expect(toEditorText({ type: 'number' }, 2.5)).toBe('2,5');
     expect(toEditorText({ type: 'number' }, '3.50')).toBe('3,5');

@@ -78,7 +78,7 @@ export function parseEditorText<T>(editor: ColumnEditor<T>, raw: string, row: T)
   const type = editor.type ?? 'text';
   let value: CellValue;
   if (type === 'number') {
-    const n = parseNumberInput(raw);
+    const n = editor.parse ? editor.parse(raw) : parseNumberInput(raw);
     if (n !== null && Number.isNaN(n)) return { ok: false, error: 'Geçerli bir sayı girin' };
     if (n !== null && editor.min !== undefined && n < editor.min)
       return { ok: false, error: `Değer en az ${String(editor.min).replace('.', ',')} olmalıdır` };

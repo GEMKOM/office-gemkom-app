@@ -18,7 +18,7 @@ import {
   MoneyWithInfo,
 } from '@/pages/management/analytics/cells';
 import { FaIcon, StatusBadge, type DataTableColumn } from '@/ui';
-import { rateText, STATUS_FAMILY, statusLabel } from './costTableData';
+import { parsePriceInput, rateText, STATUS_FAMILY, statusLabel } from './costTableData';
 import classes from './CostTable.module.css';
 
 export type DrillKind = 'job' | 'machining' | 'welding' | 'material' | 'subcontractor';
@@ -277,6 +277,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
       render: (row) => <SellingPriceCell row={row} />,
       editable: {
         type: 'number',
+        parse: parsePriceInput,
         placeholder: 'Fiyat',
         value: (row) => numOrNull(row.selling_price),
         // Emptying a price is refused (legacy left it unchanged); an empty

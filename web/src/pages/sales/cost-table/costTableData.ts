@@ -63,6 +63,18 @@ export function tableFilters(values: CostTableFilterValues): CostTableFilters {
   return filters;
 }
 
+/**
+ * Legacy price input: every dot is a thousands separator and the first comma
+ * the decimal mark, so '90.000' is 90000 and '90.000,5' 90000.5. Null when
+ * empty, NaN when not a number.
+ */
+export function parsePriceInput(raw: string): number | null {
+  const text = raw.trim().replace(/\s/g, '');
+  if (!text) return null;
+  const normalized = text.replace(/\./g, '').replace(',', '.');
+  return /^[-+]?(\d+\.?\d*|\.\d+)$/.test(normalized) ? Number(normalized) : Number.NaN;
+}
+
 /** Legacy commit: a change under a cent is no change. */
 export function samePrice(next: number, previous: unknown): boolean {
   if (previous === null || previous === undefined || previous === '') return false;

@@ -191,6 +191,9 @@ const columns = useMemo<DataTableColumn<Item>[]>(() => [
   emptied; `1,5` and `1.234,5` are read the Turkish way), dates a
   `'YYYY-MM-DD'` string or `null`, text and select a string. Legacy `onEdit`
   got the raw input string; drop the `parseFloat` when porting.
+  `editable: { type: 'number', parse }` replaces the reading when the legacy
+  input read numbers its own way (the sales cost table's price takes every
+  dot as a thousands separator, so `90.000` is 90000).
 - **Click** a cell (or focus it and press **Enter**/**F2**) to edit. **Enter**
   saves, **Escape** cancels, **Tab**/**Shift+Tab** save and open the next or
   previous editable cell, leaving the cell (blur) saves, like legacy. Arrow

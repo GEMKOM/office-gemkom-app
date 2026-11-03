@@ -67,6 +67,12 @@ export interface ColumnEditor<T> {
   min?: number;
   max?: number;
   step?: number;
+  /**
+   * Number editors: reads the typed text instead of the default parser
+   * (null for empty, NaN to refuse), e.g. a money field where every dot is a
+   * thousands separator.
+   */
+  parse?: (raw: string) => number | null;
   placeholder?: string;
   /** Value the editor opens with. Default: the column value. */
   value?: (row: T) => unknown;

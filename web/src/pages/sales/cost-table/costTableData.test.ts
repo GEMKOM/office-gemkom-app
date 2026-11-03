@@ -2,6 +2,7 @@ import {
   assignmentTotals,
   jobCostFigures,
   machiningEntryRows,
+  parsePriceInput,
   rateText,
   samePrice,
   sortByDate,
@@ -46,6 +47,17 @@ describe('tableFilters', () => {
       }),
     ).toEqual({ status: 'completed', customer: 12, manufactured: 'true', template_node: '3,4' });
     expect(tableFilters({ ...NO_FILTERS, customer: 'x', manufactured: 'maybe' })).toEqual({});
+  });
+});
+
+describe('parsePriceInput', () => {
+  it('reads every dot as a thousands separator, like the legacy input', () => {
+    expect(parsePriceInput('305.000')).toBe(305000);
+    expect(parsePriceInput('90.000,50')).toBe(90000.5);
+    expect(parsePriceInput('1250,5')).toBe(1250.5);
+    expect(parsePriceInput(' ')).toBeNull();
+    expect(parsePriceInput('-5')).toBe(-5);
+    expect(parsePriceInput('12a')).toBeNaN();
   });
 });
 
