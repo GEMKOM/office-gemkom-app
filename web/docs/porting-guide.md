@@ -67,8 +67,9 @@ The pilot pages are the worked examples:
 ## Attachments, file preview and rich text
 
 Three shared blocks replace `components/file-attachments`, `components/file-viewer`
-and `utils/richText.js` + `utils/richTextEditor.js`. The legacy files stay until
-their last legacy page is gone.
+and `utils/richText.js` + `utils/richTextEditor.js`. The first two left with
+Proje Takibi, their last legacy page; the rich text files stay while a legacy
+page still uses them.
 
 **FileAttachments** shows a record's files and takes the page's own endpoints:
 
