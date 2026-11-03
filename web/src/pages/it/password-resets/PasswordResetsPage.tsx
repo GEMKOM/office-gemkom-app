@@ -2,9 +2,14 @@ import { Center, Stack, Text, Title } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { departmentLabel } from '@/api/human_resources/organization';
-import { passwordResetsQueryOptions, type PasswordResetRequest } from '@/api/it/passwordResets';
+import { isApiError } from '@/api/client';
+import {
+  passwordResetsQueryOptions,
+  useCancelPasswordResetRequest,
+  type PasswordResetRequest,
+} from '@/api/it/passwordResets';
 import { useAuth } from '@/auth/AuthProvider';
-import { DataTable, notify, PageHeader, type DataTableColumn, type RowAction } from '@/ui';
+import { confirm, DataTable, notify, PageHeader, type DataTableColumn, type RowAction } from '@/ui';
 import { PasswordResetModal } from './PasswordResetModal';
 
 const EMPTY_ROWS: PasswordResetRequest[] = [];
@@ -29,6 +34,27 @@ export function PasswordResetsPage() {
   const { isAdmin } = useAuth();
   const list = useQuery({ ...passwordResetsQueryOptions(), enabled: isAdmin });
   const [resetting, setResetting] = useState<PasswordResetRequest | null>(null);
+  const cancelRequest = useCancelPasswordResetRequest();
+
+  const cancel = async (row: PasswordResetRequest) => {
+    const name = [row.first_name, row.last_name].filter(Boolean).join(' ') || row.username;
+    const ok = await confirm({
+      title: 'Talebi İptal Et',
+      icon: 'fas fa-ban',
+      message: 'Bu şifre sıfırlama talebi iptal edilsin mi? Kullanıcının şifresi değişmez.',
+      details: `${name} (${row.username})`,
+      confirmLabel: 'Evet, İptal Et',
+      cancelLabel: 'Vazgeç',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await cancelRequest.mutateAsync(row.id);
+      notify.success('Şifre sıfırlama talebi iptal edildi');
+    } catch (error) {
+      notify.error(isApiError(error) ? error.message : 'Talep iptal edilemedi');
+    }
+  };
 
   useEffect(() => {
     if (list.isError) notify.error('Şifre sıfırlama talepleri yüklenemedi');
@@ -56,6 +82,13 @@ export function PasswordResetsPage() {
       icon: 'fas fa-key',
       color: 'warning',
       onClick: (row) => setResetting(row),
+    },
+    {
+      key: 'cancel-request',
+      label: 'İptal Et',
+      icon: 'fas fa-ban',
+      color: 'danger',
+      onClick: (row) => void cancel(row),
     },
   ];
 
