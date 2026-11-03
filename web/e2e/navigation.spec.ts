@@ -61,9 +61,14 @@ test('admin: the menu puts the cutting pages under Planlama', async ({ page, con
     'Kapasite Planlayıcı',
   ]);
 
-  // İmalat no longer carries them.
+  // İmalat no longer carries them: no lane for either.
   await page.goto('/manufacturing/');
-  await expect(main.getByRole('heading', { name: 'İmalat Modülü' })).toBeVisible();
-  expect(await cardTitles(page)).not.toContain('CNC Kesim');
+  await expect(main.getByRole('heading', { name: 'İmalat', level: 1 })).toBeVisible();
+  const lanes = await main
+    .getByRole('region')
+    .evaluateAll((regions) => regions.map((r) => r.getAttribute('aria-label')));
+  expect(lanes).toContain('Talaşlı İmalat');
+  expect(lanes).not.toContain('CNC Kesim');
+  expect(lanes).not.toContain('Lineer Kesim');
   consoleErrors.expectNone();
 });
