@@ -106,12 +106,22 @@ export function PlanningItemsModal({
       ),
     [list.data],
   );
-  const rows = useMemo(
-    () => [...selected.values(), ...pageRows.filter((i) => !selected.has(i.id))],
-    [selected, pageRows],
-  );
+  // A row moves up when it is ticked and keeps its place there: unticking it
+  // leaves it where it is until the list reloads, so re-ticking a pinned row
+  // doesn't reshuffle the rows above and below it.
+  const [pinned, setPinned] = useState<readonly ProcurementPlanningItem[]>([]);
+  const [pinnedFor, setPinnedFor] = useState(pageRows);
+  if (pinnedFor !== pageRows) {
+    setPinnedFor(pageRows);
+    setPinned((prev) => prev.filter((i) => selected.has(i.id)));
+  }
+  const rows = useMemo(() => {
+    const ids = new Set(pinned.map((i) => i.id));
+    return [...pinned, ...pageRows.filter((i) => !ids.has(i.id))];
+  }, [pinned, pageRows]);
 
   const select = (item: ProcurementPlanningItem, on: boolean, qty?: number) => {
+    if (on) setPinned((prev) => (prev.some((i) => i.id === item.id) ? prev : [...prev, item]));
     setSelected((prev) => {
       const next = new Map(prev);
       if (on) next.set(item.id, item);
