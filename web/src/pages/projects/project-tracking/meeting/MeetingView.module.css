@@ -190,50 +190,59 @@
   100% { background-position: -200% 0; }
 }
 
-/* ---- slot placeholders ---------------------------------------------------- */
+/* ---- hero progress row and sheet slot ------------------------------------ */
 
-.heroSlot {
-  background: #ffffff;
-  border: 1px solid #e2e6ec;
-  border-left: 5px solid #6c757d;
-  border-radius: 14px;
-  box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
-  padding: 12px 20px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 24px;
-}
-
-.heroSlot[data-theme='green'] { border-left-color: #198754; }
-.heroSlot[data-theme='orange'] { border-left-color: #fd7e14; }
-.heroSlot[data-theme='red'] { border-left-color: #dc3545; }
-
-.heroJobNo {
-  font-size: 1.8rem;
-  font-weight: 800;
-  color: #1f2530;
+.heroProgress {
   display: flex;
   align-items: center;
   gap: 10px;
+  font-size: 0.74rem;
+  color: #6c757d;
 }
 
-.heroTitle { font-weight: 600; color: #1f2530; }
-.heroCustomer { font-size: 0.85rem; color: #8a919c; }
-.heroLines { font-size: 0.86rem; color: #59616d; flex: 1 1 320px; min-width: 0; }
-.heroLines p { margin: 0; }
-.heroProgress { font-weight: 700; color: #1f2530; white-space: nowrap; }
+.heroProgressBar {
+  flex: 1;
+  height: 7px;
+  border-radius: 4px;
+  background: #eef1f5;
+  overflow: hidden;
+}
+
+.heroProgressFill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: #198754;
+}
+
+.heroProgress[data-theme='red'] .heroProgressFill { background: #dc3545; }
+.heroProgress[data-theme='orange'] .heroProgressFill { background: #fd7e14; }
+.heroProgress[data-theme='grey'] .heroProgressFill { background: #6c757d; }
+
+.heroProgressPct {
+  font-weight: 700;
+  color: #1f2530;
+}
 
 .sheetSlot {
   flex: 1 1 auto;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  color: #8a919c;
-  font-size: 0.9rem;
+  overflow: hidden;
+}
+
+/* The slide has a fixed height: the grid fills it and its own scroller scrolls. */
+.sheetGrid {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheetGrid > [data-sheet-scroll] {
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 /* ---- tiles ---------------------------------------------------------------- */
@@ -477,49 +486,8 @@
   min-width: 0;
 }
 
-.chip {
-  display: inline-block;
-  padding: 1px 8px;
-  border-radius: 10px;
-  font-size: 0.72rem;
-  font-weight: 700;
-  white-space: nowrap;
-  line-height: 1.4;
-}
-
-.chipLate { background: #fde2e5; color: #a71d2a; }
-.chipChain { background: #e9ecef; color: #495057; }
-.chipEarly { background: #d9f2e3; color: #146c43; }
-.chipOk { background: #d9f2e3; color: #146c43; }
-.chipMuted { background: #f1f3f5; color: #9aa1ab; font-weight: 500; }
-
 .sheetLegend {
-  display: inline-flex;
-  gap: 10px;
-  align-items: center;
-  white-space: nowrap;
   margin-left: auto;
-}
-
-.sheetLegend > span {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.sheetLegend i {
-  width: 12px;
-  height: 8px;
-  border-radius: 2px;
-  display: inline-block;
-}
-
-.lgOntime { background: #34ad51; }
-.lgLate { background: #e2515f; }
-.lgTermin { background: #6f42c1; width: 3px !important; height: 12px !important; }
-.lgToday { background: #dc3545; width: 3px !important; height: 12px !important; }
-.lgExt {
-  background: repeating-linear-gradient(135deg, rgba(220, 53, 69, 0.6) 0 3px, rgba(220, 53, 69, 0.2) 3px 6px);
 }
 
 .zoomGroup {

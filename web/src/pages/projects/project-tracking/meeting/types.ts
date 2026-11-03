@@ -246,19 +246,8 @@ export interface SectionDetail {
   [key: string]: unknown;
 }
 
-/** The plan sheet payload (GET plan-sheet/); the deck reads the summary only. */
-export interface PlanSheet {
-  rows?: unknown[];
-  summary?: Record<string, unknown> | null;
-  job_order?: { created_at?: string | null; [key: string]: unknown } | null;
-  termin?: string | null;
-  plan_end?: string | null;
-  projected_end?: string | null;
-  plan_vs_termin_wd?: Num;
-  deviation_wd?: Num;
-  termin_gap_wd?: Num;
-  [key: string]: unknown;
-}
+/** The plan sheet payload (GET plan-sheet/). */
+export type { PlanSheet } from '@/features/plan-sheet';
 
 export type SectionKind =
   | 'welding'

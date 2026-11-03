@@ -288,7 +288,7 @@ export function SheetGrid({
       {!rows.length ? (
         <div className={classes.empty}>{tr('Bu iş emrinde plan satırı yok.', 'This job order has no plan rows.')}</div>
       ) : (
-        <div ref={scrollRef} className={classes.scroll}>
+        <div ref={scrollRef} className={classes.scroll} data-sheet-scroll>
           <div className={classes.canvas}>
             <div className={classes.header}>
               <div className={classes.headerGrid}>

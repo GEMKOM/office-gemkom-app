@@ -21,7 +21,7 @@ import { MeetingTiles, TilesError, TilesSkeleton } from './MeetingTiles';
 import s from './MeetingView.module.css';
 import { SectionModal } from './SectionModal';
 import { SheetShareDialog } from './SheetShareDialog';
-import { SHEET_ZOOMS, ZOOMS, summaryChips } from './sheetBridge';
+import { isZoomUnit, SheetLegend, SheetSummaryChips, ZOOM_UNITS, ZOOMS, type ZoomUnit } from '@/features/plan-sheet';
 import { HeroSlot, SheetSlot } from './slots';
 import type { MeetingBrief, MeetingItem, OverviewPayload, PlanSheet, SectionKind } from './types';
 
@@ -122,7 +122,7 @@ export function MeetingView({ jobNo, onJobChange, onExit }: MeetingViewProps) {
   const [modal, setModal] = useState<ModalState | null>(null);
   // Zoom and collapsed groups persist across slides: the presenter sets the
   // sheet once and every job order reads the same way.
-  const [zoom, setZoom] = useState('week');
+  const [zoom, setZoom] = useState<ZoomUnit>('week');
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const [search, setSearch] = useState('');
   const wheelAt = useRef(0);
@@ -249,7 +249,7 @@ export function MeetingView({ jobNo, onJobChange, onExit }: MeetingViewProps) {
     const scroller = target?.closest('.pp-scroll');
     if (scroller && scroller.scrollHeight > scroller.clientHeight) return;
     // The plan sheet scrolls (and Ctrl+wheel zooms) on its own when it can.
-    const sheet = target?.closest('.pg-scroll');
+    const sheet = target?.closest('[data-sheet-scroll]');
     if (
       sheet &&
       (e.ctrlKey || sheet.scrollHeight > sheet.clientHeight || sheet.scrollWidth > sheet.clientWidth)
@@ -393,7 +393,7 @@ export function MeetingView({ jobNo, onJobChange, onExit }: MeetingViewProps) {
         strip={strip}
         zoom={zoom}
         onZoom={(z) => {
-          if (SHEET_ZOOMS.includes(z)) setZoom(z);
+          if (isZoomUnit(z)) setZoom(z);
         }}
         collapsed={collapsed}
         onCollapsedChange={setCollapsed}
@@ -432,8 +432,8 @@ interface SlideProps {
   item: MeetingItem;
   neighbours: (string | undefined)[];
   strip: ReactNode;
-  zoom: string;
-  onZoom: (zoom: string) => void;
+  zoom: ZoomUnit;
+  onZoom: (zoom: ZoomUnit) => void;
   collapsed: ReadonlySet<string>;
   onCollapsedChange: (collapsed: Set<string>) => void;
   onOpen: (kind: SectionKind | 'sheet-share') => void;
@@ -493,10 +493,10 @@ function Slide({ item, neighbours, strip, zoom, onZoom, collapsed, onCollapsedCh
         {rows.length ? (
           <div className={s.sheetBody}>
             <SheetSlot
-              jobNo={item.job_no}
               sheet={sheetData}
               loading={sheet.isFetching}
               zoom={zoom}
+              onZoomChange={onZoom}
               collapsed={collapsed}
               onCollapsedChange={onCollapsedChange}
             />
@@ -540,14 +540,6 @@ function Slide({ item, neighbours, strip, zoom, onZoom, collapsed, onCollapsedCh
   );
 }
 
-const CHIP_CLASSES: Record<string, string | undefined> = {
-  'ps-chip-late': s.chipLate,
-  'ps-chip-chain': s.chipChain,
-  'ps-chip-early': s.chipEarly,
-  'ps-chip-ok': s.chipOk,
-  'ps-chip-muted': s.chipMuted,
-};
-
 /** Sheet header: what the summary counted, the legend, the zoom, print / share. */
 function SheetHead({
   sheet,
@@ -556,8 +548,8 @@ function SheetHead({
   onShare,
 }: {
   sheet: PlanSheet;
-  zoom: string;
-  onZoom: (zoom: string) => void;
+  zoom: ZoomUnit;
+  onZoom: (zoom: ZoomUnit) => void;
   onShare: () => void;
 }) {
   return (
@@ -567,36 +559,11 @@ function SheetHead({
         Plan ve sapmalar
       </span>
       <span className={s.sheetChips}>
-        {summaryChips(sheet.summary).map((c, i) => (
-          <span key={i} className={`${s.chip} ${CHIP_CLASSES[c.cls] ?? ''}`} title={c.title || undefined}>
-            {c.text}
-          </span>
-        ))}
+        <SheetSummaryChips summary={sheet.summary} />
       </span>
-      <span className={s.sheetLegend}>
-        <span>
-          <i className={s.lgOntime} />
-          plan
-        </span>
-        <span>
-          <i className={s.lgLate} />
-          geride
-        </span>
-        <span>
-          <i className={s.lgExt} />
-          öngörülen uzama
-        </span>
-        <span>
-          <i className={s.lgTermin} />
-          termin
-        </span>
-        <span>
-          <i className={s.lgToday} />
-          bugün
-        </span>
-      </span>
+      <SheetLegend className={s.sheetLegend} />
       <span className={s.zoomGroup} role="group" aria-label="Ölçek">
-        {SHEET_ZOOMS.map((z) => (
+        {ZOOM_UNITS.map((z) => (
           <button
             key={z}
             type="button"

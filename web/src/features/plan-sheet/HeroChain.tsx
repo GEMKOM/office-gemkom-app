@@ -115,6 +115,8 @@ export interface PlanSheetHeroProps {
   jobNo?: string | null;
   title?: string | null;
   customer?: string | null;
+  /** After the job number, e.g. the meeting slide's status chip. */
+  badge?: ReactNode;
   /** The left border's colour (headerSummary(sheet).theme). */
   theme: SheetTheme;
   /** The date chain (usually <HeroChain>). */
@@ -126,7 +128,7 @@ export interface PlanSheetHeroProps {
 }
 
 /** The hero card: job number, name and customer beside the date chain. */
-export function PlanSheetHero({ jobNo, title, customer, theme, chain, progress, className }: PlanSheetHeroProps) {
+export function PlanSheetHero({ jobNo, title, customer, badge, theme, chain, progress, className }: PlanSheetHeroProps) {
   return (
     <div
       className={[classes.hero, className].filter(Boolean).join(' ')}
@@ -134,7 +136,10 @@ export function PlanSheetHero({ jobNo, title, customer, theme, chain, progress, 
       data-progress={progress ? 'true' : undefined}
     >
       <div className={classes.heroId}>
-        <div className={classes.heroJobno}>{jobNo || ''}</div>
+        <div className={classes.heroJobno}>
+          {jobNo || ''}
+          {badge}
+        </div>
         <div className={classes.heroTitle} title={title || ''}>
           {title || ''}
         </div>
