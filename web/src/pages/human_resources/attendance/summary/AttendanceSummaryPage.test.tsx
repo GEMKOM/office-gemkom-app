@@ -94,3 +94,18 @@ it('sends the URL filters and the typed name', async () => {
   await waitFor(() => expect(summaryCalls().at(-1)!.searchParams.get('name')).toBe('Ali'));
   expect(summaryCalls().at(-1)!.searchParams.get('group_id')).toBe('7');
 });
+
+it('absent=1 (the HR hub check) keeps only people with an absent day, and is not sent', async () => {
+  fetchMock.mockImplementation(() =>
+    json([...ROWS, { user_id: 6, user_display: 'Ayşe Kara', days_absent: 2 }]),
+  );
+  renderPage(
+    '/human_resources/attendance/summary/?date_from=2026-10-20&date_to=2026-11-02&absent=1',
+  );
+  expect(await screen.findByText('Ayşe Kara')).toBeInTheDocument();
+  expect(screen.queryByText('Ali Yılmaz')).toBeNull();
+  expect(Object.fromEntries(summaryCalls()[0]!.searchParams)).toEqual({
+    date_from: '2026-10-20',
+    date_to: '2026-11-02',
+  });
+});

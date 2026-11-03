@@ -81,12 +81,15 @@ export function updateUserPayload(values: Values): Record<string, unknown> {
 
 const FORM_ID = 'hr-user-edit-form';
 
-type TabKey = 'info' | 'wages' | 'leave' | 'attendance' | 'permissions';
+export type UserEditTab = 'info' | 'wages' | 'leave' | 'attendance' | 'permissions';
+type TabKey = UserEditTab;
 
 export interface UserEditModalProps {
   user: HrUser;
   positions: OrgPosition[];
   onClose: () => void;
+  /** The tab it opens on, e.g. Maaşlar for a missing wage. */
+  initialTab?: UserEditTab;
 }
 
 /**
@@ -95,10 +98,15 @@ export interface UserEditModalProps {
  * first time it is opened; the footer Kaydet saves the Bilgiler form and is
  * hidden on İzinler, which saves itself.
  */
-export function UserEditModal({ user, positions, onClose }: UserEditModalProps) {
+export function UserEditModal({
+  user,
+  positions,
+  onClose,
+  initialTab = 'info',
+}: UserEditModalProps) {
   const queryClient = useQueryClient();
-  const [tab, setTab] = useState<TabKey>('info');
-  const [visited, setVisited] = useState<Set<TabKey>>(() => new Set(['info']));
+  const [tab, setTab] = useState<TabKey>(initialTab);
+  const [visited, setVisited] = useState<Set<TabKey>>(() => new Set(['info', initialTab]));
   const [submitting, setSubmitting] = useState(false);
   const shiftRules = useQuery(activeShiftRulesQueryOptions());
   const form = useForm<Values>({

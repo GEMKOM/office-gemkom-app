@@ -6,6 +6,8 @@ export interface PanelProps {
   title?: ReactNode;
   /** Font Awesome classes, shown in red before the title. */
   icon?: string;
+  /** A red count badge beside the title (e.g. what waits on the user). */
+  badge?: ReactNode;
   /** Small buttons on the right of the header. */
   actions?: ReactNode;
   /** Replaces the title on the header's left (e.g. an inline FilterBar). */
@@ -19,18 +21,27 @@ export interface PanelProps {
 }
 
 /** The white card that holds a block of a page, with an optional header bar. */
-export function Panel({ title, icon, actions, headerLeft, footer, padded = true, children, className }: PanelProps) {
+export function Panel({ title, icon, badge, actions, headerLeft, footer, padded = true, children, className }: PanelProps) {
   const hasHead = Boolean(title || headerLeft || actions);
+  const heading = (
+    <h2 className={classes.panelTitle}>
+      {icon ? <FaIcon icon={icon} /> : null}
+      {title}
+    </h2>
+  );
   return (
     <section className={className ? `${classes.panel} ${className}` : classes.panel}>
       {hasHead ? (
         <div className={classes.panelHead}>
-          {headerLeft ?? (
-            <h2 className={classes.panelTitle}>
-              {icon ? <FaIcon icon={icon} /> : null}
-              {title}
-            </h2>
-          )}
+          {headerLeft ??
+            (badge ? (
+              <div className={classes.panelTitleGroup}>
+                {heading}
+                {badge}
+              </div>
+            ) : (
+              heading
+            ))}
           {actions ? <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{actions}</div> : null}
         </div>
       ) : null}

@@ -193,6 +193,7 @@
 
 /* The bell and the user rows stay lit while their popover is open. */
 .railRow:hover,
+.railBell .railRow[aria-expanded='true'],
 .railEnd .railRow[aria-expanded='true'] {
   background: rgba(255, 255, 255, 0.08);
 }
@@ -240,6 +241,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: left;
+}
+
+/* The bell, between Neo and the sections. */
+.railBell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+  width: 48px;
+  padding-bottom: 6px;
+}
+
+.rail[data-expanded] .railBell {
+  width: 100%;
+  align-items: stretch;
 }
 
 .railEnd {

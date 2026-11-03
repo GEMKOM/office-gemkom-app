@@ -1,4 +1,4 @@
-import { authedFetch, impersonateUser, isSuperuser } from '@legacy/authService.js';
+import { authedFetch, hasPerm, impersonateUser, isSuperuser } from '@legacy/authService.js';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
@@ -9,9 +9,11 @@ import { UsersPage } from './UsersPage';
 vi.mock('@legacy/authService.js', () => ({
   authedFetch: vi.fn(),
   isSuperuser: vi.fn(() => false),
+  hasPerm: vi.fn(() => true),
   impersonateUser: vi.fn(() => Promise.resolve()),
 }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@legacy/apis/accessControl.js', () => ({ hasRouteAccess: () => true }));
 
 const fetchMock = vi.mocked(authedFetch);
 
@@ -95,6 +97,7 @@ beforeEach(() => {
     return json({});
   });
   vi.mocked(isSuperuser).mockReturnValue(false);
+  vi.mocked(hasPerm).mockReturnValue(true);
   vi.spyOn(notify, 'success');
   vi.spyOn(notify, 'error');
   vi.spyOn(notify, 'warning');
@@ -390,5 +393,74 @@ it('Yetkiler & Gruplar copes with an empty answer and toggles portal access', as
     codename: 'office_access',
     granted: true,
     reason: '',
+  });
+});
+
+describe('data checks from the HR hub (?issue=)', () => {
+  // Ali's wage is in force; Ayşe has none.
+  const WAGES = [
+    { id: 7, has_wage: true, current_wage: { id: 1, effective_from: '2026-07-01' } },
+    { id: 8, has_wage: false, current_wage: null },
+  ];
+
+  beforeEach(() => {
+    const base = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation((url, init) => {
+      const { pathname } = new URL(String(url));
+      if ((init?.method ?? 'GET') === 'GET' && pathname === '/users/wages/')
+        return json({ count: 2, next: null, previous: null, results: WAGES });
+      if (pathname === '/users/8/wages/') return json([]);
+      return base(url, init);
+    });
+  });
+
+  it('lists the employees without a wage and opens one on Maaşlar', async () => {
+    renderPage('/human_resources/users/?issue=missing_wage');
+
+    const banner = await screen.findByTestId('user-issue');
+    expect(banner).toHaveTextContent('Veri kontrolü: Ücreti girilmemiş');
+    expect(await screen.findByText('aysekara')).toBeInTheDocument();
+    expect(screen.queryByText('aliveli')).toBeNull();
+    expect(
+      within(document.getElementById('total-users-count')!).getByText('1'),
+    ).toBeInTheDocument();
+
+    // Every active employee in one page, and the wage overview; no server page.
+    expect(listCalls().map((c) => Object.fromEntries(c.url.searchParams))).toEqual([
+      { is_active: 'true', page_size: '1000' },
+    ]);
+    expect(Object.fromEntries(callTo('GET', '/users/wages/')!.url.searchParams)).toEqual({
+      active: 'true',
+      page_size: '1000',
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Çalışan Düzenle' });
+    expect(within(dialog).getByRole('tab', { name: 'Maaşlar' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+    await waitFor(() => expect(callTo('GET', '/users/8/wages/')).toBeDefined());
+  });
+
+  it('Tüm Çalışanlar drops the check and goes back to the server list', async () => {
+    renderPage('/human_resources/users/?issue=no_hire_date');
+    await screen.findByTestId('user-issue');
+    fireEvent.click(screen.getByRole('button', { name: 'Tüm Çalışanlar' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^$/));
+    expect(screen.queryByTestId('user-issue')).toBeNull();
+    await waitFor(() =>
+      expect(listCalls().some((c) => c.url.searchParams.get('page_size') === '20')).toBe(true),
+    );
+  });
+
+  it('wage checks need manage_hr: without it the page is the plain list', async () => {
+    vi.mocked(hasPerm).mockReturnValue(false);
+    renderPage('/human_resources/users/?issue=missing_wage');
+
+    expect(await screen.findByText('aliveli')).toBeInTheDocument();
+    expect(screen.queryByTestId('user-issue')).toBeNull();
+    expect(callTo('GET', '/users/wages/')).toBeUndefined();
   });
 });

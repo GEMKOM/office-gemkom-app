@@ -1,0 +1,242 @@
+/* İmalat section hub: one full-width lane per area (pages | figures | records). */
+.lanes {
+  display: grid;
+  gap: 12px;
+}
+
+.lane {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
+  background: var(--gk-surface);
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-lg);
+  box-shadow: var(--gk-shadow-card);
+}
+
+.lane > div {
+  min-width: 0;
+  padding: 14px 18px;
+}
+
+.lane > div + div {
+  border-left: 1px solid var(--gk-line);
+}
+
+@media (max-width: 64em) {
+  .lane {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .lane > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--gk-line);
+  }
+}
+
+/* ---- pages ---- */
+.title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--gk-ink);
+}
+
+.title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.title a:hover {
+  text-decoration: underline;
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  border-radius: 9px;
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+}
+
+.links {
+  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.links a {
+  color: var(--gk-red-700);
+  text-decoration: none;
+}
+
+.links a:hover {
+  text-decoration: underline;
+}
+
+/* ---- figures ---- */
+.figures {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  align-content: center;
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--gk-radius-sm);
+}
+
+.figure[data-link]:hover .figureLabel {
+  color: var(--gk-ink);
+  text-decoration: underline;
+}
+
+.figure[data-link]:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.figureValue {
+  font-size: 22px;
+  line-height: 1.15;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--gk-ink);
+}
+
+.figureValue[data-alert] {
+  color: var(--gk-danger);
+}
+
+.figureLabel {
+  margin-top: 2px;
+  font-size: 12.5px;
+  color: var(--gk-muted);
+}
+
+.figureHint {
+  font-size: 12px;
+  color: var(--gk-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- records ---- */
+.listHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+}
+
+.more {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--gk-red-700);
+  text-decoration: none;
+}
+
+.more:hover {
+  text-decoration: underline;
+}
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rows li + li {
+  border-top: 1px solid var(--gk-line);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: inherit;
+  text-decoration: none;
+}
+
+a.row:hover .rowTitle {
+  text-decoration: underline;
+}
+
+.rowLead {
+  flex: none;
+  font-family: var(--gk-font-mono);
+  font-size: 12px;
+  color: var(--gk-ink-2);
+}
+
+.rowMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rowTitle,
+.rowSub {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.rowTitle {
+  color: var(--gk-ink);
+}
+
+.rowSub {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.rowEnd {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--gk-ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.footnote {
+  padding: 6px 0 0;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.note {
+  margin: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--gk-muted);
+}

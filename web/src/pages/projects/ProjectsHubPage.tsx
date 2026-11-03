@@ -23,6 +23,7 @@ const STAGES = [
   { key: 'draft', label: 'Taslak', color: 'grey' },
   { key: 'active', label: 'Aktif', color: 'blue' },
   { key: 'on_hold', label: 'Beklemede', color: 'orange' },
+  { key: 'completed', label: 'Tamamlandı', color: 'green' },
 ] as const;
 // Late = still open (active or on hold) with the target date behind us.
 const OPEN = 'active,on_hold';

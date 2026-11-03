@@ -15,7 +15,7 @@ export function RequestStatusBadge({ status, label }: { status: string; label?: 
   return <StatusBadge color={STATUS_COLOR[status] ?? 'grey'}>{label || status}</StatusBadge>;
 }
 
-const PRIORITY: Record<string, { label: string; color: StatusFamily }> = {
+export const PRIORITY: Record<string, { label: string; color: StatusFamily }> = {
   normal: { label: 'Normal', color: 'grey' },
   urgent: { label: 'Acil', color: 'yellow' },
   critical: { label: 'Kritik', color: 'red' },

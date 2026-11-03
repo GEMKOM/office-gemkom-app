@@ -1,15 +1,17 @@
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { AttentionPanel, HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';
+import { allNavPages } from '@/shell/pageVisits';
 import { useUnreadCount } from '@/shell/notifications';
 import { formatDate, formatNumber } from '@/lib/format';
-import { MenuCards, PageHeader, Panel, PendingValue, type PageFigure } from '@/ui';
-import { useApprovals } from './approvals';
+import { PageHeader, Panel, PendingValue, type PageFigure } from '@/ui';
+import { useApprovals, userDepartment } from './approvals';
 import { greeting } from './homeFormat';
-import { NotificationsPanel, ShortcutsPanel, TodayPanel } from './HomePanels';
+import { NotificationsPanel, ShortcutsBar, TodayPanel } from './HomePanels';
+import { usePinnedPages } from './pinnedPages';
 import { DEPARTMENT_LABELS, shortcuts } from './shortcuts';
 import { TASK_PAGES, useMyIsg, useMyRequests, useMyTasks } from './work';
-import { WORK_AREAS } from './workAreas';
 import css from './HomePage.module.css';
 
 const figure = (value: number | undefined, failed = false) =>
@@ -21,15 +23,13 @@ const sum = (...values: (number | undefined)[]) =>
 /**
  * The landing page at /: what needs the signed-in user right now. Approvals
  * waiting on them, their tasks and İSG actions, their own requests, today's
- * PDKS, notifications and shortcuts; the work areas come last. Every request
+ * PDKS and notifications, with the shortcuts right under the band. What waits
+ * on them wears a red badge, which goes when it is cleared. Every request
  * starts at once, and nothing is asked for a list the user cannot open.
  */
 export function HomePage() {
   const { user } = useAuth();
-  const departmentCode =
-    (typeof user.position?.department_code === 'string' && user.position.department_code) ||
-    user.department_code ||
-    null;
+  const departmentCode = userDepartment(user);
   const positionTitle = typeof user.position_title === 'string' ? user.position_title : null;
 
   const approvals = useApprovals({ departmentCode });
@@ -37,6 +37,8 @@ export function HomePage() {
   const isg = useMyIsg();
   const requests = useMyRequests(user.id);
   const unread = useUnreadCount();
+  const { pinned, toggle } = usePinnedPages(user.id);
+  const menuPages = useMemo(() => allNavPages().filter((page) => page.path !== '/' && hasRouteAccess(page.path)), []);
 
   // Tasks are any department's; the panel shows for task departments and for
   // anyone who has some.
@@ -95,6 +97,7 @@ export function HomePage() {
         title="Onayınızı Bekleyenler"
         icon="fas fa-stamp"
         query={approvals.records}
+        badge={approvals.total}
         noun="Onay bekleyen kayıtlar"
         empty="Şu an onayınızı bekleyen bir şey yok. Yeni bir talep geldiğinde burada görünür."
       />
@@ -141,6 +144,7 @@ export function HomePage() {
         stats={stats}
         figureStyle="tiles"
       />
+      <ShortcutsBar pages={shortcuts(user.id, departmentCode, pinned)} addable={menuPages} onToggle={toggle} />
       <HubPanels>
         <div key="main" className={css.column}>
           {left.length > 0 ? (
@@ -148,26 +152,19 @@ export function HomePage() {
           ) : (
             <Panel title="Sizi Bekleyenler" icon="fas fa-mug-hot">
               <p className={css.calm}>
-                Üzerinizde bekleyen bir onay, görev ya da talep yok. Aşağıdaki çalışma alanlarından devam edebilirsiniz.
+                Üzerinizde bekleyen bir onay, görev ya da talep yok. Soldaki menüden ya da kısayollardan devam edebilirsiniz.
               </p>
             </Panel>
           )}
         </div>
         <div key="side" className={css.column}>
           {!approvals.none ? (
-            <AttentionPanel title="Onay Kuyruklarım" icon="fas fa-inbox" items={approvals.items} />
+            <AttentionPanel title="Onay Kuyruklarım" icon="fas fa-inbox" items={approvals.items} badges />
           ) : null}
           <TodayPanel />
-          <NotificationsPanel />
-          <ShortcutsPanel pages={shortcuts(user.id, departmentCode)} />
+          <NotificationsPanel unread={unread.data} />
         </div>
       </HubPanels>
-      <section className={css.areas} aria-labelledby="home-areas">
-        <h2 id="home-areas" className={css.areasTitle}>
-          Çalışma Alanları
-        </h2>
-        <MenuCards cards={WORK_AREAS} />
-      </section>
     </>
   );
 }

@@ -5,6 +5,7 @@ import { qcPendingJobOrdersQueryOptions } from '@/api/quality-control/costLines'
 import { qualityDocumentExpiryCountQueryOptions } from '@/api/quality-control/documents';
 import type { QCReview } from '@/api/quality-control/qcReviews';
 import {
+  AWAITING_CLOSE_NCR_STATUS,
   ncrCountQueryOptions,
   OPEN_NCR_STATUSES,
   qcReviewCountQueryOptions,
@@ -15,6 +16,7 @@ import {
   AttentionPanel,
   BreakdownPanel,
   HubPanels,
+  PanelTotal,
   RecordsPanel,
   type AttentionItem,
   type HubRecord,
@@ -26,13 +28,14 @@ const NCRS = '/quality-control/ncrs';
 const COST_LINES = '/quality-control/cost-lines';
 const DOCUMENTS = '/quality-control/documents';
 
-// Open NCRs by stage. The list narrows to the user's own teams by default;
+// NCRs by stage: the three open ones, then the approved ones that are not
+// closed yet, which the open count leaves out. The list narrows to the user's own teams by default;
 // `assigned_team__in=all` shows every team, as the counts do.
 const NCR_STAGES = [
   { key: 'draft', label: 'Aksiyon Bekliyor', color: 'orange' },
   { key: 'submitted', label: 'Onay Bekliyor', color: 'yellow' },
   { key: 'rejected', label: 'Reddedildi', color: 'red' },
-  { key: 'approved', label: 'Onaylandı, Kapanmadı', color: 'blue' },
+  { key: AWAITING_CLOSE_NCR_STATUS, label: 'Onaylandı, Kapanmadı (açık sayılmaz)', color: 'blue' },
 ] as const;
 const ncrLink = (params: string) => `${NCRS}?${params}&assigned_team__in=all`;
 
@@ -245,6 +248,9 @@ export function QualityControlHubPage() {
                 title="Açık Uygunsuzluklar"
                 icon="fas fa-filter"
                 failed={ncrStages.some((q) => q.isError)}
+                footer={
+                  <PanelTotal label="Açık rapor (onaylananlar hariç)" value={openNcrs.data} />
+                }
                 rows={NCR_STAGES.map((stage, i) => ({
                   key: stage.key,
                   label: stage.label,
