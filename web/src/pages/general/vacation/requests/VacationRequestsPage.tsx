@@ -2,6 +2,7 @@ import { Button, Loader, Modal, Table, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  leaveDurationLabel,
   leaveTypeLabel,
   myVacationSummaryQueryOptions,
   upcomingLeavesQueryOptions,
@@ -55,8 +56,8 @@ function dateCell(row: VacationRequest): string {
 
 function durationCell(row: VacationRequest): string {
   if (isCompensatoryLeave(row.leave_type))
-    return `${formatClock(row.start_time)} - ${formatClock(row.end_time)}`;
-  return `${row.duration_days || 0} gün`;
+    return `${leaveDurationLabel(row)} (${formatClock(row.start_time)} - ${formatClock(row.end_time)})`;
+  return leaveDurationLabel(row);
 }
 
 // Sorting sorts the loaded page, as the legacy table did.

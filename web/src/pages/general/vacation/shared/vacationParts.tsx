@@ -2,6 +2,7 @@ import { Box, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import {
+  leaveDurationLabel,
   leaveTypeLabel,
   vacationRequestQueryOptions,
   type VacationRequest,
@@ -171,7 +172,7 @@ export function VacationRequestDetailModal({
     { label: 'Durum', value: statusText(request), span: 4 },
     { label: 'Başlangıç', value: formatDate(request.start_date), span: 4 },
     { label: 'Bitiş', value: formatDate(request.end_date), span: 4 },
-    { label: 'Süre', value: `${request.duration_days || '0'} gün`, span: 4 },
+    { label: 'Süre', value: leaveDurationLabel(request), span: 4 },
     {
       label: 'Saat Aralığı',
       value:
@@ -179,7 +180,7 @@ export function VacationRequestDetailModal({
           ? `${formatClock(request.start_time)} - ${formatClock(request.end_time)}`
           : '-',
       span: 4,
-      hidden: variant !== 'mine',
+      hidden: !(request.start_time && request.end_time),
     },
     { label: 'Gerekçe', value: request.reason || '-', span: 12 },
   ];
