@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import dayjs from 'dayjs';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { MachiningUserReportPage } from './MachiningUserReportPage';
+import { UserReport } from './UserReport';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
@@ -62,10 +62,10 @@ function json(body: unknown, status = 200) {
 const calls = () => fetchMock.mock.calls.map(([url]) => new URL(String(url)));
 const reportCalls = () => calls().filter((u) => u.pathname === '/machining/reports/user-report/');
 
-function renderPage(route = '/manufacturing/machining/reports/user-report/') {
+function renderPage(route = '/manufacturing/reports/user-report/') {
   return renderWithProviders(
     <ModalsProvider>
-      <MachiningUserReportPage />
+      <UserReport module="machining" />
     </ModalsProvider>,
     { route },
   );
@@ -115,7 +115,7 @@ it('asks for today by default and shows users, figures, warnings and the summary
 
 it('a picked range in the URL reaches the request', async () => {
   renderPage(
-    '/manufacturing/machining/reports/user-report/?date_start=2026-10-01&date_end=2026-10-15',
+    '/manufacturing/reports/user-report/?date_start=2026-10-01&date_end=2026-10-15',
   );
   await screen.findByText('Ali Kaya');
   expect(Object.fromEntries(reportCalls()[0]!.searchParams)).toEqual({
@@ -126,7 +126,7 @@ it('a picked range in the URL reaches the request', async () => {
 
 it('Detaylar loads the task detail for the range and fills the tables', async () => {
   renderPage(
-    '/manufacturing/machining/reports/user-report/?date_start=2026-10-29&date_end=2026-10-30',
+    '/manufacturing/reports/user-report/?date_start=2026-10-29&date_end=2026-10-30',
   );
   await screen.findByText('Ali Kaya');
   fireEvent.click(screen.getAllByRole('button', { name: 'Detaylar' })[0]!);
@@ -144,7 +144,7 @@ it('Detaylar loads the task detail for the range and fills the tables', async ()
   expect(await within(dialog).findByText('Flanş')).toBeInTheDocument();
   expect(within(dialog).getByRole('link', { name: '#301' })).toHaveAttribute(
     'href',
-    '/manufacturing/machining/reports/finished-timers/?edit=301',
+    '/manufacturing/reports/finished-timers/?module=machining&edit=301',
   );
   // Two days: a Tarih column; totals filled from task_totals.
   expect(within(dialog).getByRole('columnheader', { name: 'Tarih' })).toBeInTheDocument();

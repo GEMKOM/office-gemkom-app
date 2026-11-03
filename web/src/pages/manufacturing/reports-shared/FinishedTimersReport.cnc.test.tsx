@@ -4,7 +4,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { CncFinishedTimersPage } from './CncFinishedTimersPage';
+import { FinishedTimersReport } from './FinishedTimersReport';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
@@ -49,10 +49,10 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
 }
 
-function renderPage(route = '/manufacturing/cnc-cutting/reports/finished-timers/') {
+function renderPage(route = '/manufacturing/reports/finished-timers/') {
   return renderWithProviders(
     <ModalsProvider>
-      <CncFinishedTimersPage />
+      <FinishedTimersReport module="cnc_cutting" />
       <LocationProbe />
     </ModalsProvider>,
     { route },
@@ -103,7 +103,7 @@ it('links the nesting to its cut and filters by Nesting ID', async () => {
 });
 
 it('Temizle empties every filter, the default dates included', async () => {
-  renderPage('/manufacturing/cnc-cutting/reports/finished-timers/?nesting_id=E90');
+  renderPage('/manufacturing/reports/finished-timers/?nesting_id=E90');
   await screen.findByText('Plazma 1');
   fireEvent.click(screen.getByRole('button', { name: 'Temizle' }));
   await waitFor(() => expect(listCalls().length).toBeGreaterThan(1));

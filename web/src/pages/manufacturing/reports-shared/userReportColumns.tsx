@@ -293,7 +293,7 @@ const timerCol: Col = {
   render: (row) =>
     row.timer_id
       ? badgeLink(
-          `/manufacturing/machining/reports/finished-timers/?edit=${row.timer_id}`,
+          `/manufacturing/reports/finished-timers/?module=machining&edit=${row.timer_id}`,
           `#${row.timer_id}`,
         )
       : '-',

@@ -116,7 +116,7 @@ it('renders a hub without figures from its path', () => {
   expect(cardTitles()).toEqual(['Çalışan Çalışma Saatleri Raporu', 'Maliyet Analizi Raporu']);
   expect(screen.getByRole('link', { name: 'Maliyet Analizi Raporu' })).toHaveAttribute(
     'href',
-    '/manufacturing/welding/reports/cost-analysis',
+    '/manufacturing/reports/job-costs?breakdown=welding',
   );
   expect(fetchMock).not.toHaveBeenCalled();
 });
@@ -159,9 +159,10 @@ it('renders the two report hubs that were inline MenuComponents', () => {
 
   renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/reports' });
   expect(screen.getByRole('heading', { name: 'Raporlar' })).toBeInTheDocument();
+  expect(cardTitles()).toEqual(['İş Maliyeti', 'Biten Zamanlayıcılar', 'Kullanıcı Raporu']);
   expect(screen.getByRole('link', { name: 'İş Maliyeti' })).toHaveAttribute(
     'href',
-    '/manufacturing/reports/combined-job-costs',
+    '/manufacturing/reports/job-costs',
   );
   expect(fetchMock).not.toHaveBeenCalled();
 });

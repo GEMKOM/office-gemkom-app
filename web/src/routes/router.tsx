@@ -1,7 +1,8 @@
-import { createBrowserRouter, type RouteObject } from 'react-router';
+import { createBrowserRouter, redirect, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
 import { RootLayout } from '@/shell/RootLayout';
+import { MERGED_REPORT_ROUTES } from './mergedReports';
 
 const hub: RouteAccessHandle = { access: 'hub' };
 
@@ -9,6 +10,22 @@ const hub: RouteAccessHandle = { access: 'hub' };
 const manufacturingHub = async () => ({
   Component: (await import('@/pages/manufacturing/ManufacturingHubPage')).ManufacturingHubPage,
 });
+
+/**
+ * The old URL of a report that was merged into another: forwards there with
+ * the view preset, keeping the rest of the query (deep links such as ?edit=).
+ * It stays in migrated-routes.json so bookmarks keep loading the SPA.
+ */
+function mergedInto(path: string, target: string, preset: Record<string, string>): RouteObject {
+  return {
+    path,
+    loader: ({ request }) => {
+      const params = new URL(request.url).searchParams;
+      for (const [key, value] of Object.entries(preset)) params.set(key, value);
+      return redirect(`${target}/?${params.toString()}`);
+    },
+  };
+}
 
 // Each migrated page is a lazy route so it ships as its own chunk. A route added
 // here must also be listed in migrated-routes.json (router.test.ts checks this).
@@ -572,38 +589,6 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/cnc-cutting/reports/finished-timers',
-    lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/cnc-cutting/reports/finished-timers/CncFinishedTimersPage')
-      ).CncFinishedTimersPage,
-    }),
-  },
-  {
-    path: '/manufacturing/cnc-cutting/reports/user-report',
-    lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/cnc-cutting/reports/user-report/CncUserReportPage')
-      ).CncUserReportPage,
-    }),
-  },
-  {
-    path: '/manufacturing/machining/reports/finished-timers',
-    lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/machining/reports/finished-timers/MachiningFinishedTimersPage')
-      ).MachiningFinishedTimersPage,
-    }),
-  },
-  {
-    path: '/manufacturing/machining/reports/user-report',
-    lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/machining/reports/user-report/MachiningUserReportPage')
-      ).MachiningUserReportPage,
-    }),
-  },
-  {
     path: '/manufacturing/cnc-cutting/cuts',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/cuts/CncCutsPage')).CncCutsPage,
@@ -624,14 +609,30 @@ export const appRoutes: RouteObject[] = [
       ).PartsSearchPage,
     }),
   },
+  // Reports merged from one page per department (old URLs forward below).
   {
-    path: '/manufacturing/machining/reports/cost-analysis',
+    path: '/manufacturing/reports/finished-timers',
     lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/machining/reports/cost-analysis/CostAnalysisPage')
-      ).CostAnalysisPage,
+      Component: (await import('@/pages/manufacturing/reports/finished-timers/FinishedTimersPage'))
+        .FinishedTimersPage,
     }),
   },
+  {
+    path: '/manufacturing/reports/user-report',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/reports/user-report/UserReportPage'))
+        .UserReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/reports/job-costs',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/reports/job-costs/JobCostsPage')).JobCostsPage,
+    }),
+  },
+  ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
+    mergedInto(path, to, preset),
+  ),
   // Manufacturing shop-floor lists and reports (Phase 3b).
   {
     path: '/manufacturing/subcontracting/adjustments',
@@ -649,14 +650,6 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/welding/reports/cost-analysis',
-    lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/welding/reports/cost-analysis/CostAnalysisPage')
-      ).CostAnalysisPage,
-    }),
-  },
-  {
     path: '/manufacturing/welding/reports/user-work-hours',
     lazy: async () => ({
       Component: (
@@ -669,14 +662,6 @@ export const appRoutes: RouteObject[] = [
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/welding/teams/WeldingTeamsPage'))
         .WeldingTeamsPage,
-    }),
-  },
-  {
-    path: '/manufacturing/reports/combined-job-costs',
-    lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/reports/combined-job-costs/CombinedJobCostsPage')
-      ).CombinedJobCostsPage,
     }),
   },
   {

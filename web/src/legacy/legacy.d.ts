@@ -81,6 +81,7 @@ declare module '@legacy/apis/accessControl.js' {
   export function hasRouteAccess(route: string): boolean;
   export function hasSectionAccess(section: string): boolean;
   export function filterNavigationByAccess(tree: NavTree): NavTree;
+  export function inheritedAccessRoutes(): string[];
 }
 
 declare module '@legacy/navigationStructure.js' {

@@ -3,7 +3,7 @@ import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { CncUserReportPage } from './CncUserReportPage';
+import { UserReport } from './UserReport';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
@@ -39,10 +39,10 @@ function json(body: unknown, status = 200) {
 
 const calls = () => fetchMock.mock.calls.map(([url]) => new URL(String(url)));
 
-function renderPage(route = '/manufacturing/cnc-cutting/reports/user-report/') {
+function renderPage(route = '/manufacturing/reports/user-report/') {
   return renderWithProviders(
     <ModalsProvider>
-      <CncUserReportPage />
+      <UserReport module="cnc_cutting" />
     </ModalsProvider>,
     { route },
   );
