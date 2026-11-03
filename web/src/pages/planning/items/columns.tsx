@@ -75,17 +75,19 @@ export const TOTAL_COLUMN_KEY = '__total_price_eur';
 // Module scope so DataTable rows stay memoized. Sortable set = legacy onSort's
 // orderable fields (id, item_code, item_name, job_no).
 export const planningItemColumns: DataTableColumn<PlanningItem>[] = [
-  { key: 'id', header: 'ID', sortable: true, render: (row) => raw(row.id) },
+  { key: 'id', header: 'ID', sortable: true, hideBelow: 1600, render: (row) => raw(row.id) },
   {
     key: 'item_code',
     header: 'Ürün Kodu',
     sortable: true,
+    maxWidth: 'clamp(90px, 8vw, 170px)',
     render: (row) => textOrDash(row.item_code),
   },
   {
     key: 'item_name',
     header: 'Ürün Adı',
     sortable: true,
+    maxWidth: 'clamp(150px, 15vw, 360px)',
     render: (row) => textOrDash(row.item_name),
   },
   {
@@ -99,21 +101,30 @@ export const planningItemColumns: DataTableColumn<PlanningItem>[] = [
     sortable: true,
     render: (row) => <ValueBadge value={row.job_no} color="grey" />,
   },
-  { key: 'quantity', header: 'Miktar', render: (row) => raw(row.quantity) },
+  { key: 'quantity', header: 'Miktar', align: 'right', render: (row) => raw(row.quantity) },
   {
     key: 'quantity_from_inventory',
     header: 'Stoktan',
+    align: 'right',
+    hideBelow: 1600,
     render: (row) => raw(row.quantity_from_inventory),
   },
   {
     key: 'quantity_to_purchase',
     header: 'Satın Alınacak',
+    align: 'right',
     render: (row) => raw(row.quantity_to_purchase),
   },
-  { key: 'item_unit', header: 'Birim', render: (row) => textOrDash(row.item_unit) },
+  {
+    key: 'item_unit',
+    header: 'Birim',
+    maxWidth: 80,
+    render: (row) => textOrDash(row.item_unit),
+  },
   {
     key: 'latest_unit_price_eur',
     header: 'Son Birim Fiyat (€)',
+    align: 'right',
     render: (row) => formatEuro(row.latest_unit_price_eur),
     exportValue: (row) => toNumber(row.latest_unit_price_eur),
     exportFormat: '#,##0.00 "€"',
@@ -121,6 +132,7 @@ export const planningItemColumns: DataTableColumn<PlanningItem>[] = [
   {
     key: TOTAL_COLUMN_KEY,
     header: 'Toplam (€)',
+    align: 'right',
     render: (row) => formatEuro(rowTotalEur(row)),
     exportValue: rowTotalEur,
     exportFormat: '#,##0.00 "€"',
@@ -128,6 +140,7 @@ export const planningItemColumns: DataTableColumn<PlanningItem>[] = [
   {
     key: 'latest_unit_price_source',
     header: 'Fiyat Kaynağı',
+    hideBelow: 1500,
     render: (row) => <PriceSource value={row.latest_unit_price_source} />,
     exportValue: (row) => priceSourceLabel(row.latest_unit_price_source),
   },
@@ -146,6 +159,7 @@ export const planningItemColumns: DataTableColumn<PlanningItem>[] = [
   {
     key: 'cnc_cuts_count',
     header: 'CNC Kesim',
+    hideBelow: 1600,
     render: (row) => (row.cnc_cuts_count ? `${row.cnc_cuts_count}` : '-'),
   },
   {

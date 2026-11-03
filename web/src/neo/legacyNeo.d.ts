@@ -25,4 +25,9 @@ declare module '@legacy/components/daily-summary/render.js' {
   export function formatWindowLabel(summary: unknown): string;
   export function seenValue(summary: unknown): string;
   export function setSeen(uid: number | string, value: string): void;
+  export function getSeen(uid: number | string): string;
+  /** Istanbul calendar date as YYYY-MM-DD. */
+  export function istanbulDate(date?: Date): string;
+  /** Whole days between an Istanbul date string and today (positive = past). */
+  export function daysSince(dateStr: string | null | undefined, now?: Date): number;
 }
