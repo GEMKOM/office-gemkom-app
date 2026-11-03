@@ -1,0 +1,649 @@
+/* Ağırlık ve Fiyat Kademeleri: port of the .tp-modal / .wp-modal rules of
+   projects/project-tracking/plannerModal.css. Job tree on the left, the
+   focused job order (or the template manager) on the right. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  font-size: 14px;
+}
+
+.titleNo {
+  font-weight: 600;
+}
+
+.layout {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/* ---- Left: job order tree ---- */
+
+.jobs {
+  display: flex;
+  flex: 0 0 580px;
+  flex-direction: column;
+  width: 580px;
+  min-height: 0;
+  border-right: 1px solid var(--gk-line);
+  background: var(--gk-surface-subtle);
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.search {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.filter {
+  flex: 0 0 168px;
+}
+
+.bulkbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--gk-line);
+  background: var(--gk-surface);
+}
+
+.bulkRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bulkRow > select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.selCount {
+  margin-right: auto;
+  font-size: 13px;
+  color: var(--gk-ink-2);
+}
+
+.inlineConfirm {
+  padding: 8px 10px;
+  border: 1px solid #f97316;
+  border-radius: var(--gk-radius-sm);
+  background: #fff7ed;
+  font-size: 13px;
+  color: #7c2d12;
+}
+
+.inlineConfirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.listHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--gk-line);
+  background: #f1f3f5;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+}
+
+.colWeight {
+  width: 110px;
+  margin-left: auto;
+  text-align: right;
+}
+
+.colTiers {
+  width: 64px;
+  text-align: right;
+}
+
+.jobList {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.jobRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px 7px calc(12px + var(--tp-depth, 0) * 16px);
+  border-bottom: 1px solid #edf0f2;
+  border-left: 3px solid transparent;
+  background: var(--gk-surface);
+  cursor: pointer;
+}
+
+.jobRow:hover {
+  background: #f1f6ff;
+}
+
+.jobRow[data-active] {
+  border-left-color: #3b82f6;
+  background: #e7f0ff;
+}
+
+.jobRow[data-disabled] .jobMain {
+  opacity: 0.55;
+}
+
+.jobRow[data-error] {
+  border-left-color: #ef4444;
+  background: #fef2f2;
+}
+
+.check {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--gk-red-700);
+  cursor: pointer;
+}
+
+.check:disabled {
+  cursor: default;
+}
+
+.jobMain {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jobNo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.jobTitle {
+  overflow: hidden;
+  font-size: 12.5px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--gk-muted);
+}
+
+.tierBadges {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: 4px;
+  width: 64px;
+}
+
+/* StatusBadge is sized for table cells; these sit inline. */
+.badge > span[data-family] {
+  min-width: 0;
+  padding: 1px 6px;
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.tierBadges .badge > span[data-family],
+.badgeEmpty {
+  min-width: 30px;
+  text-align: center;
+}
+
+.badgeEmpty {
+  display: inline-block;
+  font-size: 12px;
+  color: #adb5bd;
+}
+
+.listHint {
+  padding: 7px 12px;
+  border-top: 1px solid var(--gk-line);
+  background: var(--gk-surface);
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+/* ---- Inputs (dense rows, so plain elements rather than Mantine fields) ---- */
+
+.input,
+.select {
+  width: 100%;
+  height: 30px;
+  padding: 3px 8px;
+  border: 1px solid #ced4da;
+  border-radius: var(--gk-radius-sm);
+  background: var(--gk-surface);
+  font: inherit;
+  font-size: 13px;
+  color: var(--gk-ink);
+}
+
+.select {
+  padding-right: 4px;
+}
+
+.input:focus,
+.select:focus {
+  border-color: var(--gk-red-700);
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.input:disabled,
+.select:disabled {
+  background: #f1f3f5;
+  color: var(--gk-muted);
+  cursor: not-allowed;
+}
+
+.number {
+  text-align: right;
+}
+
+.weight {
+  flex: 0 0 110px;
+  width: 110px;
+  text-align: right;
+}
+
+.input[data-changed]:not([data-invalid]),
+.select[data-changed]:not([data-invalid]) {
+  border-color: #3b82f6;
+  background-color: #eff6ff;
+}
+
+.input[data-missing]:not([data-invalid]) {
+  border-color: #f97316;
+  background-color: #fff7ed;
+}
+
+/* A value worked out from the other column (share ↔ kg), not typed. */
+.input[data-derived] {
+  background-color: #f8f9fa;
+  font-style: italic;
+  color: var(--gk-muted);
+}
+
+.input[data-invalid],
+.select[data-invalid] {
+  border-color: var(--gk-danger);
+}
+
+.input[data-invalid]:focus {
+  box-shadow: 0 0 0 3px rgba(201, 42, 42, 0.25);
+}
+
+/* ---- Right: focused job order ---- */
+
+.detail {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+
+.detailHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.detailHeadText {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.detailNo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.detailTitle {
+  color: var(--gk-muted);
+}
+
+.alert {
+  margin-bottom: 16px;
+  padding: 8px 12px;
+  border: 1px solid #f5c2c7;
+  border-radius: var(--gk-radius-sm);
+  background: #f8d7da;
+  color: #842029;
+}
+
+.alert i {
+  margin-right: 6px;
+}
+
+.weightCard {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface-subtle);
+}
+
+.weightMain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.weightLabel {
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.weightValue {
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.weightFacts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--gk-ink-2);
+}
+
+.danger {
+  color: var(--gk-danger);
+}
+
+.over {
+  font-weight: 600;
+  color: var(--gk-danger);
+}
+
+.linkButton {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  color: #1a4fa0;
+  cursor: pointer;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.section {
+  margin-bottom: 24px;
+}
+
+.sectionHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.sectionTitle {
+  margin-right: auto;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sectionHead .sectionTitle {
+  margin-bottom: 0;
+}
+
+.sectionActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.templateAdd {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.templateAdd > select {
+  min-width: 200px;
+}
+
+.muted {
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.hint {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.empty {
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--gk-muted);
+}
+
+.emptyPlan {
+  border: 1px dashed #ced4da;
+  border-radius: var(--gk-radius-md);
+}
+
+/* ---- Tier tables ---- */
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.table th {
+  padding: 6px 6px;
+  border-bottom: 1px solid var(--gk-line);
+  background: #f8f9fa;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+}
+
+.table td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #edf0f2;
+  vertical-align: middle;
+}
+
+.table .end {
+  text-align: right;
+}
+
+.table td.small {
+  font-size: 13px;
+}
+
+.readOnly {
+  table-layout: auto;
+}
+
+.readOnly td {
+  padding: 6px;
+  font-size: 13px;
+}
+
+.newTiers {
+  min-width: 720px;
+}
+
+.existingEdit {
+  min-width: 840px;
+}
+
+.tplItems {
+  min-width: 600px;
+}
+
+.rowError td {
+  background: #fef2f2;
+}
+
+/* An existing tier marked for deletion (undone with the arrow button). */
+.deleted td {
+  background: #fef2f2;
+}
+
+.deleted input,
+.deleted select {
+  text-decoration: line-through;
+  color: #991b1b;
+}
+
+/* ---- Template manager ---- */
+
+.tplLayout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 16px;
+}
+
+.tplItem {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-sm);
+  background: var(--gk-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tplItem:hover {
+  background: #f1f6ff;
+}
+
+.tplItem[data-active] {
+  border-color: #3b82f6;
+  background: #e7f0ff;
+}
+
+.tplName {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.draftFields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.label {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12.5px;
+}
+
+.checkLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.draftActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spacer {
+  margin-right: auto;
+}
+
+/* ---- Footer ---- */
+
+.summary {
+  margin-right: auto;
+  color: var(--gk-ink-2);
+}
+
+.closeConfirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 1px solid #ef4444;
+  border-radius: var(--gk-radius-sm);
+  background: #fef2f2;
+  font-size: 14px;
+}
+
+@media (max-width: 1279.98px) {
+  .jobs {
+    flex-basis: 500px;
+    width: 500px;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .layout {
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .jobs {
+    flex: 0 0 auto;
+    width: auto;
+    max-height: 45vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--gk-line);
+  }
+
+  .detail {
+    overflow: visible;
+  }
+
+  .tplLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

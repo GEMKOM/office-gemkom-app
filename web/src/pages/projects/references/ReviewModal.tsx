@@ -1,4 +1,4 @@
-import { REFERENCE_REVIEW } from '@legacy/apis/estimator.js';
+import { REFERENCE_REVIEW } from '@/api/projects/estimator';
 import { Button, Modal, Text, Textarea } from '@mantine/core';
 import { useState } from 'react';
 import { isApiError } from '@/api/client';

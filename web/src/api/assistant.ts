@@ -287,3 +287,44 @@ export function summaryMiniStats(summary: DailySummaryRow): string {
   const jobs = num('new_jobs_root') + num('new_jobs_child');
   return `${jobs} iş emri · ${num('topics_new')} konu · ${num('comments')} yorum`;
 }
+
+// ------------------------------------------- job-order discussion summaries
+
+// Neo Özeti (legacy components/discussion-summary): one shared AI summary of
+// every discussion on a job order and its sub-jobs.
+
+export interface DiscussionSummaryText {
+  content: string;
+  created_at?: string | null;
+  created_by?: string | null;
+  topic_count?: number;
+  comment_count?: number;
+  omitted_topic_count?: number;
+}
+
+export interface DiscussionSummaryState {
+  /** What there is to summarise now. */
+  current: { topic_count: number; comment_count: number };
+  summary: DiscussionSummaryText | null;
+  /** A topic or comment changed since the summary was written. */
+  is_stale?: boolean;
+  /** Someone's request is being written right now. */
+  generating?: boolean;
+  /** POST only: false when the saved summary was still current. */
+  created?: boolean;
+  /** Topic ids the summary may cite as [#id]. */
+  topic_refs?: Record<string, { title?: string; job_no?: string | null }>;
+}
+
+// Legacy used encodeURI: a job number keeps its slashes ("260-02/P1").
+const summaryUrl = (jobNo: string) => `/assistant/discussion-summaries/${encodeURI(jobNo)}/`;
+
+/** Port of getDiscussionSummary. A 403 means no Neo access. */
+export function getDiscussionSummary(jobNo: string, signal?: AbortSignal) {
+  return apiFetch<DiscussionSummaryState>(summaryUrl(jobNo), { signal });
+}
+
+/** Port of generateDiscussionSummary. 409: someone else is writing it; 429: budget spent. */
+export function generateDiscussionSummary(jobNo: string) {
+  return apiFetch<DiscussionSummaryState>(summaryUrl(jobNo), { method: 'POST' });
+}

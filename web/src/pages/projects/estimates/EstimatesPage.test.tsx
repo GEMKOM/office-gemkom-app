@@ -7,9 +7,6 @@ import { EstimatesPage } from './EstimatesPage';
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@legacy/navigationStructure.js', () => ({ NAVIGATION_STRUCTURE: {} }));
-vi.mock('@legacy/components/estimator-method/estimator-method.js', () => ({
-  loadMethodHtml: () => Promise.resolve(''),
-}));
 
 const fetchMock = vi.mocked(authedFetch);
 
