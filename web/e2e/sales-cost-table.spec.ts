@@ -64,7 +64,7 @@ test('admin reads the cost table, edits a selling price and drills into a job', 
 
   // Taşeron drill-down.
   // The cost breakdown columns are collapsed until Toplam Maliyet expands them.
-  await main.getByRole('button', { name: 'Maliyet kalemlerini göster' }).click();
+  await main.getByRole('button', { name: 'Maliyet kalemlerini göster', exact: true }).click();
   await main
     .locator('tr[data-row-id="0-E2E-254-01"] td[data-col="subcontractor_cost"]')
     .getByRole('button')
