@@ -1,5 +1,5 @@
 import { Badge, Button } from '@mantine/core';
-import { useDebouncedCallback } from '@mantine/hooks';
+import { useDebouncedCallback, useLocalStorage } from '@mantine/hooks';
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -194,6 +194,11 @@ export function CostTablePage() {
   const expandedKey = [...shownExpanded].join(',');
   const loadingKey = [...loadingChildren].join(',');
   const withChildrenKey = [...withChildren].join(',');
+  const [breakdown, setBreakdown] = useLocalStorage<boolean>({
+    key: 'cost-table-breakdown',
+    defaultValue: false,
+  });
+  const toggleBreakdown = useCallback(() => setBreakdown((v) => !v), [setBreakdown]);
   const columns = useMemo(
     () =>
       costColumns({
@@ -201,9 +206,11 @@ export function CostTablePage() {
         loadingChildren: new Set(loadingKey ? loadingKey.split(',') : []),
         withChildren: new Set(withChildrenKey ? withChildrenKey.split(',') : []),
         onToggle: toggle,
+        breakdown,
+        onToggleBreakdown: toggleBreakdown,
         onDrill: openDrill,
       }),
-    [expandedKey, loadingKey, withChildrenKey, toggle, openDrill],
+    [expandedKey, loadingKey, withChildrenKey, toggle, breakdown, toggleBreakdown, openDrill],
   );
 
   const updatePrice = useUpdateSellingPrice();

@@ -1,7 +1,8 @@
 import { authedFetch } from '@legacy/authService.js';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
+import { costColumns } from './columns';
 import { CostTablePage } from './CostTablePage';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
@@ -80,6 +81,8 @@ const cell = (rowId: string, col: string) =>
     .querySelector<HTMLElement>(`td[data-col="${col}"]`)!;
 
 beforeEach(() => {
+  // The breakdown columns are collapsed by default; most tests need them.
+  window.localStorage.setItem('cost-table-breakdown', 'true');
   fetchMock.mockReset();
   fetchMock.mockImplementation((input, init) => {
     const url = new URL(String(input));
@@ -178,6 +181,39 @@ describe('CostTablePage', () => {
     );
     // A derived price is shown beside the (empty) entered one.
     expect(cell('0-254-02', 'selling_price')).toHaveTextContent('Fiyat≈€1.234,50');
+  });
+
+  it('collapses the cost breakdown columns by default and toggles them from Toplam Maliyet', async () => {
+    window.localStorage.setItem('cost-table-breakdown', 'false');
+    renderPage();
+    await screen.findByText('Tav Fırını');
+    expect(document.querySelector('td[data-col="labor_cost"]')).toBeNull();
+    expect(document.querySelector('td[data-col="general_expenses_cost"]')).toBeNull();
+    expect(cell('0-254-01', 'actual_total_cost')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Maliyet kalemlerini göster' }));
+    expect(cell('0-254-01', 'labor_cost')).toHaveTextContent('€1.200,00');
+    expect(window.localStorage.getItem('cost-table-breakdown')).toBe('true');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Maliyet kalemlerini gizle' }));
+    expect(document.querySelector('td[data-col="labor_cost"]')).toBeNull();
+  });
+
+  it('truncates a long Başlık and keeps the full text as the hover title', () => {
+    const column = costColumns({
+      expanded: new Set(),
+      loadingChildren: new Set(),
+      withChildren: new Set(),
+      onToggle: () => {},
+      breakdown: false,
+      onToggleBreakdown: () => {},
+      onDrill: () => {},
+    }).find((c) => c.key === 'title')!;
+    const long = `${'Ağır '.repeat(20)}parça`;
+    render(<>{column.render!({ title: long } as never, 0)}</>);
+    const shown = screen.getByTitle(long);
+    expect(shown.textContent!.length).toBeLessThan(long.length);
+    expect(shown.textContent).toMatch(/…$/);
   });
 
   it('sends the URL filters, with the date range on the chosen date field', async () => {
