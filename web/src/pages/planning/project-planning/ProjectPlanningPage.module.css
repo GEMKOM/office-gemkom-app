@@ -1,0 +1,1043 @@
+/* İmalat Planlama: the page around the grid (port of planning.css and
+   capacity.css). The grid itself is grid/grid.css. */
+
+/* ---- toolbar: resource tabs + sheet-wide actions ---- */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* Pill tabs that WRAP (no horizontal scrollbar). */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  max-width: 100%;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.tab {
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #fff;
+  color: #374151;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.tab > i {
+  font-size: 0.72rem;
+  color: #9ca3af;
+}
+
+.tabLabel {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tab:hover {
+  border-color: #8b0000;
+  color: #8b0000;
+  box-shadow: 0 1px 4px rgba(139, 0, 0, 0.12);
+}
+
+.tab:hover > i {
+  color: #8b0000;
+}
+
+.tabActive,
+.tabActive:hover {
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #8b0000 0%, #660000 100%);
+  border-color: #8b0000;
+  box-shadow: 0 2px 6px rgba(139, 0, 0, 0.3);
+}
+
+.tabActive > i,
+.tabActive:hover > i {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.resourceKg {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #6b7280;
+  background: #f3f4f6;
+  border-radius: 10px;
+  padding: 1px 7px;
+}
+
+.tabActive .resourceKg {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.tabEmpty {
+  color: #9ca3af;
+  background: #f9fafb;
+}
+
+.tabEmpty:hover {
+  color: #8b0000;
+  background: #fff;
+}
+
+.tabMore {
+  color: #6b7280;
+  background: transparent;
+  border-style: dashed;
+  font-size: 0.76rem;
+}
+
+.tabMore:hover {
+  color: #8b0000;
+  border-color: #8b0000;
+  box-shadow: none;
+}
+
+.dirtyDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #dc3545;
+  display: inline-block;
+  flex: none;
+}
+
+.tabActive .dirtyDot {
+  background: #fff;
+  outline: 2px solid #dc3545;
+}
+
+.capTabChip {
+  font-size: 0.68rem;
+  font-weight: 700;
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: 2px;
+}
+
+.capTabTight {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.capTabOver {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.tabActive .capTabChip {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.segmentWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: #6c757d;
+}
+
+.capBtnBadge {
+  display: inline-block;
+  min-width: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 9px;
+  background: #dc3545;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+
+/* ---- filter strip ----
+   These filter what is already in memory, so there is no Apply button to
+   justify a card's worth of vertical space above a sheet that is tall. */
+
+.filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  padding: 8px 16px;
+  background: #fafafa;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.pfTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9ca3af;
+}
+
+.pfField {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.pfLabel {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.pfSummary {
+  font-size: 0.76rem;
+  color: #6b7280;
+  margin-left: auto;
+}
+
+.pfEmpty {
+  color: #b45309;
+  font-weight: 500;
+}
+
+@media (max-width: 767.98px) {
+  .pfField {
+    flex: 1 1 100%;
+  }
+
+  .pfSummary {
+    margin-left: 0;
+  }
+}
+
+/* ---- legend ---- */
+
+.legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.swatch {
+  width: 15px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.swatchOnTime {
+  background: linear-gradient(180deg, #34ad51, #248239);
+}
+
+.swatchLate {
+  background: linear-gradient(180deg, #e2515f, #bd2130);
+}
+
+.swatchHold {
+  background: linear-gradient(180deg, #f0bf3f, #d99e00);
+}
+
+.swatchProgress {
+  background: linear-gradient(180deg, rgba(13, 110, 253, 0.95), rgba(0, 86, 179, 0.95));
+}
+
+/* ---- over-allocation warning ---- */
+
+.warnList {
+  padding-left: 1.1rem;
+  margin: 0;
+}
+
+.warnList li {
+  margin-bottom: 0.35rem;
+}
+
+.warnOver {
+  color: #b02a37;
+  font-weight: 600;
+}
+
+.warnHolders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.warnHolder {
+  background: rgba(255, 255, 255, 0.75);
+  border: 1px solid rgba(176, 42, 55, 0.25);
+  border-radius: 12px;
+  padding: 1px 9px;
+  font-size: 0.76rem;
+  color: #58151c;
+  white-space: nowrap;
+}
+
+.warnHolder i {
+  font-size: 0.68rem;
+  margin-right: 4px;
+  opacity: 0.7;
+}
+
+/* ---- cells ---- */
+
+.muted {
+  color: #6c757d;
+}
+
+.badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* A date that comes from somewhere other than this task, distinct from a
+   date that really happened. */
+.dateDerived,
+.durationDerived {
+  color: #6b7280;
+  font-style: italic;
+}
+
+.dateActual {
+  color: #157347;
+  font-style: italic;
+}
+
+.weightReadonly {
+  color: #6b7280;
+}
+
+.forecast {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+  color: #6b7280;
+  white-space: nowrap;
+}
+
+.forecast i {
+  font-size: 0.72rem;
+}
+
+.forecast.actual {
+  color: #157347;
+  font-weight: 600;
+}
+
+.forecast.late {
+  color: #b02a37;
+  font-weight: 600;
+}
+
+/* Two dates stacked: the job's planned finish over the promised termin. */
+.jobEnd,
+.kgSplit {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.05;
+  white-space: nowrap;
+}
+
+.kgSplit {
+  font-variant-numeric: tabular-nums;
+}
+
+.jobEndPlan,
+.kgPart {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.jobEndPlan.late {
+  color: #b02a37;
+}
+
+/* The group row's red is for the plan; the termin keeps its grey. */
+:global(.pg-group-late) .jobEndPlan {
+  color: #b91c1c;
+  font-weight: 700;
+}
+
+.jobEndTermin,
+.kgTotal {
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.qty {
+  font-variant-numeric: tabular-nums;
+}
+
+.qtyShare {
+  color: #6b7280;
+}
+
+.stageNote {
+  color: #6b7280;
+  font-size: 0.78rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.newBadge {
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: #0dcaf0;
+  color: #000;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.miniProgress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.progressTrack {
+  flex: 1;
+  height: 7px;
+  min-width: 46px;
+  border-radius: 4px;
+  background: #e9ecef;
+  overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+}
+
+.progressDone {
+  background: #198754;
+}
+
+.progressOn {
+  background: #0d6efd;
+}
+
+.progressNone {
+  background: #6c757d;
+}
+
+/* Fixed-width, right-aligned percentages so every bar ends at the same x. */
+.progressLabel {
+  min-width: 42px;
+  text-align: right;
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  color: #4b5563;
+}
+
+.capLateChip,
+.capEarlyChip,
+.capMutedChip {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.capLateChip {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.capEarlyChip {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.capMutedChip {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.capCellChip {
+  margin-left: 4px;
+}
+
+/* ---- column picker ---- */
+
+.pickerHead {
+  padding: 3px 8px 6px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #adb5bd;
+}
+
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  color: #343a40;
+  font-size: 0.8rem;
+}
+
+.pickerItem:hover {
+  background: #f1f3f5;
+}
+
+.pickerLock {
+  margin-left: auto;
+  font-size: 0.62rem;
+  color: #adb5bd;
+}
+
+/* ---- block dialogs ---- */
+
+.allocInfo {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: #f8f9fa;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+}
+
+.allocSummary {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  font-size: 0.8rem;
+  color: #374151;
+}
+
+.allocLabel {
+  color: #6b7280;
+  margin-right: 5px;
+}
+
+.allocFree strong {
+  color: #157347;
+}
+
+.allocEmpty strong {
+  color: #b02a37;
+}
+
+.allocHolders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 7px;
+}
+
+.allocHolder {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 12px;
+  padding: 1px 9px;
+  font-size: 0.75rem;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.allocHolder i {
+  font-size: 0.68rem;
+  margin-right: 4px;
+  color: #9ca3af;
+}
+
+/* İş Ekle job picker: what the job is, then how much is left and who holds
+   the rest. */
+.jpOpt {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+  line-height: 1.35;
+}
+
+.jpTop {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.jpNo {
+  font-weight: 700;
+  color: #212529;
+  flex: 0 0 auto;
+}
+
+.jpTitle {
+  color: #495057;
+  font-size: 0.84rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.jpRem {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #157347;
+  background: #e8f5ec;
+  border-radius: 9px;
+  padding: 1px 8px;
+}
+
+.jpMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.jpKg {
+  font-variant-numeric: tabular-nums;
+}
+
+.jpHolder {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1f3f5;
+  border-radius: 9px;
+  padding: 1px 8px;
+  color: #495057;
+  max-width: 220px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.jpHolder i {
+  font-size: 0.62rem;
+  opacity: 0.7;
+}
+
+.jpMore {
+  font-weight: 600;
+}
+
+.jpNone {
+  background: transparent;
+  color: #adb5bd;
+  font-style: italic;
+  padding-left: 0;
+}
+
+/* ---- Kapasite drawer ---- */
+
+.capStamp {
+  font-size: 0.72rem;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.capTools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.capBody {
+  font-size: 0.84rem;
+  color: #343a40;
+}
+
+.capSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 10px 0;
+}
+
+.capChip {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.capChipRed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.capChipOrange {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.capChipGrey {
+  background: #e5e7eb;
+  color: #374151;
+}
+
+.capChipGreen {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.capNote {
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  margin-bottom: 10px;
+}
+
+.capNoteUnsaved {
+  background: #fef3e7;
+  color: #c2410c;
+}
+
+.capNoteError {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.capSection {
+  margin: 14px 0 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: #9ca3af;
+}
+
+.capCard {
+  border: 1px solid #e5e7eb;
+  border-left-width: 4px;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: #fff;
+}
+
+.capCard[data-theme='green'] {
+  border-left-color: #10b981;
+}
+
+.capCard[data-theme='orange'] {
+  border-left-color: #f97316;
+}
+
+.capCard[data-theme='red'] {
+  border-left-color: #ef4444;
+}
+
+.capCard[data-theme='grey'] {
+  border-left-color: #9ca3af;
+}
+
+.capCardCompact {
+  padding: 6px 12px;
+}
+
+.capCardHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.capCardHead > i {
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.capCardName {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #212529;
+}
+
+.capVerdictBadge {
+  margin-left: auto;
+}
+
+.capCardVerdict {
+  margin: 8px 0 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.capCardVerdict i {
+  margin-top: 2px;
+}
+
+.capCardVerdict[data-theme='green'] {
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.capCardVerdict[data-theme='orange'] {
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.capCardVerdict[data-theme='red'] {
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.capCardVerdict[data-theme='grey'] {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.capFacts {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 3px 10px;
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.capFactLabel {
+  color: #6b7280;
+}
+
+.capFactValue {
+  color: #343a40;
+}
+
+@media (max-width: 767.98px) {
+  .capFacts {
+    grid-template-columns: 1fr;
+  }
+
+  .capFactLabel {
+    font-weight: 600;
+  }
+}
+
+.capDetails {
+  margin-top: 8px;
+}
+
+.capDetails > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: #8b0000;
+  font-weight: 600;
+}
+
+.capDetailsMuted > summary {
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: #6b7280;
+  margin: 8px 0;
+}
+
+.capTableWrap {
+  overflow-x: auto;
+  margin-top: 6px;
+}
+
+.capTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.76rem;
+}
+
+.capTable th {
+  text-align: left;
+  font-weight: 600;
+  color: #6b7280;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 4px 6px;
+  white-space: nowrap;
+}
+
+.capTable td {
+  padding: 4px 6px;
+  border-bottom: 1px solid #f3f4f6;
+  vertical-align: top;
+}
+
+.capNum {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.capDate {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.capRowLate td {
+  background: #fff7f7;
+}
+
+.capRowOverdue td {
+  background: #fafafa;
+  color: #6b7280;
+}
+
+.capSugg {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.capSugg li {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin-bottom: 3px;
+  line-height: 1.35;
+}
+
+.capSugg li > i {
+  width: 14px;
+  flex: 0 0 14px;
+  margin-top: 3px;
+  font-size: 0.72rem;
+  color: #6b7280;
+}
+
+.capSugg li[data-tone='late'] > i {
+  color: #dc2626;
+}
+
+.capSugg li[data-tone='move'] > i {
+  color: #1e40af;
+}
+
+.capSugg li[data-tone='plan'] > i {
+  color: #5b21b6;
+}
+
+.capLocate {
+  border: 0;
+  background: none;
+  color: #8b0000;
+  font: inherit;
+  font-size: 0.74rem;
+  padding: 0 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.capLocate:hover {
+  text-decoration: underline;
+}
+
+.capJob {
+  font-weight: 600;
+  color: #212529;
+  white-space: nowrap;
+}
+
+.capJobSub {
+  display: block;
+  font-size: 0.7rem;
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.capEdit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+  font-size: 0.76rem;
+  color: #6b7280;
+}
+
+.capUnassigned {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 6px;
+}
+
+.capUnassignedHead {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.capEmpty {
+  padding: 24px 0;
+  text-align: center;
+  color: #6b7280;
+  font-size: 0.82rem;
+}
+
+.capFoot {
+  margin-top: 16px;
+  padding-top: 10px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 0.74rem;
+  color: #6b7280;
+  line-height: 1.4;
+}

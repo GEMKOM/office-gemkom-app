@@ -34,6 +34,35 @@ export function leaveTypeLabel(
   );
 }
 
+/** Hours between start_time and end_time ("HH:MM[:SS]"), or null if either is missing. */
+export function leaveHours(request: {
+  start_time?: string | null;
+  end_time?: string | null;
+}): number | null {
+  const toMinutes = (value: string | null | undefined) => {
+    const m = /^(\d{1,2}):(\d{2})/.exec(value ?? '');
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const start = toMinutes(request.start_time);
+  const end = toMinutes(request.end_time);
+  return start === null || end === null || end <= start ? null : (end - start) / 60;
+}
+
+/** "3 saat", "1,5 saat" for an hourly leave (mazeret izni); else "N gün". */
+export function leaveDurationLabel(request: {
+  leave_type?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  duration_days?: number | string | null;
+}): string {
+  const hours =
+    request.leave_type === 'compensatory_leave' || request.start_time ? leaveHours(request) : null;
+  if (hours !== null) {
+    return `${String(Math.round(hours * 100) / 100).replace('.', ',')} saat`;
+  }
+  return `${request.duration_days || 0} gün`;
+}
+
 export interface ApprovalDecision {
   decision?: 'approve' | 'reject' | string;
   decided_at?: string | null;

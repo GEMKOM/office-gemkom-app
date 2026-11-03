@@ -55,6 +55,54 @@ export interface FilterBarProps<T extends FilterValues> {
 
 const SEARCH_DELAY_MS = 400;
 
+/** The options of a select pill; with `searchable`, a box on top narrows them (accents and case ignored). */
+function SelectOptions({
+  options,
+  searchable,
+  value,
+  onPick,
+}: {
+  options: FilterOption[];
+  searchable?: boolean;
+  value: FilterValue | undefined;
+  onPick: (value: string) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const fold = (text: string) => text.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const needle = fold(query.trim());
+  const shown = needle ? options.filter((o) => fold(o.label).includes(needle)) : options;
+  return (
+    <>
+      {searchable ? (
+        <TextInput
+          size="xs"
+          m={4}
+          placeholder="Ara..."
+          aria-label="Seçeneklerde ara"
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          onKeyDown={(event) => event.stopPropagation()}
+        />
+      ) : null}
+      <ScrollArea.Autosize mah={searchable ? 260 : undefined}>
+        {shown.map((option) => (
+          <Menu.Item
+            key={option.value}
+            onClick={() => onPick(option.value)}
+            fw={value === option.value ? 600 : undefined}
+            rightSection={value === option.value ? <i className="fas fa-check" aria-hidden /> : null}
+          >
+            {option.label}
+          </Menu.Item>
+        ))}
+        {searchable && shown.length === 0 ? (
+          <Menu.Label>Sonuç bulunamadı</Menu.Label>
+        ) : null}
+      </ScrollArea.Autosize>
+    </>
+  );
+}
+
 function emptyLike(value: FilterValue): FilterValue {
   if (isDateRange(value)) return { start: '', end: '' };
   if (Array.isArray(value)) return [];
@@ -235,16 +283,12 @@ export function FilterBar<T extends FilterValues>({
               <Menu.Item onClick={clearOne} fw={set ? undefined : 600}>
                 {filter.placeholder ?? 'Tümü'}
               </Menu.Item>
-              {filter.options.map((option) => (
-                <Menu.Item
-                  key={option.value}
-                  onClick={() => setAndApply(filter.key, option.value)}
-                  fw={value === option.value ? 600 : undefined}
-                  rightSection={value === option.value ? <i className="fas fa-check" aria-hidden /> : null}
-                >
-                  {option.label}
-                </Menu.Item>
-              ))}
+              <SelectOptions
+                options={filter.options}
+                searchable={filter.searchable}
+                value={value}
+                onPick={(picked) => setAndApply(filter.key, picked)}
+              />
             </Menu.Dropdown>
           </Menu>
         );

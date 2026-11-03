@@ -22,6 +22,7 @@ import {
 } from '@/api/manufacturing/machiningParts';
 import { DEFAULT_STALE_TIME } from '@/api/queryClient';
 import { useJobOrderOptions } from '@/api/reference/jobOrders';
+import { userLabel, useUsers } from '@/api/reference/users';
 import { useAuth } from '@/auth/AuthProvider';
 import { formatDate } from '@/lib/format';
 import {
@@ -155,6 +156,7 @@ const URL_DEFAULTS = {
   finish_time_lte: '',
   has_timer: false,
   exceeded_estimated_hours: false,
+  created_by: '',
   page: '1',
   page_size: '20',
   ordering: 'key',
@@ -170,7 +172,8 @@ type FilterKeys =
   | 'finish_time_gte'
   | 'finish_time_lte'
   | 'has_timer'
-  | 'exceeded_estimated_hours';
+  | 'exceeded_estimated_hours'
+  | 'created_by';
 type FilterState = Record<Exclude<FilterKeys, 'has_timer' | 'exceeded_estimated_hours'>, string> & {
   has_timer: boolean;
   exceeded_estimated_hours: boolean;
@@ -187,7 +190,11 @@ const EMPTY_FILTERS: FilterState = {
   finish_time_lte: '',
   has_timer: false,
   exceeded_estimated_hours: false,
+  created_by: '',
 };
+
+/** URL value of created_by meaning "no user filter"; empty means the current user. */
+const ANY_CREATOR = 'all';
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'text', key: 'key', label: 'TI No', placeholder: 'TI-001' },
@@ -202,7 +209,7 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'checkbox', key: 'exceeded_estimated_hours', label: 'Tahmini Saati Aşan' },
 ];
 
-/** Legacy buildTaskQuery (without page / ordering / created_by). */
+/** Legacy buildTaskQuery (without page / ordering). */
 export function taskFilterParams(values: FilterState): PartsParams {
   const params: PartsParams = {};
   const key = values.key.trim();
@@ -216,6 +223,7 @@ export function taskFilterParams(values: FilterState): PartsParams {
   if (values.finish_time_lte) params.finish_time__lte = values.finish_time_lte;
   if (values.has_timer) params.has_timer = 'true';
   if (values.exceeded_estimated_hours) params.exceeded_estimated_hours = 'true';
+  if (values.created_by) params.created_by = values.created_by;
   return params;
 }
 
@@ -517,6 +525,9 @@ export function MachiningCreateTasksPage() {
   // ---- the list ----
   const url = useUrlFilters(URL_DEFAULTS);
   const { values, apply } = url;
+  // Empty URL value = the current user (legacy default); 'all' = cleared.
+  const creatorId =
+    values.created_by === ANY_CREATOR ? '' : values.created_by || (user?.id ? String(user.id) : '');
   const filters = useMemo<FilterState>(
     () => ({
       key: values.key,
@@ -529,6 +540,7 @@ export function MachiningCreateTasksPage() {
       finish_time_lte: values.finish_time_lte,
       has_timer: values.has_timer,
       exceeded_estimated_hours: values.exceeded_estimated_hours,
+      created_by: creatorId,
     }),
     [
       values.key,
@@ -541,15 +553,43 @@ export function MachiningCreateTasksPage() {
       values.finish_time_lte,
       values.has_timer,
       values.exceeded_estimated_hours,
+      creatorId,
     ],
+  );
+  const users = useUsers();
+  const creatorOptions = useMemo(
+    () => {
+      const options = (users.data ?? []).map((u) => ({ value: String(u.id), label: userLabel(u) }));
+      // Keep the picked creator visible before / without the user list.
+      if (filters.created_by && !options.some((o) => o.value === filters.created_by)) {
+        options.unshift({
+          value: filters.created_by,
+          label: filters.created_by === String(user?.id) ? (user?.username ?? 'Ben') : filters.created_by,
+        });
+      }
+      return options;
+    },
+    [users.data, filters.created_by, user?.id, user?.username],
+  );
+  const listFilterConfig = useMemo<FilterConfig<FilterKeys>[]>(
+    () => [
+      {
+        type: 'select',
+        key: 'created_by',
+        label: 'Oluşturan',
+        placeholder: 'Tümü',
+        searchable: true,
+        options: creatorOptions,
+      },
+      ...filterConfig,
+    ],
+    [creatorOptions],
   );
   const page = positiveInt(values.page, 1);
   const pageSize = positiveInt(values.page_size, 20);
   const sort = fromOrdering(values.ordering || 'key');
   const ordering = toOrdering(sort.sortBy, sort.sortDir) ?? 'key';
   const params: PartsParams = {
-    // Always the parts the current user created.
-    ...(user?.id ? { created_by: String(user.id) } : {}),
     ...taskFilterParams(filters),
     page,
     page_size: pageSize,
@@ -750,10 +790,13 @@ export function MachiningCreateTasksPage() {
         filters={
           <FilterBar
             inline
-            filters={filterConfig}
+            filters={listFilterConfig}
             values={filters}
-            onApply={(next) => apply({ ...next, page: '1' })}
+            onApply={(next) =>
+              apply({ ...next, created_by: next.created_by || ANY_CREATOR, page: '1' })
+            }
             onClear={() => {
+              // Temizle returns to the default: my tasks.
               apply({ ...EMPTY_FILTERS, page: '1' });
               notify.info('Filtreler temizlendi');
             }}

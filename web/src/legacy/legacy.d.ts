@@ -94,3 +94,38 @@ declare module '@legacy/navigationStructure.js' {
 
   export const NAVIGATION_STRUCTURE: NavTree;
 }
+
+// No React equivalent yet: İmalat Planlama's PDF and Sunum Modu's modal PDF use
+// it as is (html2canvas + jsPDF from the CDN, loaded on first use).
+declare module '@legacy/utils/pdfExport.js' {
+  export interface ExportElementOptions {
+    fileName?: string;
+    orientation?: 'portrait' | 'landscape';
+    captureWidth?: number;
+    marginMm?: number;
+    captureClass?: string;
+    stageClass?: string;
+    /** ASCII only (jsPDF core fonts). */
+    footerText?: string;
+    prepare?: (clone: HTMLElement) => void;
+  }
+  /** Clones `element` off-screen, unclipped, and downloads it as a PDF. */
+  export function exportElementToPdf(
+    element: HTMLElement,
+    options?: ExportElementOptions,
+  ): Promise<void>;
+
+  /** Captures pre-built page elements (html2canvas + jsPDF from the CDN). */
+  export function exportPagesToPdf(
+    pages: HTMLElement[],
+    options: {
+      fileName: string;
+      orientation?: 'landscape' | 'portrait';
+      format?: string;
+      marginMm?: number;
+      /** ASCII only: jsPDF's core fonts cannot encode ı/ş/ğ. */
+      footerText?: string;
+      onProgress?: (done: number, total: number) => void;
+    },
+  ): Promise<void>;
+}

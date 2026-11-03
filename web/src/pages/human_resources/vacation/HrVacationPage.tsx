@@ -1,7 +1,7 @@
 import { Group, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { LEAVE_TYPES, leaveTypeLabel } from '@/api/general/vacation';
+import { LEAVE_TYPES, leaveDurationLabel, leaveTypeLabel } from '@/api/general/vacation';
 import {
   approvedVacationRequestsQueryOptions,
   hrVacationKeys,
@@ -104,7 +104,7 @@ const durationColumn: DataTableColumn<HrVacationRequest> = {
   key: 'duration_days',
   header: 'Süre',
   accessor: (row) => Number(row.duration_days) || 0,
-  render: (row) => `${row.duration_days || 0} gün`,
+  render: (row) => leaveDurationLabel(row),
 };
 
 const inboxColumns: DataTableColumn<HrVacationRequest>[] = [
