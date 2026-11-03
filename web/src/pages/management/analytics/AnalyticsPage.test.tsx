@@ -13,7 +13,9 @@ const ROWS = [
   {
     job_no: '254-01',
     title: 'Tav Fırını',
+    customer_name: 'Alfa Isıl İşlem Sanayi A.Ş.',
     customer_short_name: 'Alfa',
+    catalog_nodes: [{ id: 501, title: 'Tav Fırını', path: 'Şablon › Fırınlar › Tav Fırını' }],
     status: 'active',
     is_manufactured: true,
     has_children: true,
@@ -34,7 +36,8 @@ const ROWS = [
   },
   {
     job_no: '254-02',
-    title: 'Pota Ocağı',
+    title: 'Pota Ocağı için çok uzun bir iş emri başlığı, kırpılmalı',
+    customer_name: 'Beta Makina Ltd. Şti.',
     status: 'on_hold',
     total_weight_kg: '1000',
     actual_total_cost: '3000',
@@ -70,6 +73,7 @@ function renderPage(route = '/management/analytics') {
 }
 
 beforeEach(() => {
+  window.localStorage.clear();
   fetchMock.mockReset();
   fetchMock.mockImplementation((input) => {
     const url = new URL(String(input));
@@ -189,5 +193,61 @@ describe('AnalyticsPage', () => {
       job_no: '254-01',
       include_descendants: 'true',
     });
+  });
+
+  it('crops a long Başlık to a title and keeps the full text on hover', async () => {
+    renderPage();
+    await screen.findByText('Tav Fırını');
+    // 20 characters, then an ellipsis; the whole title is the hover text.
+    const cropped = screen.getByText('Pota Ocağı için çok…');
+    expect(cropped).toHaveAttribute(
+      'title',
+      'Pota Ocağı için çok uzun bir iş emri başlığı, kırpılmalı',
+    );
+    expect(screen.getByText('Tav Fırını')).not.toHaveAttribute('title');
+  });
+
+  it('shows customers by short name with the full name on hover', async () => {
+    renderPage();
+    await screen.findByText('Tav Fırını');
+    expect(screen.getByText('Alfa')).toHaveAttribute('title', 'Alfa Isıl İşlem Sanayi A.Ş.');
+    expect(screen.queryByText('Alfa Isıl İşlem Sanayi A.Ş.')).toBeNull();
+    // Without a short name the full one stands in.
+    expect(screen.getByText('Beta Makina Ltd. Şti.')).toBeInTheDocument();
+  });
+
+  it('does not show the Katalog Kalemi column, but its filter still works', async () => {
+    renderPage('/management/analytics?template_node=4,5');
+    await screen.findByText('Tav Fırını');
+    expect(screen.queryByRole('columnheader', { name: 'Katalog Kalemi' })).toBeNull();
+    expect(screen.queryByText('Şablon › Fırınlar › Tav Fırını')).toBeNull();
+    expect(callsTo('/projects/job-orders/cost_table/')[0]!.searchParams.get('template_node')).toBe(
+      '4,5',
+    );
+    // The picker button stays in the table toolbar, with the count of chosen items.
+    const picker = screen.getByRole('button', { name: /Katalog Kalemi/ });
+    expect(picker).toHaveTextContent('2');
+  });
+
+  it('folds the Top 15 chart away and remembers it', async () => {
+    const { unmount } = renderPage();
+    await screen.findByText('Tav Fırını');
+    const chart = () => screen.queryByRole('figure', { name: /En yüksek maliyetli 15 iş/ });
+    expect(chart()).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Top 15 grafiğini gizle' }));
+    expect(chart()).toBeNull();
+    const show = screen.getByRole('button', { name: 'Top 15 grafiğini göster' });
+    expect(show).toHaveAttribute('aria-expanded', 'false');
+    // The table is untouched.
+    expect(screen.getByText('Tav Fırını')).toBeInTheDocument();
+
+    // A new visit opens it folded.
+    unmount();
+    renderPage();
+    await screen.findByText('Tav Fırını');
+    expect(chart()).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Top 15 grafiğini göster' }));
+    expect(chart()).toBeInTheDocument();
   });
 });

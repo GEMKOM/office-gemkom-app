@@ -42,7 +42,7 @@
 
 .customer {
   display: inline-block;
-  max-width: 200px;
+  max-width: 84px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -149,38 +149,11 @@
   white-space: nowrap;
 }
 
-.catalog {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 190px;
-}
-
-.catalogTitle {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.catalog[data-children] .catalogTitle {
-  color: var(--gk-muted);
-  font-style: italic;
-}
-
-.more {
-  flex: none;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: #eef0f2;
-  color: var(--gk-ink-2);
-  font-size: 11px;
-}
-
 .completion {
   display: flex;
   align-items: center;
-  gap: 8px;
-  min-width: 120px;
+  gap: 6px;
+  min-width: 40px;
 }
 
 .footRow td {

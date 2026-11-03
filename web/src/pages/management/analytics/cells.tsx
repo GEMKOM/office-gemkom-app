@@ -103,30 +103,6 @@ export function ManufacturedChip({ value }: { value: boolean | null | undefined 
   return <Dash />;
 }
 
-/** The job's catalog item(s): its own, or its children's (from_children). */
-export function CatalogCell({ row }: { row: CostTableRow }) {
-  const list = Array.isArray(row.catalog_nodes) ? row.catalog_nodes : [];
-  if (!list.length) return <Dash />;
-  const fromChildren = row.catalog_nodes_from_children === true;
-  const tip = (
-    <div style={{ whiteSpace: 'pre-line' }}>
-      {(fromChildren ? 'Alt iş emirlerinin kalemleri:\n' : '') +
-        list.map((n) => n.path || n.title).join('\n')}
-    </div>
-  );
-  return (
-    <Tooltip label={tip} multiline maw={360} withArrow>
-      <span className={classes.catalog} data-children={fromChildren || undefined}>
-        <span className={classes.catalogTitle}>
-          {fromChildren ? <FaIcon icon="fas fa-sitemap" style={{ marginRight: 4 }} /> : null}
-          {list[0]!.title}
-        </span>
-        {list.length > 1 ? <span className={classes.more}>+{list.length - 1}</span> : null}
-      </span>
-    </Tooltip>
-  );
-}
-
 const MARGIN_META: Record<MarginTone, { family: string; icon: string; label: string }> = {
   green: { family: 'green', icon: 'fas fa-circle-check', label: '15% üstü' },
   amber: { family: 'yellow', icon: 'fas fa-triangle-exclamation', label: '5–15%' },
@@ -159,7 +135,7 @@ export function CompletionBar({ value }: { value: unknown }) {
   return (
     <span className={classes.completion}>
       <Progress value={safe} size="sm" radius="xl" color="gemkom" style={{ flex: 1 }} aria-hidden />
-      <Text span size="xs" c="dimmed" miw={40} ta="right">
+      <Text span size="xs" c="dimmed" miw={34} ta="right">
         {formatPercent(safe, 0)}
       </Text>
     </span>
