@@ -28,15 +28,27 @@ describe('RecordsPanel', () => {
       />,
     );
     const panel = screen.getByRole('heading', { name: 'Son Talepler' }).closest('section')!;
-    expect(within(panel).getByRole('link', { name: /DT-1/ })).toHaveAttribute('href', '/x/list?id=1');
-    expect(within(panel).getByRole('link', { name: /Tümü/ })).toHaveAttribute('href', '/x/list?status=open');
+    expect(within(panel).getByRole('link', { name: /DT-1/ })).toHaveAttribute(
+      'href',
+      '/x/list?id=1',
+    );
+    expect(within(panel).getByRole('link', { name: /Tümü/ })).toHaveAttribute(
+      'href',
+      '/x/list?status=open',
+    );
     expect(within(panel).getByText('3 Kas')).toHaveAttribute('data-alert', 'true');
   });
 
   it('says when there is nothing, and offers a retry on failure', () => {
     const refetch = vi.fn();
     const { rerender } = renderWithProviders(
-      <RecordsPanel title="Son" icon="fas fa-list" noun="Talepler" empty="Talep yok." query={settled([])} />,
+      <RecordsPanel
+        title="Son"
+        icon="fas fa-list"
+        noun="Talepler"
+        empty="Talep yok."
+        query={settled([])}
+      />,
     );
     expect(screen.getByText('Talep yok.')).toBeInTheDocument();
 
@@ -66,7 +78,9 @@ describe('AttentionPanel', () => {
   });
 
   it('greys rows with nothing waiting and keeps them in place', () => {
-    renderWithProviders(<AttentionPanel items={[item('a', 3), item('b', 0), item('c', undefined, true)]} />);
+    renderWithProviders(
+      <AttentionPanel items={[item('a', 3), item('b', 0), item('c', undefined, true)]} />,
+    );
     const a = screen.getByRole('link', { name: /Satır a/ });
     expect(a).toHaveAttribute('href', '/list/a');
     expect(a).toHaveAttribute('data-family', 'yellow');

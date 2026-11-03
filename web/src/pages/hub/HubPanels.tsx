@@ -25,7 +25,10 @@ export function HubPanels({ children }: { children: ReactNode }) {
   return (
     <div className={css.panels}>
       {Children.toArray(children).map((child, index) => (
-        <div key={isValidElement(child) && child.key !== null ? child.key : index} className={css.cell}>
+        <div
+          key={isValidElement(child) && child.key !== null ? child.key : index}
+          className={css.cell}
+        >
           {child}
         </div>
       ))}
@@ -87,7 +90,15 @@ export interface RecordsPanelProps {
 }
 
 /** A short list of records, each row a link: recent requests, overdue tasks. */
-export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5 }: RecordsPanelProps) {
+export function RecordsPanel({
+  title,
+  icon,
+  more,
+  query,
+  noun,
+  empty,
+  rows = 5,
+}: RecordsPanelProps) {
   const records = query.data ?? [];
   let body;
   if (query.isPending) {
@@ -108,7 +119,9 @@ export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5 }
         {records.map((record) => {
           const content = (
             <>
-              {record.code !== undefined ? <span className={css.recordCode}>{record.code}</span> : null}
+              {record.code !== undefined ? (
+                <span className={css.recordCode}>{record.code}</span>
+              ) : null}
               <span className={css.recordMain}>
                 <span className={css.recordTitle}>{record.title}</span>
                 {record.subtitle ? <span className={css.recordSub}>{record.subtitle}</span> : null}
@@ -141,7 +154,12 @@ export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5 }
     );
   }
   return (
-    <Panel title={title} icon={icon} actions={more ? <MoreLink to={more} /> : undefined} padded={false}>
+    <Panel
+      title={title}
+      icon={icon}
+      actions={more ? <MoreLink to={more} /> : undefined}
+      padded={false}
+    >
       {body}
     </Panel>
   );
@@ -254,7 +272,12 @@ export function BreakdownPanel({
 }) {
   const total = rows.reduce((sum, row) => sum + (row.count ?? 0), 0);
   return (
-    <Panel title={title} icon={icon} footer={footer} actions={more ? <MoreLink to={more} /> : undefined}>
+    <Panel
+      title={title}
+      icon={icon}
+      footer={footer}
+      actions={more ? <MoreLink to={more} /> : undefined}
+    >
       {failed ? (
         <p className={css.inlineNote}>Sayılar yüklenemedi.</p>
       ) : (
@@ -288,12 +311,24 @@ export function BreakdownPanel({
 }
 
 /** "Toplam" style footer line for a panel: a label and a figure. */
-export function PanelTotal({ label, value }: { label: ReactNode; value: number | string | undefined }) {
+export function PanelTotal({
+  label,
+  value,
+}: {
+  label: ReactNode;
+  value: number | string | undefined;
+}) {
   return (
     <>
       <span>{label}</span>
       <b className={css.totalValue}>
-        {value === undefined ? <PendingValue /> : typeof value === 'number' ? formatNumber(value) : value}
+        {value === undefined ? (
+          <PendingValue />
+        ) : typeof value === 'number' ? (
+          formatNumber(value)
+        ) : (
+          value
+        )}
       </b>
     </>
   );

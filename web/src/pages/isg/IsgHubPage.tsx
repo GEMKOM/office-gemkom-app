@@ -3,12 +3,23 @@ import { isgIssuesQueryOptions, type IsgIssue, type IsgSeverity } from '@/api/is
 import { formatDate } from '@/lib/format';
 import { MenuCards, PendingValue, type MenuCard, type PageFigure, type StatusFamily } from '@/ui';
 import { countValue, useIsgSummary } from '../hubFigures';
-import { BreakdownPanel, HubPanels, PanelTotal, RecordsPanel, type HubRecord } from '../hub/HubPanels';
+import {
+  BreakdownPanel,
+  HubPanels,
+  PanelTotal,
+  RecordsPanel,
+  type HubRecord,
+} from '../hub/HubPanels';
 
 const ISSUES = '/isg/issues';
 const MINE = '/isg/issues?mine=true';
 /** What the assignee still has to do; resolved issues wait on İSG to close them. */
-const MY_ACTIONS = { mine: 'true', status__in: 'open,in_progress', ordering: 'due_date', page_size: 6 };
+const MY_ACTIONS = {
+  mine: 'true',
+  status__in: 'open,in_progress',
+  ordering: 'due_date',
+  page_size: 6,
+};
 
 const SEVERITY: Record<IsgSeverity, { label: string; color: StatusFamily }> = {
   low: { label: 'Düşük', color: 'grey' },
@@ -24,8 +35,13 @@ function actionRecord(issue: IsgIssue): HubRecord {
     code: issue.issue_number,
     title: issue.title,
     subtitle: [issue.location, issue.category_display].filter(Boolean).join(' · ') || undefined,
-    status: SEVERITY[issue.severity] ?? { label: issue.severity_display ?? issue.severity, color: 'grey' },
-    meta: issue.due_date ? formatDate(issue.due_date, { day: 'numeric', month: 'short' }) : 'Süresiz',
+    status: SEVERITY[issue.severity] ?? {
+      label: issue.severity_display ?? issue.severity,
+      color: 'grey',
+    },
+    meta: issue.due_date
+      ? formatDate(issue.due_date, { day: 'numeric', month: 'short' })
+      : 'Süresiz',
     alert: Boolean(issue.is_overdue),
   };
 }
@@ -65,7 +81,13 @@ export function IsgHubPage() {
 
   // Each figure opens the list behind it (the list reads mine / overdue / severity from the URL).
   const stats: PageFigure[] = [
-    { id: 'isg-mine', label: 'Bana Atanan', value: count(s?.mine_open), icon: 'fas fa-user-shield', link: MINE },
+    {
+      id: 'isg-mine',
+      label: 'Bana Atanan',
+      value: count(s?.mine_open),
+      icon: 'fas fa-user-shield',
+      link: MINE,
+    },
     {
       id: 'isg-overdue',
       label: 'Geciken',
@@ -80,7 +102,13 @@ export function IsgHubPage() {
       icon: 'fas fa-fire',
       link: '/isg/issues?severity__in=high,critical',
     },
-    { id: 'isg-open', label: 'Açık', value: count(active), icon: 'fas fa-folder-open', link: ISSUES },
+    {
+      id: 'isg-open',
+      label: 'Açık',
+      value: count(active),
+      icon: 'fas fa-folder-open',
+      link: ISSUES,
+    },
   ].map((f) => ({ ...f, value: f.value ?? <PendingValue /> }));
 
   const stage = (status: 'open' | 'in_progress' | 'resolved') => (s ? (s[status] ?? 0) : undefined);
@@ -107,7 +135,13 @@ export function IsgHubPage() {
           icon="fas fa-filter"
           failed={summary.isError}
           rows={[
-            { key: 'open', label: 'Açık', color: 'red', count: stage('open'), link: `${ISSUES}?status__in=open` },
+            {
+              key: 'open',
+              label: 'Açık',
+              color: 'red',
+              count: stage('open'),
+              link: `${ISSUES}?status__in=open`,
+            },
             {
               key: 'in_progress',
               label: 'Devam Ediyor',
@@ -123,7 +157,9 @@ export function IsgHubPage() {
               link: `${ISSUES}?status__in=resolved`,
             },
           ]}
-          footer={<PanelTotal label="Kapatılan" value={summary.isError ? '-' : s && (s.closed ?? 0)} />}
+          footer={
+            <PanelTotal label="Kapatılan" value={summary.isError ? '-' : s && (s.closed ?? 0)} />
+          }
         />
       </HubPanels>
     </MenuCards>

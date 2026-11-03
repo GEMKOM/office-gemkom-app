@@ -9,7 +9,16 @@ vi.mock('@legacy/apis/accessControl.js', () => ({ hasRouteAccess: () => true }))
 
 const fetchMock = vi.mocked(authedFetch);
 
-const SUMMARY = { total: 30, open: 7, in_progress: 4, resolved: 1, closed: 18, overdue: 2, critical_open: 5, mine_open: 3 };
+const SUMMARY = {
+  total: 30,
+  open: 7,
+  in_progress: 4,
+  resolved: 1,
+  closed: 18,
+  overdue: 2,
+  critical_open: 5,
+  mine_open: 3,
+};
 
 const MY_ISSUES = [
   {
@@ -25,7 +34,8 @@ const MY_ISSUES = [
   },
 ];
 
-const json = (body: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(body), { status }));
+const json = (body: unknown, status = 200) =>
+  Promise.resolve(new Response(JSON.stringify(body), { status }));
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -39,7 +49,9 @@ beforeEach(() => {
 it('shows the assigned, overdue, critical and open counters from one summary request, each linking to its list', async () => {
   renderWithProviders(<IsgHubPage />, { route: '/isg/' });
 
-  expect(screen.getByRole('heading', { level: 1, name: 'İş Sağlığı ve Güvenliği' })).toBeInTheDocument();
+  expect(
+    screen.getByRole('heading', { level: 1, name: 'İş Sağlığı ve Güvenliği' }),
+  ).toBeInTheDocument();
   // Open as the list counts it: open, in progress and resolved.
   await waitFor(() => expect(document.getElementById('isg-open')).toHaveTextContent('12'));
   expect(document.getElementById('isg-overdue')).toHaveTextContent('2');
@@ -65,7 +77,9 @@ it('shows the assigned, overdue, critical and open counters from one summary req
 it("lists the user's open actions, soonest due first, and the issues by status", async () => {
   renderWithProviders(<IsgHubPage />, { route: '/isg/' });
 
-  const panel = (await screen.findByRole('heading', { name: 'Bana Atanan Aksiyonlar' })).closest('section')!;
+  const panel = (await screen.findByRole('heading', { name: 'Bana Atanan Aksiyonlar' })).closest(
+    'section',
+  )!;
   const row = await within(panel).findByRole('link', { name: /ISG-2026-009/ });
   expect(row).toHaveAttribute('href', '/isg/issues?issue=ISG-2026-009');
   expect(row).toHaveTextContent('Kritik');
@@ -93,7 +107,9 @@ it('keeps the legacy cards, Bana Atananlar with its count', async () => {
 
   const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
   expect(titles).toEqual(['İSG Bildirimleri', 'Bana Atananlar']);
-  const mine = screen.getByRole('heading', { level: 3, name: 'Bana Atananlar' }).closest('article')!;
+  const mine = screen
+    .getByRole('heading', { level: 3, name: 'Bana Atananlar' })
+    .closest('article')!;
   expect(within(mine).getByRole('link')).toHaveAttribute('href', '/isg/issues?mine=true');
   await waitFor(() => expect(mine).toHaveTextContent('3 açık aksiyon'));
 });

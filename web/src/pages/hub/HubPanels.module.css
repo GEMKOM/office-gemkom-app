@@ -247,7 +247,9 @@ a.record:focus-visible {
 .attentionChevron {
   font-size: 11px;
   color: var(--gk-line-strong);
-  transition: transform 120ms ease-out, color 120ms ease-out;
+  transition:
+    transform 120ms ease-out,
+    color 120ms ease-out;
 }
 
 .attentionRow:hover .attentionChevron {
