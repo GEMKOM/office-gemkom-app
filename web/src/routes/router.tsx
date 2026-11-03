@@ -407,6 +407,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/finance/purchase-orders',
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/purchase-orders/FinanceOperationsPage'))
+        .FinanceOperationsPage,
+    }),
+  },
+  {
     path: '/finance/reports/projects',
     lazy: async () => ({
       Component: (await import('@/pages/finance/reports/projects/ProjectsReportPage'))
