@@ -60,6 +60,9 @@ test('admin: planning and finance hubs list their cards in the legacy order', as
     'Proje Planlama',
     'Malzeme Maliyeti Satırları',
     'Planlama Kalemleri',
+    // Moved here from İmalat.
+    'CNC Kesim',
+    'Lineer Kesim',
   ]);
 
   await page.goto('/finance/');
