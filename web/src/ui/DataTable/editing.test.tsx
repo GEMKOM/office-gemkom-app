@@ -112,6 +112,24 @@ describe('DataTable inline editing', () => {
     expect(cell('1', 'qty')).toHaveTextContent('7.25');
   });
 
+  it('edits multi-line text: Enter is a new line, Ctrl+Enter saves', () => {
+    const onCellEdit = vi.fn();
+    const notes: DataTableColumn<Item>[] = [{ key: 'name', header: 'Not', editable: { type: 'textarea' } }];
+    renderWithProviders(
+      <DataTable data={items} columns={notes} getRowId={getRowId} onCellEdit={onCellEdit} />,
+    );
+    fireEvent.click(cell('1', 'name'));
+    const box = screen.getByRole('textbox', { name: 'Not' });
+    expect(box.tagName).toBe('TEXTAREA');
+    fireEvent.change(box, { target: { value: 'satır 1\nsatır 2' } });
+    fireEvent.keyDown(box, { key: 'Enter' });
+    expect(onCellEdit).not.toHaveBeenCalled();
+    fireEvent.keyDown(box, { key: 'Enter', ctrlKey: true });
+    expect(onCellEdit).toHaveBeenCalledWith(
+      expect.objectContaining({ rowId: '1', columnKey: 'name', value: 'satır 1\nsatır 2' }),
+    );
+  });
+
   it('cancels on Escape and does not save an unchanged value', () => {
     const onCellEdit = vi.fn();
     renderWithProviders(

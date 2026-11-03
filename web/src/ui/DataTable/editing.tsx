@@ -1,4 +1,4 @@
-import { NativeSelect, TextInput } from '@mantine/core';
+import { NativeSelect, Textarea, TextInput } from '@mantine/core';
 import { useRef, useState, type KeyboardEvent } from 'react';
 import { columnValue } from './sorting';
 import type { CellValue, ColumnEditor, DataTableColumn, EditOption } from './types';
@@ -141,6 +141,7 @@ export function CellEditor<T>({
   const [raw, setRaw] = useState(initial);
   // Enter/Escape/Tab end the edit; the blur that follows must not save again.
   const done = useRef(false);
+  const multiline = editor.type === 'textarea';
   const finish = (via: CommitVia) => {
     if (done.current) return;
     done.current = true;
@@ -149,6 +150,10 @@ export function CellEditor<T>({
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     // Keep the cell's own keys (Enter opens, arrows move) out of the editor.
     event.stopPropagation();
+    if (event.key === 'Enter' && multiline && !(event.ctrlKey || event.metaKey)) {
+      // A new line; Ctrl+Enter saves (legacy textarea editors).
+      return;
+    }
     if (event.key === 'Enter') {
       event.preventDefault();
       finish('enter');
@@ -181,6 +186,18 @@ export function CellEditor<T>({
       <NativeSelect
         {...common}
         data={data.map((o) => ({ value: o.value, label: o.label }))}
+        value={raw}
+        onChange={(event) => setRaw(event.currentTarget.value)}
+      />
+    );
+  }
+  if (type === 'textarea') {
+    return (
+      <Textarea
+        {...common}
+        rows={3}
+        styles={{ input: { resize: 'vertical', minHeight: 60, maxHeight: 120 } }}
+        placeholder={editor.placeholder}
         value={raw}
         onChange={(event) => setRaw(event.currentTarget.value)}
       />
