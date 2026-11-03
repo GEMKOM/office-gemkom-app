@@ -8,7 +8,7 @@ import {
   type MachineDropdownItem,
 } from '@/api/manufacturing/linearCutting';
 import { DataTable, DetailModal, FaIcon, FormModal, ModalSection, notify, StatusBadge } from '@/ui';
-import { BarLayout } from './BarDiagram';
+import { BarLayout } from '../shared/BarDiagram';
 import { cutColumns, materialText } from './columns';
 
 export function TaskDetailModal({

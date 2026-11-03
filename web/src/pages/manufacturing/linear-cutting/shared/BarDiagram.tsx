@@ -4,13 +4,29 @@ import {
   passKindLabel,
 } from '@legacy/manufacturing/linear-cutting/lc-geometry.js';
 import { Group, Portal, Table, Text } from '@mantine/core';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { LinearCuttingTask, LinearPass } from '@/api/manufacturing/linearCutting';
 import { FaIcon, StatusBadge } from '@/ui';
 import classes from './BarDiagram.module.css';
 
+export interface CanvasBar {
+  stock_length_mm?: number | null;
+  waste_mm?: number | null;
+  is_remnant?: boolean;
+  cuts?: unknown[] | null;
+  passes?: unknown[] | null;
+}
+
 /** The bar drawn by lc-geometry's drawBarCanvas, with its hover tooltip. */
-function BarCanvas({ task }: { task: LinearCuttingTask }) {
+export function BarCanvas({
+  bar,
+  kerfMm,
+  referenceStockMm,
+}: {
+  bar: CanvasBar;
+  kerfMm: number;
+  referenceStockMm?: number | null;
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -19,33 +35,23 @@ function BarCanvas({ task }: { task: LinearCuttingTask }) {
     if (!canvas || typeof canvas.getContext !== 'function' || !canvas.getContext('2d')) return;
     let frame = 0;
     let tries = 0;
-    // The modal opens with a transition; wait until the canvas has a width.
+    // A modal or tab opens with a transition; wait until the canvas has a width.
     const run = () => {
       if (canvas.clientWidth < 50 && tries < 10) {
         tries += 1;
         frame = requestAnimationFrame(run);
         return;
       }
-      drawBarCanvas(
-        canvas,
-        {
-          stock_length_mm: task.stock_length_mm,
-          waste_mm: task.waste_mm,
-          is_remnant: task.is_remnant_bar,
-          cuts: task.layout_json,
-          passes: task.passes_json,
-        },
-        { kerfMm: Number(task.kerf_mm) || 0, tooltipEl: tooltipRef.current },
-      );
+      drawBarCanvas(canvas, bar, { kerfMm, referenceStockMm, tooltipEl: tooltipRef.current });
     };
     frame = requestAnimationFrame(run);
     return () => cancelAnimationFrame(frame);
-  }, [task]);
+  }, [bar, kerfMm, referenceStockMm]);
 
   return (
     <>
       <canvas ref={canvasRef} className={classes.canvas} aria-label="Bar görseli" />
-      {/* Outside the modal so position: fixed follows the mouse. */}
+      {/* Outside any modal so position: fixed follows the mouse. */}
       <Portal>
         <div ref={tooltipRef} className={classes.tooltip} />
       </Portal>
@@ -53,7 +59,21 @@ function BarCanvas({ task }: { task: LinearCuttingTask }) {
   );
 }
 
-function PassTable({ passes }: { passes: LinearPass[] }) {
+function TaskBarCanvas({ task }: { task: LinearCuttingTask }) {
+  const bar = useMemo(
+    () => ({
+      stock_length_mm: task.stock_length_mm,
+      waste_mm: task.waste_mm,
+      is_remnant: task.is_remnant_bar,
+      cuts: task.layout_json,
+      passes: task.passes_json,
+    }),
+    [task],
+  );
+  return <BarCanvas bar={bar} kerfMm={Number(task.kerf_mm) || 0} />;
+}
+
+export function PassTable({ passes }: { passes: LinearPass[] }) {
   return (
     <>
       <Table withTableBorder withColumnBorders fz="sm" verticalSpacing={4}>
@@ -133,7 +153,7 @@ export function BarLayout({ task }: { task: LinearCuttingTask }) {
             Fire: <strong>{task.waste_mm ?? '—'} mm</strong> · Kesim: <strong>{cuts.length}</strong>
           </span>
         </Group>
-        <BarCanvas task={task} />
+        <TaskBarCanvas task={task} />
         <Text c="dimmed" fz="sm" mt={8}>
           Parçaların üzerine gelince detayları görebilirsiniz.
         </Text>

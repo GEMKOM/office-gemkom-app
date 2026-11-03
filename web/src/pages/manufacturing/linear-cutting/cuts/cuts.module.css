@@ -1,0 +1,250 @@
+.empty {
+  padding: 48px 20px;
+  color: var(--mantine-color-dimmed);
+  text-align: center;
+}
+
+.empty i {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 3rem;
+  opacity: 0.4;
+}
+
+.empty p {
+  margin: 0;
+}
+
+/* ── Parts table ── */
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table td,
+.table th {
+  vertical-align: middle;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Şekil cell: the scale drawing doubles as the panel toggle ── */
+.geomToggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.geomToggle:hover {
+  border-color: var(--mantine-color-gray-3);
+  background: var(--mantine-color-gray-0);
+}
+
+.geomToggle[data-open] {
+  border-color: var(--mantine-color-blue-3);
+  background: var(--mantine-color-blue-0);
+}
+
+.geomToggle svg {
+  display: block;
+}
+
+.geomCaret {
+  color: var(--mantine-color-gray-6);
+  font-size: 0.62rem;
+  transition: transform 0.15s ease;
+}
+
+.geomToggle[data-open] .geomCaret {
+  transform: rotate(180deg);
+}
+
+.geomFlag {
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  color: var(--mantine-color-blue-6);
+  font-size: 0.6rem;
+  opacity: 0.75;
+}
+
+/* ── Expanded per-part measurement panel ── */
+.geomCell {
+  padding: 10px 14px 12px !important;
+  background: var(--mantine-color-gray-0);
+}
+
+.geomPanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.geomDrawing {
+  flex: 0 0 auto;
+  padding: 4px;
+  border: 1px solid var(--mantine-color-gray-3);
+  border-radius: 10px;
+  background: var(--mantine-color-white);
+  line-height: 0;
+}
+
+.geomForm {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 300px;
+}
+
+.geomHead {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.geomKesit {
+  color: var(--mantine-color-dimmed);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+.geomSide {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.geomSideLabel {
+  flex: 0 0 58px;
+  font-weight: 600;
+}
+
+.geomStatic {
+  flex: 0 0 210px;
+}
+
+.geomArrow {
+  color: var(--mantine-color-gray-5);
+}
+
+.geomHint {
+  margin-top: 2px;
+  color: var(--mantine-color-dimmed);
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+/* ── Optimization result ── */
+.summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.metric {
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+
+.metricKey {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  color: var(--mantine-color-dimmed);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.metricValue {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.metricSub {
+  margin-top: 0.35rem;
+  color: var(--mantine-color-dimmed);
+  font-size: 0.78rem;
+}
+
+.bars {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.barCard {
+  overflow: hidden;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+}
+
+.barHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-gray-0);
+}
+
+.barTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+}
+
+.barMeta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  color: var(--mantine-color-dimmed);
+  font-size: 0.8rem;
+}
+
+.barBody {
+  padding: 0.9rem 1rem 1rem;
+}
+
+.canvasWrap {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: 10px;
+}
+
+@media (max-width: 992px) {
+  .summary {
+    grid-template-columns: 1fr;
+  }
+
+  .geomPanel {
+    gap: 12px;
+  }
+
+  .geomDrawing {
+    flex: 1 1 100%;
+    overflow-x: auto;
+  }
+}
