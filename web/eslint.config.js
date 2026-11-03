@@ -5,7 +5,14 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default defineConfig([
-  globalIgnores(['dist/', 'node_modules/', 'coverage/', 'test-results/', 'playwright-report/']),
+  globalIgnores([
+    'dist/',
+    'node_modules/',
+    '.vite/',
+    'coverage/',
+    'test-results/',
+    'playwright-report/',
+  ]),
   {
     files: ['**/*.{js,mjs,cjs,ts,mts,cts,tsx}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],

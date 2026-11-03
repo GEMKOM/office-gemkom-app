@@ -19,8 +19,8 @@ const REMNANTS = [
     thickness_mm_2: null,
     dimensions: '1200x800',
     quantity: 3,
+    available_quantity: 3,
     material: 'S235JR',
-    assigned_to: null,
     task: null,
   },
   {
@@ -29,9 +29,34 @@ const REMNANTS = [
     thickness_mm_2: '4.00',
     dimensions: '600x400',
     quantity: 2,
+    // A cut used one of the two.
+    available_quantity: 1,
     material: 'BAKIR',
-    assigned_to: 4,
     task: 'CNC-12',
+  },
+];
+
+// Every matching plate (page_size=1000): the page above plus two whose
+// dimensions are not "1200x800"-style, one fixable and one not.
+const ALL_REMNANTS = [
+  ...REMNANTS,
+  {
+    id: 10,
+    thickness_mm: '8.00',
+    thickness_mm_2: null,
+    dimensions: '1500 X 600',
+    quantity: 1,
+    available_quantity: 1,
+    material: 'S355',
+  },
+  {
+    id: 11,
+    thickness_mm: '6.00',
+    thickness_mm_2: null,
+    dimensions: 'L 300',
+    quantity: 2,
+    available_quantity: 2,
+    material: 'S235JR',
   },
 ];
 
@@ -49,8 +74,13 @@ function calls(): Call[] {
     body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
   }));
 }
-const listCalls = () =>
+const isAll = (c: Call) => c.url.searchParams.get('page_size') === '1000';
+const remnantGets = () =>
   calls().filter((c) => c.method === 'GET' && c.url.pathname === '/cnc_cutting/remnants/');
+/** The table's page requests. */
+const listCalls = () => remnantGets().filter((c) => !isAll(c));
+/** The every-plate requests behind the figures. */
+const allCalls = () => remnantGets().filter(isAll);
 
 function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
@@ -70,8 +100,12 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
-    const path = new URL(String(url)).pathname;
+    const parsed = new URL(String(url));
+    const path = parsed.pathname;
     if (method === 'GET' && path === '/cnc_cutting/remnants/') {
+      if (parsed.searchParams.get('page_size') === '1000') {
+        return json({ count: 4, next: null, previous: null, results: ALL_REMNANTS });
+      }
       return json({ count: 31, next: null, previous: null, results: REMNANTS });
     }
     if (method === 'GET' && path === '/cnc_cutting/remnants/7/')
@@ -89,31 +123,54 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('lists unassigned plates by default with the page figures', async () => {
+const figureOf = (id: string) => document.getElementById(id)!.textContent;
+
+it('lists the plates in stock by default, with figures over every matching plate', async () => {
   renderPage();
   expect(screen.getByRole('heading', { level: 1, name: 'Fire Plakalar' })).toBeInTheDocument();
   expect(await screen.findByText('1200x800')).toBeInTheDocument();
   expect(screen.getByText('CNC-12')).toBeInTheDocument();
 
-  expect(
-    within(document.getElementById('total-remnants-count')!).getByText('31'),
-  ).toBeInTheDocument();
-  expect(
-    within(document.getElementById('total-quantity-count')!).getByText('5'),
-  ).toBeInTheDocument();
-  expect(
-    within(document.getElementById('assigned-remnants-count')!).getByText('1'),
-  ).toBeInTheDocument();
-  expect(
-    within(document.getElementById('unassigned-remnants-count')!).getByText('1'),
-  ).toBeInTheDocument();
+  // Over all four plates, not the page of two: 4 records, 3+1+1+2 pieces left,
+  // one of them used from (#8), so 3 + 1 = 4.
+  await waitFor(() => expect(figureOf('total-remnants-count')).toContain('4'));
+  expect(figureOf('total-remnants-count')).toBe('Plaka Kaydı4');
+  expect(figureOf('total-quantity-count')).toBe('Kalan Adet7');
+  expect(figureOf('unassigned-remnants-count')).toBe('Atanmamış3');
+  expect(figureOf('assigned-remnants-count')).toBe('Atanmış1');
+  // 1200×800×10 mm × 3 + 600×400×5 × 1 + 1500×600×8 × 1 at 7.85 g/cm³ = 292.02 kg;
+  // "L 300" cannot be read and is left out.
+  expect(figureOf('estimated-weight')).toBe('Tahmini Ağırlık · 1 plaka hariç≈ 292 kg');
 
-  // No unassigned param: the backend's default is the unassigned plates.
+  // No unassigned param: the backend's default is the plates with pieces left.
   expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({
     ordering: 'id',
     page: '1',
     page_size: '20',
   });
+  expect(Object.fromEntries(allCalls()[0]!.url.searchParams)).toEqual({
+    page: '1',
+    page_size: '1000',
+  });
+});
+
+it('flags malformed dimensions and filters to them', async () => {
+  renderPage();
+  await screen.findByText('1200x800');
+  const alert = await screen.findByTestId('malformed-dimensions');
+  expect(alert).toHaveTextContent('2 plakanın boyutu 1200x800');
+
+  fireEvent.click(within(alert).getByRole('button', { name: 'Hatalı kayıtları göster' }));
+  await waitFor(() => {
+    const search = new URLSearchParams(screen.getByTestId('location').textContent ?? '');
+    expect(search.get('format')).toBe('invalid');
+  });
+  // Only the two, from the every-plate list; no page request is made for them.
+  expect(await screen.findByText('1500 X 600')).toBeInTheDocument();
+  expect(screen.getByText('L 300')).toBeInTheDocument();
+  expect(screen.queryByText('1200x800')).not.toBeInTheDocument();
+  expect(screen.getAllByTestId('dimensions-flag')).toHaveLength(2);
+  expect(listCalls()).toHaveLength(1);
 });
 
 it('filters write the URL and send the legacy params', async () => {
@@ -158,9 +215,21 @@ it('the create form validates and posts the legacy body', async () => {
   fireEvent.change(within(dialog).getByLabelText(/^Kalınlık \(mm\)/), {
     target: { value: '12.5' },
   });
-  fireEvent.change(within(dialog).getByLabelText(/^Boyutlar/), { target: { value: ' 900x500 ' } });
+  fireEvent.change(within(dialog).getByLabelText(/^Boyutlar/), { target: { value: '900-500' } });
   fireEvent.change(within(dialog).getByLabelText(/^Adet/), { target: { value: '2' } });
   fireEvent.change(within(dialog).getByLabelText(/^Malzeme/), { target: { value: 'S355' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Plaka Oluştur' }));
+  expect(
+    await within(dialog).findByText(
+      'Boyutlar Genişlik x Yükseklik (mm) biçiminde olmalıdır, örn. 1200x800',
+    ),
+  ).toBeInTheDocument();
+  expect(calls().some((c) => c.method === 'POST')).toBe(false);
+
+  // Spacing and case are fixed on save.
+  fireEvent.change(within(dialog).getByLabelText(/^Boyutlar/), {
+    target: { value: ' 900 X 500 ' },
+  });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Plaka Oluştur' }));
 
   await waitFor(() =>
@@ -274,6 +343,24 @@ describe('parseBulkRemnants', () => {
         3,
         'Yeterli veri yok (5 veya 6 alan gerekli: Kalınlık, [Kalınlık2], Genişlik, Yükseklik, Adet, Malzeme)',
       ],
+    ]);
+  });
+
+  it('writes and checks dimensions the way the single-plate form does', () => {
+    const { valid, invalid } = parseBulkRemnants(
+      [
+        '10,1200 X 800,2,S235',
+        '3\t-\t1500,5\t660\t5\tGALVANİZ',
+        '3\t-\t1500 × 660\t5\tS235',
+        '10,1200x800x10,2,S235',
+        '3\t-\t1.200\t660\t5\tS235',
+      ].join('\n'),
+    );
+    expect(valid.map((r) => r.dimensions)).toEqual(['1200x800', '1500.5x660', '1500x660']);
+    const error = 'Boyutlar Genişlik x Yükseklik (mm) biçiminde olmalıdır, örn. 1200x800';
+    expect(invalid.map((i) => [i.lineNumber, i.error])).toEqual([
+      [4, error],
+      [5, error],
     ]);
   });
 });

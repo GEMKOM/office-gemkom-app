@@ -1,4 +1,5 @@
 import type { RemnantPlateInput } from '@/api/manufacturing/remnants';
+import { DIMENSIONS_ERROR, normalizeDimensions } from './dimensions';
 
 export interface BulkRemnantRow extends RemnantPlateInput {
   lineNumber: number;
@@ -23,8 +24,8 @@ function optionalThickness(text: string): number | null {
 
 /** "1200x800" -> ['1200', '800']; null when the field is not in that form. */
 function splitDimensions(field: string): [string, string] | null {
-  if (!/[xX]/.test(field)) return null;
-  const parts = field.split(/[xX]/).map((p) => p.trim());
+  if (!/[xX×*]/.test(field)) return null;
+  const parts = field.split(/[xX×*]/).map((p) => p.trim());
   return parts.length === 2 ? [parts[0]!, parts[1]!] : null;
 }
 
@@ -90,17 +91,20 @@ export function parseBulkRemnants(text: string): {
       const [thicknessText = '', dimensions = '', quantityText = '', material = ''] = parts;
       const thickness = parseFloat(thicknessText.replace(',', '.'));
       const quantity = parseInt(quantityText, 10);
+      const normalized = normalizeDimensions(dimensions);
       let error: string | null = null;
       if (Number.isNaN(thickness) || thickness <= 0) error = 'Geçersiz kalınlık değeri';
       else if (!dimensions) error = 'Boyutlar gereklidir';
+      else if (!normalized) error = DIMENSIONS_ERROR;
       else if (Number.isNaN(quantity) || quantity < 0) error = 'Geçersiz adet değeri';
       else if (!material) error = 'Malzeme gereklidir';
-      if (error) invalid.push({ lineNumber, line, error });
+      if (error || !normalized)
+        invalid.push({ lineNumber, line, error: error ?? DIMENSIONS_ERROR });
       else
         valid.push({
           lineNumber,
           thickness_mm: thickness.toFixed(2),
-          dimensions,
+          dimensions: normalized,
           quantity,
           material,
         });
@@ -115,6 +119,8 @@ export function parseBulkRemnants(text: string): {
     const thickness = parseFloat(thicknessText);
     const fields = readFields(parts);
     const quantity = parseInt(fields.quantity, 10);
+    // The same check as the single-plate form: Genişlik/Yükseklik must make "1200x800".
+    const dimensions = normalizeDimensions(`${fields.width}x${fields.height}`);
 
     let error: string | null = null;
     if (thicknessText.includes('+')) error = 'Bileşik kalınlık formatı desteklenmiyor (örn: 20+8)';
@@ -123,18 +129,19 @@ export function parseBulkRemnants(text: string): {
       error = 'Geçersiz genişlik değeri';
     else if (!fields.height || Number.isNaN(parseFloat(fields.height)))
       error = 'Geçersiz yükseklik değeri';
+    else if (!dimensions) error = DIMENSIONS_ERROR;
     else if (!fields.quantity || Number.isNaN(quantity) || quantity < 0)
       error = 'Geçersiz adet değeri';
     else if (!fields.material) error = 'Malzeme gereklidir';
 
-    if (error) {
-      invalid.push({ lineNumber, line, error });
+    if (error || !dimensions) {
+      invalid.push({ lineNumber, line, error: error ?? DIMENSIONS_ERROR });
       return;
     }
     const row: BulkRemnantRow = {
       lineNumber,
       thickness_mm: thickness.toFixed(2),
-      dimensions: `${fields.width}x${fields.height}`,
+      dimensions,
       quantity,
       material: fields.material,
     };

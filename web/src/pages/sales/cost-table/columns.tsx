@@ -1,4 +1,4 @@
-import { Text, Tooltip } from '@mantine/core';
+import { ActionIcon, Text, Tooltip } from '@mantine/core';
 import type { CostTableRow } from '@/api/projects/cost';
 import { formatCurrency, formatDate, formatNumber, formatPercent } from '@/lib/format';
 import {
@@ -29,8 +29,14 @@ export interface ColumnContext {
   /** Rows whose loaded children list is non-empty (legacy also showed + for those). */
   withChildren: ReadonlySet<string>;
   onToggle: (jobNo: string) => void;
+  /** Whether the cost-breakdown columns are shown (collapsed by default, as in legacy). */
+  breakdown: boolean;
+  onToggleBreakdown: () => void;
   onDrill: (kind: DrillKind, jobNo: string) => void;
 }
+
+/** Başlık is cut at this length; the full text is the hover title. */
+export const TITLE_LIMIT = 40;
 
 const MONEY = '#,##0.00 "€"';
 const PRICE_ERROR = 'Geçerli bir satış fiyatı girin.';
@@ -81,6 +87,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     key,
     header,
     align: 'right',
+    hidden: !ctx.breakdown,
     render: (row) => <Money value={row[key]} />,
     exportValue: (row) => numOrNull(row[key]),
     exportFormat: MONEY,
@@ -112,7 +119,20 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
       width: 160,
       render: (row) => <JobNoCell row={row} />,
     },
-    { key: 'title', header: 'Başlık', render: (row) => row.title || '-' },
+    {
+      key: 'title',
+      header: 'Başlık',
+      exportValue: (row) => row.title || null,
+      render: (row) => {
+        const title = row.title;
+        if (!title) return '-';
+        return title.length > TITLE_LIMIT ? (
+          <span title={title}>{title.slice(0, TITLE_LIMIT).trimEnd()}…</span>
+        ) : (
+          title
+        );
+      },
+    },
     {
       key: 'customer_name',
       header: 'Müşteri',
@@ -150,6 +170,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     },
     {
       key: 'labor_cost',
+      hidden: !ctx.breakdown,
       header: 'İşçilik + Vergi',
       align: 'right',
       exportValue: (row) => laborWithTax(row),
@@ -167,6 +188,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     },
     {
       key: 'material_cost',
+      hidden: !ctx.breakdown,
       header: 'Malzeme',
       align: 'right',
       exportValue: (row) => numOrNull(row.material_cost),
@@ -183,6 +205,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     },
     {
       key: 'subcontractor_cost',
+      hidden: !ctx.breakdown,
       header: 'Taşeron',
       align: 'right',
       exportValue: (row) => numOrNull(row.subcontractor_cost),
@@ -201,6 +224,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     },
     {
       key: 'paint_cost',
+      hidden: !ctx.breakdown,
       header: 'Boya + Boya Malzemesi',
       align: 'right',
       exportValue: (row) => paintWithMaterial(row),
@@ -212,6 +236,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     money('machine_rental_cost', 'Makine Kirası'),
     {
       key: 'general_expenses_cost',
+      hidden: !ctx.breakdown,
       header: 'Genel Giderler',
       align: 'right',
       exportValue: (row) => numOrNull(row.general_expenses_cost),
@@ -254,7 +279,30 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     },
     {
       key: 'actual_total_cost',
-      header: 'Toplam Maliyet',
+      header: (
+        <span className={classes.totalHeader}>
+          Toplam Maliyet
+          <Tooltip
+            label={ctx.breakdown ? 'Maliyet kalemlerini gizle' : 'Maliyet kalemlerini göster'}
+          >
+            <ActionIcon
+              size="xs"
+              variant={ctx.breakdown ? 'filled' : 'default'}
+              aria-label={
+                ctx.breakdown ? 'Maliyet kalemlerini gizle' : 'Maliyet kalemlerini göster'
+              }
+              aria-pressed={ctx.breakdown}
+              onClick={(event) => {
+                event.stopPropagation();
+                ctx.onToggleBreakdown();
+              }}
+            >
+              <FaIcon icon={ctx.breakdown ? 'fas fa-minus' : 'fas fa-plus'} />
+            </ActionIcon>
+          </Tooltip>
+        </span>
+      ),
+      exportHeader: 'Toplam Maliyet',
       sortable: true,
       sortKey: 'actual_cost',
       align: 'right',

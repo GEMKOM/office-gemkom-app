@@ -10,6 +10,14 @@ import { scriptFetchDest } from './vite/scriptFetchDest.ts';
 const legacyRoot = fileURLToPath(new URL('..', import.meta.url));
 const srcRoot = fileURLToPath(new URL('./src', import.meta.url));
 const routesFile = fileURLToPath(new URL('./src/routes/migrated-routes.json', import.meta.url));
+// Vite's pre-bundled dependencies, kept per checkout instead of in node_modules/.vite.
+// Worktrees link node_modules from the main checkout, so with the default every
+// dev server shares one deps folder. The chunk names there depend on the path
+// from the cache to node_modules, so each server writes differently named React
+// chunks and deletes the others'. A page that loads its libraries later (the
+// chart pages) then gets a second React, and Mantine's use() reads a null
+// dispatcher: "Cannot read properties of null (reading 'use')".
+const cacheDir = fileURLToPath(new URL('./.vite', import.meta.url));
 
 // Recharts and the packages only it pulls in; see the chunk groups below.
 const CHART_PACKAGES =
@@ -18,6 +26,7 @@ const CHART_PACKAGES =
 export default defineConfig(({ command }) => ({
   // Built files are published under /app-assets/; in dev the SPA is served at /.
   base: command === 'build' ? '/app-assets/' : '/',
+  cacheDir,
   // legacyStatic: in dev, every non-migrated path is a legacy file from the repo root.
   // scriptFetchDest: see the file; keeps module loads compiled in misbehaving browsers.
   plugins: [scriptFetchDest(), react(), legacyStatic({ legacyRoot, routesFile })],
@@ -70,6 +79,6 @@ export default defineConfig(({ command }) => ({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'vite/**/*.test.ts'],
   },
 }));

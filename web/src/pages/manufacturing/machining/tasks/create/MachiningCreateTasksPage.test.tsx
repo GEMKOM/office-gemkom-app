@@ -81,6 +81,12 @@ beforeEach(() => {
     const path = new URL(String(url)).pathname;
     if (method === 'GET' && path === '/tasks/parts/')
       return json({ count: 1, next: null, previous: null, results: TASKS });
+    if (method === 'GET' && path === '/users/dropdown/') {
+      return json([
+        { id: 42, username: 'op', full_name: 'Oya Pala' },
+        { id: 7, username: 'ali', full_name: 'Ali Çelik' },
+      ]);
+    }
     if (method === 'GET' && path === '/projects/job-orders/dropdown/') {
       return json([
         { job_no: '254-01', title: 'Kazan' },
@@ -118,6 +124,26 @@ it('lists the current user’s parts with the legacy defaults', async () => {
   expect(params.get('created_by')).toBe('42');
   expect(params.get('ordering')).toBe('key');
   expect(params.get('page_size')).toBe('20');
+});
+
+it('shows the creator filter, defaulting to me, and lets it be changed or cleared', async () => {
+  renderPage();
+  await screen.findByText('PT-10');
+  const pill = await screen.findByRole('button', { name: /Oluşturan/ });
+  await waitFor(() => expect(pill).toHaveTextContent('Oya Pala (op)'));
+
+  fireEvent.click(pill);
+  fireEvent.change(await screen.findByLabelText('Seçeneklerde ara'), { target: { value: 'celik' } });
+  fireEvent.click(await screen.findByText('Ali Çelik (ali)'));
+  await waitFor(() =>
+    expect(callsTo('GET', '/tasks/parts/').at(-1)!.url.searchParams.get('created_by')).toBe('7'),
+  );
+
+  fireEvent.click(screen.getByRole('button', { name: /Oluşturan/ }));
+  fireEvent.click(await screen.findByText('Tümü'));
+  await waitFor(() =>
+    expect(callsTo('GET', '/tasks/parts/').at(-1)!.url.searchParams.has('created_by')).toBe(false),
+  );
 });
 
 it('passes list filters to the request', async () => {

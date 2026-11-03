@@ -540,8 +540,13 @@
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* Notifications popover: a white panel, unread rows first and tinted. */
+/* Notifications popover: a white panel. Header and footer stay put, the
+   groups (today / yesterday / earlier) scroll between them, so the panel
+   always fits the window whatever its height. Unread rows are tinted. */
 .notifPanel {
+  display: flex;
+  flex-direction: column;
+  max-height: min(640px, calc(100dvh - 24px));
   padding: 0;
   overflow: hidden;
   background: var(--gk-surface);
@@ -552,15 +557,15 @@
 
 .notifHeader {
   display: flex;
+  flex: none;
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--gk-line);
 }
 
 .notifHeading {
   color: var(--gk-ink);
-  font-size: 15px;
+  font-size: 16px;
   font-weight: 600;
 }
 
@@ -576,16 +581,49 @@
 }
 
 .notifAction {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
   padding: 4px 8px;
   border-radius: var(--gk-radius-sm);
   color: var(--gk-red-700);
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .notifAction:hover {
   background: var(--gk-red-050);
+}
+
+.notifFilter {
+  flex: none;
+  padding: 0 14px 12px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.notifScroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.notifGroup {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin: 0;
+  padding: 6px 14px;
+  background: var(--gk-surface-subtle);
+  border-bottom: 1px solid var(--gk-line);
+  color: var(--gk-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
 }
 
 .notifList {
@@ -594,8 +632,27 @@
   padding: 0;
 }
 
-.notifList > li + li {
+.notifItem {
+  position: relative;
+  background: var(--gk-surface);
+  transition: background 120ms ease-out;
+}
+
+.notifItem + .notifItem {
   border-top: 1px solid var(--gk-line);
+}
+
+.notifItem:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.notifItem[data-unread] {
+  background: color-mix(in srgb, var(--gk-red-050) 60%, var(--gk-surface));
+  box-shadow: inset 3px 0 0 var(--gk-red-700);
+}
+
+.notifItem[data-unread]:hover {
+  background: var(--gk-red-050);
 }
 
 .notifRow {
@@ -605,23 +662,11 @@
   width: 100%;
   padding: 12px 14px;
   text-align: left;
-  transition: background 120ms ease-out;
-}
-
-.notifRow:hover {
-  background: var(--gk-surface-subtle);
-}
-
-.notifRow[data-unread] {
-  background: color-mix(in srgb, var(--gk-red-050) 60%, var(--gk-surface));
-}
-
-.notifRow[data-unread]:hover {
-  background: var(--gk-red-050);
 }
 
 .notifRow:focus-visible,
 .notifAction:focus-visible,
+.notifCheck:focus-visible,
 .notifFooter:focus-visible {
   outline: none;
   box-shadow: inset var(--gk-focus-ring);
@@ -650,9 +695,10 @@
   font-size: 14px;
   font-weight: 500;
   line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
-.notifRow[data-unread] .notifTitle {
+.notifItem[data-unread] .notifTitle {
   color: var(--gk-ink);
   font-weight: 600;
 }
@@ -661,6 +707,7 @@
   color: var(--gk-ink-2);
   font-size: 13px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -668,9 +715,25 @@
 }
 
 .notifMeta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin-top: 2px;
   color: var(--gk-muted);
   font-size: 12px;
+}
+
+/* A notification with a destination: the arrow says the row opens it. */
+.notifGo {
+  margin-left: auto;
+  font-size: 11px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.notifItem:hover .notifGo,
+.notifRow:focus-visible .notifGo {
+  opacity: 1;
 }
 
 .notifDot {
@@ -682,23 +745,95 @@
   flex: none;
 }
 
+/* Mark one read without opening it: replaces the dot while the row is
+   hovered or focused, and is always there on touch screens. */
+.notifCheck {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gk-surface);
+  border: 1px solid var(--gk-line);
+  color: var(--gk-ink-2);
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.notifCheck:hover {
+  background: var(--gk-red-050);
+  border-color: var(--gk-red-100);
+  color: var(--gk-red-700);
+}
+
+.notifItem:hover .notifCheck,
+.notifItem:focus-within .notifCheck {
+  opacity: 1;
+}
+
+.notifItem:hover .notifDot,
+.notifItem:focus-within .notifDot {
+  opacity: 0;
+}
+
+@media (hover: none) {
+  .notifCheck {
+    opacity: 1;
+  }
+
+  .notifDot {
+    display: none;
+  }
+}
+
 .notifState {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 36px 16px;
+  gap: 4px;
+  padding: 36px 24px;
   color: var(--gk-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.notifState strong {
+  color: var(--gk-ink);
   font-size: 14px;
+  font-weight: 600;
+}
+
+.notifStateIcon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--gk-surface-subtle);
+  border: 1px solid var(--gk-line);
+  color: var(--gk-muted);
+}
+
+.notifStateIcon[data-tone='error'] {
+  background: var(--gk-red-050);
+  border-color: var(--gk-red-100);
+  color: var(--gk-red-700);
 }
 
 .notifFooter {
   display: flex;
+  flex: none;
   justify-content: center;
   align-items: center;
   gap: 8px;
   padding: 11px;
   border-top: 1px solid var(--gk-line);
+  background: var(--gk-surface);
   color: var(--gk-red-700);
   font-size: 14px;
   font-weight: 500;

@@ -1,10 +1,19 @@
 import { categoryMeta } from '@legacy/components/notificationBell/notificationCategories.js';
-import { Loader, Popover, ScrollArea, Tooltip, UnstyledButton, VisuallyHidden, type FloatingPosition } from '@mantine/core';
-import { useState } from 'react';
+import {
+  Loader,
+  Popover,
+  SegmentedControl,
+  Tooltip,
+  UnstyledButton,
+  VisuallyHidden,
+  type FloatingPosition,
+} from '@mantine/core';
+import { useMemo, useState } from 'react';
 import { neoLinkTarget, openNeo } from '@/neo';
 import { AppLink, useAppNavigate } from './AppLink';
 import { FaIcon } from './FaIcon';
 import {
+  groupByDay,
   timeAgo,
   useLatestNotifications,
   useMarkAllRead,
@@ -16,11 +25,23 @@ import classes from './shell.module.css';
 
 const countLabel = (count: number) => (count > 99 ? '99+' : String(count));
 
-function NotificationRow({ item, onOpen }: { item: AppNotification; onOpen: (item: AppNotification) => void }) {
+type Filter = 'all' | 'unread';
+
+const hasTarget = (item: AppNotification) => Boolean(item.link && item.link !== '#');
+
+function NotificationRow({
+  item,
+  onOpen,
+  onMarkRead,
+}: {
+  item: AppNotification;
+  onOpen: (item: AppNotification) => void;
+  onMarkRead: (item: AppNotification) => void;
+}) {
   const meta = categoryMeta(item.category);
   return (
-    <li>
-      <UnstyledButton className={classes.notifRow} data-unread={!item.is_read || undefined} onClick={() => onOpen(item)}>
+    <li className={classes.notifItem} data-unread={!item.is_read || undefined}>
+      <UnstyledButton className={classes.notifRow} onClick={() => onOpen(item)}>
         <span className={classes.notifIcon} style={{ background: meta.bg, color: meta.color }}>
           <FaIcon icon={`fas ${meta.icon}`} />
         </span>
@@ -30,6 +51,7 @@ function NotificationRow({ item, onOpen }: { item: AppNotification; onOpen: (ite
           <span className={classes.notifMeta}>
             {item.notification_type_display ? <>{item.notification_type_display} · </> : null}
             {timeAgo(item.created_at)}
+            {hasTarget(item) ? <FaIcon icon="fas fa-arrow-right" className={classes.notifGo} /> : null}
           </span>
         </span>
         {!item.is_read && (
@@ -38,15 +60,29 @@ function NotificationRow({ item, onOpen }: { item: AppNotification; onOpen: (ite
           </span>
         )}
       </UnstyledButton>
+      {!item.is_read && (
+        <Tooltip label="Okundu işaretle" position="left" withArrow>
+          <UnstyledButton className={classes.notifCheck} aria-label="Okundu işaretle" onClick={() => onMarkRead(item)}>
+            <FaIcon icon="fas fa-check" />
+          </UnstyledButton>
+        </Tooltip>
+      )}
     </li>
   );
 }
 
 function NotificationPanel({ count, onClose }: { count: number; onClose: () => void }) {
+  const [filter, setFilter] = useState<Filter>('all');
   const { data: items, isPending, isError } = useLatestNotifications(true);
   const markRead = useMarkRead();
   const markAllRead = useMarkAllRead();
   const navigate = useAppNavigate();
+
+  const visible = useMemo(
+    () => (items ? (filter === 'unread' ? items.filter((n) => !n.is_read) : items) : []),
+    [items, filter],
+  );
+  const groups = useMemo(() => groupByDay(visible), [visible]);
 
   const open = (item: AppNotification) => {
     if (!item.is_read) markRead.mutate(item.id);
@@ -57,9 +93,9 @@ function NotificationPanel({ count, onClose }: { count: number; onClose: () => v
       openNeo(neo);
       return;
     }
-    if (item.link && item.link !== '#') {
+    if (hasTarget(item)) {
       onClose();
-      navigate(item.link);
+      navigate(item.link!);
     }
   };
 
@@ -73,26 +109,37 @@ function NotificationPanel({ count, onClose }: { count: number; onClose: () => v
   } else if (isError) {
     body = (
       <div className={classes.notifState}>
-        <FaIcon icon="fas fa-triangle-exclamation" size={20} />
-        Bildirimler yüklenirken hata oluştu.
+        <span className={classes.notifStateIcon} data-tone="error">
+          <FaIcon icon="fas fa-triangle-exclamation" size={20} />
+        </span>
+        <strong>Bildirimler yüklenemedi</strong>
+        Bağlantınızı kontrol edip tekrar deneyin.
       </div>
     );
-  } else if (items.length === 0) {
+  } else if (visible.length === 0) {
     body = (
       <div className={classes.notifState}>
-        <FaIcon icon="fas fa-bell-slash" size={20} />
-        Henüz bildiriminiz yok
+        <span className={classes.notifStateIcon}>
+          <FaIcon icon={filter === 'unread' ? 'fas fa-check-double' : 'fas fa-bell-slash'} size={20} />
+        </span>
+        <strong>{filter === 'unread' ? 'Okunmamış bildirim yok' : 'Henüz bildiriminiz yok'}</strong>
+        {filter === 'unread' ? 'Hepsini okudunuz.' : 'Yeni bildirimler burada görünecek.'}
       </div>
     );
   } else {
     body = (
-      <ScrollArea.Autosize mah="min(440px, 60vh)" type="auto">
-        <ul className={classes.notifList}>
-          {items.map((item) => (
-            <NotificationRow key={item.id} item={item} onOpen={open} />
-          ))}
-        </ul>
-      </ScrollArea.Autosize>
+      <div className={classes.notifScroll}>
+        {groups.map((group) => (
+          <section key={group.key} aria-label={group.label}>
+            <h3 className={classes.notifGroup}>{group.label}</h3>
+            <ul className={classes.notifList}>
+              {group.items.map((item) => (
+                <NotificationRow key={item.id} item={item} onOpen={open} onMarkRead={(n) => markRead.mutate(n.id)} />
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
     );
   }
 
@@ -103,10 +150,26 @@ function NotificationPanel({ count, onClose }: { count: number; onClose: () => v
         {count > 0 && <span className={classes.notifCount}>{countLabel(count)}</span>}
         {count > 0 && (
           <UnstyledButton className={classes.notifAction} onClick={() => markAllRead.mutate()}>
+            <FaIcon icon="fas fa-check-double" />
             Tümünü Okundu Yap
           </UnstyledButton>
         )}
       </div>
+      {items && items.length > 0 && (
+        <div className={classes.notifFilter}>
+          <SegmentedControl
+            size="xs"
+            fullWidth
+            aria-label="Bildirim filtresi"
+            value={filter}
+            onChange={(v) => setFilter(v as Filter)}
+            data={[
+              { value: 'all', label: 'Tümü' },
+              { value: 'unread', label: 'Okunmamış' },
+            ]}
+          />
+        </div>
+      )}
       {body}
       <AppLink to="/general/notifications" className={classes.notifFooter} onClick={onClose}>
         Tümünü Gör <FaIcon icon="fas fa-arrow-right" />

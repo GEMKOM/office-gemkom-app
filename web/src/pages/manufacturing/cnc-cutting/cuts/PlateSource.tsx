@@ -45,6 +45,7 @@ import {
   type FilterConfig,
   type RowAction,
 } from '@/ui';
+import { DIMENSIONS_ERROR, normalizeDimensions } from '../remnants/dimensions';
 
 // The "Plaka Kaynağı" section of the create and edit modals. Every cut uses
 // exactly one plate source: a remnant plate (fire plaka) or a planning request
@@ -424,10 +425,15 @@ export function RemnantPickerModal({ onClose, onPick }: RemnantPickerProps) {
       notify.warning('Adet en az 1 olmalıdır');
       return;
     }
+    const normalized = normalizeDimensions(dimensions);
+    if (!normalized) {
+      notify.warning(DIMENSIONS_ERROR);
+      return;
+    }
     try {
       const created = await create.mutateAsync({
         thickness_mm: thickness,
-        dimensions,
+        dimensions: normalized,
         quantity,
         material,
       });
