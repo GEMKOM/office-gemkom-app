@@ -5,9 +5,10 @@ import { useAuth } from '@/auth/AuthProvider';
 import shell from '@/shell/shell.module.css';
 import { FaIcon } from '@/ui/FaIcon';
 import classes from './neo.module.css';
-import { hintKey, toggleNeo, useNeo } from './neoStore';
+import { clickNeoEntry, hintKey, useNeo } from './neoStore';
 import { NEO_PANEL_ID } from './NeoPanel';
 
+export const UNREAD_TITLE = 'Bugünün özeti okunmadı';
 export const NEO_HINT = "Neo'ya her sayfadan soru sorabilirsiniz";
 
 function hintSeen(key: string): boolean {
@@ -34,6 +35,7 @@ function rememberHint(key: string) {
  */
 export function NeoEntry({ variant }: { variant: 'icon' | 'row' | 'bar' }) {
   const open = useNeo((s) => s.open);
+  const unread = useNeo((s) => s.unreadSummary !== null);
   const { user } = useAuth();
   const key = hintKey(user.id);
   const [seen, setSeen] = useState(() => hintSeen(key));
@@ -51,7 +53,7 @@ export function NeoEntry({ variant }: { variant: 'icon' | 'row' | 'bar' }) {
 
   const onClick = () => {
     if (!seen) dismiss();
-    toggleNeo();
+    clickNeoEntry();
   };
 
   const common = {
@@ -66,7 +68,7 @@ export function NeoEntry({ variant }: { variant: 'icon' | 'row' | 'bar' }) {
   if (variant === 'row') {
     button = (
       <UnstyledButton className={`${shell.railRow} ${classes.entryRow}`} {...common}>
-        <span className={classes.entryIcon}>
+        <span className={classes.entryIcon} data-unread={unread || undefined}>
           <FaIcon icon="fas fa-robot" />
           <span className={classes.entryDot} />
         </span>
@@ -80,7 +82,7 @@ export function NeoEntry({ variant }: { variant: 'icon' | 'row' | 'bar' }) {
         className={`${shell.railItem} ${variant === 'icon' ? classes.entry : classes.entryBar}`}
         {...common}
       >
-        <span className={classes.entryIcon}>
+        <span className={classes.entryIcon} data-unread={unread || undefined}>
           <FaIcon icon="fas fa-robot" />
           <span className={classes.entryDot} />
         </span>
@@ -104,7 +106,7 @@ export function NeoEntry({ variant }: { variant: 'icon' | 'row' | 'bar' }) {
     >
       <Popover.Target>
         <Tooltip
-          label={`Neo · ${shortcut}`}
+          label={unread ? `Neo · ${UNREAD_TITLE}` : `Neo · ${shortcut}`}
           position={variant === 'bar' ? 'bottom' : 'right'}
           offset={12}
           withArrow
