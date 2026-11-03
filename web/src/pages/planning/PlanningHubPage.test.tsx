@@ -26,17 +26,6 @@ const json = (body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 const calls = () => fetchMock.mock.calls.map(([u]) => new URL(String(u)));
 
-const TASK = {
-  id: 77,
-  job_order: '265-04',
-  job_order_title: 'Konveyör Hattı',
-  customer_name: 'Acme',
-  assigned_to_name: 'Zeynep',
-  status: 'in_progress',
-  status_display: 'Devam Ediyor',
-  target_completion_date: '2020-01-10',
-};
-
 beforeEach(() => {
   granted.routes = null;
   fetchMock.mockReset();
@@ -47,7 +36,6 @@ beforeEach(() => {
       return json(page(searchParams.get('status') === 'pending_erp_entry' ? 3 : 1));
     if (pathname === '/projects/job-orders/procurement_pending/') return json(page(8));
     if (pathname === '/projects/department-tasks/') {
-      if (searchParams.get('page_size') !== '1') return json(page(1, [TASK]));
       if (searchParams.has('assigned_to')) return json(page(2));
       if (searchParams.has('target_completion_date__lte')) return json(page(4));
       if (searchParams.get('status') === 'blocked') return json(page(1));
@@ -59,7 +47,7 @@ beforeEach(() => {
   });
 });
 
-it('shows the queues planning works through and the tasks by target date', async () => {
+it('shows the queues planning works through, the active tasks among them', async () => {
   renderWithProviders(<PlanningHubPage />, { route: '/planning/' });
 
   await waitFor(() => expect(document.getElementById('to-transfer')).toHaveTextContent('5'));
@@ -82,20 +70,18 @@ it('shows the queues planning works through and the tasks by target date', async
     '/planning/department-requests?pr_status=pending_inventory',
   );
 
-  const deadlines = screen.getByRole('heading', { name: 'Teslim Sırası' }).closest('section')!;
-  const row = await within(deadlines).findByRole('link', { name: /265-04/ });
-  expect(row).toHaveAttribute('href', '/planning/projects?task=77');
-  expect(row).toHaveTextContent('Konveyör Hattı');
-  // Past its target: the date shows in red.
-  expect(row.querySelector('[data-alert]')).not.toBeNull();
+  // The active tasks are counted among the queues; the list of tasks by
+  // target date is gone from this hub.
+  const active = within(queues).getByRole('link', { name: /Aktif görevler/ });
+  expect(active).toHaveTextContent('19');
+  expect(active).toHaveAttribute('href', '/planning/projects');
+  expect(screen.queryByRole('heading', { name: 'Teslim Sırası' })).not.toBeInTheDocument();
 
   // Counts match the Projeler page: the department's main tasks only.
   const tasks = calls().filter((url) => url.pathname === '/projects/department-tasks/');
   expect(tasks.every((url) => url.searchParams.get('department') === 'planning')).toBe(true);
   expect(tasks.every((url) => url.searchParams.get('main_only') === 'true')).toBe(true);
-  const list = tasks.find((url) => url.searchParams.get('page_size') === '6')!;
-  expect(list.searchParams.get('ordering')).toBe('target_completion_date');
-  expect(list.searchParams.get('status__in')).toBe('pending,in_progress');
+  expect(tasks.every((url) => url.searchParams.get('page_size') === '1')).toBe(true);
 });
 
 it('fetches only what the user can open', async () => {
