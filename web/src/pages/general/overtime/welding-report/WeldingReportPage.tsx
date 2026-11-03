@@ -20,6 +20,7 @@ import {
   type FilterConfig,
 } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
+import { FlagRowsModal } from './FlagRowsModal';
 import {
   countFlags,
   decorate,
@@ -446,6 +447,7 @@ export function WeldingReportPage() {
   const dataThrough = report.isError ? null : report.data?.meta?.welding_data_through;
 
   const [detail, setDetail] = useState<DecoratedRow | null>(null);
+  const [flagDetail, setFlagDetail] = useState<string | null>(null);
 
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(
     () => [
@@ -532,6 +534,16 @@ export function WeldingReportPage() {
           getRowId={(row) => row.flag}
           loading={loading}
           verticalSpacing="xs"
+          onRowClick={(row) => setFlagDetail(row.flag)}
+          rowActions={() => [
+            {
+              key: 'records',
+              label: 'Kayıtları göster',
+              icon: 'fas fa-list',
+              color: 'primary',
+              onClick: (row) => setFlagDetail(row.flag),
+            },
+          ]}
           emptyMessage="Sapma bulunamadı — tüm kayıtlar uyumlu"
           exportable={{ fileName: 'kaynak-mesai-sapma-dagilimi' }}
         />
@@ -566,6 +578,17 @@ export function WeldingReportPage() {
         />
       </Stack>
 
+      {flagDetail ? (
+        <FlagRowsModal
+          flag={flagDetail}
+          rows={rows}
+          onClose={() => setFlagDetail(null)}
+          onOpenDay={(row) => {
+            setFlagDetail(null);
+            setDetail(row);
+          }}
+        />
+      ) : null}
       {detail ? <WeldingDetailModal row={detail} onClose={() => setDetail(null)} /> : null}
     </>
   );
