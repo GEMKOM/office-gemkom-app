@@ -36,6 +36,17 @@ const PENDING = [
     start_date: '2026-11-03',
   },
 ];
+const HOURLY = {
+  id: 23,
+  requester_username: 'mert.su',
+  leave_type: 'compensatory_leave',
+  status: 'submitted',
+  start_date: '2026-11-05',
+  end_date: '2026-11-05',
+  start_time: '13:00:00',
+  end_time: '16:00:00',
+  duration_days: 0,
+};
 const DECIDED = [
   {
     id: 5,
@@ -191,4 +202,22 @@ it('shows a request in the approver detail modal', async () => {
   expect(within(dialog).getByText('Aile ziyareti')).toBeInTheDocument();
   expect(within(dialog).getByText('Onay Özeti')).toBeInTheDocument();
   expect(within(dialog).queryByText('Saat Aralığı')).not.toBeInTheDocument();
+});
+
+it('shows hourly leave as hours, with the time range in the detail modal', async () => {
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    const { pathname } = new URL(String(url));
+    if (pathname === '/vacation-requests/requests/pending_approval/')
+      return json({ count: 1, next: null, previous: null, results: [HOURLY] });
+    if (pathname === '/vacation-requests/requests/23/') return json(HOURLY);
+    return base(url, init);
+  });
+  renderPage();
+  await screen.findByText('mert.su');
+  expect(screen.getByText('3 saat')).toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: 'İzin Talebi Detayı' });
+  expect(within(dialog).getByText('13:00 - 16:00')).toBeInTheDocument();
+  expect(within(dialog).getByText('3 saat')).toBeInTheDocument();
 });
