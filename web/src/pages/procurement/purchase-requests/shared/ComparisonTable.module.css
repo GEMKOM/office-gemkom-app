@@ -1,0 +1,102 @@
+/* Port of components/comparison-table/comparison-table.css (the parts the pages use). */
+.wrap {
+  overflow-x: auto;
+}
+.table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.85rem;
+}
+.table th,
+.table td {
+  border: 1px solid var(--gk-line);
+  padding: 6px 8px;
+  min-width: 80px;
+  text-align: center;
+  vertical-align: middle;
+}
+.table thead th {
+  background: var(--gk-surface-subtle);
+  font-weight: 600;
+}
+.clickable {
+  cursor: pointer;
+  user-select: none;
+}
+.clickable:hover {
+  background: #eef1f5;
+}
+.minimized {
+  width: 40px;
+  min-width: 40px !important;
+  max-width: 40px;
+  padding: 4px 2px !important;
+}
+.rotated {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.75rem;
+  max-height: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+.itemCell {
+  text-align: left !important;
+}
+.muted {
+  color: var(--gk-muted);
+  font-size: 0.75rem;
+}
+.bold {
+  font-weight: 700;
+}
+.noOffer {
+  color: var(--gk-muted);
+}
+.recommended {
+  background: #f3fff6;
+  border-color: #bde5c6 !important;
+}
+.blacklisted {
+  background: #fee2e2 !important;
+}
+.supplierName {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  cursor: help;
+  margin: 0 auto;
+}
+.summaryRow td {
+  background: linear-gradient(180deg, #f1f3f5, #e9ecef);
+  border-top: 2px solid #6c757d;
+  font-weight: 700;
+}
+.summaryValue {
+  color: #495057;
+  font-size: 1.05rem;
+}
+.iconButton {
+  cursor: pointer;
+}
+.rowNoOffer td {
+  background: #f8d7da;
+}
+.rowNoOffer td:first-child {
+  border-left: 4px solid #dc3545;
+}
+.rowNoRecommendation td {
+  background: #fff3cd;
+}
+.rowNoRecommendation td:first-child {
+  border-left: 4px solid #ffc107;
+}
+.empty {
+  text-align: center;
+  padding: 32px;
+  color: var(--gk-muted);
+}
