@@ -41,7 +41,13 @@ beforeEach(() => {
       body = searchParams.get('page_size') === '1' ? page(7) : page(7, [REVIEW]);
     else if (pathname === '/quality-control/ncrs/')
       body = page(
-        searchParams.has('severity') ? 2 : searchParams.get('status') === 'draft' ? 5 : 1284,
+        searchParams.has('severity')
+          ? 2
+          : searchParams.get('status') === 'draft'
+            ? 5
+            : searchParams.get('status') === 'approved'
+              ? 55
+              : 1284,
       );
     else if (pathname === '/projects/job-orders/qc_pending/') body = page(9);
     else if (pathname === '/quality-control/documents/')
@@ -82,7 +88,7 @@ it('shows the four cards in legacy order with pending reviews and open NCRs', as
     .map((url) => `${url.pathname}${url.search}`);
   expect(counts).toContain('/quality-control/qc-reviews/?status=pending&page_size=1');
   expect(counts).toContain(
-    '/quality-control/ncrs/?status__in=draft%2Csubmitted%2Capproved%2Crejected&page_size=1',
+    '/quality-control/ncrs/?status__in=draft%2Csubmitted%2Crejected&page_size=1',
   );
 });
 
@@ -105,6 +111,21 @@ it('lists the reviews that have waited longest, NCRs by stage and what to follow
     'href',
     '/quality-control/ncrs?status__in=draft&assigned_team__in=all',
   );
+
+  await waitFor(() => expect(ncrs).toHaveTextContent('(açık sayılmaz)55'));
+  // Approved-but-not-closed reports are listed apart and not in the open count.
+  expect(within(ncrs).getByRole('link', { name: /Onaylandı, Kapanmadı/ })).toHaveTextContent(
+    'Onaylandı, Kapanmadı (açık sayılmaz)55',
+  );
+  expect(within(ncrs).getByRole('link', { name: /Onaylandı, Kapanmadı/ })).toHaveAttribute(
+    'href',
+    '/quality-control/ncrs?status__in=approved&assigned_team__in=all',
+  );
+  await waitFor(() => expect(ncrs).toHaveTextContent('Açık rapor (onaylananlar hariç)1.284'));
+  const open = calls().filter(
+    (url) => url.pathname === '/quality-control/ncrs/' && url.searchParams.has('status__in'),
+  );
+  expect(open.every((url) => !url.searchParams.get('status__in')!.includes('approved'))).toBe(true);
 
   const follow = screen.getByRole('heading', { name: 'Takip Edilecekler' }).closest('section')!;
   await waitFor(() =>

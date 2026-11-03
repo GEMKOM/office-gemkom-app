@@ -6,7 +6,7 @@ import {
   procurementLinesPendingCountQueryOptions,
 } from '@/api/planning/hubs';
 import { MenuCards, type MenuCard, type PageFigure } from '@/ui';
-import { TaskDeadlinesPanel, useDepartmentTaskFigures } from '../hub/departmentTasks';
+import { useDepartmentTaskFigures } from '../hub/departmentTasks';
 import { AttentionPanel, HubPanels, type AttentionItem } from '../hub/HubPanels';
 import { countFigure, countValue } from '../hubCount';
 
@@ -165,15 +165,26 @@ export function PlanningHubPage() {
     });
   }
   if (tasks.enabled) {
-    queues.push({
-      id: 'queue-blocked',
-      label: 'Engellenen görevler',
-      hint: 'Planlama görevi engellendi',
-      icon: 'fas fa-ban',
-      color: 'red',
-      link: `${PROJECTS}?status=blocked`,
-      count: tasks.blocked,
-    });
+    queues.push(
+      {
+        id: 'queue-active',
+        label: 'Aktif görevler',
+        hint: 'Planlama görevi bekliyor veya devam ediyor',
+        icon: 'fas fa-list-check',
+        color: 'blue',
+        link: PROJECTS,
+        count: tasks.active,
+      },
+      {
+        id: 'queue-blocked',
+        label: 'Engellenen görevler',
+        hint: 'Planlama görevi engellendi',
+        icon: 'fas fa-ban',
+        color: 'red',
+        link: `${PROJECTS}?status=blocked`,
+        count: tasks.blocked,
+      },
+    );
   }
 
   return (
@@ -186,7 +197,6 @@ export function PlanningHubPage() {
     >
       {queues.length > 0 ? (
         <HubPanels>
-          {tasks.enabled ? <TaskDeadlinesPanel department="planning" route={PROJECTS} /> : null}
           <AttentionPanel title="Planlamayı Bekleyenler" icon="fas fa-inbox" items={queues} />
         </HubPanels>
       ) : null}

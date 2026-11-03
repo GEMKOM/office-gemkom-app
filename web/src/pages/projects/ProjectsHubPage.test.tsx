@@ -19,7 +19,7 @@ const page = (count: number, results: unknown[] = []) => ({
   previous: null,
   results,
 });
-const STATUS: Record<string, number> = { draft: 2, active: 37, on_hold: 4 };
+const STATUS: Record<string, number> = { draft: 2, active: 37, on_hold: 4, completed: 118 };
 
 beforeEach(() => {
   granted.routes = null;
@@ -61,6 +61,11 @@ it('counts top-level job orders by status and the late ones, each linking to Pro
     'href',
     '/projects/project-tracking?status=on_hold',
   );
+  // The breakdown panel lists completed jobs next to the open stages.
+  const breakdown = screen.getByRole('heading', { name: 'İş Emirleri' }).closest('section')!;
+  const completed = await within(breakdown).findByRole('link', { name: /Tamamlandı/ });
+  expect(completed).toHaveTextContent('118');
+  expect(completed).toHaveAttribute('href', '/projects/project-tracking?status=completed');
   // As Proje Takibi counts them: top-level jobs only.
   const jobs = calls().filter((url) => url.pathname === '/projects/job-orders/');
   expect(jobs.every((url) => url.searchParams.get('root_only') === 'true')).toBe(true);

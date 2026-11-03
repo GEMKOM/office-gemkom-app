@@ -8,8 +8,14 @@ import { toPaginated } from './types';
 export type QCReviewStatus = 'pending' | 'approved' | 'rejected';
 export type NCRStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'closed';
 
-/** Every NCR status but closed: the reports someone still has to act on. */
-export const OPEN_NCR_STATUSES: NCRStatus[] = ['draft', 'submitted', 'approved', 'rejected'];
+/**
+ * The reports someone still has to act on: waiting for action, for approval
+ * or rejected. Approved-but-not-closed ones are counted apart (see
+ * AWAITING_CLOSE_NCR_STATUS); closed ones are done.
+ */
+export const OPEN_NCR_STATUSES: NCRStatus[] = ['draft', 'submitted', 'rejected'];
+/** Approved and waiting to be closed: no longer open, not yet closed. */
+export const AWAITING_CLOSE_NCR_STATUS: NCRStatus = 'approved';
 
 export const QUALITY_STALE_TIME = 60_000;
 
