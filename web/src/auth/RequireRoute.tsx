@@ -1,4 +1,4 @@
-import { hasRouteAccess, inheritedAccessRoutes, MOVED_ROUTES } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess, inheritedAccessRoutes } from '@legacy/apis/accessControl.js';
 import {
   getGrantedPageRoutes,
   getPermissions,
@@ -6,6 +6,7 @@ import {
   isAdmin,
   ROUTES,
 } from '@legacy/authService.js';
+import { MOVED_ROUTES } from '@legacy/movedRoutes.js';
 import { Button, Center, Stack, Text, Title } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { useLocation, useMatches } from 'react-router';
@@ -48,10 +49,11 @@ export function defaultRouteForUser(): string {
 
 export function hasHubAccess(path: string): boolean {
   const route = normalizeRoute(path);
-  if (hasRouteAccess(route)) return true;
+  // The plain grant lists first: most hubs open through a page under them.
   for (const granted of getGrantedPageRoutes()) {
     if (granted.startsWith(route + '/')) return true;
   }
+  if (hasRouteAccess(route)) return true;
   // A merged report opens through its old pages' grants, which sit elsewhere
   // (/manufacturing/reports/finished-timers follows the CNC and machining ones).
   for (const inherited of inheritedAccessRoutes()) {

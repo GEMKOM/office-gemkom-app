@@ -1,5 +1,5 @@
 import type { NavTree } from '@legacy/navigationStructure.js';
-import { findTrail, flattenMenu, isPathActive, isUnbuiltGeneralPage, withoutPaths } from './navModel';
+import { findParent, findTrail, flattenMenu, isPathActive, isUnbuiltGeneralPage, withoutPaths } from './navModel';
 
 const leaf = (label: string) => ({ label, icon: 'fas fa-circle', children: {} });
 
@@ -47,6 +47,23 @@ describe('navModel', () => {
     ]);
     expect(findTrail(tree, '/isg/issues').map((s) => s.label)).toEqual(['Genel', 'İSG Bildirimleri']);
     expect(findTrail(tree, '/sales')).toEqual([]);
+  });
+
+  it('finds the nearest openable entry above a page', () => {
+    const any = () => true;
+    expect(findParent(tree, '/general/overtime/pending/', any)?.path).toBe('/general/overtime');
+    // A page the menu does not list goes to the entry its path sits under.
+    expect(findParent(tree, '/general/overtime/pending/archive', any)?.path).toBe(
+      '/general/overtime/pending',
+    );
+    // Entries without a page of their own are skipped.
+    expect(
+      findParent(tree, '/general/overtime/pending', (path) => path !== '/general/overtime')?.path,
+    ).toBe('/general');
+    expect(findParent(tree, '/isg/issues', any)?.path).toBe('/general');
+    // The top of a section, or a page outside the menu, has no parent.
+    expect(findParent(tree, '/general', any)).toBeUndefined();
+    expect(findParent(tree, '/sales', any)).toBeUndefined();
   });
 
   it('knows which /general pages are built', () => {

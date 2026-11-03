@@ -1,7 +1,7 @@
 import { expect, mockBackend, paginated, seedSession, test } from './fixtures';
 
 // The manufacturing hubs (one React page, cards by path). Contracts:
-//   /manufacturing/               "İmalat Modülü", ten cards, band counts from
+//   /manufacturing/               "İmalat Modülü", eight cards, band counts from
 //                                 GET /machining/timers/, /cnc_cutting/timers/
 //                                 and /machines/faults/ (one-row DRF pages)
 //   /manufacturing/<area>/...     each area's hub; cards filtered by grants
@@ -32,8 +32,6 @@ test('admin: the section hub shows every card and its live counts', async ({ pag
   expect(await cardTitles(page)).toEqual([
     'Projeler',
     'Talaşlı İmalat',
-    'CNC Kesim',
-    'Lineer Kesim',
     'Bakım',
     'Kaynak',
     'Raporlar',

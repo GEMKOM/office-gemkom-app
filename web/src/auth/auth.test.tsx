@@ -124,6 +124,20 @@ describe('hub routes', () => {
     expect(await screen.findByText('sayfa içeriği')).toBeInTheDocument();
   });
 
+  it('open where moved pages now sit, through the grants on their old routes', async () => {
+    legacy.allowedRoutes = new Set();
+    legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/reports/finished-timers']);
+    renderGuarded('/planning/cnc-cutting/reports', { access: 'hub' });
+    expect(await screen.findByText('sayfa içeriği')).toBeInTheDocument();
+  });
+
+  it('open a section that moved pages joined', async () => {
+    legacy.allowedRoutes = new Set();
+    legacy.grantedPages = new Set(['/manufacturing/linear-cutting/tasks']);
+    renderGuarded('/planning', { access: 'hub' });
+    expect(await screen.findByText('sayfa içeriği')).toBeInTheDocument();
+  });
+
   it('stay closed when nothing under them is granted', async () => {
     legacy.allowedRoutes = new Set();
     legacy.grantedPages = new Set(['/salesforce', '/finance/purchase-orders']);

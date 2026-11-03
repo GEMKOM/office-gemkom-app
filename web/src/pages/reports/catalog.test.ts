@@ -88,7 +88,9 @@ describe('catalogItems', () => {
 
   it('keeps a hub to its departments and offers only those with something to open', () => {
     const items = catalogItems(REPORT_HUBS['/manufacturing/reports']!, () => true);
-    expect(items.every((i) => i.entry.route.startsWith('/manufacturing/') || i.entry.route.startsWith('/general/overtime/'))).toBe(true);
+    // CNC and linear cutting pages sit under Planlama but are still the shop's reports.
+    const shop = ['/manufacturing/', '/general/overtime/', '/planning/cnc-cutting/', '/planning/linear-cutting/'];
+    expect(items.every((i) => shop.some((prefix) => i.entry.route.startsWith(prefix)))).toBe(true);
     expect(departmentOptions(items, REPORT_HUBS['/manufacturing/reports']!.departments).map((o) => o.value)).toEqual([
       'machining',
       'cnc',

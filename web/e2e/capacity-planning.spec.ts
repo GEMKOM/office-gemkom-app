@@ -85,7 +85,7 @@ test('CNC planner: drag a task to another slot and save the plan', async ({
     { session },
   );
 
-  await page.goto('/manufacturing/cnc-cutting/capacity/planning/');
+  await page.goto('/planning/cnc-cutting/capacity/');
   const main = page.getByRole('main');
   await expect(main.getByRole('heading', { name: 'Kapasite Planlayıcı' })).toBeVisible();
   await main.getByText('Plazma 1').click();
@@ -161,7 +161,9 @@ test('CNC planner: reorder the queue in the table by drag and by typing a Sıra'
     { session },
   );
 
-  await page.goto('/manufacturing/cnc-cutting/capacity/planning/?machine=3');
+  // The old capacity hub URL opens the planner under Planlama, machine kept.
+  await page.goto('/manufacturing/cnc-cutting/capacity/?machine=3');
+  await expect(page).toHaveURL(/\/planning\/cnc-cutting\/capacity\/\?machine=3$/);
   const main = page.getByRole('main');
   const queue = main.locator('tbody').filter({ hasText: 'N-61' });
   const order = () =>
@@ -275,7 +277,9 @@ test('machining planner: reorder the queue in the Gantt and save', async ({
     { session },
   );
 
-  await page.goto('/manufacturing/machining/capacity/planning/?machine=21');
+  // The capacity hub had one card; its URL now opens the planner itself.
+  await page.goto('/manufacturing/machining/capacity/?machine=21');
+  await expect(page).toHaveURL(/\/manufacturing\/machining\/capacity\/planning\/\?machine=21$/);
   const main = page.getByRole('main');
   await expect(main.getByRole('cell', { name: 'Flanş' })).toBeVisible();
   const list = backend.callsTo('/tasks/operations/', 'GET')[0]!;

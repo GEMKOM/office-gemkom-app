@@ -1,4 +1,4 @@
-import { MOVED_ROUTES } from '@legacy/apis/accessControl.js';
+import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@legacy/movedRoutes.js';
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
@@ -35,9 +35,9 @@ function mergedInto(path: string, target: string, preset: Record<string, string>
 }
 
 /**
- * The old URL of a page that moved (MOVED_ROUTES in apis/accessControl.js), or
- * of a hub that gave way to its only page: forwards there with the query and
- * hash (?machine=, ?cut=). Listed in migrated-routes.json like mergedInto().
+ * The old URL of a page that moved, or of a hub that gave way to its only page
+ * (movedRoutes.js): forwards there with the query and hash (?machine=, ?cut=).
+ * Listed in migrated-routes.json like mergedInto().
  */
 function movedTo(path: string, target: string): RouteObject {
   return {
@@ -48,13 +48,6 @@ function movedTo(path: string, target: string): RouteObject {
     },
   };
 }
-
-// The capacity hubs held one card each, the planner; their URLs open it.
-const CAPACITY_HUB_REDIRECTS: Record<string, string> = {
-  '/manufacturing/cnc-cutting/capacity': '/planning/cnc-cutting/capacity',
-  '/manufacturing/linear-cutting/capacity': '/planning/linear-cutting/capacity',
-  '/manufacturing/machining/capacity': '/manufacturing/machining/capacity/planning',
-};
 
 // Each migrated page is a lazy route so it ships as its own chunk. A route added
 // here must also be listed in migrated-routes.json (router.test.ts checks this).
@@ -659,7 +652,7 @@ export const appRoutes: RouteObject[] = [
   ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
     mergedInto(path, to, preset),
   ),
-  ...Object.entries({ ...MOVED_ROUTES, ...CAPACITY_HUB_REDIRECTS }).map(([path, to]) =>
+  ...Object.entries({ ...MOVED_ROUTES, ...REPLACED_HUB_ROUTES }).map(([path, to]) =>
     movedTo(path, to),
   ),
   // Manufacturing shop-floor lists and reports (Phase 3b).

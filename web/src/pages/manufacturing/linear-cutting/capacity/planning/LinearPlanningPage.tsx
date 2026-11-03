@@ -302,7 +302,7 @@ export function LinearPlanningPage() {
       <PageHeader
         title="Lineer Kesim Kapasite Planlayıcı"
         subtitle="Lineer kesim bar görevlerini planlayın"
-        backTo="/manufacturing/linear-cutting/"
+        backTo="/planning/linear-cutting/"
       />
       <Stack gap="md">
         <Panel padded>

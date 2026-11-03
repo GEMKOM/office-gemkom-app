@@ -1,4 +1,5 @@
 import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authService.js';
+import { MOVED_ROUTES } from '../movedRoutes.js';
 import { REPORT_CATALOG } from '../reportCatalog.js';
 
 /**
@@ -71,34 +72,11 @@ const ROUTE_ACCESS_INHERITS = {
     ],
 };
 
-// Pages that moved to a new URL, old -> new. The grants stay on the old
-// routes, so a moved page opens for exactly whoever could open it before
-// (hasRouteAccess asks the old route), and the old URL forwards to the new one
-// (web/src/routes/router.tsx). CNC and linear cutting moved from İmalat to
-// Planlama; their capacity hubs (one card each) gave way to the planners.
-export const MOVED_ROUTES = {
-    '/manufacturing/cnc-cutting': '/planning/cnc-cutting',
-    '/manufacturing/cnc-cutting/dashboard': '/planning/cnc-cutting/dashboard',
-    '/manufacturing/cnc-cutting/cuts': '/planning/cnc-cutting/cuts',
-    '/manufacturing/cnc-cutting/remnants': '/planning/cnc-cutting/remnants',
-    '/manufacturing/cnc-cutting/reports': '/planning/cnc-cutting/reports',
-    '/manufacturing/cnc-cutting/reports/parts-search': '/planning/cnc-cutting/reports/parts-search',
-    '/manufacturing/cnc-cutting/capacity/planning': '/planning/cnc-cutting/capacity',
-    '/manufacturing/linear-cutting': '/planning/linear-cutting',
-    '/manufacturing/linear-cutting/dashboard': '/planning/linear-cutting/dashboard',
-    '/manufacturing/linear-cutting/cuts': '/planning/linear-cutting/cuts',
-    '/manufacturing/linear-cutting/tasks': '/planning/linear-cutting/tasks',
-    '/manufacturing/linear-cutting/capacity/planning': '/planning/linear-cutting/capacity',
-};
-
+// A moved page keeps its old route's grants: hasRouteAccess asks the old
+// route (movedRoutes.js), so it opens for exactly whoever could open it before.
 const MOVED_FROM = Object.fromEntries(
     Object.entries(MOVED_ROUTES).map(([oldRoute, newRoute]) => [newRoute, oldRoute]),
 );
-
-/** The old route of a moved page (MOVED_ROUTES), or undefined. */
-export function movedFrom(route) {
-    return MOVED_FROM[normalizePath(route)];
-}
 
 /** Routes opened through another page's grant (ROUTE_ACCESS_INHERITS). */
 export function inheritedAccessRoutes() {
@@ -166,7 +144,7 @@ export function hasRouteAccess(route) {
             return true;
         }
 
-        // A moved page keeps the grants of its old route (MOVED_ROUTES).
+        // A moved page keeps the grants of its old route (movedRoutes.js).
         const oldRoute = MOVED_FROM[normalized];
         if (oldRoute && hasRouteAccess(oldRoute)) return true;
 

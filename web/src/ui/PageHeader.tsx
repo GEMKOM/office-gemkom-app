@@ -65,7 +65,15 @@ function Breadcrumbs() {
 
 // A parent the user can open: a React page their grants reach. Hubs open
 // for anyone with a page under them, so this is the hub rule (RequireRoute).
-const canOpenParent = (path: string) => isMigratedRoute(path) && hasHubAccess(path);
+// Access that cannot be read counts as closed; the page's backTo stands in.
+function canOpenParent(path: string): boolean {
+  if (!isMigratedRoute(path)) return false;
+  try {
+    return hasHubAccess(path);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * The band's back arrow: one level up in the menu hierarchy (never the

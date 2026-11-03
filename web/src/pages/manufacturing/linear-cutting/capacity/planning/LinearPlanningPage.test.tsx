@@ -73,7 +73,7 @@ it('reads the { tasks } list, edits a bar and saves', async () => {
     <ModalsProvider>
       <LinearPlanningPage />
     </ModalsProvider>,
-    { route: '/manufacturing/linear-cutting/capacity/planning/?machine=5&session=LC-0004' },
+    { route: '/planning/linear-cutting/capacity/?machine=5&session=LC-0004' },
   );
   expect(await screen.findByText('NPU 100')).toBeInTheDocument();
   const list = backend.calls().find((c) => c.url.pathname === '/linear_cutting/planning/list/')!;
@@ -110,7 +110,7 @@ it('reorders by dragging a row and by typing a new #', async () => {
     <ModalsProvider>
       <LinearPlanningPage />
     </ModalsProvider>,
-    { route: '/manufacturing/linear-cutting/capacity/planning/?machine=5' },
+    { route: '/planning/linear-cutting/capacity/?machine=5' },
   );
   await screen.findByText('NPU 100');
   const queue = () => tableOrder(screen.getByText('NPU 100').closest('tbody')!);

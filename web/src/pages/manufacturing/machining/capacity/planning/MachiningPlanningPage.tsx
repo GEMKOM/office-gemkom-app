@@ -567,7 +567,7 @@ export function MachiningPlanningPage() {
       <PageHeader
         title="Kapasite Planlayıcı"
         subtitle="Makine kapasitelerini planlayın ve üretim programını oluşturun"
-        backTo="/manufacturing/machining/capacity/"
+        backTo="/manufacturing/machining/"
         stats={[
           { id: 'planned-count', label: 'Planlanmış', value: figure(plannedCount) },
           {
