@@ -1,11 +1,25 @@
 import type { CncPartSearchRow } from '@/api/manufacturing/cncParts';
 import type { StatusFamily } from '@/ui';
 
+/** The plate fields a parts-search row and a CNC cut (cuts table) both carry. */
+export type PlateSourceRow = { id?: unknown } & Pick<
+  CncPartSearchRow,
+  | 'material'
+  | 'thickness_mm'
+  | 'planning_request_item'
+  | 'plate_item_name'
+  | 'plate_item_code'
+  | 'plate_item_quantity'
+  | 'plate_item_delivered_quantity'
+  | 'plate_item_is_delivered'
+  | 'has_remnant_plate'
+>;
+
 /**
  * Combined "N mm MATERIAL" text from the part's cut fields. Derived materials
  * already start with "N mm ..."; don't prepend twice.
  */
-export function plateInfoText(row: CncPartSearchRow): string {
+export function plateInfoText(row: PlateSourceRow): string {
   const material = (row.material || '').trim();
   const raw = row.thickness_mm;
   const thickness =
@@ -24,7 +38,7 @@ export interface PlateSource {
 }
 
 /** The plate source cell (same as the cuts table): name plus delivery state. */
-export function plateSource(row: CncPartSearchRow): PlateSource {
+export function plateSource(row: PlateSourceRow): PlateSource {
   if (row.planning_request_item) {
     const delivered = row.plate_item_is_delivered === true;
     const partial = !delivered && Number(row.plate_item_delivered_quantity || 0) > 0;
@@ -50,7 +64,7 @@ export function plateSource(row: CncPartSearchRow): PlateSource {
 }
 
 /** Plain-text plate source for the export. */
-export function plateSourceText(row: CncPartSearchRow): string {
+export function plateSourceText(row: PlateSourceRow): string {
   const source = plateSource(row);
   if (!source.badge) return source.name;
   if (row.has_remnant_plate && !row.planning_request_item) {

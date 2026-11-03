@@ -92,6 +92,7 @@
   "/manufacturing/cnc-cutting/reports/user-report",
   "/manufacturing/machining/reports/finished-timers",
   "/manufacturing/machining/reports/user-report",
+  "/manufacturing/cnc-cutting/cuts",
   "/manufacturing/cnc-cutting/remnants",
   "/manufacturing/cnc-cutting/reports/parts-search",
   "/manufacturing/machining/reports/cost-analysis",

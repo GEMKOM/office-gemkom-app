@@ -584,6 +584,12 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/manufacturing/cnc-cutting/cuts',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/cnc-cutting/cuts/CncCutsPage')).CncCutsPage,
+    }),
+  },
+  {
     path: '/manufacturing/cnc-cutting/remnants',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/remnants/RemnantsPage'))
