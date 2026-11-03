@@ -1,4 +1,4 @@
-import { Button, Grid, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Button, SimpleGrid, Stack, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -519,87 +519,82 @@ export function DepartmentRequestsPage() {
       />
 
       <Stack gap="lg">
-        <Grid gap="lg">
-          <Grid.Col span={{ base: 12, lg: 6 }}>
-            <Stack gap="sm">
-              <FilterBar
-                title="Departman Talepleri Filtreleri"
-                filters={drFilters}
-                values={pick(values, DR_KEYS)}
-                onApply={(next) => apply({ ...next, dr_page: '1' })}
-                onClear={() => {
-                  apply({ dr_department: '', dr_priority: '', dr_requestor: '', dr_page: '1' });
-                  filtersCleared();
-                }}
-              />
-              <DataTable
-                title="Aktarılacak Departman Talepleri"
-                icon="fas fa-check-circle"
-                data={approved.data?.results ?? EMPTY_DEPARTMENT}
-                columns={approvedRequestColumns}
-                getRowId={(row) => String(row.id)}
-                loading={approved.isFetching}
-                sort={{
-                  sortBy: drSort.sortBy,
-                  sortDir: drSort.sortDir,
-                  onSortChange: (sortBy, sortDir) =>
-                    apply({ dr_ordering: toOrdering(sortBy, sortDir) ?? '-id', dr_page: '1' }),
-                }}
-                pagination={{
-                  page: drPage,
-                  pageSize: PAGE_SIZE,
-                  total: approved.data?.count ?? 0,
-                  onPageChange: (next) => apply({ dr_page: String(next) }),
-                }}
-                rowActions={approvedActions}
-                emptyMessage="Aktarılacak departman talebi bulunamadı."
-                onRefresh={() => void approved.refetch()}
-              />
-            </Stack>
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, lg: 6 }}>
-            <Stack gap="sm">
-              <FilterBar
-                title="ERP Girişi Bekleyen Planlama Talepleri Filtreleri"
-                filters={erpFilters}
-                values={pick(values, ERP_KEYS)}
-                onApply={(next) => apply({ ...next, erp_page: '1' })}
-                onClear={() => {
-                  apply({
-                    erp_priority: '',
-                    erp_created_by: '',
-                    erp_department_request: '',
-                    erp_page: '1',
-                  });
-                  filtersCleared();
-                }}
-              />
-              <DataTable
-                title="ERP Girişi Bekleyen Planlama Talepleri"
-                icon="fas fa-clock"
-                data={pendingErp.data?.results ?? EMPTY_PLANNING}
-                columns={planningRequestColumns}
-                getRowId={(row) => String(row.id)}
-                loading={pendingErp.isFetching}
-                sort={{
-                  sortBy: erpSort.sortBy,
-                  sortDir: erpSort.sortDir,
-                  onSortChange: (sortBy, sortDir) =>
-                    apply({ erp_ordering: toOrdering(sortBy, sortDir) ?? '-id', erp_page: '1' }),
-                }}
-                pagination={{
-                  page: erpPage,
-                  pageSize: PAGE_SIZE,
-                  total: pendingErp.data?.count ?? 0,
-                  onPageChange: (next) => apply({ erp_page: String(next) }),
-                }}
-                rowActions={pendingErpActions}
-                emptyMessage="ERP girişi bekleyen planlama talebi bulunamadı."
-                onRefresh={() => void pendingErp.refetch()}
-              />
-            </Stack>
-          </Grid.Col>
-        </Grid>
+        {/* Legacy put the first two side by side; at half width the actions scroll out of view. */}
+        <Stack gap="sm">
+          <FilterBar
+            title="Departman Talepleri Filtreleri"
+            filters={drFilters}
+            values={pick(values, DR_KEYS)}
+            onApply={(next) => apply({ ...next, dr_page: '1' })}
+            onClear={() => {
+              apply({ dr_department: '', dr_priority: '', dr_requestor: '', dr_page: '1' });
+              filtersCleared();
+            }}
+          />
+          <DataTable
+            title="Aktarılacak Departman Talepleri"
+            icon="fas fa-check-circle"
+            data={approved.data?.results ?? EMPTY_DEPARTMENT}
+            columns={approvedRequestColumns}
+            getRowId={(row) => String(row.id)}
+            loading={approved.isFetching}
+            sort={{
+              sortBy: drSort.sortBy,
+              sortDir: drSort.sortDir,
+              onSortChange: (sortBy, sortDir) =>
+                apply({ dr_ordering: toOrdering(sortBy, sortDir) ?? '-id', dr_page: '1' }),
+            }}
+            pagination={{
+              page: drPage,
+              pageSize: PAGE_SIZE,
+              total: approved.data?.count ?? 0,
+              onPageChange: (next) => apply({ dr_page: String(next) }),
+            }}
+            rowActions={approvedActions}
+            emptyMessage="Aktarılacak departman talebi bulunamadı."
+            onRefresh={() => void approved.refetch()}
+          />
+        </Stack>
+        <Stack gap="sm">
+          <FilterBar
+            title="ERP Girişi Bekleyen Planlama Talepleri Filtreleri"
+            filters={erpFilters}
+            values={pick(values, ERP_KEYS)}
+            onApply={(next) => apply({ ...next, erp_page: '1' })}
+            onClear={() => {
+              apply({
+                erp_priority: '',
+                erp_created_by: '',
+                erp_department_request: '',
+                erp_page: '1',
+              });
+              filtersCleared();
+            }}
+          />
+          <DataTable
+            title="ERP Girişi Bekleyen Planlama Talepleri"
+            icon="fas fa-clock"
+            data={pendingErp.data?.results ?? EMPTY_PLANNING}
+            columns={planningRequestColumns}
+            getRowId={(row) => String(row.id)}
+            loading={pendingErp.isFetching}
+            sort={{
+              sortBy: erpSort.sortBy,
+              sortDir: erpSort.sortDir,
+              onSortChange: (sortBy, sortDir) =>
+                apply({ erp_ordering: toOrdering(sortBy, sortDir) ?? '-id', erp_page: '1' }),
+            }}
+            pagination={{
+              page: erpPage,
+              pageSize: PAGE_SIZE,
+              total: pendingErp.data?.count ?? 0,
+              onPageChange: (next) => apply({ erp_page: String(next) }),
+            }}
+            rowActions={pendingErpActions}
+            emptyMessage="ERP girişi bekleyen planlama talebi bulunamadı."
+            onRefresh={() => void pendingErp.refetch()}
+          />
+        </Stack>
 
         <FilterBar
           title="Planlama Talepleri Filtreleri"

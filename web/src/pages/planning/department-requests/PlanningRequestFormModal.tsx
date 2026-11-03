@@ -343,7 +343,7 @@ export function PlanningRequestFormModal({
         submitLabel={editing ? 'Kaydet' : 'Oluştur'}
         onSubmit={form.onSubmit(save)}
       >
-        <Grid gap="lg">
+        <Grid gap="lg" mb="md">
           <Grid.Col span={{ base: 12, md: 6 }}>
             <ModalSection title="Temel Bilgiler" icon="fas fa-info-circle">
               <Stack gap="sm">
