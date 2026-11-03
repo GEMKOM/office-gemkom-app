@@ -1,6 +1,6 @@
 import { authedFetch } from '@legacy/authService.js';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { appRoutes } from '@/routes/router';
 import { MANUFACTURING_HUBS } from './hubs';
@@ -19,6 +19,18 @@ const COUNTS: Record<string, number> = {
   '/cnc_cutting/timers/?is_active=true&page_size=1': 2,
   '/machines/faults/?unresolved=true&page_size=1': 1284,
   '/machines/faults/?unresolved=true&is_breaking=true&page_size=1': 3,
+  '/warehouse/pull-requests/?status=pending&page_size=1': 4,
+  '/cnc_cutting/tasks/?completion_date__isnull=true&page_size=1': 12,
+};
+
+const FAULT = {
+  id: 5,
+  machine_name: 'Okuma MA-600',
+  description: 'Hidrolik kaçak',
+  is_breaking: true,
+  reported_by_full_name: 'Veli',
+  reported_at: '2026-11-02T06:00:00Z',
+  open_duration_seconds: 2 * 86400,
 };
 
 const requested = () =>
@@ -36,9 +48,17 @@ beforeEach(() => {
   fetchMock.mockImplementation((url) => {
     const { pathname, search } = new URL(String(url));
     const count = COUNTS[pathname + search] ?? 0;
-    return Promise.resolve(
-      new Response(JSON.stringify({ count, next: null, previous: null, results: [] }), { status: 200 }),
-    );
+    let body: unknown = { count, next: null, previous: null, results: [] };
+    if (pathname === '/machines/faults/' && search.includes('page_size=6'))
+      body = { count: 1, next: null, previous: null, results: [FAULT] };
+    if (pathname === '/tasks/parts/stats/')
+      body = {
+        parts_without_operations: 3,
+        parts_with_unassigned_operations: 5,
+        parts_with_unplanned_operations: 8,
+        incomplete_parts: 40,
+      };
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
   });
 });
 
@@ -71,14 +91,61 @@ it('renders the section hub with its cards in legacy order and live figures', as
   expect(document.getElementById('machiningTimers')).toHaveTextContent('Talaşlı Aktif Zamanlayıcı');
   expect(document.getElementById('machiningTimers')).toHaveTextContent('7');
   expect(document.getElementById('cncTimers')).toHaveTextContent('2');
-  expect(screen.getByRole('heading', { name: 'Bakım' }).closest('article')).toHaveTextContent('1.284 açık arıza');
-  expect(requested().sort()).toEqual(
-    [
-      '/machining/timers/?is_active=true&page_size=1',
-      '/cnc_cutting/timers/?is_active=true&page_size=1',
-      '/machines/faults/?unresolved=true&page_size=1',
-    ].sort(),
+  expect(screen.getByRole('heading', { name: 'Bakım' }).closest('article')).toHaveTextContent(
+    '1.284 açık arıza',
   );
+  for (const count of [
+    '/machining/timers/?is_active=true&page_size=1',
+    '/cnc_cutting/timers/?is_active=true&page_size=1',
+    '/machines/faults/?unresolved=true&page_size=1',
+    '/machines/faults/?unresolved=true&is_breaking=true&page_size=1',
+  ]) {
+    expect(requested()).toContain(count);
+  }
+  // Each count is asked for once, however many places show it.
+  expect(
+    requested().filter((url) => url === '/machines/faults/?unresolved=true&page_size=1'),
+  ).toHaveLength(1);
+});
+
+it('shows the open faults and what waits on the shop under the section cards', async () => {
+  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/' });
+
+  const faults = screen.getByRole('heading', { name: 'Açık Arızalar' }).closest('section')!;
+  const row = await within(faults).findByRole('link', { name: /Okuma MA-600/ });
+  expect(row).toHaveTextContent('Hidrolik kaçak');
+  expect(row).toHaveTextContent('Duruşta');
+  expect(row).toHaveTextContent('2 gün');
+
+  const queues = screen.getByRole('heading', { name: 'Atölyeyi Bekleyenler' }).closest('section')!;
+  const pulls = within(queues).getByRole('link', { name: /Depo çekme talepleri/ });
+  await waitFor(() => expect(pulls).toHaveTextContent('4'));
+  expect(pulls).toHaveAttribute(
+    'href',
+    '/manufacturing/material-tracking/pull-requests?status=pending',
+  );
+  await waitFor(() =>
+    expect(within(queues).getByRole('link', { name: /CNC kesimleri/ })).toHaveTextContent('12'),
+  );
+  const late = requested().find(
+    (url) => url.startsWith('/tasks/parts/') && url.includes('finish_time__lte'),
+  )!;
+  expect(late).toContain('completion_date__isnull=true');
+  expect(
+    screen.getByRole('heading', { name: 'Depo Çekme Talepleri' }).closest('article'),
+  ).toHaveTextContent('4 talep depoda bekliyor');
+});
+
+it('shows the machining parts held up before production', async () => {
+  renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing/machining' });
+
+  const backlog = screen.getByRole('heading', { name: 'Parça Hazırlığı' }).closest('section')!;
+  await waitFor(() => expect(backlog).toHaveTextContent('Tamamlanmamış parça40'));
+  expect(within(backlog).getByRole('link', { name: /Operasyonu olmayan/ })).toHaveAttribute(
+    'href',
+    '/manufacturing/machining/tasks/list?has_operations=true',
+  );
+  expect(document.getElementById('incompleteParts')).toBeInTheDocument();
 });
 
 it('shows the maintenance hub with open and stopped counts', async () => {
@@ -97,16 +164,22 @@ it('shows the maintenance hub with open and stopped counts', async () => {
   ]);
 });
 
-it('hides ungranted cards and fetches nothing for figures the user cannot open', () => {
+it('hides ungranted cards and fetches nothing for figures the user cannot open', async () => {
   const granted = ['/manufacturing/welding', '/manufacturing/welding/time-entries'];
   accessMock.mockImplementation((route: string) => granted.includes(route.replace(/\/$/, '')));
   renderWithProviders(<ManufacturingHubPage />, { route: '/manufacturing' });
 
   expect(cardTitles()).toEqual(['Kaynak']);
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   const welding = screen.getByRole('heading', { name: 'Kaynak' }).closest('article')!;
-  expect([...welding.querySelectorAll('li')].map((li) => li.textContent)).toEqual(['Zaman Kayıtları']);
+  expect([...welding.querySelectorAll('li')].map((li) => li.textContent)).toEqual([
+    'Zaman Kayıtları',
+  ]);
   expect(document.getElementById('openFaults')).toBeNull();
-  expect(fetchMock).not.toHaveBeenCalled();
+  // Only the figure behind the one page the user can open: today's time entries.
+  expect(new Set(requested().map((url) => url.split('?')[0]))).toEqual(
+    new Set(['/welding/time-entries/']),
+  );
 });
 
 it('renders a hub without figures from its path', () => {
