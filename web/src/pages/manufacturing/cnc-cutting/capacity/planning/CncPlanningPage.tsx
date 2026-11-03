@@ -23,10 +23,12 @@ import {
   PageHeader,
   Panel,
   useUrlFilters,
+  type CellEdit,
   type DataTableColumn,
   type DetailSection,
   type FilterConfig,
   type RowAction,
+  type RowMove,
 } from '@/ui';
 import { Gantt, machineCalendarWindows, type GanttBarChange } from '@/ui/Gantt';
 import { cuttingGantt, byPlanOrder, type TaskBar } from '../../../capacity-shared/ganttAdapters';
@@ -36,6 +38,9 @@ import {
   addToPlan,
   autoschedule,
   cuttingSaveItems,
+  editPlannedTask,
+  moveInQueue,
+  orderEditor,
   removeFromPlan,
   reorderCutting,
   type AutoscheduleOptions,
@@ -82,9 +87,9 @@ const orderBadge = (v: number | null | undefined) => (
 );
 
 // TODO(DataTable inline editing): legacy edited Planlanan Başlangıç / Bitiş in
-// the cell. Until DataTable's inline editing lands (another session), the
-// dates are edited in "Görev Düzenle" or by dragging the bar.
-const plannedColumns: DataTableColumn<CuttingPlanTask>[] = [
+// the cell; they are still edited in "Görev Düzenle" or by dragging the bar.
+// "Sıra" is edited in the cell (see the page's plannedColumns).
+const baseColumns: DataTableColumn<CuttingPlanTask>[] = [
   {
     key: 'plan_order',
     header: 'Sıra',
@@ -145,7 +150,7 @@ const plannedColumns: DataTableColumn<CuttingPlanTask>[] = [
   },
 ];
 
-const unplannedColumns: DataTableColumn<CuttingPlanTask>[] = plannedColumns.filter(
+const unplannedColumns: DataTableColumn<CuttingPlanTask>[] = baseColumns.filter(
   (c) => c.key !== 'planned_start_ms' && c.key !== 'planned_end_ms',
 );
 
@@ -344,6 +349,28 @@ export function CncPlanningPage() {
     (key: string, target: string, position: 'before' | 'after') =>
       draft.edit(reorderCutting(tasks, key, target, position)),
     [draft, tasks],
+  );
+  // The table's drag (or Space + arrows on the handle) and the "Sıra" cell
+  // both move the row in the queue; the order goes out with "Planı Kaydet".
+  const plannedColumns = useMemo(
+    () =>
+      baseColumns.map((c) =>
+        c.key === 'plan_order'
+          ? { ...c, editable: orderEditor<CuttingPlanTask>(() => planned.length) }
+          : c,
+      ),
+    [planned.length],
+  );
+  const onOrderEdit = useCallback(
+    ({ row, columnKey, value }: CellEdit<CuttingPlanTask>) => {
+      if (columnKey === 'plan_order' && typeof value === 'number')
+        draft.edit(moveInQueue(planned, row.key, value));
+    },
+    [draft, planned],
+  );
+  const onTableReorder = useCallback(
+    (_ids: string[], move: RowMove) => draft.edit(moveInQueue(planned, move.id, move.to + 1)),
+    [draft, planned],
   );
   const onBarOpen = useCallback((bar: TaskBar<CuttingPlanTask>) => setEditingKey(bar.task.key), []);
 
@@ -550,6 +577,8 @@ export function CncPlanningPage() {
                   getRowId={(r) => r.key}
                   loading={loadingRows}
                   sortable
+                  reorder={{ onReorder: onTableReorder }}
+                  onCellEdit={onOrderEdit}
                   rowActions={plannedActions}
                   onRefresh={() =>
                     machineId ? void planQuery.refetch() : notify.warning('Önce bir makine seçin')
@@ -596,7 +625,7 @@ export function CncPlanningPage() {
           task={editingTask}
           onClose={() => setEditingKey(null)}
           onSave={(next) => {
-            draft.edit(new Map<string, Partial<CuttingPlanTask>>([[editingTask.key, { ...next }]]));
+            draft.edit(editPlannedTask(planned, editingTask.key, next));
             setEditingKey(null);
           }}
         />
