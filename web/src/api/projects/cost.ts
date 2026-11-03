@@ -1,6 +1,6 @@
-import { queryOptions } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, type QueryParams } from '../client';
-import { extractResults, toPaginated } from '../types';
+import { extractResults, toPaginated, type Paginated } from '../types';
 
 // Port of the job-order cost endpoints in apis/projects/cost.js (the cost
 // table, its catalog scope, cost children, procurement lines, the estimated
@@ -67,6 +67,8 @@ export interface CostTableRow {
 
 /** Filters of the cost table; the catalog scope takes the same ones. */
 export interface CostTableFilters {
+  /** One status (the sales cost table); status__in takes several. */
+  status?: string;
   status__in?: string;
   search?: string;
   customer?: number;
@@ -213,6 +215,7 @@ export function costTableQuery(options: CostTableParams): QueryParams {
   for (const key of DATE_PARAMS) {
     if (options[key]) params[key] = options[key];
   }
+  if (options.status) params.status = options.status;
   if (options.status__in) params.status__in = options.status__in;
   if (
     options.customer !== undefined &&
@@ -340,5 +343,54 @@ export function subcontractorCostBreakdownQueryOptions(jobNo: string) {
         { signal },
       ).then((data) => data ?? {}),
     staleTime: COST_STALE_TIME,
+  });
+}
+
+/** Currencies the cost_summary endpoint takes for selling_price_currency. */
+export type CostSummaryCurrency = 'EUR' | 'USD' | 'GBP' | 'TRY';
+
+export interface CostSummaryPatch {
+  /** Decimal string, e.g. "90000.00". */
+  selling_price?: string;
+  selling_price_currency?: CostSummaryCurrency;
+  cost_not_applicable?: boolean;
+}
+
+/** Legacy patchJobCostSummary: PATCH /projects/job-orders/{job_no}/cost_summary/. */
+export function patchJobCostSummary(jobNo: string, body: CostSummaryPatch) {
+  return apiFetch<unknown>(`/projects/job-orders/${encodeURIComponent(jobNo)}/cost_summary/`, {
+    method: 'PATCH',
+    body,
+  });
+}
+
+/**
+ * Saves a job's selling price (EUR) and writes it into every cached cost table
+ * page and children list, as the legacy table did, without reloading them.
+ * The cached rows are marked stale so the next load brings the new margins.
+ */
+export function useUpdateSellingPrice() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ jobNo, price }: { jobNo: string; price: number }) =>
+      patchJobCostSummary(jobNo, {
+        selling_price: price.toFixed(2),
+        selling_price_currency: 'EUR',
+      }),
+    onSuccess: (_data, { jobNo, price }) => {
+      const update = (row: CostTableRow) =>
+        row.job_no === jobNo
+          ? { ...row, selling_price: price.toFixed(2), selling_price_currency: 'EUR' }
+          : row;
+      queryClient.setQueriesData<Paginated<CostTableRow>>(
+        { queryKey: [...costKeys.all, 'table'] },
+        (page) => (page ? { ...page, results: page.results.map(update) } : page),
+      );
+      queryClient.setQueriesData<CostTableRow[]>(
+        { queryKey: [...costKeys.all, 'children'] },
+        (rows) => rows?.map(update),
+      );
+      void queryClient.invalidateQueries({ queryKey: costKeys.all, refetchType: 'none' });
+    },
   });
 }

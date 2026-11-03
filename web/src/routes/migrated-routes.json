@@ -12,6 +12,7 @@
   "/sales",
   "/sales/customers",
   "/sales/catalog",
+  "/sales/cost-table",
   "/manufacturing",
   "/manufacturing/cnc-cutting",
   "/manufacturing/cnc-cutting/capacity",
