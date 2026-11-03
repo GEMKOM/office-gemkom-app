@@ -95,13 +95,30 @@ function taskRecord(task: DepartmentTask, route: string, today: string): HubReco
     subtitle: [task.customer_name, task.assigned_to_name].filter(Boolean).join(' · ') || undefined,
     status: {
       label: task.status_display || task.status || '-',
-      color: STATUS_FAMILY[task.status ?? ''] ?? 'grey',
+      color: taskStatusFamily(task.status),
     },
     meta: target
       ? formatDate(target, { day: 'numeric', month: 'short', year: '2-digit' })
       : undefined,
     alert: Boolean(target && target < today),
   };
+}
+
+/** The department's active tasks with a target date, the earliest first. */
+export function taskDeadlinesQueryOptions(department: string, pageSize: number) {
+  return listPageQueryOptions<DepartmentTask>(KEY, PATH, {
+    department,
+    main_only: true,
+    status__in: ACTIVE,
+    target_completion_date__isnull: false,
+    ordering: 'target_completion_date',
+    page_size: pageSize,
+  });
+}
+
+/** A task's status as a pill colour. */
+export function taskStatusFamily(status: string | null | undefined): StatusFamily {
+  return STATUS_FAMILY[status ?? ''] ?? 'grey';
 }
 
 /**
@@ -111,14 +128,7 @@ function taskRecord(task: DepartmentTask, route: string, today: string): HubReco
 export function TaskDeadlinesPanel({ department, route }: { department: string; route: string }) {
   const today = dayjs().format('YYYY-MM-DD');
   const tasks = useQuery({
-    ...listPageQueryOptions<DepartmentTask>(KEY, PATH, {
-      department,
-      main_only: true,
-      status__in: ACTIVE,
-      target_completion_date__isnull: false,
-      ordering: 'target_completion_date',
-      page_size: 6,
-    }),
+    ...taskDeadlinesQueryOptions(department, 6),
     select: (page) => page.results.map((task) => taskRecord(task, route, today)),
     enabled: hasRouteAccess(route),
   });
