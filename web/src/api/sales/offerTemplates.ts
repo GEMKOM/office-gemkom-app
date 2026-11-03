@@ -3,7 +3,8 @@ import { apiFetch } from '../client';
 import { extractResults } from '../types';
 
 // Port of the apis/sales/offerTemplates.js calls the Ürün Kataloğu page
-// (sales/catalog) makes. Offers and the cost table still use the legacy module.
+// (sales/catalog) and the offers page's catalog panel make. The cost table
+// still uses the legacy module.
 
 /** A row of GET /sales/offer-templates/. */
 export interface OfferTemplate {
@@ -83,6 +84,32 @@ export function nodeChildrenQueryOptions(templateId: number, nodeId: number) {
       const list = body.results ?? body.data ?? body.children;
       return Array.isArray(list) ? (list as TemplateNode[]) : [];
     },
+  });
+}
+
+/** A template's root nodes (GET <id>/nodes/), the offers page's catalog panel. */
+export function templateRootNodesQueryOptions(templateId: number) {
+  return queryOptions({
+    queryKey: [...offerTemplateKeys.detail(templateId), 'roots'] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<TemplateNode>(await apiFetch<unknown>(`${BASE}/${templateId}/nodes/`, { signal })),
+  });
+}
+
+/** A node found by GET nodes/search/?q=: where it sits, and its template. */
+export interface TemplateNodeHit extends TemplateNode {
+  breadcrumb?: string[];
+  template?: number;
+  code?: string;
+}
+
+export function searchTemplateNodesQueryOptions(q: string) {
+  return queryOptions({
+    queryKey: [...offerTemplateKeys.all, 'search', q] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<TemplateNodeHit>(
+        await apiFetch<unknown>(`${BASE}/nodes/search/`, { params: { q }, signal }),
+      ),
   });
 }
 
