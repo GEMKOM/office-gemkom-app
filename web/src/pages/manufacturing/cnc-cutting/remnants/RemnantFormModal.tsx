@@ -9,6 +9,7 @@ import {
   type RemnantPlateInput,
 } from '@/api/manufacturing/remnants';
 import { FormModal, ModalSection, notify } from '@/ui';
+import { DIMENSIONS_ERROR, DIMENSIONS_EXAMPLE, normalizeDimensions } from './dimensions';
 
 const isPositive = (v: string) =>
   v.trim() !== '' && !Number.isNaN(parseFloat(v)) && parseFloat(v) > 0;
@@ -19,7 +20,10 @@ export const remnantSchema = z.object({
   thickness_mm_2: z
     .string()
     .refine((v) => v.trim() === '' || isPositive(v), 'Kalınlık 2 geçerli bir sayı olmalıdır'),
-  dimensions: z.string().refine((v) => v.trim() !== '', 'Boyutlar gereklidir'),
+  dimensions: z
+    .string()
+    .refine((v) => v.trim() !== '', 'Boyutlar gereklidir')
+    .refine((v) => v.trim() === '' || normalizeDimensions(v) !== null, DIMENSIONS_ERROR),
   quantity: z.string().refine((v) => {
     const n = parseInt(v, 10);
     return !Number.isNaN(n) && n >= 1;
@@ -45,13 +49,13 @@ export function remnantFormValues(remnant?: RemnantPlate | null): RemnantFormVal
 
 /**
  * The request body as legacy built it: thickness to two decimals, text
- * trimmed. On create, empty optional fields are left out; on edit they are
+ * trimmed, dimensions in the one format ("1200 X 800" is saved as "1200x800"). On create, empty optional fields are left out; on edit they are
  * sent as null so they can be cleared.
  */
 export function remnantInput(values: RemnantFormValues, editing: boolean): RemnantPlateInput {
   const data: RemnantPlateInput = {
     thickness_mm: parseFloat(values.thickness_mm).toFixed(2),
-    dimensions: values.dimensions.trim(),
+    dimensions: normalizeDimensions(values.dimensions) ?? values.dimensions.trim(),
     quantity: parseInt(values.quantity, 10),
     material: values.material.trim(),
   };
@@ -151,9 +155,13 @@ export function RemnantFormModal({ remnant, onClose }: RemnantFormModalProps) {
               min: '0.01',
             },
           )}
-          {field('dimensions', 'Boyutlar', '1200x800', 'Plaka boyutları (örn: 1200x800)', {
-            required: true,
-          })}
+          {field(
+            'dimensions',
+            'Boyutlar',
+            DIMENSIONS_EXAMPLE,
+            `Genişlik x Yükseklik, mm (örn: ${DIMENSIONS_EXAMPLE})`,
+            { required: true },
+          )}
           {field('quantity', 'Adet', '1', 'Plaka adedi', {
             required: true,
             type: 'number',

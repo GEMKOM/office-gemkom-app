@@ -52,8 +52,17 @@ const DATE_FORMAT: Intl.DateTimeFormatOptions = {
   minute: '2-digit',
 };
 
+/** The name a row's subcontractor is shown under in the table and filters. */
+export type SubcontractorLabel = (row: SubcontractingAdjustment) => string;
+
+/** Without a lookup, the report's own (full) name. */
+export const reportSubcontractorName: SubcontractorLabel = (row) => row.subcontractor_name || '-';
+
 /** Both tables share the columns; only the amount colour differs (legacy buildColumns). */
-function buildColumns(isAddition: boolean): DataTableColumn<SubcontractingAdjustment>[] {
+function buildColumns(
+  isAddition: boolean,
+  subcontractorLabel: SubcontractorLabel,
+): DataTableColumn<SubcontractingAdjustment>[] {
   return [
     {
       key: 'created_at',
@@ -71,7 +80,18 @@ function buildColumns(isAddition: boolean): DataTableColumn<SubcontractingAdjust
       render: (row) => formatPeriod(row),
       exportValue: (row) => formatPeriod(row),
     },
-    { key: 'subcontractor_name', header: 'Taşeron' },
+    {
+      key: 'subcontractor_name',
+      header: 'Taşeron',
+      // Short name shown; the full name appears on hover.
+      accessor: (row) => subcontractorLabel(row),
+      render: (row) => {
+        const label = subcontractorLabel(row);
+        const full = row.subcontractor_name || '';
+        return full && full !== label ? <span title={full}>{label}</span> : label;
+      },
+      exportValue: (row) => subcontractorLabel(row),
+    },
     {
       key: 'job_no',
       header: 'İş No',
@@ -110,10 +130,14 @@ function buildColumns(isAddition: boolean): DataTableColumn<SubcontractingAdjust
 }
 
 // The table is sortable by default; Açıklama opts out as in legacy.
-export const additionColumns = buildColumns(true);
-export const deductionColumns = buildColumns(false);
+export function adjustmentColumns(
+  kind: 'addition' | 'deduction',
+  subcontractorLabel: SubcontractorLabel = reportSubcontractorName,
+) {
+  return buildColumns(kind === 'addition', subcontractorLabel);
+}
 
-const COLUMN_COUNT = additionColumns.length;
+const COLUMN_COUNT = adjustmentColumns('addition').length;
 
 /** Per-currency total of every row's amount, e.g. "Toplam: 1.000,00 EUR + 500,00 TRY". */
 export function amountTotals(rows: readonly SubcontractingAdjustment[]): string {

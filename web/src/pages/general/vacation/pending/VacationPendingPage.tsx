@@ -2,6 +2,8 @@ import { Text, Textarea } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import {
+  leaveDurationLabel,
+  leaveHours,
   leaveTypeLabel,
   pendingVacationApprovalsQueryOptions,
   useDecideVacationRequest,
@@ -22,10 +24,14 @@ import {
   ApprovalSummary,
   VacationRequestDetailModal,
   VacationStatusBadge,
+  formatClock,
   statusText,
 } from '../shared/vacationParts';
 
 const EMPTY_ROWS: VacationRequest[] = [];
+
+const withClock = (date: string | undefined, time: string | null | undefined) =>
+  time ? `${formatDate(date)} ${formatClock(time)}` : formatDate(date);
 
 const idColumn: DataTableColumn<VacationRequest> = {
   key: 'id',
@@ -47,12 +53,12 @@ const leaveTypeColumn: DataTableColumn<VacationRequest> = {
 const startColumn: DataTableColumn<VacationRequest> = {
   key: 'start_date',
   header: 'Başlangıç',
-  render: (row) => formatDate(row.start_date),
+  render: (row) => withClock(row.start_date, row.start_time),
 };
 const endColumn: DataTableColumn<VacationRequest> = {
   key: 'end_date',
   header: 'Bitiş',
-  render: (row) => formatDate(row.end_date),
+  render: (row) => withClock(row.end_date, row.end_time),
 };
 const statusColumn = (header: string): DataTableColumn<VacationRequest> => ({
   key: 'status',
@@ -70,9 +76,9 @@ const pendingColumns: DataTableColumn<VacationRequest>[] = [
   endColumn,
   {
     key: 'duration_days',
-    header: 'İş Günü',
-    accessor: (row) => Number(row.duration_days) || 0,
-    render: (row) => String(row.duration_days || 0),
+    header: 'Süre',
+    accessor: (row) => leaveHours(row) ?? (Number(row.duration_days) || 0) * 8,
+    render: (row) => leaveDurationLabel(row),
   },
   {
     key: 'approval',

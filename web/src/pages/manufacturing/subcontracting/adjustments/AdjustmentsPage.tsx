@@ -1,13 +1,16 @@
 import { Button, SimpleGrid, Stack } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { DEFAULT_STALE_TIME } from '@/api';
 import {
   adjustmentsReportQueryOptions,
   type AdjustmentsParams,
   type SubcontractingAdjustment,
 } from '@/api/subcontracting/adjustments';
-import { subcontractorsQueryOptions } from '@/api/subcontracting/subcontractors';
+import {
+  subcontractorsQueryOptions,
+  type Subcontractor,
+} from '@/api/subcontracting/subcontractors';
 import {
   DataTable,
   FaIcon,
@@ -17,7 +20,13 @@ import {
   useUrlFilters,
   type FilterConfig,
 } from '@/ui';
-import { additionColumns, deductionColumns, MONTH_NAMES, totalsFooter } from './columns';
+import {
+  adjustmentColumns,
+  MONTH_NAMES,
+  reportSubcontractorName,
+  totalsFooter,
+  type SubcontractorLabel,
+} from './columns';
 
 // Applied filters live in the URL (legacy kept them in the filter panel only).
 const URL_DEFAULTS = { subcontractor: '', year: '', month: '', job_no: '' };
@@ -27,8 +36,6 @@ type FilterKeys = keyof FilterState;
 const EMPTY_FILTERS: FilterState = { subcontractor: '', year: '', month: '', job_no: '' };
 const EMPTY_ROWS: SubcontractingAdjustment[] = [];
 const DEFAULT_SORT = { sortBy: 'created_at', sortDir: 'desc' } as const;
-// Legacy feeds the dropdown with the active subcontractors only.
-const ACTIVE_SUBCONTRACTORS = { is_active: true };
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -45,7 +52,32 @@ export function AdjustmentsPage() {
     [values.subcontractor, values.year, values.month, values.job_no],
   );
 
-  const subcontractors = useQuery(subcontractorsQueryOptions(ACTIVE_SUBCONTRACTORS));
+  // One unfiltered list serves both the name lookup (inactive subcontractors too,
+  // their rows still need a name) and the dropdown, which stays active-only as legacy.
+  const subcontractors = useQuery(subcontractorsQueryOptions());
+  const subcontractorList = subcontractors.data?.results;
+
+  const subcontractorById = useMemo(
+    () => new Map<number, Subcontractor>((subcontractorList ?? []).map((s) => [s.id, s] as const)),
+    [subcontractorList],
+  );
+
+  // Short name, else the full name, else the name the report itself carries.
+  const subcontractorLabel = useCallback<SubcontractorLabel>(
+    (row) => {
+      const sub = row.subcontractor != null ? subcontractorById.get(row.subcontractor) : undefined;
+      return sub?.short_name || sub?.name || reportSubcontractorName(row);
+    },
+    [subcontractorById],
+  );
+
+  const columns = useMemo(
+    () => ({
+      addition: adjustmentColumns('addition', subcontractorLabel),
+      deduction: adjustmentColumns('deduction', subcontractorLabel),
+    }),
+    [subcontractorLabel],
+  );
 
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(() => {
     const currentYear = new Date().getFullYear();
@@ -57,10 +89,12 @@ export function AdjustmentsPage() {
         label: 'Taşeron',
         placeholder: 'Tümü',
         searchable: true,
-        options: (subcontractors.data?.results ?? []).map((s) => ({
-          value: String(s.id),
-          label: s.name || s.short_name || String(s.id),
-        })),
+        options: (subcontractorList ?? [])
+          .filter((s) => s.is_active !== false)
+          .map((s) => ({
+            value: String(s.id),
+            label: s.short_name || s.name || String(s.id),
+          })),
       },
       {
         type: 'select',
@@ -82,7 +116,7 @@ export function AdjustmentsPage() {
         options: MONTH_NAMES.map((name, i) => ({ value: String(i + 1), label: name })),
       },
     ];
-  }, [subcontractors.data]);
+  }, [subcontractorList]);
 
   const params: AdjustmentsParams = {
     subcontractor: filters.subcontractor || undefined,
@@ -141,7 +175,7 @@ export function AdjustmentsPage() {
             title="Ek Ödemeler"
             icon="fas fa-plus-circle"
             data={additions}
-            columns={additionColumns}
+            columns={columns.addition}
             getRowId={(row) => String(row.id)}
             loading={report.isFetching}
             sortable
@@ -154,7 +188,7 @@ export function AdjustmentsPage() {
             title="Kesintiler"
             icon="fas fa-minus-circle"
             data={deductions}
-            columns={deductionColumns}
+            columns={columns.deduction}
             getRowId={(row) => String(row.id)}
             loading={report.isFetching}
             sortable

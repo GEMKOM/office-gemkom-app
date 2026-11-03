@@ -50,6 +50,42 @@ export function sortUnreadFirst(list: AppNotification[]): AppNotification[] {
   });
 }
 
+export type NotificationGroupKey = 'today' | 'yesterday' | 'earlier';
+
+export interface NotificationGroup {
+  key: NotificationGroupKey;
+  label: string;
+  items: AppNotification[];
+}
+
+const GROUP_LABELS: Record<NotificationGroupKey, string> = {
+  today: 'Bugün',
+  yesterday: 'Dün',
+  earlier: 'Daha önce',
+};
+
+const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+
+/**
+ * Newest first, split into today / yesterday / earlier (by the viewer's local
+ * calendar day). Empty groups are left out; a notification without a date
+ * counts as earlier.
+ */
+export function groupByDay(list: AppNotification[], now = new Date()): NotificationGroup[] {
+  const today = startOfDay(now);
+  const day = 86_400_000;
+  const buckets: Record<NotificationGroupKey, AppNotification[]> = { today: [], yesterday: [], earlier: [] };
+  for (const item of list) {
+    const at = item.created_at ? new Date(item.created_at).getTime() : NaN;
+    const key: NotificationGroupKey = Number.isNaN(at) || at < today - day ? 'earlier' : at < today ? 'yesterday' : 'today';
+    buckets[key].push(item);
+  }
+  const time = (n: AppNotification) => new Date(n.created_at || 0).getTime();
+  return (['today', 'yesterday', 'earlier'] as const)
+    .filter((key) => buckets[key].length > 0)
+    .map((key) => ({ key, label: GROUP_LABELS[key], items: buckets[key].sort((a, b) => time(b) - time(a)) }));
+}
+
 /** The latest notifications, fetched while the popover is open. */
 export function useLatestNotifications(enabled: boolean) {
   return useQuery({

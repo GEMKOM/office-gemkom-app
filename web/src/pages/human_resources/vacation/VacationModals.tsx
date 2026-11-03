@@ -1,7 +1,11 @@
 import { Grid, Paper, Table, Text, Textarea } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { leaveTypeLabel, vacationRequestQueryOptions } from '@/api/general/vacation';
+import {
+  leaveDurationLabel,
+  leaveTypeLabel,
+  vacationRequestQueryOptions,
+} from '@/api/general/vacation';
 import {
   leaveLedgerQueryOptions,
   useHrVacationDecision,
@@ -48,7 +52,7 @@ export function HrVacationDetailModal({
     { label: 'Durum', render: <RequestStatusBadge request={request} />, span: 3 },
     { label: 'İşlem Tipi', render: <ApprovalKindBadge kind={kind} />, span: 3 },
     { label: 'İzin Türü', value: leaveTypeLabel(request), span: 3 },
-    { label: 'Süre', value: `${request.duration_days || '0'} gün`, span: 3 },
+    { label: 'Süre', value: leaveDurationLabel(request), span: 3 },
     {
       label: 'Başlangıç',
       value: formatVacationDate(request.start_date, request.start_time),

@@ -14,9 +14,13 @@
   color: var(--gk-ink);
 }
 
-.button[data-variant='default']:hover {
-  background: var(--gk-surface-subtle);
-  border-color: var(--gk-ink);
+/* Hover tint only where hover is real (as Mantine gates its own): on touch
+   screens a tapped outlined button keeps :hover and reads as selected. */
+@media (hover: hover) {
+  .button[data-variant='default']:hover {
+    background: var(--gk-surface-subtle);
+    border-color: var(--gk-ink);
+  }
 }
 
 .button:focus-visible {
