@@ -10,16 +10,16 @@ export interface EstimateHtmlProps extends Omit<HTMLAttributes<HTMLDivElement>, 
  *
  * Why innerHTML is allowed here (the porting guide's second exception, next to
  * RichText): the Tahmin report body is built by
- * components/estimate-report/report-view.js, which the legacy offers and
- * project tracking modals still mount. Keeping that file the single source
+ * components/estimate-report/report-view.js, which the legacy project
+ * tracking modal still mounts. Keeping that file the single source
  * means a change to the report shows on both sides at once. Its builders
  * escape every payload value (utils/text.js escapeHtml) and pass markdown
  * through utils/markdownLite.js, which escapes first and only adds its own
  * tags, the same contract as renderRichText. The estimator's method text
  * (loadMethodHtml, markdownLite) is the one other allowed input. Never pass
  * anything else here.
- * When offers and project tracking move to React, port the builders to JSX
- * and delete this component.
+ * When project tracking moves to React, port the builders to JSX and delete
+ * this component.
  */
 export const EstimateHtml = forwardRef<HTMLDivElement, EstimateHtmlProps>(function EstimateHtml(
   { html, ...rest },

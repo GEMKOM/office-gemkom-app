@@ -1,6 +1,6 @@
 // Types for the legacy Tahmin modules the React estimate report imports through
 // `@legacy`. report-view.js stays the single source of the report's markup
-// while the offers and project tracking pages (legacy) mount the same card;
+// while the project tracking page (legacy) mounts the same card;
 // see EstimateHtml.tsx. Only the parts used here are declared.
 
 declare module '@legacy/components/estimate-report/report-model.js' {
