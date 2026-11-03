@@ -212,8 +212,10 @@ test.describe('route permissions', () => {
   });
 });
 
-// The signed-out pages send a signed-in visitor on; e2e/login.spec.ts covers them.
-const PUBLIC_ROUTES = new Set(['/login', '/login/reset-password']);
+// The signed-out pages have no shell: the login pages send a signed-in visitor
+// on (e2e/login.spec.ts), and the plan sheet is a share link's page on its own
+// (e2e/plan-sheet.spec.ts).
+const PUBLIC_ROUTES = new Set(['/login', '/login/reset-password', '/projects/plan-sheet']);
 
 test.describe('every migrated route loads as admin', () => {
   const routes = migratedRoutes().filter((route) => !PUBLIC_ROUTES.has(route));
