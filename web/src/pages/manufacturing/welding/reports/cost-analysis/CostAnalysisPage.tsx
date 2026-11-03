@@ -52,7 +52,7 @@ function Leader({ jobNo, detail }: { jobNo: string; detail: string }): ReactNode
 }
 
 /** Port of manufacturing/welding/reports/cost-analysis (costAnalysis.js). */
-export function CostAnalysisPage() {
+export function CostAnalysisPage({ switcher }: { switcher?: ReactNode }) {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const filters = useMemo<FilterState>(
     () => ({
@@ -98,11 +98,12 @@ export function CostAnalysisPage() {
   return (
     <>
       <PageHeader
-        title="Maliyet Analizi Raporu"
+        title="İş Maliyeti Raporu"
         subtitle="İş numaralarına göre detaylı maliyet analizi, saat başı maliyet hesaplamaları ve kullanıcı bazlı detaylar. Tüm iş numaraları görüntülenir, belirli bir iş numarası için filtreleme yapabilirsiniz."
         icon="fas fa-calculator"
-        backTo="/manufacturing/welding/reports/"
+        backTo="/manufacturing/reports/"
         backLabel="Raporlara Dön"
+        actions={switcher}
       />
 
       <StatCards

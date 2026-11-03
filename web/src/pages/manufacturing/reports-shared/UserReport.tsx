@@ -1,6 +1,6 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { TimerModule } from '@/api/manufacturing/counts';
 import { userReportQueryOptions, type UserReportDates } from '@/api/manufacturing/userReport';
 import { formatNumber } from '@/lib/format';
@@ -53,7 +53,14 @@ export function reportDates(range: DateRange): UserReportDates {
 const EMPTY_ROWS: UserReportRow[] = [];
 
 /** Port of {machining,cnc-cutting}/reports/user-report/userReport.js. */
-export function UserReport({ module }: { module: TimerModule }) {
+export function UserReport({
+  module,
+  switcher,
+}: {
+  module: TimerModule;
+  /** The CNC / machining switch of the merged report, shown on the band. */
+  switcher?: ReactNode;
+}) {
   const header = HEADERS[module];
   // The range opens on today (local day), as legacy did.
   const [defaults] = useState(() => {
@@ -114,6 +121,7 @@ export function UserReport({ module }: { module: TimerModule }) {
         subtitle={header.subtitle}
         icon="fas fa-calendar-alt"
         backTo={header.backTo}
+        actions={switcher}
         stats={[
           {
             id: 'total-users-count',

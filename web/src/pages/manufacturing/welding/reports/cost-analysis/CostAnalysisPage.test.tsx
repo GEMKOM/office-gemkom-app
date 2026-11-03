@@ -106,7 +106,7 @@ afterEach(() => {
 
 it('loads every job once, sorts by İş No and shows the leaders', async () => {
   renderPage();
-  expect(screen.getByText('Maliyet Analizi Raporu', { selector: 'h1' })).toBeInTheDocument();
+  expect(screen.getByText('İş Maliyeti Raporu', { selector: 'h1' })).toBeInTheDocument();
   await screen.findAllByText('010-24');
 
   // No ordering or paging is sent: the page sorts the loaded rows (numeric-aware).

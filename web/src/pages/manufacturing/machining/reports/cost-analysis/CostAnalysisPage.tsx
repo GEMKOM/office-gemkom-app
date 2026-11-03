@@ -1,6 +1,6 @@
 import { Text } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { jobCostReportQueryOptions, type JobCostRow } from '@/api/manufacturing/costAnalysis';
 import { formatNumber } from '@/lib/format';
 import {
@@ -141,7 +141,7 @@ const filterConfig: FilterConfig<'job_no'>[] = [
 const EMPTY_ROWS: JobCostTableRow[] = [];
 
 /** Port of manufacturing/machining/reports/cost-analysis (costAnalysis.js). */
-export function CostAnalysisPage() {
+export function CostAnalysisPage({ switcher }: { switcher?: ReactNode }) {
   const { values, apply } = useUrlFilters({ job_no: '' });
   const filters = useMemo(() => ({ job_no: values.job_no }), [values.job_no]);
 
@@ -170,10 +170,11 @@ export function CostAnalysisPage() {
   return (
     <>
       <PageHeader
-        title="Maliyet Analizi Raporu"
+        title="İş Maliyeti Raporu"
         subtitle="İş numaralarına göre detaylı maliyet analizi, saat başı maliyet hesaplamaları ve kullanıcı bazlı detaylar. Tüm iş numaraları görüntülenir, belirli bir iş numarası için filtreleme yapabilirsiniz."
-        backTo="/manufacturing/machining/reports/"
+        backTo="/manufacturing/reports/"
         backLabel="Raporlara Dön"
+        actions={switcher}
       />
 
       <StatCards

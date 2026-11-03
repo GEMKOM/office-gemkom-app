@@ -137,7 +137,14 @@ function useMachineOptions(module: TimerModule): FilterOption[] {
  * Port of {machining,cnc-cutting}/reports/finished-timers/finishedTimers.js:
  * finished timers with server paging and sorting, edit and delete.
  */
-export function FinishedTimersReport({ module }: { module: TimerModule }) {
+export function FinishedTimersReport({
+  module,
+  switcher,
+}: {
+  module: TimerModule;
+  /** The CNC / machining switch of the merged report, shown on the band. */
+  switcher?: ReactNode;
+}) {
   const variant = VARIANTS[module];
   const [defaults] = useState(urlDefaults);
   const { values, apply } = useUrlFilters(defaults);
@@ -328,6 +335,7 @@ export function FinishedTimersReport({ module }: { module: TimerModule }) {
         subtitle="Tamamlanan zamanlayıcıların detaylı raporu"
         icon="fas fa-clock"
         backTo={variant.backTo}
+        actions={switcher}
         stats={[
           {
             id: 'total-timers-count',

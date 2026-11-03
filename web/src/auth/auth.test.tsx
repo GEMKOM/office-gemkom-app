@@ -34,6 +34,7 @@ vi.mock('@legacy/authService.js', () => ({
 
 vi.mock('@legacy/apis/accessControl.js', () => ({
   hasRouteAccess: (route: string) => legacy.allowedRoutes.has(route),
+  inheritedAccessRoutes: () => ['/manufacturing/reports/finished-timers'],
 }));
 
 function renderGuarded(path: string, handle?: RouteAccessHandle) {
@@ -112,6 +113,14 @@ describe('hub routes', () => {
     legacy.allowedRoutes = new Set();
     legacy.permissions = { access_sales_customers: true };
     renderGuarded('/sales', { access: 'hub' });
+    expect(await screen.findByText('sayfa içeriği')).toBeInTheDocument();
+  });
+
+  it('open for a merged report under them that the user opens through an old grant', async () => {
+    // The CNC grant opens the merged page through ROUTE_ACCESS_INHERITS.
+    legacy.allowedRoutes = new Set(['/manufacturing/reports/finished-timers']);
+    legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/reports/finished-timers']);
+    renderGuarded('/manufacturing/reports', { access: 'hub' });
     expect(await screen.findByText('sayfa içeriği')).toBeInTheDocument();
   });
 

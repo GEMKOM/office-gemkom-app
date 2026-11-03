@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess, inheritedAccessRoutes } from '@legacy/apis/accessControl.js';
 import {
   getGrantedPageRoutes,
   getPermissions,
@@ -51,6 +51,11 @@ export function hasHubAccess(path: string): boolean {
   if (hasRouteAccess(route)) return true;
   for (const granted of getGrantedPageRoutes()) {
     if (granted.startsWith(route + '/')) return true;
+  }
+  // A merged report opens through its old pages' grants, which sit elsewhere
+  // (/manufacturing/reports/finished-timers follows the CNC and machining ones).
+  for (const inherited of inheritedAccessRoutes()) {
+    if (inherited.startsWith(route + '/') && hasRouteAccess(inherited)) return true;
   }
   // Older payloads only carry boolean access_* codenames
   // (/sales/customers -> access_sales_customers).

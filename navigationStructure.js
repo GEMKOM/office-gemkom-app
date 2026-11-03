@@ -278,11 +278,6 @@ export const NAVIGATION_STRUCTURE = {
                                 label: 'Çalışan Çalışma Saatleri',
                                 icon: 'fas fa-user-clock',
                                 children: {}
-                            },
-                            '/manufacturing/welding/reports/cost-analysis': {
-                                label: 'Maliyet Analizi',
-                                icon: 'fas fa-calculator',
-                                children: {}
                             }
                         }
                     }
@@ -317,19 +312,9 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-pie',
                         children: {
-                            '/manufacturing/machining/reports/finished-timers': {
-                                label: 'Biten Zamanlayıcılar',
-                                icon: 'fas fa-clock',
-                                children: {}
-                            },
                             '/manufacturing/machining/reports/sum-report': {
                                 label: 'Toplam Raporu',
                                 icon: 'fas fa-chart-pie',
-                                children: {}
-                            },
-                            '/manufacturing/machining/reports/cost-analysis': {
-                                label: 'Maliyet Analizi',
-                                icon: 'fas fa-calculator',
                                 children: {}
                             },
                             '/manufacturing/machining/reports/history': {
@@ -339,11 +324,6 @@ export const NAVIGATION_STRUCTURE = {
                             },
                             '/manufacturing/machining/reports/production-plan': {
                                 label: 'Üretim Planı',
-                                icon: 'fas fa-calendar-alt',
-                                children: {}
-                            },
-                            '/manufacturing/machining/reports/user-report': {
-                                label: 'Kullanıcı Raporu',
                                 icon: 'fas fa-calendar-alt',
                                 children: {}
                             }
@@ -428,14 +408,9 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-bar',
                         children: {
-                            '/manufacturing/cnc-cutting/reports/finished-timers': {
-                                label: 'Biten Zamanlayıcılar',
-                                icon: 'fas fa-clock',
-                                children: {}
-                            },
-                            '/manufacturing/cnc-cutting/reports/user-report': {
-                                label: 'Kullanıcı Raporu',
-                                icon: 'fas fa-calendar-alt',
+                            '/manufacturing/cnc-cutting/reports/parts-search': {
+                                label: 'Parça Arama',
+                                icon: 'fas fa-search',
                                 children: {}
                             }
                         }
@@ -490,9 +465,19 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-pie',
                 children: {
-                    '/manufacturing/reports/combined-job-costs': {
+                    '/manufacturing/reports/job-costs': {
                         label: 'İş Maliyeti',
                         icon: 'fas fa-calculator',
+                        children: {}
+                    },
+                    '/manufacturing/reports/finished-timers': {
+                        label: 'Biten Zamanlayıcılar',
+                        icon: 'fas fa-clock',
+                        children: {}
+                    },
+                    '/manufacturing/reports/user-report': {
+                        label: 'Kullanıcı Raporu',
+                        icon: 'fas fa-calendar-alt',
                         children: {}
                     }
                 }

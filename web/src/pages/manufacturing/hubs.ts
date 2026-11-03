@@ -135,7 +135,9 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         iconColor: 'info',
         link: '/manufacturing/reports',
         features: [
-          { label: 'İş Maliyeti', icon: 'fas fa-calculator', link: '/manufacturing/reports/combined-job-costs' },
+          { label: 'İş Maliyeti', icon: 'fas fa-calculator', link: '/manufacturing/reports/job-costs' },
+          { label: 'Biten Zamanlayıcılar', icon: 'fas fa-clock', link: '/manufacturing/reports/finished-timers' },
+          { label: 'Kullanıcı Raporu', icon: 'fas fa-calendar-alt', link: '/manufacturing/reports/user-report' },
         ],
       },
       {
@@ -210,12 +212,12 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           {
             label: 'Biten Zamanlayıcılar',
             icon: 'fas fa-clock',
-            link: '/manufacturing/cnc-cutting/reports/finished-timers',
+            link: '/manufacturing/reports/finished-timers?module=cnc_cutting',
           },
           {
             label: 'Kullanıcı Raporu',
             icon: 'fas fa-calendar-alt',
-            link: '/manufacturing/cnc-cutting/reports/user-report',
+            link: '/manufacturing/reports/user-report?module=cnc_cutting',
           },
         ],
       },
@@ -341,13 +343,13 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           {
             label: 'Biten Zamanlayıcılar',
             icon: 'fas fa-clock',
-            link: '/manufacturing/machining/reports/finished-timers',
+            link: '/manufacturing/reports/finished-timers?module=machining',
           },
           { label: 'Toplam Raporu', icon: 'fas fa-chart-pie', link: '/manufacturing/machining/reports/sum-report' },
           {
             label: 'Maliyet Analizi',
             icon: 'fas fa-calculator',
-            link: '/manufacturing/machining/reports/cost-analysis',
+            link: '/manufacturing/reports/job-costs?breakdown=machining',
           },
           {
             label: 'Makine Çalışma Geçmişi',
@@ -362,7 +364,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           {
             label: 'Kullanıcı Raporu',
             icon: 'fas fa-calendar-alt',
-            link: '/manufacturing/machining/reports/user-report',
+            link: '/manufacturing/reports/user-report?module=machining',
           },
           {
             label: 'Performans Raporu',
@@ -589,7 +591,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         description: 'İş numaralarına göre detaylı saat analizi ve kullanıcı bazlı detaylar.',
         icon: 'fas fa-calculator',
         iconColor: 'success',
-        link: '/manufacturing/welding/reports/cost-analysis',
+        link: '/manufacturing/reports/job-costs?breakdown=welding',
       },
     ],
   },
@@ -605,7 +607,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           'Tamamlanan zamanlayıcıların detaylı analizi. Kullanıcı performansları, süre dağılımları ve verimlilik metriklerini görüntüleyin.',
         icon: 'fas fa-clock',
         iconColor: 'primary',
-        link: '/manufacturing/cnc-cutting/reports/finished-timers',
+        link: '/manufacturing/reports/finished-timers?module=cnc_cutting',
       },
       {
         title: 'Kullanıcı Raporu',
@@ -613,7 +615,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           'Seçilen tarih aralığında CNC kesim ekibi kullanıcı performansı, parça ve görev özetleri. Detayda günlük görevler, nesting, malzeme ve parça adetleri.',
         icon: 'fas fa-calendar-alt',
         iconColor: 'primary',
-        link: '/manufacturing/cnc-cutting/reports/user-report',
+        link: '/manufacturing/reports/user-report?module=cnc_cutting',
       },
       {
         title: 'Parça Arama',
@@ -637,7 +639,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           'Seçilen tarih aralığında kullanıcı çalışma performansı ve zaman kullanımı analizi. Detayda günlük görevler, boşta geçen dönemler ve verimlilik metriklerini görüntüleyin.',
         icon: 'fas fa-calendar-alt',
         iconColor: 'primary',
-        link: '/manufacturing/machining/reports/user-report',
+        link: '/manufacturing/reports/user-report?module=machining',
       },
       {
         title: 'Günlük Verimlilik Raporu',
@@ -661,7 +663,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           'Tamamlanan zamanlayıcıların detaylı analizi. Kullanıcı performansları, süre dağılımları ve verimlilik metriklerini görüntüleyin.',
         icon: 'fas fa-clock',
         iconColor: 'primary',
-        link: '/manufacturing/machining/reports/finished-timers',
+        link: '/manufacturing/reports/finished-timers?module=machining',
       },
       {
         title: 'Toplam Raporu',
@@ -677,7 +679,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           'İş numarasına göre çalışma saatleri analizi ve maliyet hesaplamaları. Hafta içi, mesai ve pazar çalışma saatlerini detaylı olarak görüntüleyin.',
         icon: 'fas fa-calculator',
         iconColor: 'warning',
-        link: '/manufacturing/machining/reports/cost-analysis',
+        link: '/manufacturing/reports/job-costs?breakdown=machining',
       },
       {
         title: 'Makine Çalışma Geçmişi',
@@ -741,10 +743,26 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
       {
         title: 'İş Maliyeti',
         description:
-          'iş maliyeti analizi. Tüm iş numaraları için detaylı maliyet ve saat bilgilerini görüntüleyin.',
+          'İş numaralarına harcanan saatler ve işçilik maliyeti: talaşlı ve kaynaklı imalat birlikte ya da ayrı ayrı.',
         icon: 'fas fa-calculator',
         iconColor: 'success',
-        link: '/manufacturing/reports/combined-job-costs',
+        link: '/manufacturing/reports/job-costs',
+      },
+      {
+        title: 'Biten Zamanlayıcılar',
+        description:
+          'Talaşlı imalat ve CNC kesimde tamamlanan zamanlayıcılar: kim, hangi makinede, ne kadar sürdü.',
+        icon: 'fas fa-clock',
+        iconColor: 'primary',
+        link: '/manufacturing/reports/finished-timers',
+      },
+      {
+        title: 'Kullanıcı Raporu',
+        description:
+          'Talaşlı imalat ve CNC kesim ekiplerinin çalışma, boşta ve bekleme saatleri ile verimliliği.',
+        icon: 'fas fa-calendar-alt',
+        iconColor: 'info',
+        link: '/manufacturing/reports/user-report',
       },
     ],
   },

@@ -52,7 +52,28 @@ const ROUTE_ACCESS_INHERITS = {
     ],
     // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
     '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking'],
+    // Reports merged from one page per department: the grants stay on the old
+    // pages, and the merged page shows each user only the views whose old page
+    // they can open (useReportView in web/src/pages/manufacturing/reports-shared).
+    '/manufacturing/reports/finished-timers': [
+        '/manufacturing/cnc-cutting/reports/finished-timers',
+        '/manufacturing/machining/reports/finished-timers',
+    ],
+    '/manufacturing/reports/user-report': [
+        '/manufacturing/cnc-cutting/reports/user-report',
+        '/manufacturing/machining/reports/user-report',
+    ],
+    '/manufacturing/reports/job-costs': [
+        '/manufacturing/reports/combined-job-costs',
+        '/manufacturing/machining/reports/cost-analysis',
+        '/manufacturing/welding/reports/cost-analysis',
+    ],
 };
+
+/** Routes opened through another page's grant (ROUTE_ACCESS_INHERITS). */
+export function inheritedAccessRoutes() {
+    return Object.keys(ROUTE_ACCESS_INHERITS);
+}
 
 function normalizePath(path) {
     if (!path) return '/';

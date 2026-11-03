@@ -76,7 +76,7 @@ function timerSections(timer: FinishedTimer): DetailSection[] {
           span: 12,
           render: (
             <Anchor
-              href={`/manufacturing/machining/reports/finished-timers/?edit=${timer.id}`}
+              href={`/manufacturing/reports/finished-timers/?module=machining&edit=${timer.id}`}
               target="_blank"
               title="Zamanlayıcıyı düzenlemek için tıklayın"
             >

@@ -10,6 +10,7 @@ import {
   seedSession,
   test,
 } from './fixtures';
+import { MERGED_REPORT_ROUTES } from '../src/routes/mergedReports';
 
 // Smoke tests for the React/legacy split: one origin, one session in
 // localStorage, migrated routes served by the SPA, everything else legacy.
@@ -226,8 +227,13 @@ test.describe('every migrated route loads as admin', () => {
       await mockBackend(page, {}, { session });
 
       await page.goto(pageUrl(route));
+      // A merged report's old URL forwards to it with its view preset.
+      const merged = MERGED_REPORT_ROUTES[route];
+      const landing = merged
+        ? `${pageUrl(merged.to)}?${new URLSearchParams(merged.preset).toString()}`
+        : pageUrl(route);
       await expect(page).toHaveURL(
-        new RegExp(`${pageUrl(route).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
+        new RegExp(`${landing.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
       );
       await expectSpa(page);
       const main = page.getByRole('main');

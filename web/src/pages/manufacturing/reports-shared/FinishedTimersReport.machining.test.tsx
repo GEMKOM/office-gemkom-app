@@ -5,7 +5,7 @@ import dayjs from 'dayjs';
 import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { MachiningFinishedTimersPage } from './MachiningFinishedTimersPage';
+import { FinishedTimersReport } from './FinishedTimersReport';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
@@ -60,10 +60,10 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
 }
 
-function renderPage(route = '/manufacturing/machining/reports/finished-timers/') {
+function renderPage(route = '/manufacturing/reports/finished-timers/') {
   return renderWithProviders(
     <ModalsProvider>
-      <MachiningFinishedTimersPage />
+      <FinishedTimersReport module="machining" />
       <LocationProbe />
     </ModalsProvider>,
     { route },
@@ -129,7 +129,7 @@ it('lists finished timers from yesterday to today with the legacy params and fig
 });
 
 it('the TI No search goes to the URL and the request', async () => {
-  renderPage('/manufacturing/machining/reports/finished-timers/?page=2');
+  renderPage('/manufacturing/reports/finished-timers/?page=2');
   await screen.findByText('TI-501');
 
   fireEvent.change(screen.getByLabelText('TI No'), { target: { value: 'TI-501' } });
@@ -182,7 +182,7 @@ it('edits a timer: finish time, comment and the read-only part fields go back in
 });
 
 it('opens the edit modal from ?edit= for a timer not on the page', async () => {
-  renderPage('/manufacturing/machining/reports/finished-timers/?edit=99');
+  renderPage('/manufacturing/reports/finished-timers/?edit=99');
   const dialog = await screen.findByRole('dialog', { name: 'Zamanlayıcıyı Düzenle' });
   expect(calls().some((c) => c.url.pathname === '/machining/timers/99/')).toBe(true);
   expect(within(dialog).getByLabelText('Kullanıcı')).toHaveValue('veli.y');

@@ -1,6 +1,6 @@
 import { Text } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { combinedJobCostsQueryOptions } from '@/api/jobCosts/combinedJobCosts';
 import {
   DataTable,
@@ -35,7 +35,7 @@ const filterConfig: FilterConfig<'job_no'>[] = [
 const EMPTY_ROWS: CombinedJobCostRow[] = [];
 
 /** Port of manufacturing/reports/combined-job-costs (combinedJobCosts.js). */
-export function CombinedJobCostsPage() {
+export function CombinedJobCostsPage({ switcher }: { switcher?: ReactNode }) {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const filters = useMemo(() => ({ job_no: values.job_no }), [values.job_no]);
   const sort = fromOrdering(values.ordering || DEFAULT_ORDERING);
@@ -92,6 +92,7 @@ export function CombinedJobCostsPage() {
         icon="fas fa-calculator"
         backTo="/manufacturing/reports/"
         backLabel="Raporlara Dön"
+        actions={switcher}
       />
 
       <StatCards

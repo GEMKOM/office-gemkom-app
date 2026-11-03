@@ -37,3 +37,37 @@ describe('normalizeRoute', () => {
     expect(normalizeRoute('/?x=1')).toBe('/');
   });
 });
+
+describe('merged reports', () => {
+  async function landing(url: string) {
+    const target = appRoutes.find((r) => r.path === url.split('?')[0]);
+    expect(target?.loader).toBeTypeOf('function');
+    const loader = target!.loader as (args: { request: Request }) => Response;
+    const response = loader({ request: new Request(`https://ofis.test${url}`) });
+    return response.headers.get('Location');
+  }
+
+  it('forward the old URLs with the view preset and the rest of the query', async () => {
+    expect(await landing('/manufacturing/cnc-cutting/reports/finished-timers')).toBe(
+      '/manufacturing/reports/finished-timers/?module=cnc_cutting',
+    );
+    expect(await landing('/manufacturing/machining/reports/finished-timers?edit=12')).toBe(
+      '/manufacturing/reports/finished-timers/?edit=12&module=machining',
+    );
+    expect(await landing('/manufacturing/cnc-cutting/reports/user-report')).toBe(
+      '/manufacturing/reports/user-report/?module=cnc_cutting',
+    );
+    expect(await landing('/manufacturing/machining/reports/user-report')).toBe(
+      '/manufacturing/reports/user-report/?module=machining',
+    );
+    expect(await landing('/manufacturing/reports/combined-job-costs?job_no=225')).toBe(
+      '/manufacturing/reports/job-costs/?job_no=225&breakdown=combined',
+    );
+    expect(await landing('/manufacturing/machining/reports/cost-analysis')).toBe(
+      '/manufacturing/reports/job-costs/?breakdown=machining',
+    );
+    expect(await landing('/manufacturing/welding/reports/cost-analysis?date_after=2026-10-01')).toBe(
+      '/manufacturing/reports/job-costs/?date_after=2026-10-01&breakdown=welding',
+    );
+  });
+});
