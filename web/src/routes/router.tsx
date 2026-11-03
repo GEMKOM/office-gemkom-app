@@ -82,6 +82,12 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/sales/catalog/CatalogPage')).CatalogPage,
     }),
   },
+  {
+    path: '/sales/cost-table',
+    lazy: async () => ({
+      Component: (await import('@/pages/sales/cost-table/CostTablePage')).CostTablePage,
+    }),
+  },
   { path: '/manufacturing', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/cnc-cutting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/cnc-cutting/capacity', handle: hub, lazy: manufacturingHub },
