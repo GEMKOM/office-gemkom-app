@@ -293,6 +293,7 @@ export function SuppliersPage() {
       />
 
       <DataTable
+        columnsKey="suppliers"
         title="Tüm Tedarikçiler"
         icon="fas fa-building"
         filters={

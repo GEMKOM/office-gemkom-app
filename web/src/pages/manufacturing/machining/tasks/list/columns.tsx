@@ -43,7 +43,9 @@ export function PartStatus({ part }: { part: MachiningPart }) {
   if (part.is_locked) {
     const dr = part.department_request_number || '';
     return (
-      <StatusBadge color="blue">Departman Talebine Dönüştürüldü{dr ? ` → ${dr}` : ''}</StatusBadge>
+      <span title={`Departman Talebine Dönüştürüldü${dr ? ` → ${dr}` : ''}`}>
+        <StatusBadge color="blue">Talebe Dönüştü</StatusBadge>
+      </span>
     );
   }
   if (part.completion_date) return <StatusBadge color="green">Tamamlandı</StatusBadge>;
@@ -63,7 +65,6 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
       key: 'key',
       header: 'Parça No',
       sortable: true,
-      width: '10%',
       exportValue: (row) => `${row.key || '-'}${row.task_key ? ` (${row.task_key})` : ''}`,
       render: (row) => (
         <span className={classes.partKey}>
@@ -76,16 +77,20 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
       key: 'name',
       header: 'Ad',
       sortable: true,
-      width: '15%',
+      maxWidth: 'clamp(100px, 8.5vw, 260px)',
       editable: true,
       render: (row) => <strong>{row.name || '-'}</strong>,
     },
-    { key: 'description', header: 'Açıklama', width: '15%', editable: true },
+    {
+      key: 'description',
+      header: 'Açıklama',
+      maxWidth: 'clamp(100px, 8.5vw, 320px)',
+      editable: true,
+    },
     {
       key: 'job_no',
       header: 'İş No',
       sortable: true,
-      width: '10%',
       render: (row) => (
         <button
           type="button"
@@ -100,12 +105,17 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
         </button>
       ),
     },
-    { key: 'image_no', header: 'Resim No', width: '10%', editable: true },
-    { key: 'position_no', header: 'Poz No', width: '10%', editable: true },
+    {
+      key: 'image_no',
+      header: 'Resim No',
+      maxWidth: 'clamp(80px, 7vw, 180px)',
+      editable: true,
+    },
+    { key: 'position_no', header: 'Poz No', editable: true },
     {
       key: 'quantity',
       header: 'Adet',
-      width: '8%',
+      align: 'center',
       exportValue: (row) => row.quantity ?? 0,
       render: (row) => (
         <button
@@ -121,11 +131,16 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
         </button>
       ),
     },
-    { key: 'material', header: 'Malzeme', width: '9%', editable: true },
+    {
+      key: 'material',
+      header: 'Malzeme',
+      maxWidth: 'clamp(80px, 7vw, 180px)',
+      editable: true,
+    },
     {
       key: 'weight_kg',
       header: 'Ağırlık (kg)',
-      width: '8%',
+      hideBelow: 1600,
       align: 'right',
       editable: { type: 'number', step: 0.001 },
       exportValue: (row) =>
@@ -137,14 +152,16 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
     {
       key: 'operation_count',
       header: 'Operasyon Sayısı',
-      width: '8%',
+      align: 'center',
+      hideBelow: 1600,
       exportValue: (row) => row.operation_count || 0,
       render: (row) => <span className={classes.countPill}>{row.operation_count || 0}</span>,
     },
     {
       key: 'incomplete_operation_count',
-      header: 'Tamamlanmamış',
-      width: '8%',
+      header: 'Kalan Op.',
+      exportHeader: 'Tamamlanmamış',
+      align: 'center',
       exportValue: (row) => row.incomplete_operation_count || 0,
       render: (row) => {
         const count = row.incomplete_operation_count || 0;
@@ -155,7 +172,6 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
       key: 'finish_time',
       header: 'Bitiş Tarihi',
       sortable: true,
-      width: '10%',
       // A native date picker; the saved value is 'YYYY-MM-DD'.
       editable: { type: 'date' },
       exportValue: (row) => (row.finish_time ? formatDate(row.finish_time) : '-'),
@@ -164,7 +180,6 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
     {
       key: 'files',
       header: 'Dosyalar',
-      width: '8%',
       exportValue: (row) => row.files?.length ?? 0,
       render: (row) => {
         const count = row.files?.length ?? 0;
@@ -197,7 +212,6 @@ export function partColumns(handlers: PartColumnHandlers): DataTableColumn<Machi
     {
       key: 'status',
       header: 'Durum',
-      width: '12%',
       exportValue: (row) =>
         row.is_locked
           ? `Departman Talebine Dönüştürüldü${row.department_request_number ? ` → ${row.department_request_number}` : ''}`

@@ -323,6 +323,19 @@ a.figureTile:focus-visible {
   background: currentColor;
 }
 
+/* In a compact DataTable: a smaller pill, so status columns stay narrow. */
+:global(table[data-density='compact']) .status {
+  gap: 5px;
+  padding: 1px 8px;
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+:global(table[data-density='compact']) .status::before {
+  width: 5px;
+  height: 5px;
+}
+
 /* ---- Icon tiles (stat cards, hub cards) ------------------------------------- */
 .tile {
   flex: none;

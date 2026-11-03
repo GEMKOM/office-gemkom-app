@@ -10,6 +10,7 @@ import {
   Menu,
   NativeSelect,
   Pagination,
+  Popover,
   Skeleton,
   Stack,
   Table,
@@ -33,11 +34,13 @@ import {
   isValidElement,
   memo,
   useEffect,
+  useCallback,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
@@ -190,7 +193,55 @@ function headerText(header: ReactNode): string {
   return typeof header === 'string' || typeof header === 'number' ? String(header) : 'Değer';
 }
 
+/**
+ * A column's `maxWidth`: the content ends in "…" past it. The hover text is
+ * set on mouse enter, and only when something is actually cut off.
+ */
+function Clip({
+  maxWidth,
+  title,
+  children,
+}: {
+  maxWidth: number | string;
+  title: () => string | null | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={tableClasses.clip}
+      style={{ maxWidth }}
+      onMouseEnter={(event) => {
+        const box = event.currentTarget;
+        const inner = box.firstElementChild;
+        const cut =
+          box.scrollWidth > box.clientWidth ||
+          (inner instanceof HTMLElement && inner.scrollWidth > inner.clientWidth);
+        const text = cut ? (title() ?? box.textContent ?? '').trim() : '';
+        if (text) box.title = text;
+        else box.removeAttribute('title');
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function renderCellContent<T>(
+  column: DataTableColumn<T>,
+  row: T,
+  index: number,
+  editor: ColumnEditor<T> | null,
+): ReactNode {
+  const content = renderCellBody(column, row, index, editor);
+  if (column.maxWidth === undefined) return content;
+  return (
+    <Clip maxWidth={column.maxWidth} title={() => column.cellTitle?.(row)}>
+      {content}
+    </Clip>
+  );
+}
+
+function renderCellBody<T>(
   column: DataTableColumn<T>,
   row: T,
   index: number,
@@ -205,6 +256,119 @@ function renderCellContent<T>(
   }
   return displayValue(value);
 }
+
+/** The `hideBelow` widths the viewport is narrower than; follows resizes. */
+function useNarrowerThan(widths: readonly number[]): ReadonlySet<number> {
+  const key = widths.join(',');
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      const lists = key
+        ? key.split(',').map((w) => window.matchMedia(`(max-width: ${Number(w) - 0.02}px)`))
+        : [];
+      for (const list of lists) list.addEventListener('change', onChange);
+      return () => {
+        for (const list of lists) list.removeEventListener('change', onChange);
+      };
+    },
+    [key],
+  );
+  const matched = useSyncExternalStore(
+    subscribe,
+    () =>
+      key
+        ? key
+            .split(',')
+            .filter((w) => window.matchMedia(`(max-width: ${Number(w) - 0.02}px)`).matches)
+            .join(',')
+        : '',
+    () => '',
+  );
+  return useMemo(() => new Set(matched ? matched.split(',').map(Number) : []), [matched]);
+}
+
+const COLUMNS_STORAGE = 'gk.tableColumns.';
+
+/** Sütunlar choices: column key -> shown. Storage can be off; then nothing is remembered. */
+function readColumnChoice(columnsKey: string | undefined): Record<string, boolean> {
+  if (!columnsKey) return {};
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(COLUMNS_STORAGE + columnsKey) ?? '{}');
+    return stored && typeof stored === 'object' ? (stored as Record<string, boolean>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeColumnChoice(columnsKey: string | undefined, choice: Record<string, boolean>) {
+  if (!columnsKey) return;
+  try {
+    if (Object.keys(choice).length === 0) localStorage.removeItem(COLUMNS_STORAGE + columnsKey);
+    else localStorage.setItem(COLUMNS_STORAGE + columnsKey, JSON.stringify(choice));
+  } catch {
+    // Private mode or full storage: the choice lasts until the page closes.
+  }
+}
+
+/** The Sütunlar menu: a checkbox per column, and the count hidden on the button. */
+function ColumnMenu<T>({
+  columns,
+  isShown,
+  onToggle,
+  onReset,
+}: {
+  columns: readonly DataTableColumn<T>[];
+  isShown: (column: DataTableColumn<T>) => boolean;
+  onToggle: (column: DataTableColumn<T>) => void;
+  onReset: () => void;
+}) {
+  const hiddenCount = columns.filter((column) => !isShown(column)).length;
+  const shownCount = columns.length - hiddenCount;
+  return (
+    <Popover position="bottom-end" withinPortal shadow="md" hideDetached={false}>
+      <Popover.Target>
+        <Button size="xs" variant="default" leftSection={<FaIcon icon="fas fa-table-columns" />}>
+          Sütunlar{hiddenCount > 0 ? ` (${hiddenCount} gizli)` : ''}
+        </Button>
+      </Popover.Target>
+      <Popover.Dropdown>
+        <Stack
+          gap={8}
+          role="group"
+          aria-label="Görünen sütunlar"
+          mah={360}
+          style={{ overflowY: 'auto' }}
+        >
+          {columns.map((column) => {
+            const shown = isShown(column);
+            return (
+              <Checkbox
+                key={column.key}
+                size="xs"
+                label={column.exportHeader ?? headerText(column.header)}
+                checked={shown}
+                // The last column on screen stays.
+                disabled={shown && shownCount === 1}
+                onChange={() => onToggle(column)}
+              />
+            );
+          })}
+        </Stack>
+        <Button
+          mt="sm"
+          size="compact-xs"
+          variant="subtle"
+          leftSection={<FaIcon icon="fas fa-undo" />}
+          onClick={onReset}
+        >
+          Varsayılana dön
+        </Button>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+/** Row action buttons; small enough for a compact row. */
+const ACTION_SIZE = 24;
 
 function ActionsCell<T>({
   row,
@@ -226,6 +390,7 @@ function ActionsCell<T>({
           <ActionIcon
             variant="subtle"
             color="gray"
+            size={ACTION_SIZE}
             className={uiClasses.rowAction}
             data-tone={mantineColor(action.color, 'gray')}
             aria-label={action.label}
@@ -245,6 +410,7 @@ function ActionsCell<T>({
             <ActionIcon
               variant="subtle"
               color="gray"
+              size={ACTION_SIZE}
               aria-label="Diğer işlemler"
               onClick={(event) => event.stopPropagation()}
             >
@@ -462,7 +628,7 @@ function SortIcon({ dir }: { dir: SortDir | null }) {
   return (
     <FaIcon
       icon={icon}
-      style={{ marginLeft: 6, opacity: dir ? 1 : 0.35 }}
+      style={{ marginLeft: 4, opacity: dir ? 1 : 0.35 }}
       color={dir ? 'var(--mantine-primary-color-filled)' : undefined}
     />
   );
@@ -626,6 +792,7 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
     icon,
     toolbar,
     onRefresh,
+    columnsKey,
     onCellEdit,
     isRowEditable,
     isCellDirty,
@@ -633,13 +800,43 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
     reorder,
     striped = false,
     withColumnBorders = false,
-    verticalSpacing = 'sm',
+    verticalSpacing = 'compact',
   } = props;
 
-  const visibleColumns = useMemo(
+  // ---- columns on screen: `hideBelow` defaults, then the Sütunlar choices ----
+  const choosableColumns = useMemo(
     () => columns.filter((column) => !column.hidden && !column.exportOnly),
     [columns],
   );
+  const hideWidths = useMemo(
+    () =>
+      [...new Set(choosableColumns.map((column) => column.hideBelow))]
+        .filter((w): w is number => typeof w === 'number')
+        .sort((a, b) => a - b),
+    [choosableColumns],
+  );
+  const narrowerThan = useNarrowerThan(hideWidths);
+  const [columnChoice, setColumnChoice] = useState(() => readColumnChoice(columnsKey));
+  const isColumnShown = useCallback(
+    (column: DataTableColumn<T>) =>
+      columnChoice[column.key] ??
+      !(column.hideBelow !== undefined && narrowerThan.has(column.hideBelow)),
+    [columnChoice, narrowerThan],
+  );
+  const visibleColumns = useMemo(
+    () => choosableColumns.filter(isColumnShown),
+    [choosableColumns, isColumnShown],
+  );
+  const hasColumnMenu = Boolean(columnsKey) || hideWidths.length > 0;
+  const toggleColumn = (column: DataTableColumn<T>) => {
+    const next = { ...columnChoice, [column.key]: !isColumnShown(column) };
+    setColumnChoice(next);
+    writeColumnChoice(columnsKey, next);
+  };
+  const resetColumns = () => {
+    setColumnChoice({});
+    writeColumnChoice(columnsKey, {});
+  };
   const exportColumns = useMemo(() => columns.filter((column) => !column.hidden), [columns]);
   const virtualOptions = virtualize ? (typeof virtualize === 'object' ? virtualize : {}) : null;
   const server = isServerPagination(pagination) ? pagination : null;
@@ -1414,7 +1611,9 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
     : stickyHeader === true
       ? LEGACY_SCROLL_HEIGHT
       : stickyHeader || undefined;
-  const hasHeader = Boolean(title || filters || icon || toolbar || onRefresh || exportable);
+  const hasHeader = Boolean(
+    title || filters || icon || toolbar || onRefresh || exportable || hasColumnMenu,
+  );
   const pageRows = useMemo(() => tableRows.map((row) => row.original), [tableRows]);
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const last = Math.min(page * pageSize, total);
@@ -1431,6 +1630,14 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
           )}
           <Group gap="xs">
             {toolbar}
+            {hasColumnMenu ? (
+              <ColumnMenu
+                columns={choosableColumns}
+                isShown={isColumnShown}
+                onToggle={toggleColumn}
+                onReset={resetColumns}
+              />
+            ) : null}
             {onRefresh ? (
               <Button
                 size="xs"
@@ -1488,7 +1695,10 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
             highlightOnHover
             striped={striped}
             withColumnBorders={withColumnBorders}
-            verticalSpacing={verticalSpacing}
+            verticalSpacing={verticalSpacing === 'compact' ? 6 : verticalSpacing}
+            horizontalSpacing={8}
+            className={tableClasses.table}
+            data-density={verticalSpacing === 'compact' ? 'compact' : undefined}
           >
             <Table.Thead>
               <Table.Tr>
@@ -1516,7 +1726,7 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
                     <FaIcon
                       icon="fas fa-pen"
                       className={tableClasses.editableMark}
-                      style={{ marginLeft: 6 }}
+                      style={{ marginLeft: 4 }}
                     />
                   ) : null;
                   return (
@@ -1524,7 +1734,7 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
                       key={column.key}
                       style={{
                         width: column.width,
-                        minWidth: column.width,
+                        minWidth: column.minWidth ?? column.width,
                         textAlign: column.align,
                       }}
                       aria-sort={
@@ -1537,7 +1747,7 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
                           fw={500}
                           fz={12}
                           c="inherit"
-                          style={{ whiteSpace: 'nowrap' }}
+                          className={tableClasses.sortButton}
                         >
                           {column.header}
                           {pen}
@@ -1561,7 +1771,9 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
             </Table.Thead>
             <Table.Tbody {...bodyDragProps}>{body}</Table.Tbody>
             {footer && !showPlaceholder ? (
-              <Table.Tfoot>{footer({ rows: pageRows, allRows: data as T[] })}</Table.Tfoot>
+              <Table.Tfoot>
+                {footer({ rows: pageRows, allRows: data as T[], columns: visibleColumns })}
+              </Table.Tfoot>
             ) : null}
           </Table>
         </Box>

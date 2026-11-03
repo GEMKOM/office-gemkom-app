@@ -187,7 +187,10 @@ it('renders the parts, the figures and asks for the legacy defaults', async () =
   expect(screen.getAllByText('Parça Listesi').length).toBeGreaterThan(0);
   expect(await screen.findByText('Flanş')).toBeInTheDocument();
   expect(screen.getByText('1.500 kg')).toBeInTheDocument();
-  expect(screen.getByText('Departman Talebine Dönüştürüldü → DR-9')).toBeInTheDocument();
+  expect(screen.getByText('Talebe Dönüştü').closest('[title]')).toHaveAttribute(
+    'title',
+    'Departman Talebine Dönüştürüldü → DR-9',
+  );
   await waitFor(() =>
     expect(
       within(document.getElementById('unassigned-operations-count')!).getByText('3'),
