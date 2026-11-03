@@ -94,20 +94,22 @@ test.describe('navigation', () => {
     const session = await seedSession(page, { admin: true });
     await mockBackend(page, {}, { session });
 
-    await page.goto('/projects/');
+    await page.goto('/planning/');
     await expectSpa(page);
 
-    // A hub card to a page that is still legacy (Proje Takibi): a full load.
+    // A hub card to a page that is still legacy (Proje Planlama, the last one
+    // with the legacy navbar): a full load. The PR that ports it removes or
+    // rewrites this test.
     await page.evaluate(() => {
       window.__spaMarker = 'spa';
     });
     await page
       .getByRole('main')
-      .getByRole('link', { name: /Proje Takibi/ })
+      .getByRole('link', { name: /Proje Planlama/ })
       .first()
       .click();
 
-    await expect(page).toHaveURL(/\/projects\/project-tracking\/?$/);
+    await expect(page).toHaveURL(/\/planning\/project-planning\/?$/);
     await expect(page.locator('#navbar-container')).toHaveCount(1);
     await expect(page.locator('#root')).toHaveCount(0);
     expect(await page.evaluate(() => window.__spaMarker)).toBeUndefined();
