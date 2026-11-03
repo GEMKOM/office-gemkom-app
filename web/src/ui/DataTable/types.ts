@@ -21,8 +21,23 @@ export interface DataTableColumn<T> {
    */
   sortKey?: string;
   width?: number | string;
+  /** Lower bound of the column width; default `width`. */
+  minWidth?: number | string;
+  /**
+   * Caps the cell content: longer text ends in "…" and shows in full on
+   * hover. A CSS length; a clamp() such as 'clamp(160px, 16vw, 320px)' lets
+   * wide screens show more of it.
+   */
+  maxWidth?: number | string;
+  /** Hover text of a clipped cell. Default: the cell's text. */
+  cellTitle?: (row: T) => string | null | undefined;
   align?: 'left' | 'center' | 'right';
   hidden?: boolean;
+  /**
+   * Starts hidden on screens narrower than this many px, for columns a
+   * laptop can do without; the table's Sütunlar menu shows it again.
+   */
+  hideBelow?: number;
   /**
    * In the Excel export but not on screen, e.g. the group column of a grouped
    * report (legacy pages patched prepareExportData for this).
@@ -231,6 +246,8 @@ export interface DataTableFooterContext<T> {
   rows: T[];
   /** Every row in `data`. */
   allRows: T[];
+  /** The columns on screen, in order (the Sütunlar menu can hide some). */
+  columns: readonly DataTableColumn<T>[];
 }
 
 export interface DataTableProps<T extends RowData> {
@@ -286,6 +303,11 @@ export interface DataTableProps<T extends RowData> {
   toolbar?: ReactNode;
   /** Shows a Yenile button. */
   onRefresh?: () => void;
+  /**
+   * Shows the Sütunlar menu (it shows anyway when a column has `hideBelow`)
+   * and remembers its choices in this browser under this key.
+   */
+  columnsKey?: string;
 
   /**
    * Inline edit save (legacy onEdit). Return a promise: the cell shows the
@@ -313,6 +335,6 @@ export interface DataTableProps<T extends RowData> {
 
   striped?: boolean;
   withColumnBorders?: boolean;
-  /** Default 'sm'. */
-  verticalSpacing?: 'xs' | 'sm' | 'md';
+  /** Cell padding top and bottom; default 'compact' (6px, 13px text). */
+  verticalSpacing?: 'compact' | 'xs' | 'sm' | 'md';
 }

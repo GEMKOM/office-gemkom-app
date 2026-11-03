@@ -408,6 +408,7 @@ export function NcrsPage() {
       />
 
       <DataTable
+        columnsKey="ncrs"
         title="Uygunsuzluk Raporları"
         filters={
           <FilterBar
