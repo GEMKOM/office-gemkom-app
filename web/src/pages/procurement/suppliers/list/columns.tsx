@@ -1,4 +1,4 @@
-import { Group, Text } from '@mantine/core';
+import { Text } from '@mantine/core';
 import type { PaymentTermOption, Supplier } from '@/api/procurement/suppliers';
 import { StatusBadge, type DataTableColumn } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
@@ -31,30 +31,21 @@ export function dbsLimitText(limit: Supplier['dbs_limit'], currency: string | un
   return `${parseFloat(String(limit)).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency || 'TRY'}`;
 }
 
-function WithIcon({ icon, children }: { icon: string; children: string }) {
-  return (
-    <Group gap={8} wrap="nowrap">
-      <Text span c="dimmed" size="sm">
-        <i className={icon} aria-hidden />
-      </Text>
-      <span>{children}</span>
-    </Group>
-  );
-}
-
 /** The legacy table's columns; every one sorts on the server by its `data-field`. */
 export function supplierColumns(terms: readonly PaymentTermOption[]): DataTableColumn<Supplier>[] {
   return [
     {
       key: 'id',
       header: 'ID',
+      hideBelow: 1600,
       render: (row) => <span className={uiClasses.code}>{row.id}</span>,
     },
     {
       key: 'name',
       header: 'Tedarikçi Adı',
+      maxWidth: 'clamp(140px, 12.5vw, 360px)',
       render: (row) => (
-        <Text size="sm" fw={600}>
+        <Text span fz="inherit" fw={600}>
           {row.name || 'İsimsiz'}
         </Text>
       ),
@@ -62,28 +53,32 @@ export function supplierColumns(terms: readonly PaymentTermOption[]): DataTableC
     {
       key: 'contact_person',
       header: 'İletişim Kişisi',
-      render: (row) => <WithIcon icon="fas fa-user-circle">{row.contact_person || '-'}</WithIcon>,
+      maxWidth: 'clamp(90px, 8.5vw, 220px)',
+      render: (row) => row.contact_person || '-',
     },
     {
       key: 'phone',
       header: 'Telefon',
-      render: (row) => <WithIcon icon="fas fa-phone">{row.phone || '-'}</WithIcon>,
+      render: (row) => row.phone || '-',
     },
     {
       key: 'email',
       header: 'E-posta',
-      render: (row) => <WithIcon icon="fas fa-envelope">{row.email || '-'}</WithIcon>,
+      maxWidth: 'clamp(110px, 10vw, 280px)',
+      render: (row) => row.email || '-',
     },
     {
       key: 'default_currency',
       header: 'Para Birimi',
       align: 'center',
+      hideBelow: 1600,
       render: (row) => <StatusBadge color="grey">{row.default_currency || 'TRY'}</StatusBadge>,
     },
     {
       key: 'default_tax_rate',
       header: 'Vergi Oranı',
       align: 'center',
+      hideBelow: 1600,
       render: (row) => <StatusBadge color="blue">{taxRateText(row.default_tax_rate)}</StatusBadge>,
     },
     {
@@ -101,12 +96,15 @@ export function supplierColumns(terms: readonly PaymentTermOption[]): DataTableC
       key: 'default_payment_terms',
       sortKey: 'payment_terms_name',
       header: 'Ödeme Koşulları',
+      maxWidth: 'clamp(100px, 9vw, 240px)',
       render: (row) => paymentTermName(row.default_payment_terms, terms),
     },
     {
       key: 'has_dbs',
       header: 'DBS Kullanıyor',
       align: 'center',
+      // DBS Limiti shows '-' for a supplier without DBS.
+      hideBelow: 1600,
       render: (row) =>
         row.has_dbs ? (
           <StatusBadge color="blue">Evet</StatusBadge>
@@ -119,7 +117,7 @@ export function supplierColumns(terms: readonly PaymentTermOption[]): DataTableC
       header: 'DBS Limiti',
       align: 'center',
       render: (row) => (
-        <span style={{ fontFamily: 'var(--mantine-font-family-monospace)', whiteSpace: 'nowrap' }}>
+        <span style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
           {dbsLimitText(row.dbs_limit, row.dbs_currency || row.default_currency)}
         </span>
       ),

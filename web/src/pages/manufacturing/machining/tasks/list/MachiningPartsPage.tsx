@@ -446,6 +446,7 @@ export function MachiningPartsPage() {
       />
 
       <DataTable
+        columnsKey="machining-parts"
         title="Parça Listesi"
         filters={
           <FilterBar

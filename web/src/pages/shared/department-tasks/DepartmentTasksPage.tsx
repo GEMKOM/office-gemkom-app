@@ -623,6 +623,7 @@ export function DepartmentTasksPage({ config }: { config: DepartmentTasksConfig 
           />
         ) : (
           <DataTable
+            columnsKey="department-tasks"
             title="Görev Listesi"
             filters={
               <FilterBar

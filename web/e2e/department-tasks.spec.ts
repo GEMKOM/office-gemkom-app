@@ -67,8 +67,14 @@ for (const { path, department, title } of PAGES) {
     const bar = row
       .locator('td[data-col="completion_percentage"] [role="progressbar"]')
       .locator('..');
-    expect((await bar.boundingBox())?.width ?? 0).toBeGreaterThan(80);
+    expect((await bar.boundingBox())?.width ?? 0).toBeGreaterThan(60);
     await expect(row.locator('td[data-col="completion_percentage"]')).toContainText('0.0%');
+
+    // Ağırlık starts hidden at laptop width (1440); the Sütunlar menu brings it back.
+    await expect(row.locator('td[data-col="weight"]')).toHaveCount(0);
+    await main.getByRole('button', { name: /^Sütunlar \(\d+ gizli\)$/ }).click();
+    await page.getByRole('checkbox', { name: 'Ağırlık' }).click();
+    await page.keyboard.press('Escape');
 
     // Inline edit: one PATCH with the field.
     await row.locator('td[data-col="weight"]').click();

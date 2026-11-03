@@ -91,7 +91,11 @@ test('parts list: inline edit saves, Escape cancels, a failed save rolls back, l
   await expect(cell('name')).not.toHaveAttribute('data-cell-state', 'saving');
   await expect(page.getByText('Parça başarıyla güncellendi')).toBeVisible();
 
-  // Numbers go typed; the Turkish decimal comma is read.
+  // Numbers go typed; the Turkish decimal comma is read. Ağırlık starts hidden
+  // at laptop width (1440); the Sütunlar menu brings it back.
+  await page.getByRole('button', { name: /^Sütunlar \(\d+ gizli\)$/ }).click();
+  await page.getByRole('checkbox', { name: 'Ağırlık (kg)' }).click();
+  await page.keyboard.press('Escape');
   await cell('weight_kg').click();
   const weight = page.getByRole('textbox', { name: 'Ağırlık (kg)' });
   await weight.fill('2,25');

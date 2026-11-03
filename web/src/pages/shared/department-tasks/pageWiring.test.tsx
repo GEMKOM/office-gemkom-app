@@ -155,5 +155,34 @@ it('planning lists subcontractors and teams, without the fixed paint subcontract
   expect(await screen.findByText('Usta Kaynak')).toBeInTheDocument();
   expect(screen.getByText('A Takımı')).toBeInTheDocument();
   expect(screen.queryByText('Boyacı')).not.toBeInTheDocument();
-  await waitFor(() => expect(screen.getByText('(120,00 kg)')).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByText('(120 kg)')).toBeInTheDocument());
+});
+
+it('planning shows the subcontractor short name, the trade name on hover', async () => {
+  // The task only carries subcontractor__name; the short name comes from the list.
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) =>
+    new URL(String(url)).pathname === '/subcontracting/subcontractors/'
+      ? Promise.resolve(
+          new Response(
+            JSON.stringify({
+              count: 1,
+              next: null,
+              previous: null,
+              results: [{ id: 3, name: 'Usta Kaynak', short_name: 'Usta' }],
+            }),
+            { status: 200 },
+          ),
+        )
+      : base(url, init),
+  );
+  renderWithProviders(
+    <ModalsProvider>
+      <PlanningProjectsPage />
+    </ModalsProvider>,
+    { route: '/planning/projects/' },
+  );
+  const short = await screen.findByText('Usta');
+  expect(short.closest('div')).toHaveAttribute('title', 'Usta Kaynak');
+  expect(screen.queryByText('Usta Kaynak')).not.toBeInTheDocument();
 });

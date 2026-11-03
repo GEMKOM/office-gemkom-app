@@ -139,6 +139,24 @@ show the plan tables and the "Nasıl çalışır?" text).
   separate queries; mutations invalidate the keys they change instead of
   reloading the page.
 
+## DataTable: fitting the screen
+
+Tables are compact by default (6px cell padding, 13px text, small pills) and
+headers wrap before the table scrolls sideways. A table should fit a 1440px
+screen without scrolling, and nearly fit 1366px:
+
+- **Long text:** `maxWidth` on the column ends it in "…" and shows it all on
+  hover (`cellTitle` overrides the hover text). Use a clamp, e.g.
+  `maxWidth: 'clamp(160px, 16vw, 360px)'`, so wide screens show more.
+- **Fixed `width`s are minimums** (the header gets `min-width`); don't add them
+  to text columns, and never percentages that sum past 100%.
+- **Too many columns:** `hideBelow: 1600` starts a column hidden on narrower
+  screens; the Sütunlar menu ("Sütunlar (2 gizli)") shows it again, and
+  `columnsKey="page-name"` remembers the user's choice. A table `footer` lines
+  up with `ctx.columns`, the columns on screen.
+- Don't clip pill columns: a pill has no "…". Shorten the label instead and put
+  the full text in a `title`.
+
 ## DataTable: editing, grouping, reordering
 
 The legacy table's `editable`, `groupBy` and `draggable` options have

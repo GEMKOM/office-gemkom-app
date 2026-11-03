@@ -39,12 +39,22 @@ const EMPTY_MACHINES: Machine[] = [];
 
 const isDowntime = (timer: Timer) => Boolean(timer.timer_type && timer.timer_type !== 'productive');
 
+const machineType = (m: Machine) => m.machine_type_label || m.machine_type || 'Bilinmeyen Tip';
+
+// The card is a third of the page: the type sits under the name, both cut to fit.
 const machineColumns: DataTableColumn<Machine>[] = [
-  machineNameColumn,
   {
-    key: 'type',
-    header: 'Tip',
-    render: (m) => m.machine_type_label || m.machine_type || 'Bilinmeyen Tip',
+    ...machineNameColumn,
+    maxWidth: 'clamp(150px, 15vw, 340px)',
+    cellTitle: (m) => `${m.name || 'Bilinmeyen Makine'} · ${machineType(m)}`,
+    render: (m) => (
+      <>
+        <div>{m.name || 'Bilinmeyen Makine'}</div>
+        <Text size="xs" c="dimmed" lh={1.3}>
+          {machineType(m)}
+        </Text>
+      </>
+    ),
   },
   machineStatusColumn,
   { key: 'weeks', header: 'Hafta', render: (m) => formatWeeks(m.total_estimated_hours) },

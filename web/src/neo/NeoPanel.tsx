@@ -163,7 +163,7 @@ export function NeoAside() {
   let body;
   if (view === 'history' && !locked) body = <NeoHistory />;
   else if (view === 'report') body = <NeoReports />;
-  else if (view === 'summaries') body = <NeoSummaries locked={locked} />;
+  else if (view === 'summaries') body = <NeoSummaries />;
   else body = <NeoChat quota={quota} locked={locked} inputRef={inputRef} />;
 
   return (

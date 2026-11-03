@@ -230,6 +230,7 @@ export function QcReviewsPage() {
       />
 
       <DataTable
+        columnsKey="qc-reviews"
         title="KK İncelemeleri"
         filters={
           <FilterBar

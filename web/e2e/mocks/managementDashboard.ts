@@ -558,6 +558,8 @@ export const DAILY_SUMMARY = {
     id: 9301,
     summary_date: '2026-11-02',
     status: 'ok',
+    // Already read: an unread one would pop up over the page (the morning check).
+    is_read: true,
     headline:
       'Dün 4 yeni iş emri açıldı, kaynak ekibi E2E-A haftalık hedefin üstüne çıktı; iki NCR kapandı.',
     window_start: '2026-11-01T02:20:00Z',
