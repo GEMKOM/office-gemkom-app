@@ -167,5 +167,17 @@
   "/management/reports/cash-flow",
   "/management/dashboard",
   "/management/analytics",
-  "/manufacturing/machining/create-task"
+  "/manufacturing/machining/create-task",
+  "/planning/cnc-cutting",
+  "/planning/cnc-cutting/dashboard",
+  "/planning/cnc-cutting/cuts",
+  "/planning/cnc-cutting/remnants",
+  "/planning/cnc-cutting/reports",
+  "/planning/cnc-cutting/reports/parts-search",
+  "/planning/cnc-cutting/capacity",
+  "/planning/linear-cutting",
+  "/planning/linear-cutting/dashboard",
+  "/planning/linear-cutting/cuts",
+  "/planning/linear-cutting/tasks",
+  "/planning/linear-cutting/capacity"
 ]

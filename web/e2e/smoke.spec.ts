@@ -1,6 +1,7 @@
 import {
   expect,
   FAKE,
+  forwardedRoutes,
   migratedRoutes,
   MOCK_CUSTOMERS,
   mockBackend,
@@ -217,6 +218,7 @@ const PUBLIC_ROUTES = new Set(['/login', '/login/reset-password', '/projects/pla
 
 test.describe('every migrated route loads as admin', () => {
   const routes = migratedRoutes().filter((route) => !PUBLIC_ROUTES.has(route));
+  const FORWARDED = forwardedRoutes();
   test('migrated-routes.json is not empty', () => {
     expect(routes.length).toBeGreaterThan(0);
   });
@@ -227,11 +229,13 @@ test.describe('every migrated route loads as admin', () => {
       await mockBackend(page, {}, { session });
 
       await page.goto(pageUrl(route));
-      // A merged report's old URL forwards to it with its view preset.
+      // A merged report's old URL forwards to it with its view preset, and a
+      // moved page's (or a one-card hub's) to its new URL.
       const merged = MERGED_REPORT_ROUTES[route];
+      const moved = FORWARDED[route];
       const landing = merged
         ? `${pageUrl(merged.to)}?${new URLSearchParams(merged.preset).toString()}`
-        : pageUrl(route);
+        : pageUrl(moved ?? route);
       await expect(page).toHaveURL(
         new RegExp(`${landing.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`),
       );

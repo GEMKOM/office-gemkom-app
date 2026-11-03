@@ -2,6 +2,7 @@ import { authedFetch } from '@legacy/authService.js';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
+import { MOVED_ROUTES } from '@legacy/movedRoutes.js';
 import { REPORT_HUBS } from '@legacy/reportCatalog.js';
 import { appRoutes } from '@/routes/router';
 import { MANUFACTURING_HUBS } from './hubs';
@@ -65,9 +66,12 @@ beforeEach(() => {
 
 it('has a hub for every manufacturing hub route', () => {
   // List pages under /manufacturing are their own routes, without the hub handle;
-  // the report hubs are views of the Rapor Merkezi (REPORT_HUBS).
+  // the report hubs are views of the Rapor Merkezi (REPORT_HUBS). CNC and linear
+  // cutting kept their hubs when they moved under Planlama.
+  const moved = Object.values(MOVED_ROUTES);
   const routes = appRoutes
-    .filter((route) => route.path?.startsWith('/manufacturing') && route.handle?.access === 'hub')
+    .filter((route) => route.handle?.access === 'hub')
+    .filter((route) => route.path?.startsWith('/manufacturing') || moved.includes(route.path!))
     .map((route) => route.path!)
     .filter((path) => !(path in REPORT_HUBS));
   expect(Object.keys(MANUFACTURING_HUBS).sort()).toEqual(routes.sort());
@@ -80,8 +84,6 @@ it('renders the section hub with its cards in legacy order and live figures', as
   expect(cardTitles()).toEqual([
     'Projeler',
     'Talaşlı İmalat',
-    'CNC Kesim',
-    'Lineer Kesim',
     'Bakım',
     'Kaynak',
     'Raporlar',

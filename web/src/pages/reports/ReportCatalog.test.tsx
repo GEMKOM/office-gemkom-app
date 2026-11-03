@@ -102,7 +102,7 @@ it('says so when there is nothing to open', () => {
 
 it('shows a hub as the catalog filtered to its departments, merged reports at their view', () => {
   accessMock.mockReturnValue(true);
-  renderWithProviders(<ReportHubPage />, { route: '/manufacturing/cnc-cutting/reports/' });
+  renderWithProviders(<ReportHubPage />, { route: '/planning/cnc-cutting/reports/' });
 
   expect(screen.getByRole('heading', { name: 'CNC Kesim Raporları', level: 1 })).toBeInTheDocument();
   expect(cardTitles()).toEqual(['Biten Zamanlayıcılar', 'Kullanıcı Raporu', 'Parça Arama', 'CNC Kesim Dashboard']);

@@ -41,8 +41,8 @@ const REF_ROUTES: Record<string, (r: Json) => string | null> = {
   offer: (r) => `/sales/offers/?offer_no=${enc(r.id)}`,
   dr: (r) => `/general/department-requests/pending/?request=${enc(r.id)}`,
   planning_request: (r) => `/planning/department-requests/?talep=${enc(r.id)}`,
-  cnc: (r) => `/manufacturing/cnc-cutting/cuts/?cut=${enc(r.id)}`,
-  lc_session: (r) => `/manufacturing/linear-cutting/cuts/?session=${enc(r.id)}`,
+  cnc: (r) => `/planning/cnc-cutting/cuts/?cut=${enc(r.id)}`,
+  lc_session: (r) => `/planning/linear-cutting/cuts/?session=${enc(r.id)}`,
   statement: (r) => `/manufacturing/subcontracting/statements/?statement=${enc(r.id)}`,
   mpr: () => '/manufacturing/material-tracking/',
 };

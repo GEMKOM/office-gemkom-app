@@ -95,7 +95,7 @@ export const cncTimerColumns: DataTableColumn<FinishedTimer>[] = [
       if (!row.nesting_id) return '-';
       if (!row.issue_key) return <span className={uiClasses.code}>{row.nesting_id}</span>;
       return newTabLink(
-        `/manufacturing/cnc-cutting/cuts?cut=${encodeURIComponent(row.issue_key)}`,
+        `/planning/cnc-cutting/cuts?cut=${encodeURIComponent(row.issue_key)}`,
         row.nesting_id,
         'Kesim detaylarını görüntüle',
       );

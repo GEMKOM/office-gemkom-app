@@ -1,4 +1,5 @@
 import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authService.js';
+import { MOVED_ROUTES } from '../movedRoutes.js';
 import { REPORT_CATALOG } from '../reportCatalog.js';
 
 /**
@@ -71,6 +72,12 @@ const ROUTE_ACCESS_INHERITS = {
     ],
 };
 
+// A moved page keeps its old route's grants: hasRouteAccess asks the old
+// route (movedRoutes.js), so it opens for exactly whoever could open it before.
+const MOVED_FROM = Object.fromEntries(
+    Object.entries(MOVED_ROUTES).map(([oldRoute, newRoute]) => [newRoute, oldRoute]),
+);
+
 /** Routes opened through another page's grant (ROUTE_ACCESS_INHERITS). */
 export function inheritedAccessRoutes() {
     return Object.keys(ROUTE_ACCESS_INHERITS);
@@ -136,6 +143,10 @@ export function hasRouteAccess(route) {
         if (extraCodenames && extraCodenames.some((codename) => hasPerm(codename))) {
             return true;
         }
+
+        // A moved page keeps the grants of its old route (movedRoutes.js).
+        const oldRoute = MOVED_FROM[normalized];
+        if (oldRoute && hasRouteAccess(oldRoute)) return true;
 
         // Inherited access: some pages follow another page's grant.
         const inheritsFrom = ROUTE_ACCESS_INHERITS[normalized];

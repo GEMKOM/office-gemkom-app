@@ -33,6 +33,17 @@ export function migratedRoutes(): string[] {
   ];
 }
 
+/**
+ * Old URL -> new URL of every moved page and one-card hub: both maps of the
+ * plain-data movedRoutes.js at the repo root, read as text (the repo root is
+ * not an ES module package, so Node will not import it here).
+ */
+export function forwardedRoutes(): Record<string, string> {
+  const file = fileURLToPath(new URL('../../movedRoutes.js', import.meta.url));
+  const pairs = readFileSync(file, 'utf8').matchAll(/^\s*'([^']+)':\s*'([^']+)',?$/gm);
+  return Object.fromEntries([...pairs].map(([, from, to]) => [from!, to!]));
+}
+
 /** "/sales/customers" -> "/sales/customers/" (what the static server serves without a 301). */
 export function pageUrl(route: string): string {
   return route === '/' ? '/' : `${route.replace(/\/$/, '')}/`;

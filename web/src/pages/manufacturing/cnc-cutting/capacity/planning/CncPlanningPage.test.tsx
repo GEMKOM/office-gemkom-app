@@ -100,7 +100,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function renderPage(route = '/manufacturing/cnc-cutting/capacity/planning/?machine=3') {
+function renderPage(route = '/planning/cnc-cutting/capacity/?machine=3') {
   return renderWithProviders(
     <ModalsProvider>
       <CncPlanningPage />

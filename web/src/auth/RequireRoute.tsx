@@ -6,6 +6,7 @@ import {
   isAdmin,
   ROUTES,
 } from '@legacy/authService.js';
+import { MOVED_ROUTES } from '@legacy/movedRoutes.js';
 import { Button, Center, Stack, Text, Title } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { useLocation, useMatches } from 'react-router';
@@ -27,7 +28,7 @@ export interface RouteAccessHandle {
 const FALLBACK_ROUTES = [
   '/management/dashboard',
   '/manufacturing/machining/dashboard',
-  '/manufacturing/cnc-cutting/dashboard',
+  '/planning/cnc-cutting/dashboard',
   '/manufacturing/maintenance/fault-requests',
   '/manufacturing/welding',
   '/procurement/purchase-requests',
@@ -48,14 +49,20 @@ export function defaultRouteForUser(): string {
 
 export function hasHubAccess(path: string): boolean {
   const route = normalizeRoute(path);
-  if (hasRouteAccess(route)) return true;
+  // The plain grant lists first: most hubs open through a page under them.
   for (const granted of getGrantedPageRoutes()) {
     if (granted.startsWith(route + '/')) return true;
   }
+  if (hasRouteAccess(route)) return true;
   // A merged report opens through its old pages' grants, which sit elsewhere
   // (/manufacturing/reports/finished-timers follows the CNC and machining ones).
   for (const inherited of inheritedAccessRoutes()) {
     if (inherited.startsWith(route + '/') && hasRouteAccess(inherited)) return true;
+  }
+  // A moved hub, or a hub that moved pages now sit under, opens for whoever
+  // could open their old routes (/planning/cnc-cutting follows /manufacturing/cnc-cutting).
+  for (const [oldRoute, newRoute] of Object.entries(MOVED_ROUTES)) {
+    if ((newRoute === route || newRoute.startsWith(route + '/')) && hasHubAccess(oldRoute)) return true;
   }
   // Older payloads only carry boolean access_* codenames
   // (/sales/customers -> access_sales_customers).

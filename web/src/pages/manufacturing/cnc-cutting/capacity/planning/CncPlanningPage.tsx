@@ -453,7 +453,7 @@ export function CncPlanningPage() {
       // Legacy openEditCutInNewTab.
       onClick: (r) =>
         window.open(
-          `/manufacturing/cnc-cutting/cuts/?cut=${encodeURIComponent(r.key)}&mode=edit`,
+          `/planning/cnc-cutting/cuts/?cut=${encodeURIComponent(r.key)}&mode=edit`,
           '_blank',
         ),
     },
@@ -500,7 +500,7 @@ export function CncPlanningPage() {
       <PageHeader
         title="Kapasite Planlayıcı"
         subtitle="Makine kapasitelerini planlayın ve üretim programını oluşturun"
-        backTo="/manufacturing/cnc-cutting/capacity/"
+        backTo="/planning/cnc-cutting/"
         stats={[
           { id: 'planned-count', label: 'Planlanmış', value: figure(planned.length) },
           { id: 'unplanned-count', label: 'Planlanmamış', value: figure(unplanned.length) },

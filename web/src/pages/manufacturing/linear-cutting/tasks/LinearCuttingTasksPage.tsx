@@ -178,7 +178,7 @@ export function LinearCuttingTasksPage() {
         title="Lineer Kesim Görevler"
         subtitle="Bar görevleri listesi ve yönetimi"
         icon="fas fa-tasks"
-        backTo="/manufacturing/linear-cutting/"
+        backTo="/planning/linear-cutting/"
         actions={
           <Button
             variant="default"

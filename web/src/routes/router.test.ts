@@ -71,3 +71,32 @@ describe('merged reports', () => {
     );
   });
 });
+
+describe('moved pages', () => {
+  async function landing(url: string) {
+    const target = appRoutes.find((r) => r.path === url.split('?')[0]);
+    expect(target?.loader).toBeTypeOf('function');
+    const loader = target!.loader as (args: { request: Request }) => Response;
+    const response = await loader({ request: new Request(`https://ofis.test${url}`) });
+    return response.headers.get('Location');
+  }
+
+  it('forward the old URLs under Planlama with the query', async () => {
+    expect(await landing('/manufacturing/cnc-cutting/cuts?cut=CNC-7&mode=edit')).toBe(
+      '/planning/cnc-cutting/cuts/?cut=CNC-7&mode=edit',
+    );
+    expect(await landing('/manufacturing/linear-cutting')).toBe('/planning/linear-cutting/');
+    expect(await landing('/manufacturing/linear-cutting/capacity/planning?machine=5')).toBe(
+      '/planning/linear-cutting/capacity/?machine=5',
+    );
+  });
+
+  it('open the planner from the one-card capacity hubs', async () => {
+    expect(await landing('/manufacturing/cnc-cutting/capacity?machine=3')).toBe(
+      '/planning/cnc-cutting/capacity/?machine=3',
+    );
+    expect(await landing('/manufacturing/machining/capacity?machine=21')).toBe(
+      '/manufacturing/machining/capacity/planning/?machine=21',
+    );
+  });
+});

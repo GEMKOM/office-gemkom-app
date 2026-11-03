@@ -1,3 +1,4 @@
+import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@legacy/movedRoutes.js';
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
@@ -35,6 +36,21 @@ function mergedInto(path: string, target: string, preset: Record<string, string>
       const params = new URL(request.url).searchParams;
       for (const [key, value] of Object.entries(preset)) params.set(key, value);
       return redirect(`${target}/?${params.toString()}`);
+    },
+  };
+}
+
+/**
+ * The old URL of a page that moved, or of a hub that gave way to its only page
+ * (movedRoutes.js): forwards there with the query and hash (?machine=, ?cut=).
+ * Listed in migrated-routes.json like mergedInto().
+ */
+function movedTo(path: string, target: string): RouteObject {
+  return {
+    path,
+    loader: ({ request }) => {
+      const url = new URL(request.url);
+      return redirect(`${target}/${url.search}${url.hash}`);
     },
   };
 }
@@ -131,12 +147,10 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   { path: '/manufacturing', handle: hub, lazy: manufacturingSectionHub },
-  { path: '/manufacturing/cnc-cutting', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/cnc-cutting/capacity', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/linear-cutting', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/linear-cutting/capacity', handle: hub, lazy: manufacturingHub },
+  // CNC and linear cutting sit under Planlama; the page picks their cards by path.
+  { path: '/planning/cnc-cutting', handle: hub, lazy: manufacturingHub },
+  { path: '/planning/linear-cutting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/machining', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/machining/capacity', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/machining/tasks', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/maintenance', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/subcontracting', handle: hub, lazy: manufacturingHub },
@@ -560,18 +574,18 @@ export const appRoutes: RouteObject[] = [
         .NotificationsPage,
     }),
   },
-  // Phase 3b: CNC kesim, lineer kesim and talaşlı imalat lists and reports.
-  { path: '/manufacturing/cnc-cutting/reports', handle: hub, lazy: reportHub },
+  // Phase 3b: CNC kesim, lineer kesim (now under Planlama) and talaşlı imalat lists and reports.
+  { path: '/planning/cnc-cutting/reports', handle: hub, lazy: reportHub },
   { path: '/manufacturing/machining/reports', handle: hub, lazy: reportHub },
   {
-    path: '/manufacturing/cnc-cutting/dashboard',
+    path: '/planning/cnc-cutting/dashboard',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/dashboard/CncDashboardPage'))
         .CncDashboardPage,
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/dashboard',
+    path: '/planning/linear-cutting/dashboard',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/linear-cutting/dashboard/LinearCuttingDashboardPage')
@@ -579,14 +593,14 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/cuts',
+    path: '/planning/linear-cutting/cuts',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/linear-cutting/cuts/LinearCuttingCutsPage'))
         .LinearCuttingCutsPage,
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/tasks',
+    path: '/planning/linear-cutting/tasks',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/linear-cutting/tasks/LinearCuttingTasksPage'))
         .LinearCuttingTasksPage,
@@ -600,20 +614,20 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/cnc-cutting/cuts',
+    path: '/planning/cnc-cutting/cuts',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/cuts/CncCutsPage')).CncCutsPage,
     }),
   },
   {
-    path: '/manufacturing/cnc-cutting/remnants',
+    path: '/planning/cnc-cutting/remnants',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/remnants/RemnantsPage'))
         .RemnantsPage,
     }),
   },
   {
-    path: '/manufacturing/cnc-cutting/reports/parts-search',
+    path: '/planning/cnc-cutting/reports/parts-search',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/cnc-cutting/reports/parts-search/PartsSearchPage')
@@ -643,6 +657,9 @@ export const appRoutes: RouteObject[] = [
   },
   ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
     mergedInto(path, to, preset),
+  ),
+  ...Object.entries({ ...MOVED_ROUTES, ...REPLACED_HUB_ROUTES }).map(([path, to]) =>
+    movedTo(path, to),
   ),
   // Manufacturing shop-floor lists and reports (Phase 3b).
   {
@@ -977,7 +994,7 @@ export const appRoutes: RouteObject[] = [
   },
   // Capacity planning and machining reports on the React Gantt.
   {
-    path: '/manufacturing/cnc-cutting/capacity/planning',
+    path: '/planning/cnc-cutting/capacity',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/cnc-cutting/capacity/planning/CncPlanningPage')
@@ -985,7 +1002,7 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/capacity/planning',
+    path: '/planning/linear-cutting/capacity',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/linear-cutting/capacity/planning/LinearPlanningPage')

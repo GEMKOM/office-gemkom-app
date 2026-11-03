@@ -46,7 +46,7 @@ interface Variant {
 
 const VARIANTS: Record<TimerModule, Variant> = {
   cnc_cutting: {
-    backTo: '/manufacturing/cnc-cutting/reports',
+    backTo: '/planning/cnc-cutting/reports',
     columns: cncTimerColumns,
     textFilters: [{ key: 'nesting_id', label: 'Nesting ID', placeholder: 'E9035' }],
     deleteDetails: (t) => [

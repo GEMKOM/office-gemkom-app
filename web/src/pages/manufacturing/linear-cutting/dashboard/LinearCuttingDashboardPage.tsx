@@ -30,7 +30,7 @@ const machineColumns: DataTableColumn<Machine>[] = [
 ];
 
 // The task cell opens the tasks list in a new tab (legacy had no detail modal here).
-const openTasks = () => window.open('/manufacturing/linear-cutting/tasks/', '_blank', 'noopener');
+const openTasks = () => window.open('/planning/linear-cutting/tasks/', '_blank', 'noopener');
 
 const timerColumns: DataTableColumn<Timer>[] = [
   {
@@ -94,7 +94,7 @@ export function LinearCuttingDashboardPage() {
       <PageHeader
         title="Lineer Kesim Dashboard"
         subtitle="Gerçek zamanlı zamanlayıcı ve makine takibi"
-        backTo="/manufacturing/linear-cutting/"
+        backTo="/planning/linear-cutting/"
       />
       <StatCards
         loading={timersQuery.isPending}

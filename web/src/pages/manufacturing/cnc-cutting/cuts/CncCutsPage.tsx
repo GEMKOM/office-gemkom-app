@@ -411,7 +411,7 @@ export function CncCutsPage() {
         title="CNC Kesim Kesimler"
         subtitle="CNC kesim görevleri yönetimi ve takibi"
         icon="cut"
-        backTo="/manufacturing/cnc-cutting/"
+        backTo="/planning/cnc-cutting/"
         stats={[
           { id: 'all-cuts-count', label: 'Tüm Kesimler', value: figure(total) },
           { id: 'active-cuts-count', label: 'Aktif Kesimler', value: figure(0) },

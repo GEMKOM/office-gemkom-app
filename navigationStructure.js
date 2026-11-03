@@ -218,6 +218,69 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Malzeme Maliyeti Satırları',
                 icon: 'fas fa-shopping-cart',
                 children: {}
+            },
+            '/planning/cnc-cutting': {
+                label: 'CNC Kesim',
+                icon: 'fas fa-cut',
+                children: {
+                    '/planning/cnc-cutting/dashboard': {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/planning/cnc-cutting/cuts': {
+                        label: 'Kesimler',
+                        icon: 'fas fa-scissors',
+                        children: {}
+                    },
+                    '/planning/cnc-cutting/remnants': {
+                        label: 'Fire Plakalar',
+                        icon: 'fas fa-layer-group',
+                        children: {}
+                    },
+                    '/planning/cnc-cutting/reports': {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        children: {
+                            '/planning/cnc-cutting/reports/parts-search': {
+                                label: 'Parça Arama',
+                                icon: 'fas fa-search',
+                                children: {}
+                            }
+                        }
+                    },
+                    '/planning/cnc-cutting/capacity': {
+                        label: 'Kapasite Planlayıcı',
+                        icon: 'fas fa-calendar-alt',
+                        children: {}
+                    }
+                }
+            },
+            '/planning/linear-cutting': {
+                label: 'Lineer Kesim',
+                icon: 'fas fa-ruler-horizontal',
+                children: {
+                    '/planning/linear-cutting/dashboard': {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/planning/linear-cutting/cuts': {
+                        label: 'Kesimler',
+                        icon: 'fas fa-ruler-horizontal',
+                        children: {}
+                    },
+                    '/planning/linear-cutting/tasks': {
+                        label: 'Görevler',
+                        icon: 'fas fa-tasks',
+                        children: {}
+                    },
+                    '/planning/linear-cutting/capacity': {
+                        label: 'Kapasite Planlayıcı',
+                        icon: 'fas fa-calendar-alt',
+                        children: {}
+                    }
+                }
             }
         }
     },
@@ -344,16 +407,10 @@ export const NAVIGATION_STRUCTURE = {
                             }
                         }
                     },
-                    '/manufacturing/machining/capacity': {
-                        label: 'Kapasite Yönetimi',
-                        icon: 'fas fa-industry',
-                        children: {
-                            '/manufacturing/machining/capacity/planning': {
-                                label: 'Kapasite Planlayıcı',
-                                icon: 'fas fa-calendar-alt',
-                                children: {}
-                            }
-                        }
+                    '/manufacturing/machining/capacity/planning': {
+                        label: 'Kapasite Planlayıcı',
+                        icon: 'fas fa-calendar-alt',
+                        children: {}
                     }
                 }
             },
@@ -400,82 +457,6 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
-            '/manufacturing/cnc-cutting': {
-                label: 'CNC Kesim',
-                icon: 'fas fa-cut',
-                children: {
-                    '/manufacturing/cnc-cutting/dashboard': {
-                        label: 'Dashboard',
-                        icon: 'fas fa-chart-line',
-                        children: {}
-                    },
-                    '/manufacturing/cnc-cutting/cuts': {
-                        label: 'Kesimler',
-                        icon: 'fas fa-scissors',
-                        children: {}
-                    },
-                    '/manufacturing/cnc-cutting/remnants': {
-                        label: 'Fire Plakalar',
-                        icon: 'fas fa-layer-group',
-                        children: {}
-                    },
-                    '/manufacturing/cnc-cutting/reports': {
-                        label: 'Raporlar',
-                        icon: 'fas fa-chart-bar',
-                        children: {
-                            '/manufacturing/cnc-cutting/reports/parts-search': {
-                                label: 'Parça Arama',
-                                icon: 'fas fa-search',
-                                children: {}
-                            }
-                        }
-                    },
-                    '/manufacturing/cnc-cutting/capacity': {
-                        label: 'Kapasite Yönetimi',
-                        icon: 'fas fa-industry',
-                        children: {
-                            '/manufacturing/cnc-cutting/capacity/planning': {
-                                label: 'Kapasite Planlayıcı',
-                                icon: 'fas fa-calendar-alt',
-                                children: {}
-                            }
-                        }
-                    }
-                }
-            },
-            '/manufacturing/linear-cutting': {
-                label: 'Lineer Kesim',
-                icon: 'fas fa-ruler-horizontal',
-                children: {
-                    '/manufacturing/linear-cutting/dashboard': {
-                        label: 'Dashboard',
-                        icon: 'fas fa-chart-line',
-                        children: {}
-                    },
-                    '/manufacturing/linear-cutting/cuts': {
-                        label: 'Kesimler',
-                        icon: 'fas fa-ruler-horizontal',
-                        children: {}
-                    },
-                    '/manufacturing/linear-cutting/tasks': {
-                        label: 'Görevler',
-                        icon: 'fas fa-tasks',
-                        children: {}
-                    },
-                    '/manufacturing/linear-cutting/capacity': {
-                        label: 'Kapasite Yönetimi',
-                        icon: 'fas fa-industry',
-                        children: {
-                            '/manufacturing/linear-cutting/capacity/planning': {
-                                label: 'Kapasite Planlayıcı',
-                                icon: 'fas fa-calendar-alt',
-                                children: {}
-                            }
-                        }
-                    }
-                }
-            },
-            
             '/manufacturing/reports': {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-pie',

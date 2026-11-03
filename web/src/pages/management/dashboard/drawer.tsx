@@ -414,7 +414,7 @@ function Production({ pr, ctx }: { pr: ProductionSection; ctx: PillarContext }) 
       <Links
         links={[
           ['/planning/project-planning', 'Proje planlama (Kapasite)'],
-          ['/manufacturing/cnc-cutting/dashboard', 'CNC kesim'],
+          ['/planning/cnc-cutting/dashboard', 'CNC kesim'],
           ['/management/reports/overview', 'Genel bakış raporu'],
         ]}
       />

@@ -84,6 +84,13 @@ declare module '@legacy/apis/accessControl.js' {
   export function inheritedAccessRoutes(): string[];
 }
 
+declare module '@legacy/movedRoutes.js' {
+  /** Moved pages, old route -> new route. */
+  export const MOVED_ROUTES: Record<string, string>;
+  /** Hubs that held one card, old route -> that card's page. */
+  export const REPLACED_HUB_ROUTES: Record<string, string>;
+}
+
 declare module '@legacy/reportCatalog.js' {
   export const REPORT_TOPICS: Record<string, string>;
   export const REPORT_DEPARTMENTS: Record<string, string>;

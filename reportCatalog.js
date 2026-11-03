@@ -131,7 +131,7 @@ export const REPORT_CATALOG = [
 
     // ---- CNC, kaynak, bakım, taşeron ----
     {
-        route: '/manufacturing/cnc-cutting/reports/parts-search',
+        route: '/planning/cnc-cutting/reports/parts-search',
         title: 'Parça Arama',
         question: 'Bir CNC parçası hangi nestingte, hangi plakadan ve ne zaman kesildi ya da kesilecek?',
         topic: 'uretim',
@@ -190,7 +190,7 @@ export const REPORT_CATALOG = [
         departments: ['machining'],
     },
     {
-        route: '/manufacturing/cnc-cutting/dashboard',
+        route: '/planning/cnc-cutting/dashboard',
         title: 'CNC Kesim Dashboard',
         question: 'Şu an hangi CNC zamanlayıcıları çalışıyor ve kesim makineleri ne durumda?',
         topic: 'canli',
@@ -198,7 +198,7 @@ export const REPORT_CATALOG = [
         departments: ['cnc'],
     },
     {
-        route: '/manufacturing/linear-cutting/dashboard',
+        route: '/planning/linear-cutting/dashboard',
         title: 'Lineer Kesim Dashboard',
         question: 'Şu an hangi lineer kesim zamanlayıcıları çalışıyor ve hangi makineler dolu?',
         topic: 'canli',
@@ -359,10 +359,10 @@ export const REPORT_HUBS = {
         departments: ['machining'],
         backTo: '/manufacturing/machining',
     },
-    '/manufacturing/cnc-cutting/reports': {
+    '/planning/cnc-cutting/reports': {
         title: 'CNC Kesim Raporları',
         departments: ['cnc'],
-        backTo: '/manufacturing/cnc-cutting',
+        backTo: '/planning/cnc-cutting',
     },
     '/manufacturing/welding/reports': {
         title: 'Kaynaklı İmalat Raporları',

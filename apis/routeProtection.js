@@ -116,7 +116,7 @@ function getDefaultRedirectForUser() {
         const candidates = [
             '/management/dashboard',
             '/manufacturing/machining/dashboard',
-            '/manufacturing/cnc-cutting/dashboard',
+            '/planning/cnc-cutting/dashboard',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/welding',
             '/procurement/purchase-requests',

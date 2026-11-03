@@ -1012,7 +1012,7 @@ export function initNavbar() {
                             return;
                         }
                         
-                        if (path.startsWith('/manufacturing/cnc-cutting/')) {
+                        if (path.startsWith('/planning/cnc-cutting/')) {
                             // Allow navigation to CNC cutting pages
                             navigateTo(path);
                             return;
@@ -1135,7 +1135,7 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/manufacturing/cnc-cutting/')) {
+                if (path.startsWith('/planning/cnc-cutting/')) {
                     // Allow navigation to CNC cutting pages
                     navigateTo(path);
                     return;

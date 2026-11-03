@@ -172,7 +172,7 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
       return (
         <div>
           <SubtaskPrefix task={task} />
-          <KeyLink href={`/manufacturing/cnc-cutting/cuts/?cut=${encodeURIComponent(key)}`}>
+          <KeyLink href={`/planning/cnc-cutting/cuts/?cut=${encodeURIComponent(key)}`}>
             {key}
           </KeyLink>
         </div>

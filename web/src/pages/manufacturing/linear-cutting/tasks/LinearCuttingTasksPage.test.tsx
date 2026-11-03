@@ -63,7 +63,7 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
 }
 
-function renderPage(route = '/manufacturing/linear-cutting/tasks/') {
+function renderPage(route = '/planning/linear-cutting/tasks/') {
   return renderWithProviders(
     <ModalsProvider>
       <LinearCuttingTasksPage />

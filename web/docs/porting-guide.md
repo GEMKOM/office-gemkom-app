@@ -40,7 +40,7 @@ The pilot pages are the worked examples:
 |---|---|---|
 | `guardRoute()` + `initRouteProtection()` | nothing | Every SPA route is guarded by the shell (`RequireRoute`). |
 | `initNavbar()` | nothing | The shell renders the navbar. |
-| `new HeaderComponent({...})` | `<PageHeader>` (the red band) | `show*Button` flags become `actions`; `backUrl` becomes `backTo`. The breadcrumb comes from the menu tree. |
+| `new HeaderComponent({...})` | `<PageHeader>` (the red band) | `show*Button` flags become `actions`. The breadcrumb and the back arrow come from the menu tree (the arrow goes one level up); `backUrl` becomes `backTo`, used only for a page the menu does not place or a view inside the page itself. A page that moves URL goes in `movedRoutes.js` (old URL forwards, old grants still open it). |
 | `new StatisticsCards(...)` | `PageHeader` `stats` on list pages; `<StatCards>` on dashboards | Pass values; no `updateValues()`. |
 | `new FiltersComponent(...)` + `add*Filter()` | `<FilterBar inline filters={[...]}>` in `DataTable`'s `filters` slot + `useUrlFilters(defaults)` | The first text filter is the search box, the rest are pills that apply at once. Applied filters live in the URL (shareable, survive reload). |
 | `new TableComponent(...)` + `setLoading`/`updateData` | `<DataTable>` + `useQuery({ placeholderData: keepPreviousData })` | Pass `loading={isFetching}`; rows stay on screen while refetching. |

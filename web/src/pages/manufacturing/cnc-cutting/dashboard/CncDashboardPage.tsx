@@ -160,7 +160,7 @@ function CutModal({
         data ? (
           <Button
             component={AppLink}
-            to={`/manufacturing/cnc-cutting/cuts/?filter=${encodeURIComponent(data.key)}`}
+            to={`/planning/cnc-cutting/cuts/?filter=${encodeURIComponent(data.key)}`}
             leftSection={<FaIcon icon="fas fa-scissors" />}
           >
             Kesimler Sayfasında Aç
@@ -230,7 +230,7 @@ export function CncDashboardPage() {
       <PageHeader
         title="CNC Kesim Dashboard"
         subtitle="Gerçek zamanlı üretim takibi ve analizi"
-        backTo="/manufacturing/cnc-cutting/"
+        backTo="/planning/cnc-cutting/"
       />
       <StatCards
         loading={timersQuery.isPending}

@@ -66,36 +66,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           { label: 'Dashboard', icon: 'fas fa-chart-line', link: '/manufacturing/machining/dashboard' },
           { label: 'Görevler', icon: 'fas fa-tasks', link: '/manufacturing/machining/tasks' },
           { label: 'Raporlar', icon: 'fas fa-chart-pie', link: '/manufacturing/machining/reports' },
-          { label: 'Kapasite Yönetimi', icon: 'fas fa-industry', link: '/manufacturing/machining/capacity' },
-        ],
-      },
-      {
-        title: 'CNC Kesim',
-        description: 'CNC kesim operasyonları, nesting dosyaları ve kesim görevleri yönetimi.',
-        icon: 'fas fa-cut',
-        iconColor: 'primary',
-        link: '/manufacturing/cnc-cutting',
-        figure: 'cncTimers',
-        features: [
-          { label: 'Dashboard', icon: 'fas fa-chart-line', link: '/manufacturing/cnc-cutting/dashboard' },
-          { label: 'Kesimler', icon: 'fas fa-scissors', link: '/manufacturing/cnc-cutting/cuts' },
-          { label: 'Fire Plakalar', icon: 'fas fa-layer-group', link: '/manufacturing/cnc-cutting/remnants' },
-          { label: 'Raporlar', icon: 'fas fa-chart-bar', link: '/manufacturing/cnc-cutting/reports' },
-          { label: 'Kapasite Yönetimi', icon: 'fas fa-industry', link: '/manufacturing/cnc-cutting/capacity' },
-        ],
-      },
-      {
-        title: 'Lineer Kesim',
-        description: 'Profil ve çubuk kesim optimizasyonu, oturum ve bar görevleri yönetimi.',
-        icon: 'fas fa-ruler-horizontal',
-        iconColor: 'success',
-        link: '/manufacturing/linear-cutting',
-        figure: 'linearPendingTasks',
-        features: [
-          { label: 'Dashboard', icon: 'fas fa-chart-line', link: '/manufacturing/linear-cutting/dashboard' },
-          { label: 'Kesimler', icon: 'fas fa-ruler-horizontal', link: '/manufacturing/linear-cutting/cuts' },
-          { label: 'Görevler', icon: 'fas fa-tasks', link: '/manufacturing/linear-cutting/tasks' },
-          { label: 'Kapasite Yönetimi', icon: 'fas fa-industry', link: '/manufacturing/linear-cutting/capacity' },
+          { label: 'Kapasite Planlayıcı', icon: 'fas fa-calendar-alt', link: '/manufacturing/machining/capacity/planning' },
         ],
       },
       {
@@ -168,139 +139,6 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         iconColor: 'info',
         link: '/manufacturing/material-tracking/pull-requests',
         figure: 'pendingPullRequests',
-      },
-    ],
-  },
-
-  // manufacturing/cnc-cutting/cnc-cutting.js
-  '/manufacturing/cnc-cutting': {
-    title: 'CNC Kesim',
-    subtitle: 'CNC kesim operasyonları yönetimi',
-    figures: ['cncTimers', 'cncPendingCuts'],
-    cards: [
-      {
-        title: 'Dashboard',
-        description:
-          'Gerçek zamanlı görünüm ile aktif zamanlayıcıları, makine durumlarını ve istatistikleri takip edin.',
-        icon: 'fas fa-chart-line',
-        iconColor: 'primary',
-        link: '/manufacturing/cnc-cutting/dashboard',
-        figure: 'cncTimers',
-      },
-      {
-        title: 'Kesimler',
-        description: 'CNC kesim görevlerini yönetin ve takip edin',
-        icon: 'fas fa-scissors',
-        iconColor: 'success',
-        link: '/manufacturing/cnc-cutting/cuts/',
-        figure: 'cncPendingCuts',
-      },
-      {
-        title: 'Fire Plakalar',
-        description: 'CNC kesim fire plakalarını görüntüleyin ve yönetin',
-        icon: 'fas fa-layer-group',
-        iconColor: 'info',
-        link: '/manufacturing/cnc-cutting/remnants/',
-      },
-      {
-        title: 'Raporlar',
-        description: 'Detaylı raporlar ve analizler ile performansınızı ölçün ve veriye dayalı kararlar alın.',
-        icon: 'fas fa-chart-bar',
-        iconColor: 'warning',
-        link: '/manufacturing/cnc-cutting/reports',
-        features: [
-          {
-            label: 'Biten Zamanlayıcılar',
-            icon: 'fas fa-clock',
-            link: '/manufacturing/reports/finished-timers?module=cnc_cutting',
-          },
-          {
-            label: 'Kullanıcı Raporu',
-            icon: 'fas fa-calendar-alt',
-            link: '/manufacturing/reports/user-report?module=cnc_cutting',
-          },
-        ],
-      },
-      {
-        title: 'Kapasite Yönetimi',
-        description: 'Makine kapasitelerini planlayın ve geçmiş çalışma verilerini analiz edin.',
-        icon: 'fas fa-industry',
-        iconColor: 'secondary',
-        link: '/manufacturing/cnc-cutting/capacity',
-        features: [
-          {
-            label: 'Kapasite Planlayıcı',
-            icon: 'fas fa-calendar-alt',
-            link: '/manufacturing/cnc-cutting/capacity/planning',
-          },
-        ],
-      },
-    ],
-  },
-
-  // manufacturing/cnc-cutting/capacity/capacity.js
-  '/manufacturing/cnc-cutting/capacity': {
-    title: 'Kapasite Yönetimi',
-    subtitle: 'CNC Kesim kapasitelerini planlayın ve üretim programını yönetin',
-    cards: [
-      {
-        title: 'Kapasite Planlayıcı',
-        description: 'Kesim makineleri için plan oluşturun ve düzenleyin.',
-        icon: 'fas fa-calendar-alt',
-        iconColor: 'primary',
-        link: '/manufacturing/cnc-cutting/capacity/planning',
-      },
-    ],
-  },
-
-  // manufacturing/linear-cutting/linear-cutting.js
-  '/manufacturing/linear-cutting': {
-    title: 'Lineer Kesim',
-    subtitle: 'Lineer kesim optimizasyonu ve görev yönetimi',
-    figures: ['linearPendingTasks'],
-    cards: [
-      {
-        title: 'Dashboard',
-        description: 'Kesim planlarını ve kesim görevlerini hızlıca görüntüleyin.',
-        icon: 'fas fa-chart-line',
-        iconColor: 'primary',
-        link: '/manufacturing/linear-cutting/dashboard',
-      },
-      {
-        title: 'Kesimler',
-        description: 'Kesim planı oluşturun, parçaları yönetin, optimize edin ve onaylayın.',
-        icon: 'fas fa-ruler-horizontal',
-        iconColor: 'success',
-        link: '/manufacturing/linear-cutting/cuts/',
-      },
-      {
-        title: 'Görevler',
-        description: 'Oluşturulan bar görevlerini görüntüleyin, yönetin ve tamamlayın.',
-        icon: 'fas fa-tasks',
-        iconColor: 'warning',
-        link: '/manufacturing/linear-cutting/tasks/',
-      },
-      {
-        title: 'Kapasite Planlayıcı',
-        description: 'Lineer kesim görevlerini makinelere planlayın ve Gantt üzerinden takip edin.',
-        icon: 'fas fa-calendar-alt',
-        iconColor: 'primary',
-        link: '/manufacturing/linear-cutting/capacity/planning/',
-      },
-    ],
-  },
-
-  // manufacturing/linear-cutting/capacity/capacity.js
-  '/manufacturing/linear-cutting/capacity': {
-    title: 'Kapasite Yönetimi',
-    subtitle: 'Lineer kesim kapasitelerini planlayın ve üretim programını yönetin',
-    cards: [
-      {
-        title: 'Kapasite Planlayıcı',
-        description: 'Lineer kesim makineleri için plan oluşturun ve düzenleyin.',
-        icon: 'fas fa-calendar-alt',
-        iconColor: 'primary',
-        link: '/manufacturing/linear-cutting/capacity/planning',
       },
     ],
   },
@@ -378,28 +216,6 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         description: 'Makine kapasitelerini planlayın ve geçmiş çalışma verilerini analiz edin.',
         icon: 'fas fa-industry',
         iconColor: 'warning',
-        link: '/manufacturing/machining/capacity',
-        features: [
-          {
-            label: 'Kapasite Planlayıcı',
-            icon: 'fas fa-calendar-alt',
-            link: '/manufacturing/machining/capacity/planning',
-          },
-        ],
-      },
-    ],
-  },
-
-  // manufacturing/machining/capacity/capacity.js
-  '/manufacturing/machining/capacity': {
-    title: 'Kapasite Yönetimi',
-    subtitle: 'Makine kapasitelerini planlayın ve geçmiş çalışma verilerini analiz edin',
-    cards: [
-      {
-        title: 'Kapasite Planlayıcı',
-        description: 'Makine kapasitelerini planlayın ve üretim programını oluşturun.',
-        icon: 'fas fa-calendar-alt',
-        iconColor: 'primary',
         link: '/manufacturing/machining/capacity/planning',
       },
     ],
@@ -564,6 +380,102 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
             link: '/manufacturing/welding/reports/user-work-hours',
           },
         ],
+      },
+    ],
+  },
+
+  // manufacturing/cnc-cutting/cnc-cutting.js (now under Planlama)
+  '/planning/cnc-cutting': {
+    title: 'CNC Kesim',
+    subtitle: 'CNC kesim operasyonları yönetimi',
+    figures: ['cncTimers', 'cncPendingCuts'],
+    cards: [
+      {
+        title: 'Dashboard',
+        description:
+          'Gerçek zamanlı görünüm ile aktif zamanlayıcıları, makine durumlarını ve istatistikleri takip edin.',
+        icon: 'fas fa-chart-line',
+        iconColor: 'primary',
+        link: '/planning/cnc-cutting/dashboard',
+        figure: 'cncTimers',
+      },
+      {
+        title: 'Kesimler',
+        description: 'CNC kesim görevlerini yönetin ve takip edin',
+        icon: 'fas fa-scissors',
+        iconColor: 'success',
+        link: '/planning/cnc-cutting/cuts/',
+        figure: 'cncPendingCuts',
+      },
+      {
+        title: 'Fire Plakalar',
+        description: 'CNC kesim fire plakalarını görüntüleyin ve yönetin',
+        icon: 'fas fa-layer-group',
+        iconColor: 'info',
+        link: '/planning/cnc-cutting/remnants/',
+      },
+      {
+        title: 'Raporlar',
+        description: 'Detaylı raporlar ve analizler ile performansınızı ölçün ve veriye dayalı kararlar alın.',
+        icon: 'fas fa-chart-bar',
+        iconColor: 'warning',
+        link: '/planning/cnc-cutting/reports',
+        features: [
+          {
+            label: 'Biten Zamanlayıcılar',
+            icon: 'fas fa-clock',
+            link: '/manufacturing/reports/finished-timers?module=cnc_cutting',
+          },
+          {
+            label: 'Kullanıcı Raporu',
+            icon: 'fas fa-calendar-alt',
+            link: '/manufacturing/reports/user-report?module=cnc_cutting',
+          },
+        ],
+      },
+      {
+        title: 'Kapasite Planlayıcı',
+        description: 'Kesim makineleri için plan oluşturun ve düzenleyin.',
+        icon: 'fas fa-calendar-alt',
+        iconColor: 'secondary',
+        link: '/planning/cnc-cutting/capacity',
+      },
+    ],
+  },
+
+  // manufacturing/linear-cutting/linear-cutting.js (now under Planlama)
+  '/planning/linear-cutting': {
+    title: 'Lineer Kesim',
+    subtitle: 'Lineer kesim optimizasyonu ve görev yönetimi',
+    figures: ['linearPendingTasks'],
+    cards: [
+      {
+        title: 'Dashboard',
+        description: 'Kesim planlarını ve kesim görevlerini hızlıca görüntüleyin.',
+        icon: 'fas fa-chart-line',
+        iconColor: 'primary',
+        link: '/planning/linear-cutting/dashboard',
+      },
+      {
+        title: 'Kesimler',
+        description: 'Kesim planı oluşturun, parçaları yönetin, optimize edin ve onaylayın.',
+        icon: 'fas fa-ruler-horizontal',
+        iconColor: 'success',
+        link: '/planning/linear-cutting/cuts/',
+      },
+      {
+        title: 'Görevler',
+        description: 'Oluşturulan bar görevlerini görüntüleyin, yönetin ve tamamlayın.',
+        icon: 'fas fa-tasks',
+        iconColor: 'warning',
+        link: '/planning/linear-cutting/tasks/',
+      },
+      {
+        title: 'Kapasite Planlayıcı',
+        description: 'Lineer kesim görevlerini makinelere planlayın ve Gantt üzerinden takip edin.',
+        icon: 'fas fa-calendar-alt',
+        iconColor: 'primary',
+        link: '/planning/linear-cutting/capacity',
       },
     ],
   },

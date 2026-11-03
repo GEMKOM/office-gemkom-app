@@ -78,7 +78,7 @@ afterEach(() => {
 });
 
 it('lists the cutting timers and machines', async () => {
-  renderWithProviders(<CncDashboardPage />, { route: '/manufacturing/cnc-cutting/dashboard/' });
+  renderWithProviders(<CncDashboardPage />, { route: '/planning/cnc-cutting/dashboard/' });
   expect(await screen.findByText('NST-100')).toBeInTheDocument();
   expect(screen.getByText('12 mm')).toBeInTheDocument();
   expect(screen.getByText(/^00:30:\d\d$/)).toBeInTheDocument();
@@ -94,7 +94,7 @@ it('lists the cutting timers and machines', async () => {
 });
 
 it('shows the stop error instead of failing silently', async () => {
-  renderWithProviders(<CncDashboardPage />, { route: '/manufacturing/cnc-cutting/dashboard/' });
+  renderWithProviders(<CncDashboardPage />, { route: '/planning/cnc-cutting/dashboard/' });
   await screen.findByText('NST-100');
   fireEvent.click(screen.getByRole('button', { name: 'Durdur' }));
 
@@ -106,7 +106,7 @@ it('shows the stop error instead of failing silently', async () => {
 });
 
 it('opens the cut details with files and parts', async () => {
-  renderWithProviders(<CncDashboardPage />, { route: '/manufacturing/cnc-cutting/dashboard/' });
+  renderWithProviders(<CncDashboardPage />, { route: '/planning/cnc-cutting/dashboard/' });
   fireEvent.click(await screen.findByRole('button', { name: /NST-100/ }));
 
   const dialog = await screen.findByRole('dialog');
@@ -119,6 +119,6 @@ it('opens the cut details with files and parts', async () => {
   expect(within(dialog).getByText('14.5 kg')).toBeInTheDocument();
   expect(within(dialog).getByRole('link', { name: /Kesimler Sayfasında Aç/ })).toHaveAttribute(
     'href',
-    '/manufacturing/cnc-cutting/cuts/?filter=CNC-7',
+    '/planning/cnc-cutting/cuts/?filter=CNC-7',
   );
 });
