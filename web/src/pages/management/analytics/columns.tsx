@@ -12,7 +12,6 @@ import {
   type TreeRow,
 } from './analyticsData';
 import {
-  CatalogCell,
   CompletionBar,
   Dash,
   ExpandCell,
@@ -56,6 +55,12 @@ export const DETAIL_KEYS = new Set([
 
 const MONEY = '#,##0.00 "€"';
 
+/** Başlık is cut here (the full title shows on hover) to keep the table within a laptop screen. */
+/** The €/kg and Marj (€) columns start hidden on screens narrower than this (Sütunlar brings them back). */
+export const WIDE_ONLY_BELOW = 1600;
+
+export const TITLE_LIMIT = 20;
+
 function rate(value: unknown) {
   const n = numOrNull(value);
   return n === null ? null : n;
@@ -76,7 +81,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     {
       key: '_expand',
       header: '',
-      width: 80,
+      width: 44,
       exportHeader: 'Seviye',
       // 0 = a row of the table, 1+ = an expanded child (already in its parent's totals).
       exportValue: (row) => row.hierarchy_level,
@@ -95,19 +100,34 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
       header: 'İş No',
       sortable: true,
       sortKey: 'job_no',
-      width: 160,
+      width: 112,
       render: (row) => <JobNoCell row={row} />,
     },
-    { key: 'title', header: 'Başlık', sortable: true, sortKey: 'title' },
+    {
+      key: 'title',
+      header: 'Başlık',
+      sortable: true,
+      sortKey: 'title',
+      exportValue: (row) => row.title || null,
+      render: (row) => {
+        const title = row.title;
+        if (!title) return '-';
+        return title.length > TITLE_LIMIT ? (
+          <span title={title}>{title.slice(0, TITLE_LIMIT).trimEnd()}…</span>
+        ) : (
+          title
+        );
+      },
+    },
     {
       key: 'customer_name',
       header: 'Müşteri',
-      width: 220,
+      width: 96,
       accessor: (row) => row.customer_short_name || row.customer_name || null,
       render: (row) => {
         const name = row.customer_short_name || row.customer_name;
         return name ? (
-          <span className={classes.customer} title={row.customer_name ?? undefined}>
+          <span className={classes.customer} title={row.customer_name || name}>
             {name}
           </span>
         ) : (
@@ -118,7 +138,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     {
       key: 'status',
       header: 'Durum',
-      width: 64,
+      width: 48,
       align: 'center',
       exportValue: (row) => (row.status ? (STATUS_META[row.status]?.label ?? row.status) : null),
       render: (row) => <StatusChip status={row.status} />,
@@ -126,22 +146,23 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     {
       key: 'is_manufactured',
       header: 'İmalat',
-      width: 64,
+      width: 48,
       align: 'center',
       exportValue: (row) =>
         row.is_manufactured === true ? 'Bizde' : row.is_manufactured === false ? 'Harici' : null,
       render: (row) => <ManufacturedChip value={row.is_manufactured} />,
     },
     {
+      // Not on screen (the Katalog Kalemi filter still works); the Excel export keeps it.
       key: 'catalog_nodes',
       header: 'Katalog Kalemi',
-      width: 190,
+      exportOnly: true,
       exportValue: (row) => (row.catalog_nodes ?? []).map((n) => n.title).join(', ') || null,
-      render: (row) => <CatalogCell row={row} />,
     },
     {
       key: 'total_weight_kg',
       header: 'Ağırlık (kg)',
+      width: 72,
       sortable: true,
       sortKey: 'weight',
       align: 'right',
@@ -262,6 +283,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     {
       key: 'price_per_kg',
       header: 'Kg Maliyeti',
+      hideBelow: WIDE_ONLY_BELOW,
       sortable: true,
       sortKey: 'price_per_kg',
       align: 'right',
@@ -283,6 +305,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     {
       key: 'selling_price_per_kg',
       header: 'Kg Fiyatı',
+      hideBelow: WIDE_ONLY_BELOW,
       align: 'right',
       exportValue: (row) => numOrNull(row.selling_price_per_kg),
       exportFormat: MONEY,
@@ -291,6 +314,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
     {
       key: 'margin_eur',
       header: 'Marj (€)',
+      hideBelow: WIDE_ONLY_BELOW,
       sortable: true,
       sortKey: 'margin_eur',
       align: 'right',
@@ -314,7 +338,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
       header: 'Tamamlanma',
       sortable: true,
       sortKey: 'completion_pct',
-      width: 160,
+      width: 84,
       exportValue: (row) => numOrNull(row.completion_pct),
       render: (row) => <CompletionBar value={row.completion_pct} />,
     },
@@ -323,7 +347,7 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
       header: 'Hedef tarih',
       sortable: true,
       sortKey: 'date',
-      width: 120,
+      width: 92,
       render: (row) =>
         row.target_completion_date ? formatDate(row.target_completion_date) : <Dash />,
     },
@@ -332,8 +356,8 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
 }
 
 /** Legacy buildFooter: totals of the top-level rows, weighted €/kg, the margin from the totals. */
-export function costFooter(columns: DataTableColumn<TreeRow>[]) {
-  return function CostFooter({ rows }: DataTableFooterContext<TreeRow>) {
+export function costFooter() {
+  return function CostFooter({ rows, columns }: DataTableFooterContext<TreeRow>) {
     const t = costTotals(rows);
     const cells: Record<string, ReactNode> = {
       job_no: (
@@ -370,13 +394,11 @@ export function costFooter(columns: DataTableColumn<TreeRow>[]) {
     };
     return (
       <Table.Tr className={classes.footRow}>
-        {columns
-          .filter((c) => !c.hidden)
-          .map((column) => (
-            <Table.Td key={column.key} ta={column.align === 'right' ? 'right' : undefined}>
-              {column.key in cells ? cells[column.key] : column.key === '_expand' ? null : <Dash />}
-            </Table.Td>
-          ))}
+        {columns.map((column) => (
+          <Table.Td key={column.key} ta={column.align === 'right' ? 'right' : undefined}>
+            {column.key in cells ? cells[column.key] : column.key === '_expand' ? null : <Dash />}
+          </Table.Td>
+        ))}
       </Table.Tr>
     );
   };

@@ -1,5 +1,5 @@
 import { Badge, Button } from '@mantine/core';
-import { useDebouncedCallback, useMediaQuery } from '@mantine/hooks';
+import { useDebouncedCallback, useLocalStorage, useMediaQuery } from '@mantine/hooks';
 import { keepPreviousData, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -202,6 +202,11 @@ export function AnalyticsPage() {
   const rows = mergeExpandedChildren(roots, shownExpanded, childrenMap);
 
   const [breakdown, setBreakdown] = useState(false);
+  // Top 15 can be folded away to give the table the screen; remembered per browser.
+  const [topCollapsed, setTopCollapsed] = useLocalStorage<boolean>({
+    key: 'analytics-top15-collapsed',
+    defaultValue: false,
+  });
   const [drills, setDrills] = useState<Drill[]>([]);
   const openDrill = useCallback(
     (kind: DrillKind, row: TreeRow) => setDrills((prev) => [...prev, { kind, row }]),
@@ -224,7 +229,7 @@ export function AnalyticsPage() {
       }),
     [breakdown, expandedKey, loadingKey, withChildrenKey, toggle, openDrill],
   );
-  const footer = useMemo(() => costFooter(columns), [columns]);
+  const footer = useMemo(() => costFooter(), []);
 
   const figures = useMemo(() => summaryFigures(roots), [roots]);
   const stack = useMemo(() => topCostStack(roots), [roots]);
@@ -351,22 +356,42 @@ export function AnalyticsPage() {
 
       <DashGrid>
         <DashCell>
-          <Panel title="Top 15 Maliyet (Stacked)" icon="fas fa-layer-group">
-            <BarsChart
-              label="En yüksek maliyetli 15 iş, maliyet kırılımı"
-              data={stack}
-              categoryKey="job_no"
-              categoryLabel="İş No"
-              categoryWidth={110}
-              horizontal
-              stacked
-              series={STACK_SERIES}
-              height={Math.max(220, stack.length * 30 + 40)}
-              format={valueFormats.currency('EUR', 2)}
-              axisFormat={(v) => compactCurrency(v, 'EUR')}
-              tooltipNote={(row) => `Toplam: ${formatCurrency(row.total, 'EUR', 2)}`}
-              empty={loading ? 'Yükleniyor…' : stack.length ? undefined : 'Veri yok'}
-            />
+          <Panel
+            title="Top 15 Maliyet (Stacked)"
+            icon="fas fa-layer-group"
+            padded={!topCollapsed}
+            actions={
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                leftSection={
+                  <FaIcon icon={topCollapsed ? 'fas fa-chevron-down' : 'fas fa-chevron-up'} />
+                }
+                aria-expanded={!topCollapsed}
+                aria-label={topCollapsed ? 'Top 15 grafiğini göster' : 'Top 15 grafiğini gizle'}
+                onClick={() => setTopCollapsed((v) => !v)}
+              >
+                {topCollapsed ? 'Göster' : 'Gizle'}
+              </Button>
+            }
+          >
+            {topCollapsed ? null : (
+              <BarsChart
+                label="En yüksek maliyetli 15 iş, maliyet kırılımı"
+                data={stack}
+                categoryKey="job_no"
+                categoryLabel="İş No"
+                categoryWidth={110}
+                horizontal
+                stacked
+                series={STACK_SERIES}
+                height={Math.max(220, stack.length * 30 + 40)}
+                format={valueFormats.currency('EUR', 2)}
+                axisFormat={(v) => compactCurrency(v, 'EUR')}
+                tooltipNote={(row) => `Toplam: ${formatCurrency(row.total, 'EUR', 2)}`}
+                empty={loading ? 'Yükleniyor…' : stack.length ? undefined : 'Veri yok'}
+              />
+            )}
           </Panel>
         </DashCell>
         <DashCell>
