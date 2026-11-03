@@ -45,6 +45,17 @@ function toInput(values: Values): OfferInput {
   };
 }
 
+/**
+ * Ödeme Şekli select value. GET may nest the term (`{id, name}`) the way
+ * GenelTab already reads; String(object) is "[object Object]" and dropping
+ * objects sent payment_terms: null on the next save, wiping the term.
+ */
+export function paymentTermFieldValue(value: OfferDetail['payment_terms']): string {
+  if (value == null || value === '') return '';
+  if (typeof value === 'object') return value.id != null ? String(value.id) : '';
+  return String(value);
+}
+
 function customerLabel(c: { code?: string; name?: string; id: number | string }) {
   return [c.code, c.name].filter(Boolean).join(' - ') || `#${c.id}`;
 }
@@ -82,10 +93,7 @@ export function OfferFormModal({ offer, onClose }: { offer?: OfferDetail; onClos
       order_no: offer?.order_no || '',
       incoterms: offer?.incoterms || '',
       delivery_place: offer?.delivery_place || '',
-      payment_terms:
-        offer?.payment_terms != null && typeof offer.payment_terms !== 'object'
-          ? String(offer.payment_terms)
-          : '',
+      payment_terms: paymentTermFieldValue(offer?.payment_terms),
       delivery_date_requested: offer?.delivery_date_requested || '',
       offer_expiry_date: offer?.offer_expiry_date || '',
     },
