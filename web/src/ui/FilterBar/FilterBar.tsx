@@ -4,6 +4,7 @@ import {
   Popover,
   ScrollArea,
   Stack,
+  Text,
   TextInput,
   UnstyledButton,
 } from '@mantine/core';
@@ -55,54 +56,6 @@ export interface FilterBarProps<T extends FilterValues> {
 
 const SEARCH_DELAY_MS = 400;
 
-/** The options of a select pill; with `searchable`, a box on top narrows them (accents and case ignored). */
-function SelectOptions({
-  options,
-  searchable,
-  value,
-  onPick,
-}: {
-  options: FilterOption[];
-  searchable?: boolean;
-  value: FilterValue | undefined;
-  onPick: (value: string) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const fold = (text: string) => text.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '');
-  const needle = fold(query.trim());
-  const shown = needle ? options.filter((o) => fold(o.label).includes(needle)) : options;
-  return (
-    <>
-      {searchable ? (
-        <TextInput
-          size="xs"
-          m={4}
-          placeholder="Ara..."
-          aria-label="Seçeneklerde ara"
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          onKeyDown={(event) => event.stopPropagation()}
-        />
-      ) : null}
-      <ScrollArea.Autosize mah={searchable ? 260 : undefined}>
-        {shown.map((option) => (
-          <Menu.Item
-            key={option.value}
-            onClick={() => onPick(option.value)}
-            fw={value === option.value ? 600 : undefined}
-            rightSection={value === option.value ? <i className="fas fa-check" aria-hidden /> : null}
-          >
-            {option.label}
-          </Menu.Item>
-        ))}
-        {searchable && shown.length === 0 ? (
-          <Menu.Label>Sonuç bulunamadı</Menu.Label>
-        ) : null}
-      </ScrollArea.Autosize>
-    </>
-  );
-}
-
 function emptyLike(value: FilterValue): FilterValue {
   if (isDateRange(value)) return { start: '', end: '' };
   if (Array.isArray(value)) return [];
@@ -137,7 +90,9 @@ function describe(filter: FilterConfig, value: FilterValue | undefined): ReactNo
       return day(asString(value));
     case 'dateRange': {
       const range = isDateRange(value) ? value : { start: '', end: '' };
-      return range.end && range.end !== range.start ? `${day(range.start)} – ${day(range.end)}` : day(range.start);
+      return range.end && range.end !== range.start
+        ? `${day(range.start)} – ${day(range.end)}`
+        : day(range.start);
     }
     default:
       return asString(value);
@@ -176,6 +131,95 @@ function PillFace({ label, set, summary, onClear, chevron = true }: PillProps) {
       ) : chevron ? (
         <i className={`fas fa-chevron-down ${classes.pillChevron}`} aria-hidden />
       ) : null}
+    </>
+  );
+}
+
+const NAV_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Escape', 'Tab']);
+
+/**
+ * A select pill's menu items. Searchable ones get a box above the list that
+ * narrows it (Enter picks the first match) and a scrolling list for long ones.
+ */
+function SelectOptions({
+  options,
+  value,
+  allLabel,
+  searchable = false,
+  onPick,
+  onClear,
+}: {
+  options: FilterOption[];
+  value: FilterValue | undefined;
+  allLabel: string;
+  searchable?: boolean;
+  onPick: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  // Accents and case are ignored, so "sut" finds "Süt".
+  const fold = (text: string) => text.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '');
+  const needle = fold(query.trim());
+  const shown = needle ? options.filter((o) => fold(o.label).includes(needle)) : options;
+  // The box keeps its text while the menu is closed, so a pick empties it and
+  // the next opening shows the whole list again.
+  const items = (
+    <>
+      {needle ? null : (
+        <Menu.Item onClick={onClear} fw={value ? undefined : 600}>
+          {allLabel}
+        </Menu.Item>
+      )}
+      {shown.map((option) => (
+        <Menu.Item
+          key={option.value}
+          onClick={() => {
+            setQuery('');
+            onPick(option.value);
+          }}
+          fw={value === option.value ? 600 : undefined}
+          rightSection={value === option.value ? <i className="fas fa-check" aria-hidden /> : null}
+        >
+          {option.label}
+        </Menu.Item>
+      ))}
+    </>
+  );
+  if (!searchable) return items;
+  return (
+    <>
+      <TextInput
+        data-autofocus
+        size="xs"
+        m={4}
+        mb={6}
+        w={240}
+        placeholder="Ara..."
+        aria-label="Seçeneklerde ara"
+        leftSection={<i className="fas fa-search" aria-hidden style={{ fontSize: 11 }} />}
+        value={query}
+        onChange={(event) => setQuery(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          // Letters and Space are the box's, not the menu's; arrows still reach the items.
+          if (!NAV_KEYS.has(event.key)) event.stopPropagation();
+          // Enter takes the first match, through its item so the menu closes too.
+          if (event.key === 'Enter' && needle && shown.length > 0) {
+            event.preventDefault();
+            event.currentTarget
+              .closest('[role="menu"]')
+              ?.querySelector<HTMLElement>('[role="menuitem"]')
+              ?.click();
+          }
+        }}
+      />
+      <ScrollArea.Autosize mah={300} type="auto">
+        {items}
+        {shown.length === 0 ? (
+          <Text size="sm" c="dimmed" px="sm" py={6}>
+            Sonuç bulunamadı
+          </Text>
+        ) : null}
+      </ScrollArea.Autosize>
     </>
   );
 }
@@ -267,7 +311,11 @@ export function FilterBar<T extends FilterValues>({
             aria-label={typeof label === 'string' ? label : undefined}
             onClick={() => setAndApply(filter.key, !set)}
           >
-            <i className={set ? 'fas fa-check' : 'far fa-square'} aria-hidden style={{ fontSize: 12 }} />
+            <i
+              className={set ? 'fas fa-check' : 'far fa-square'}
+              aria-hidden
+              style={{ fontSize: 12 }}
+            />
             {label}
           </UnstyledButton>
         );
@@ -276,18 +324,22 @@ export function FilterBar<T extends FilterValues>({
           <Menu key={filter.key} position="bottom-start" offset={6} withinPortal>
             <Menu.Target>
               <UnstyledButton className={classes.pill} data-set={set || undefined}>
-                <PillFace label={label} set={set} summary={describe(filter, value)} onClear={clearOne} />
+                <PillFace
+                  label={label}
+                  set={set}
+                  summary={describe(filter, value)}
+                  onClear={clearOne}
+                />
               </UnstyledButton>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item onClick={clearOne} fw={set ? undefined : 600}>
-                {filter.placeholder ?? 'Tümü'}
-              </Menu.Item>
               <SelectOptions
                 options={filter.options}
-                searchable={filter.searchable}
                 value={value}
+                allLabel={filter.placeholder ?? 'Tümü'}
+                searchable={filter.searchable}
                 onPick={(picked) => setAndApply(filter.key, picked)}
+                onClear={clearOne}
               />
             </Menu.Dropdown>
           </Menu>
@@ -297,7 +349,12 @@ export function FilterBar<T extends FilterValues>({
           <Popover key={filter.key} position="bottom-start" offset={6} withinPortal trapFocus>
             <Popover.Target>
               <UnstyledButton className={classes.pill} data-set={set || undefined}>
-                <PillFace label={label} set={set} summary={describe(filter, value)} onClear={clearOne} />
+                <PillFace
+                  label={label}
+                  set={set}
+                  summary={describe(filter, value)}
+                  onClear={clearOne}
+                />
               </UnstyledButton>
             </Popover.Target>
             <Popover.Dropdown p="sm">{renderEditor(filter, value)}</Popover.Dropdown>
@@ -306,7 +363,10 @@ export function FilterBar<T extends FilterValues>({
     }
   };
 
-  const renderEditor = (filter: FilterConfig<Extract<keyof T, string>>, value: FilterValue | undefined) => {
+  const renderEditor = (
+    filter: FilterConfig<Extract<keyof T, string>>,
+    value: FilterValue | undefined,
+  ) => {
     switch (filter.type) {
       case 'multiselect': {
         const picked = Array.isArray(value) ? value : [];
@@ -353,7 +413,9 @@ export function FilterBar<T extends FilterValues>({
             placeholder={filter.placeholder}
             type={filter.inputType ?? 'text'}
             value={asString(value)}
-            onChange={(event) => setDraft((prev) => ({ ...prev, [filter.key]: event.currentTarget.value }))}
+            onChange={(event) =>
+              setDraft((prev) => ({ ...prev, [filter.key]: event.currentTarget.value }))
+            }
             onKeyDown={onEnter}
           />
         );
