@@ -68,6 +68,7 @@
   "/design/revision-requests",
   "/logistics/cost-lines",
   "/finance/reports/projects",
+  "/finance/purchase-orders",
   "/general/crane-requests/list",
   "/general/crane-requests/pending",
   "/general/crane-requests/prices",
