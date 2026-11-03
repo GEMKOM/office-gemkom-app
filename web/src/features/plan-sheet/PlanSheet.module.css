@@ -1,0 +1,397 @@
+/* The plan sheet's hero, date chain, legend and chips (ported from
+   projects/project-tracking/planSheet.css). Colours are the house palette,
+   never yellow. The grid's own styles are in SheetGrid.module.css. */
+
+/* ---- hero ---------------------------------------------------------------- */
+
+.hero {
+  background: #ffffff;
+  border: 1px solid #e2e6ec;
+  border-left: 6px solid #6c757d;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+  padding: 12px 18px 10px;
+  display: grid;
+  /* The id keeps a readable title; the chain takes the rest and caps itself. */
+  grid-template-columns: minmax(240px, 420px) minmax(0, 1fr);
+  grid-template-areas: 'id figures';
+  column-gap: 18px;
+  row-gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.hero[data-progress] {
+  grid-template-areas:
+    'id figures'
+    'progress progress';
+}
+
+.hero[data-tone='green'] { border-left-color: #198754; }
+.hero[data-tone='orange'] { border-left-color: #fd7e14; }
+.hero[data-tone='red'] { border-left-color: #dc3545; }
+.hero[data-tone='grey'] { border-left-color: #6c757d; }
+
+.heroId {
+  grid-area: id;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* No progress row: the id block and the chain share the height */
+.hero:not([data-progress]) .heroId { align-self: center; }
+
+.heroJobno {
+  font-size: 1.9rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: #1f2530;
+  line-height: 1;
+}
+
+.heroTitle {
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: #2b3240;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.heroCustomer {
+  font-size: 0.82rem;
+  color: #6c757d;
+}
+
+.heroProgress { grid-area: progress; }
+
+.figMuted { color: #9aa1ab; }
+
+/* ---- the date chain -----------------------------------------------------
+   Four figures in one fixed row; the connectors carry the comparisons and the
+   bracket above the termin-to-öngörülen total. Rows: 1 bracket · 2 labels ·
+   3 values + connectors · 4 baseline. */
+
+.chain {
+  grid-area: figures;
+  justify-self: end;
+  width: 100%;
+  max-width: 1180px;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(28px, 0.6fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto;
+  /* The bracket row is reserved even without a bracket, so the hero does not
+     jump when the sheet arrives. */
+  grid-template-rows: minmax(25px, auto) auto auto auto;
+  align-items: end;
+  text-align: center;
+}
+
+/* A figure is two grid items (label, value) in one column */
+.cf { display: contents; }
+.cf[data-fig='start'] { --ps-col: 1; }
+.cf[data-fig='termin'] { --ps-col: 3; }
+.cf[data-fig='plan'] { --ps-col: 5; }
+.cf[data-fig='proj'] { --ps-col: 7; }
+
+.cf label {
+  grid-column: var(--ps-col);
+  grid-row: 2;
+  margin: 0;
+  padding: 0 6px 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: #8a919c;
+  white-space: nowrap;
+}
+
+.cfValue {
+  grid-column: var(--ps-col);
+  grid-row: 3;
+  position: relative;
+  padding: 0 6px;
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: #1f2530;
+  white-space: nowrap;
+}
+
+/* The dot on the baseline under each date */
+.cfValue::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -11px;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: #1f2530;
+  box-shadow: 0 0 0 2px #ffffff;
+}
+
+/* Başlangıç is context, Öngörülen is the answer */
+.cf[data-fig='start'] .cfValue { font-size: 1rem; font-weight: 600; color: #6c757d; }
+.cf[data-fig='start'] .cfValue::after { background: #9aa3b2; }
+.cf[data-fig='plan'][data-state='late'] .cfValue::after { background: #fd7e14; }
+.cf[data-fig='plan'][data-state='early'] .cfValue::after,
+.cf[data-fig='plan'][data-state='ok'] .cfValue::after { background: #198754; }
+.cf[data-fig='proj'] .cfValue { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; }
+.cf[data-fig='proj'][data-state='late'] .cfValue { color: #c62839; }
+.cf[data-fig='proj'][data-state='late'] .cfValue::after { background: #dc3545; }
+.cf[data-fig='proj'][data-state='early'] .cfValue,
+.cf[data-fig='proj'][data-state='ok'] .cfValue { color: #1f8a4c; }
+.cf[data-fig='proj'][data-state='early'] .cfValue::after,
+.cf[data-fig='proj'][data-state='ok'] .cfValue::after { background: #198754; }
+.hero[data-tone='red'] .cf[data-fig='proj'] label { color: #dc3545; }
+.hero[data-tone='orange'] .cf[data-fig='proj'] label { color: #fd7e14; }
+.hero[data-tone='green'] .cf[data-fig='proj'] label { color: #198754; }
+
+/* Connectors: a line with an arrowhead, the comparison in a pill on it */
+.ck {
+  --ps-lc: #d3d9e1;
+  grid-row: 3;
+  align-self: end;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.55rem;
+  min-width: 0;
+}
+
+.ck[data-ck='1'] { grid-column: 2; }
+.ck[data-ck='2'] { grid-column: 4; }
+.ck[data-ck='3'] { grid-column: 6; }
+
+.ck::before {
+  content: '';
+  position: absolute;
+  left: 4px;
+  right: 9px;
+  top: 50%;
+  margin-top: -1px;
+  border-top: 2px solid var(--ps-lc);
+}
+
+.ck::after {
+  content: '';
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  margin-top: -4px;
+  border-left: 7px solid var(--ps-lc);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+}
+
+.ck span {
+  position: relative;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 4px 9px;
+  margin: 0 14px 0 8px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px #ffffff;
+  white-space: nowrap;
+}
+
+/* Late: the plan past its termin is orange, the forecast past its plan is
+   red. Early and on time are green. */
+.ck[data-ck='2'][data-state='late'] { --ps-lc: #fd7e14; }
+.ck[data-ck='2'][data-state='late'] span { background: #fff1e3; color: #b5500a; }
+.ck[data-ck='3'][data-state='late'] { --ps-lc: #dc3545; }
+.ck[data-ck='3'][data-state='late'] span { background: #fde2e5; color: #a71d2a; }
+.ck[data-state='early'],
+.ck[data-state='ok'] { --ps-lc: #198754; }
+.ck[data-state='early'] span,
+.ck[data-state='ok'] span { background: #d9f2e3; color: #146c43; }
+
+/* The bracket: termin to öngörülen, the one number the room asks for */
+.brk {
+  --ps-bc: #dc3545;
+  --ps-bbg: #fde2e5;
+  --ps-bfg: #a71d2a;
+  grid-column: 3 / -1;
+  grid-row: 1;
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  height: 18px;
+  margin: 0 8px 7px;
+  padding-right: 14px;
+}
+
+.brk::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 8px;
+  margin-top: -1px;
+  border: 2px solid var(--ps-bc);
+  border-bottom: 0;
+  border-radius: 3px 3px 0 0;
+}
+
+.brk span {
+  position: relative;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: var(--ps-bfg);
+  background: var(--ps-bbg);
+  padding: 3px 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px #ffffff;
+  white-space: nowrap;
+}
+
+.brk b { font-size: 14px; font-weight: 800; }
+
+.brk[data-state='early'],
+.brk[data-state='ok'] { --ps-bc: #198754; --ps-bbg: #d9f2e3; --ps-bfg: #146c43; }
+
+/* The baseline the dots sit on: a chain, not a scale */
+.chainBase {
+  grid-column: 1 / -1;
+  grid-row: 4;
+  height: 1px;
+  margin-top: 7px;
+  background: linear-gradient(90deg, rgba(211, 217, 225, 0), #d3d9e1 6%, #d3d9e1 94%, rgba(211, 217, 225, 0));
+}
+
+/* Short screens (laptop 768p): one size step down, before the width steps so
+   a screen that is both short and narrow takes the narrower step. */
+@media (max-height: 860px) {
+  .hero { padding: 9px 16px 8px; row-gap: 4px; }
+  .heroJobno { font-size: 1.55rem; }
+  .heroTitle { font-size: 0.94rem; }
+  .cf label { padding: 0 4px 4px; }
+  .cfValue { padding: 0 4px; font-size: 1.15rem; }
+  .cf[data-fig='start'] .cfValue { font-size: 0.9rem; }
+  .cf[data-fig='proj'] .cfValue { font-size: 1.5rem; }
+  .ck { height: 1.4rem; }
+  .ck span { font-size: 12.5px; padding: 3px 7px; }
+  .chain { grid-template-rows: minmax(21px, auto) auto auto auto; }
+  .brk { height: 16px; margin-bottom: 5px; }
+}
+
+/* Width steps: each first takes width from the id, then shrinks the figures,
+   so the row survives down to the 1240px stacking point. */
+@media (max-width: 1640px) {
+  .hero { grid-template-columns: minmax(240px, 360px) minmax(0, 1fr); }
+  .cf label { padding: 0 4px 4px; }
+  .cfValue { padding: 0 4px; font-size: 1.15rem; }
+  .cf[data-fig='start'] .cfValue { font-size: 0.9rem; }
+  .cf[data-fig='proj'] .cfValue { font-size: 1.5rem; }
+  .ck span { font-size: 12.5px; padding: 3px 7px; }
+}
+
+@media (max-width: 1400px) {
+  .hero { grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); }
+  .chain {
+    grid-template-columns: auto minmax(16px, 0.5fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto;
+  }
+  .cf label { font-size: 0.68rem; }
+  .cfValue { font-size: 1.1rem; }
+  .cf[data-fig='start'] .cfValue { font-size: 0.85rem; }
+  .cf[data-fig='proj'] .cfValue { font-size: 1.4rem; }
+  .ck span { font-size: 12px; padding: 3px 6px; margin: 0 12px 0 6px; }
+}
+
+/* Below this the row cannot hold four dates beside the id: stack them */
+@media (max-width: 1240px) {
+  .hero,
+  .hero[data-progress] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: 'id' 'figures' 'progress';
+  }
+  .chain { justify-self: start; max-width: none; }
+}
+
+/* A4 landscape is 1062px of content: a tighter id and a smaller chain keep the
+   four dates on one row; the title may take two lines rather than lose its end. */
+@media print {
+  .hero {
+    box-shadow: none;
+    border-color: #c9ced4;
+    break-inside: avoid;
+    grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
+    grid-template-areas: 'id figures';
+  }
+  .heroTitle {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    font-size: 0.92rem;
+    line-height: 1.25;
+  }
+  .chain {
+    max-width: none;
+    justify-self: end;
+    grid-template-columns: auto minmax(16px, 0.5fr) auto minmax(min-content, 1fr) auto minmax(min-content, 1fr) auto;
+  }
+  .cf label { font-size: 0.68rem; padding: 0 2px 4px; }
+  .cfValue { font-size: 1.1rem; padding: 0 2px; }
+  .cf[data-fig='start'] .cfValue { font-size: 0.85rem; }
+  .cf[data-fig='proj'] .cfValue { font-size: 1.2rem; }
+  .ck span { font-size: 11.5px; padding: 3px 6px; margin: 0 12px 0 6px; }
+}
+
+/* ---- legend and chips ---------------------------------------------------- */
+
+.legend {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  color: #6c757d;
+}
+
+.legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legend i {
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.legend i[data-lg='ontime'] { background: #34ad51; }
+.legend i[data-lg='late'] { background: #e2515f; }
+.legend i[data-lg='hold'] { background: #d99e00; }
+.legend i[data-lg='termin'] { background: #6f42c1; width: 3px; height: 12px; }
+.legend i[data-lg='today'] { background: #dc3545; width: 3px; height: 12px; }
+.legend i[data-lg='ext'] {
+  background: repeating-linear-gradient(135deg, rgba(220, 53, 69, 0.6) 0 3px, rgba(220, 53, 69, 0.2) 3px 6px);
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.chip[data-chip='ps-chip-late'] { background: #fde2e5; color: #a71d2a; }
+.chip[data-chip='ps-chip-chain'] { background: #e9ecef; color: #495057; }
+.chip[data-chip='ps-chip-early'],
+.chip[data-chip='ps-chip-ok'] { background: #d9f2e3; color: #146c43; }
+.chip[data-chip='ps-chip-muted'] { background: #f1f3f5; color: #9aa1ab; font-weight: 500; }

@@ -1080,6 +1080,15 @@ export const publicRoutes: RouteObject[] = [
       Component: (await import('@/pages/auth/ResetPasswordPage')).ResetPasswordPage,
     }),
   },
+  {
+    // Plan ve Sapmalar on its own: opened by a customer's share link without a
+    // session (?share=), or by the office for printing (?job_no=, whose API
+    // call signs in through apiFetch as usual).
+    path: '/projects/plan-sheet',
+    lazy: async () => ({
+      Component: (await import('@/pages/projects/plan-sheet/PlanSheetPage')).PlanSheetPage,
+    }),
+  },
 ];
 
 export const routeTree: RouteObject[] = [
