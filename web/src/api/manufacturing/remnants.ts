@@ -10,6 +10,8 @@ export interface RemnantPlate {
   thickness_mm_2?: string | number | null;
   dimensions?: string | null;
   quantity?: number | string | null;
+  /** quantity minus what cuts have used (RemnantPlateUsage); read-only. */
+  available_quantity?: number | null;
   material?: string | null;
   heat_number?: string | null;
   assigned_to?: unknown;
@@ -40,6 +42,7 @@ export type RemnantPlatesParams = {
 export const remnantKeys = {
   all: ['remnantPlates'] as const,
   list: (params: QueryParams) => ['remnantPlates', 'list', cleanParams(params)] as const,
+  every: (params: QueryParams) => ['remnantPlates', 'every', cleanParams(params)] as const,
   detail: (id: string | number) => ['remnantPlates', 'detail', String(id)] as const,
 };
 
@@ -50,6 +53,40 @@ export function remnantPlatesQueryOptions(params: RemnantPlatesParams) {
     queryKey: remnantKeys.list(params),
     queryFn: async ({ signal }) =>
       toPaginated<RemnantPlate>(await apiFetch<unknown>(BASE, { params, signal })),
+  });
+}
+
+const ALL_PAGE_SIZE = 1000; // the backend's max_page_size
+
+/**
+ * Every plate the filters match, all pages, each once. The backend's
+ * `unassigned=false` filter joins the usage records, so a plate used by two
+ * cuts comes back twice; it is counted once here.
+ */
+export async function fetchAllRemnantPlates(
+  params: Omit<RemnantPlatesParams, 'page' | 'page_size'>,
+  signal?: AbortSignal,
+): Promise<RemnantPlate[]> {
+  const byId = new Map<number, RemnantPlate>();
+  for (let page = 1; ; page += 1) {
+    const data = toPaginated<RemnantPlate>(
+      await apiFetch<unknown>(BASE, {
+        params: { ...params, page, page_size: ALL_PAGE_SIZE },
+        signal,
+      }),
+    );
+    for (const plate of data.results) if (!byId.has(plate.id)) byId.set(plate.id, plate);
+    if (!data.next || data.results.length === 0) break;
+  }
+  return [...byId.values()];
+}
+
+export function allRemnantPlatesQueryOptions(
+  params: Omit<RemnantPlatesParams, 'page' | 'page_size'>,
+) {
+  return queryOptions({
+    queryKey: remnantKeys.every(params),
+    queryFn: ({ signal }) => fetchAllRemnantPlates(params, signal),
   });
 }
 
