@@ -41,7 +41,10 @@ test('admin: the section hub shows every card and its live counts', async ({ pag
     'Malzeme Takibi',
     'Depo Çekme Talepleri',
   ]);
-  expect(backend.callsTo('/machines/faults/', 'GET')).toHaveLength(1);
+  // The open-fault count is asked for once, though the band, the Bakım card and
+  // the queue all show it (the fault list panel makes its own request).
+  const faultQueries = backend.callsTo('/machines/faults/', 'GET').map((c) => c.query);
+  expect(faultQueries.filter((q) => q === '?unresolved=true&page_size=1')).toHaveLength(1);
 
   // Into an area hub without a page load.
   await page.evaluate(() => {

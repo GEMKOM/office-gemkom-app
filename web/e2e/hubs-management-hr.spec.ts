@@ -34,7 +34,9 @@ test('admin: quality control hub shows its cards and live counts', async ({ page
   }
   await expect(page.locator('#pending-reviews')).toContainText('7');
   await expect(page.locator('#open-ncrs')).toContainText('12');
-  expect(backend.callsTo('/quality-control/qc-reviews/', 'GET')[0]!.query).toBe('?status=pending&page_size=1');
+  expect(backend.callsTo('/quality-control/qc-reviews/', 'GET').map((c) => c.query)).toContain(
+    '?status=pending&page_size=1',
+  );
   consoleErrors.expectNone();
 });
 

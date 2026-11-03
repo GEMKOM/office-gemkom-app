@@ -1,5 +1,6 @@
 import { queryOptions, type QueryKey } from '@tanstack/react-query';
 import { apiFetch, cleanParams, type QueryParams } from '../client';
+import { listCountQueryOptions } from '../counts';
 import { toPaginated } from '../types';
 
 // Counts for the manufacturing hubs, from one-row pages of lists the legacy
@@ -38,4 +39,77 @@ export function activeTimerCountQueryOptions(module: TimerModule) {
  */
 export function openFaultCountQueryOptions(filter: { is_breaking?: boolean } = {}) {
   return countQueryOptions('machineFaults', '/machines/faults/', { unresolved: true, ...filter });
+}
+
+// ---- counts the manufacturing hubs added later; keys under each list's root ----
+
+/** Machining parts not completed; `lateBefore` keeps those due on or before that day. */
+export function incompletePartCountQueryOptions(lateBefore?: string) {
+  return listCountQueryOptions(
+    ['machiningParts'],
+    '/tasks/parts/',
+    { completion_date__isnull: true, finish_time__lte: lateBefore },
+    SHOP_FLOOR_STALE_TIME,
+  );
+}
+
+/** CNC cuts (nestings) not completed, as the cuts page lists status=pending. */
+export function pendingCncCutCountQueryOptions() {
+  return listCountQueryOptions(
+    ['cncTasks'],
+    '/cnc_cutting/tasks/',
+    { completion_date__isnull: true },
+    SHOP_FLOOR_STALE_TIME,
+  );
+}
+
+/** Linear cutting tasks not completed. */
+export function pendingLinearTaskCountQueryOptions() {
+  return listCountQueryOptions(
+    ['linearCuttingTasks'],
+    '/linear_cutting/tasks/',
+    { completed: false },
+    SHOP_FLOOR_STALE_TIME,
+  );
+}
+
+/** Welding time entries booked for a day. */
+export function weldingEntryCountQueryOptions(date: string) {
+  return listCountQueryOptions(['weldingTimeEntries'], '/welding/time-entries/', { date });
+}
+
+/** Material pull requests the warehouse has not transferred yet. */
+export function pendingPullRequestCountQueryOptions() {
+  return listCountQueryOptions(['materialTracking', 'pullRequests'], '/warehouse/pull-requests/', {
+    status: 'pending',
+  });
+}
+
+/** Subcontractor statements waiting for approval. */
+export function statementsInApprovalCountQueryOptions() {
+  return listCountQueryOptions(
+    ['subcontractingStatements', 'list'],
+    '/subcontracting/statements/',
+    {
+      status: 'submitted',
+    },
+  );
+}
+
+/** Welders whose timesheet for a day waits for approval (daily-status counts.pending). */
+export function pendingTimesheetCountQueryOptions(date: string) {
+  return queryOptions({
+    queryKey: ['welding', 'timesheets', 'daily', date, 'pending'] as QueryKey,
+    queryFn: async ({ signal }) => {
+      const status = await apiFetch<{ counts?: Record<string, number> }>(
+        '/welding/timesheets/daily-status/',
+        {
+          params: { date },
+          signal,
+        },
+      );
+      return status?.counts?.pending ?? 0;
+    },
+    staleTime: SHOP_FLOOR_STALE_TIME,
+  });
 }
