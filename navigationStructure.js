@@ -4,6 +4,11 @@ export const NAVIGATION_STRUCTURE = {
         icon: 'fas fa-home',
         children: {}
     },
+    '/reports': {
+        label: 'Raporlar',
+        icon: 'fas fa-chart-pie',
+        children: {}
+    },
     '/general': {
         label: 'Genel',
         icon: 'fas fa-cogs',
@@ -312,6 +317,16 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-pie',
                         children: {
+                            '/manufacturing/machining/reports/daily-efficiency': {
+                                label: 'Günlük Verimlilik',
+                                icon: 'fas fa-chart-line',
+                                children: {}
+                            },
+                            '/manufacturing/machining/reports/performance': {
+                                label: 'Performans Raporu',
+                                icon: 'fas fa-tachometer-alt',
+                                children: {}
+                            },
                             '/manufacturing/machining/reports/sum-report': {
                                 label: 'Toplam Raporu',
                                 icon: 'fas fa-chart-pie',
@@ -359,11 +374,6 @@ export const NAVIGATION_STRUCTURE = {
                                 label: 'Arıza Listesi',
                                 icon: 'fas fa-list',
                                 children: {}
-                            },
-                            '/manufacturing/maintenance/fault-requests/statistics': {
-                                label: 'Arıza İstatistikleri',
-                                icon: 'fas fa-chart-bar',
-                                children: {}
                             }
                         }
                     },
@@ -376,9 +386,14 @@ export const NAVIGATION_STRUCTURE = {
                                 icon: 'fas fa-file-alt',
                                 children: {}
                             },
-                            '/manufacturing/maintenance/reports/user-resolution': {
-                                label: 'Kullanıcı Çözüm Raporu',
-                                icon: 'fas fa-user-check',
+                            '/manufacturing/maintenance/reports/staff-report': {
+                                label: 'Personel Faaliyet Raporu',
+                                icon: 'fas fa-users-cog',
+                                children: {}
+                            },
+                            '/manufacturing/maintenance/reports/monthly-metrics': {
+                                label: 'Aylık Metrikler',
+                                icon: 'fas fa-chart-bar',
                                 children: {}
                             }
                         }

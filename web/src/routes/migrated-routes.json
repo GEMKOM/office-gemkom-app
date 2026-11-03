@@ -2,6 +2,7 @@
   "/",
   "/login",
   "/login/reset-password",
+  "/reports",
   "/general",
   "/general/crane-requests",
   "/general/department-requests",

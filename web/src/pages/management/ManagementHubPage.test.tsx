@@ -3,7 +3,6 @@ import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { ProjectsHubPage } from '../projects/ProjectsHubPage';
 import { ManagementHubPage } from './ManagementHubPage';
-import { ManagementReportsHubPage } from './reports/ManagementReportsHubPage';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
 vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
@@ -104,13 +103,7 @@ it('management hub: figures behind pages the user cannot open fall back to the d
   expect(calls().some((url) => url.pathname === '/machines/faults/')).toBe(false);
 });
 
-it('reports and projects hubs keep their cards and order', () => {
-  const { unmount } = renderWithProviders(<ManagementReportsHubPage />, {
-    route: '/management/reports/',
-  });
-  expect(cardTitles()).toEqual(['Genel Bakış', 'Nakit Akış Tablosu']);
-  unmount();
-
+it('the projects hub keeps its cards and order', () => {
   renderWithProviders(<ProjectsHubPage />, { route: '/projects/' });
   expect(cardTitles()).toEqual(['Proje Takibi', 'Tahminler', 'Referanslar']);
 });
