@@ -280,38 +280,38 @@ test.describe('rail', () => {
     consoleErrors.expectNone();
   });
 
-  test('the bell lists unread first and marks a notification read', async ({
+  test('the bell groups by day, filters unread and marks notifications read', async ({
     page,
     consoleErrors,
   }) => {
     const session = await seedSession(page, { admin: true });
-    let unread = 1;
+    const minutesAgo = (m: number) => new Date(Date.now() - m * 60_000).toISOString();
+    let unread = 2;
     const backend = await mockBackend(
       page,
       {
         'GET /notifications/unread_count/': () => ({ json: { count: unread } }),
         'GET /notifications/': {
           json: paginated([
-            {
-              id: 71,
-              title: 'Okunmuş bildirim',
-              is_read: true,
-              created_at: '2026-01-02T10:00:00Z',
-              link: null,
-            },
+            { id: 71, title: 'Okunmuş bildirim', is_read: true, created_at: minutesAgo(3 * 24 * 60), link: null },
             {
               id: 72,
               title: 'Yeni bildirim',
               body: 'Onay bekliyor',
               category: 'sales',
               is_read: false,
-              created_at: '2026-01-01T10:00:00Z',
+              created_at: minutesAgo(1),
               link: null,
             },
+            { id: 73, title: 'Diğer yeni bildirim', is_read: false, created_at: minutesAgo(5), link: null },
           ]),
         },
         'POST /notifications/72/mark_read/': () => {
-          unread = 0;
+          unread -= 1;
+          return { json: {} };
+        },
+        'POST /notifications/73/mark_read/': () => {
+          unread -= 1;
           return { json: {} };
         },
       },
@@ -319,25 +319,56 @@ test.describe('rail', () => {
     );
     await page.goto(CUSTOMERS);
     const nav = page.getByRole('navigation', { name: 'Ana menü' });
-    const bell = nav.getByRole('button', { name: 'Bildirimler, 1 okunmamış' });
+    const bell = nav.getByRole('button', { name: 'Bildirimler, 2 okunmamış' });
     await bell.click();
 
     const panel = page.getByRole('dialog');
     const rows = panel.getByRole('listitem');
-    await expect(rows).toHaveCount(2);
-    await expect(rows.first()).toContainText('Yeni bildirim');
+    // Today first (newest first), then earlier.
+    await expect(rows).toHaveCount(3);
+    await expect(panel.getByRole('heading')).toHaveText(['Bugün', 'Daha önce']);
+    await expect(rows.nth(0)).toContainText('Yeni bildirim');
+    await expect(rows.nth(1)).toContainText('Diğer yeni bildirim');
+    await expect(rows.nth(2)).toContainText('Okunmuş bildirim');
     await expect(panel.getByRole('link', { name: 'Tümünü Gör' })).toHaveAttribute(
       'href',
       '/general/notifications',
     );
 
-    await rows.first().getByRole('button').click();
+    await panel.getByRole('radiogroup').getByText('Okunmamış').click();
+    await expect(rows).toHaveCount(2);
+    await expect(panel.getByRole('heading')).toHaveText(['Bugün']);
+
+    // Mark one read without opening it.
+    await rows.nth(1).getByRole('button', { name: 'Okundu işaretle' }).click();
+    await expect.poll(() => backend.callsTo('/notifications/73/mark_read/', 'POST').length).toBe(1);
+    await expect(rows).toHaveCount(1);
+
+    // Opening the other one marks it read as well.
+    await rows.first().getByRole('button').first().click();
     await expect.poll(() => backend.callsTo('/notifications/72/mark_read/', 'POST').length).toBe(1);
     await expect(panel.getByRole('button', { name: 'Tümünü Okundu Yap' })).toBeHidden();
+    await expect(panel.getByText('Okunmamış bildirim yok')).toBeVisible();
+
+    // The rows that held focus are gone from the filtered list; the filter takes it back.
+    await panel.getByRole('radiogroup').getByText('Tümü').click();
+    await expect(rows).toHaveCount(3);
 
     await page.keyboard.press('Escape');
     await expect(panel).toBeHidden();
     await expect(nav.getByRole('button', { name: 'Bildirimler', exact: true })).toBeFocused();
+    consoleErrors.expectNone();
+  });
+
+  test('the bell shows an empty state without notifications', async ({ page, consoleErrors }) => {
+    const session = await seedSession(page, { admin: true });
+    await mockBackend(page, { 'GET /notifications/': { json: paginated([]) } }, { session });
+    await page.goto(CUSTOMERS);
+    await page.getByRole('navigation', { name: 'Ana menü' }).getByRole('button', { name: 'Bildirimler', exact: true }).click();
+    const panel = page.getByRole('dialog');
+    await expect(panel.getByText('Henüz bildiriminiz yok')).toBeVisible();
+    await expect(panel.getByRole('radio')).toHaveCount(0);
+    await expect(panel.getByRole('link', { name: 'Tümünü Gör' })).toBeVisible();
     consoleErrors.expectNone();
   });
 
