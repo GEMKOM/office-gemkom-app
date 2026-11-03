@@ -32,9 +32,13 @@ describe('deadline urgency', () => {
   it('is red from one day left, yellow under three, none for offers with the customer', () => {
     expect(deadlineUrgency({ status: 'draft', offer_expiry_date: '2026-11-04' }, NOW)).toBe('red');
     expect(deadlineUrgency({ status: 'draft', offer_expiry_date: '2026-11-01' }, NOW)).toBe('red');
-    expect(deadlineUrgency({ status: 'pricing', offer_expiry_date: '2026-11-05' }, NOW)).toBe('yellow');
+    expect(deadlineUrgency({ status: 'pricing', offer_expiry_date: '2026-11-05' }, NOW)).toBe(
+      'yellow',
+    );
     expect(deadlineUrgency({ status: 'pricing', offer_expiry_date: '2026-11-06' }, NOW)).toBeNull();
-    expect(deadlineUrgency({ status: 'submitted_customer', offer_expiry_date: '2026-11-01' }, NOW)).toBeNull();
+    expect(
+      deadlineUrgency({ status: 'submitted_customer', offer_expiry_date: '2026-11-01' }, NOW),
+    ).toBeNull();
     expect(deadlineUrgency({ status: 'draft', offer_expiry_date: null }, NOW)).toBeNull();
   });
 });
@@ -75,15 +79,25 @@ describe('pasting items', () => {
       'title',
       'quantity',
     ]);
-    expect(setColumnRole(['title', 'ignore'], 1, 'title', ['quantity'])).toEqual(['title', 'title']);
+    expect(setColumnRole(['title', 'ignore'], 1, 'title', ['quantity'])).toEqual([
+      'title',
+      'title',
+    ]);
   });
 });
 
 describe('pasting prices', () => {
-  const table = parsePasteTable('1250,5\t12\t6 ay\tçok uzun bir açıklama metni burada\n900\t8\t4 ay\tnot');
+  const table = parsePasteTable(
+    '1250,5\t12\t6 ay\tçok uzun bir açıklama metni burada\n900\t8\t4 ay\tnot',
+  );
 
   it('takes the larger numbers as the price, then weight, period and notes', () => {
-    expect(guessPriceColumnRoles(table.rows, 4)).toEqual(['unit_price', 'weight_kg', 'delivery_period', 'notes']);
+    expect(guessPriceColumnRoles(table.rows, 4)).toEqual([
+      'unit_price',
+      'weight_kg',
+      'delivery_period',
+      'notes',
+    ]);
   });
 
   it('skips rows with text in a numeric column', () => {
@@ -109,7 +123,13 @@ const staged = (ref: string, extra: Partial<StagedItem> = {}): StagedItem => ({
 
 describe('kalemler draft', () => {
   const saved: OfferItem[] = [
-    { id: 1, parent: null, sequence: 2, title: 'B', children: [{ id: 3, parent: 1, sequence: 1, title: 'B1' }] },
+    {
+      id: 1,
+      parent: null,
+      sequence: 2,
+      title: 'B',
+      children: [{ id: 3, parent: 1, sequence: 1, title: 'B1' }],
+    },
     { id: 2, parent: null, sequence: 1, title: 'A' },
   ];
   const flat = flatItemMap(saved);
@@ -118,7 +138,7 @@ describe('kalemler draft', () => {
     const draft = [
       staged('item-1'),
       staged('item-2', { parentId: 2 }),
-      staged('item-3', { parentRef: 'item-1', templateNode: 7, titleOverride: '' }),
+      staged('item-3', { parentRef: 'item-1', templateNode: 7, titleOverride: null }),
     ];
     expect(flattenStaged(draft)).toEqual([
       { _ref: 'item-1', quantity: 1, title_override: 'item-1' },
@@ -138,7 +158,10 @@ describe('kalemler draft', () => {
     // A (sequence 1) first; B is deleted; B1 moved under A; staged roots last.
     expect(tree.map((n) => (n.kind === 'existing' ? n.id : n.staged.ref))).toEqual([2, 'item-1']);
     const a = tree[0]!;
-    expect(a.children.map((n) => (n.kind === 'existing' ? n.id : n.staged.ref))).toEqual([3, 'item-2']);
+    expect(a.children.map((n) => (n.kind === 'existing' ? n.id : n.staged.ref))).toEqual([
+      3,
+      'item-2',
+    ]);
     expect(draftBadge(draft)).toBe('+2 ~1 −1');
     expect(draftBadge(EMPTY_DRAFT)).toBe('0');
   });
@@ -148,7 +171,9 @@ describe('kalemler draft', () => {
     expect(wouldCreateCycle(1, 1, flat, EMPTY_DRAFT)).toBe(true);
     expect(wouldCreateCycle(3, 2, flat, EMPTY_DRAFT)).toBe(false);
     // After moving 2 under 3, putting 1 under 2 would loop.
-    expect(wouldCreateCycle(1, 2, flat, { ...EMPTY_DRAFT, edits: { 2: { parent: 3 } } })).toBe(true);
+    expect(wouldCreateCycle(1, 2, flat, { ...EMPTY_DRAFT, edits: { 2: { parent: 3 } } })).toBe(
+      true,
+    );
   });
 });
 
@@ -170,13 +195,26 @@ describe('pricing', () => {
   it('prices root items in flat mode and sums leaves in leaf mode', () => {
     expect(itemSubtotal(items[0]!, 'flat', edits)).toBe(200);
     expect(itemSubtotal(items[0]!, 'leaf', edits)).toBe(30);
-    expect(pricingTotals(items, 'leaf', edits, 50)).toEqual({ itemsTotal: 30, weight: 10, avgKg: 3, shipping: 50, grand: 80 });
+    expect(pricingTotals(items, 'leaf', edits, 50)).toEqual({
+      itemsTotal: 30,
+      weight: 10,
+      avgKg: 3,
+      shipping: 50,
+      grand: 80,
+    });
   });
 
   it('clears the other mode’s prices in the payload', () => {
     const payload = setPricesPayload(items, 'flat', edits, 0);
-    expect(payload.items.find((i) => i.id === 1)).toMatchObject({ unit_price: 100, weight_kg: null });
-    expect(payload.items.find((i) => i.id === 2)).toMatchObject({ unit_price: null, weight_kg: null, quantity: 3 });
+    expect(payload.items.find((i) => i.id === 1)).toMatchObject({
+      unit_price: 100,
+      weight_kg: null,
+    });
+    expect(payload.items.find((i) => i.id === 2)).toMatchObject({
+      unit_price: null,
+      weight_kg: null,
+      quantity: 3,
+    });
   });
 });
 
@@ -196,7 +234,13 @@ describe('approval tab', () => {
       'leaf',
     );
     expect(rows[0]).toMatchObject({ unitPrice: 30, weight: 20, kgPrice: 3, depth: 0 });
-    expect(rows[1]).toMatchObject({ unitPrice: null, weight: 5, kgPrice: 4, subtotal: 40, depth: 1 });
+    expect(rows[1]).toMatchObject({
+      unitPrice: null,
+      weight: 5,
+      kgPrice: 4,
+      subtotal: 40,
+      depth: 1,
+    });
   });
 
   it('summarises workflows newest first with the latest decision', () => {
@@ -214,7 +258,12 @@ describe('approval tab', () => {
               approved_count: 0,
               approvers: [{ id: 5, first_name: 'Ayşe', last_name: 'Kaya' }],
               decisions: [
-                { approver: 5, decision: 'reject', decided_at: '2026-02-02T10:00:00Z', comment: 'Pahalı' },
+                {
+                  approver: 5,
+                  decision: 'reject',
+                  decided_at: '2026-02-02T10:00:00Z',
+                  comment: 'Pahalı',
+                },
               ],
             },
           ],
@@ -223,13 +272,21 @@ describe('approval tab', () => {
       'EUR',
     );
     expect(rows.map((r) => r.status.label)).toEqual(['Devam Ediyor', 'Tamamlandı']);
-    expect(rows[0]).toMatchObject({ stage: 'Müdür', approvers: 'Ayşe Kaya', comment: 'Pahalı', currency: 'EUR' });
+    expect(rows[0]).toMatchObject({
+      stage: 'Müdür',
+      approvers: 'Ayşe Kaya',
+      comment: 'Pahalı',
+      currency: 'EUR',
+    });
     expect(rows[0]!.lastDecision?.label).toBe('Red');
     expect(rows[0]!.lastDecisionBy).toBe('#5');
   });
 });
 
 it('lists the customer fields a conversion needs', () => {
-  expect(missingCustomerFields({ phone: '1', address: ' ', tax_id: 'x' })).toEqual(['Adres', 'Vergi Dairesi']);
+  expect(missingCustomerFields({ phone: '1', address: ' ', tax_id: 'x' })).toEqual([
+    'Adres',
+    'Vergi Dairesi',
+  ]);
   expect(missingCustomerFields(null)).toHaveLength(4);
 });

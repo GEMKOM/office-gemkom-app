@@ -12,6 +12,7 @@
   "/sales",
   "/sales/customers",
   "/sales/catalog",
+  "/sales/offers",
   "/manufacturing",
   "/manufacturing/cnc-cutting",
   "/manufacturing/cnc-cutting/capacity",

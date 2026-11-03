@@ -61,7 +61,8 @@ export const offerTemplateKeys = {
 export function offerTemplatesQueryOptions() {
   return queryOptions({
     queryKey: offerTemplateKeys.list(),
-    queryFn: async ({ signal }) => extractResults<OfferTemplate>(await apiFetch<unknown>(`${BASE}/`, { signal })),
+    queryFn: async ({ signal }) =>
+      extractResults<OfferTemplate>(await apiFetch<unknown>(`${BASE}/`, { signal })),
   });
 }
 
@@ -92,7 +93,9 @@ export function templateRootNodesQueryOptions(templateId: number) {
   return queryOptions({
     queryKey: [...offerTemplateKeys.detail(templateId), 'roots'] as const,
     queryFn: async ({ signal }) =>
-      extractResults<TemplateNode>(await apiFetch<unknown>(`${BASE}/${templateId}/nodes/`, { signal })),
+      extractResults<TemplateNode>(
+        await apiFetch<unknown>(`${BASE}/${templateId}/nodes/`, { signal }),
+      ),
   });
 }
 
@@ -119,7 +122,8 @@ export function useOfferTemplateMutations() {
   const invalidate = () => queryClient.invalidateQueries({ queryKey: offerTemplateKeys.all });
   return {
     createTemplate: useMutation({
-      mutationFn: (data: TemplateInput) => apiFetch<OfferTemplate>(`${BASE}/`, { method: 'POST', body: data }),
+      mutationFn: (data: TemplateInput) =>
+        apiFetch<OfferTemplate>(`${BASE}/`, { method: 'POST', body: data }),
       onSuccess: invalidate,
     }),
     patchTemplate: useMutation({
@@ -133,8 +137,19 @@ export function useOfferTemplateMutations() {
       onSuccess: invalidate,
     }),
     patchNode: useMutation({
-      mutationFn: ({ templateId, nodeId, data }: { templateId: number; nodeId: number; data: NodeInput }) =>
-        apiFetch<TemplateNode>(`${BASE}/${templateId}/nodes/${nodeId}/`, { method: 'PATCH', body: data }),
+      mutationFn: ({
+        templateId,
+        nodeId,
+        data,
+      }: {
+        templateId: number;
+        nodeId: number;
+        data: NodeInput;
+      }) =>
+        apiFetch<TemplateNode>(`${BASE}/${templateId}/nodes/${nodeId}/`, {
+          method: 'PATCH',
+          body: data,
+        }),
       onSuccess: invalidate,
     }),
     deleteNode: useMutation({

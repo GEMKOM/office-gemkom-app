@@ -25,7 +25,8 @@ export const APPROVAL_CANCELLING_STATUSES = ['pending_approval', 'approved', 'su
 export const canSubmitApproval = (offer: Pick<OfferDetail, 'status' | 'total_price'>) =>
   offer.status === 'pricing' && Number.parseFloat(String(offer.total_price ?? '')) > 0;
 
-export type OfferTab = 'genel' | 'kalemler' | 'dosyalar' | 'consultations' | 'pricing' | 'approval' | 'tahmin';
+export type OfferTab =
+  'genel' | 'kalemler' | 'dosyalar' | 'consultations' | 'pricing' | 'approval' | 'tahmin';
 
 export const TAB_LABELS: Record<OfferTab, string> = {
   genel: 'Genel',
@@ -111,7 +112,13 @@ export function money(amount: number, currency: string, decimals: number): strin
 // ── Titles ───────────────────────────────────────────────────────────
 
 export function itemTitle(item: OfferItem): string {
-  return item.resolved_title || item.title_override || item.title || item.template_node_detail?.title || '-';
+  return (
+    item.resolved_title ||
+    item.title_override ||
+    item.title ||
+    item.template_node_detail?.title ||
+    '-'
+  );
 }
 
 /** The catalog title an override replaced (template_node_detail.title, else title). */
@@ -296,7 +303,12 @@ export function buildPastePrices(rows: string[][], roles: PriceColumnRole[]): Pa
 }
 
 /** A role picked for one column leaves the columns that had it (quantity, and every price role). */
-export function setColumnRole<R extends string>(roles: R[], index: number, role: R, exclusive: readonly R[]): R[] {
+export function setColumnRole<R extends string>(
+  roles: R[],
+  index: number,
+  role: R,
+  exclusive: readonly R[],
+): R[] {
   if (!exclusive.includes(role)) return roles.map((r, i) => (i === index ? role : r));
   return roles.map((r, i) => (i === index ? role : r === role ? ('ignore' as R) : r));
 }
@@ -307,7 +319,8 @@ export function setColumnRole<R extends string>(roles: R[], index: number, role:
 export interface StagedItem {
   ref: string;
   templateNode: number | null;
-  titleOverride: string;
+  /** null until the catalog title is edited. */
+  titleOverride: string | null;
   quantity: number;
   /** Under another staged row. */
   parentRef: string | null;
@@ -437,7 +450,11 @@ export function flatItemMap(items: readonly OfferItem[]): Record<number, OfferIt
 }
 
 /** The effective parent of a saved item, honouring a pending move. */
-function effectiveParent(id: number, flat: Record<number, OfferItem>, draft: ItemsDraft): number | null {
+function effectiveParent(
+  id: number,
+  flat: Record<number, OfferItem>,
+  draft: ItemsDraft,
+): number | null {
   const edit = draft.edits[id];
   if (edit && edit.parent !== undefined) return edit.parent;
   return flat[id]?.parent ?? null;
@@ -497,7 +514,11 @@ export function isPriceEditable(item: OfferItem, mode: PricingMode): boolean {
 }
 
 /** In leaf mode a parent sums its children; otherwise unit price × quantity. */
-export function itemSubtotal(item: OfferItem, mode: PricingMode, edits: Record<number, PriceEdit>): number | null {
+export function itemSubtotal(
+  item: OfferItem,
+  mode: PricingMode,
+  edits: Record<number, PriceEdit>,
+): number | null {
   const edit = edits[item.id];
   if (!edit) return null;
   if (mode === 'leaf' && item.children?.length) {
@@ -515,7 +536,11 @@ export function itemSubtotal(item: OfferItem, mode: PricingMode, edits: Record<n
   return edit.unit_price !== null ? edit.unit_price * (edit.quantity || 1) : null;
 }
 
-export function itemWeightTotal(item: OfferItem, mode: PricingMode, edits: Record<number, PriceEdit>): number | null {
+export function itemWeightTotal(
+  item: OfferItem,
+  mode: PricingMode,
+  edits: Record<number, PriceEdit>,
+): number | null {
   const edit = edits[item.id];
   if (!edit) return null;
   if (mode === 'leaf' && item.children?.length) {
@@ -533,7 +558,12 @@ export function itemWeightTotal(item: OfferItem, mode: PricingMode, edits: Recor
   return edit.weight_kg !== null ? edit.weight_kg * (edit.quantity || 1) : null;
 }
 
-export function pricingTotals(items: readonly OfferItem[], mode: PricingMode, edits: Record<number, PriceEdit>, shipping: number) {
+export function pricingTotals(
+  items: readonly OfferItem[],
+  mode: PricingMode,
+  edits: Record<number, PriceEdit>,
+  shipping: number,
+) {
   let itemsTotal = 0;
   let weight = 0;
   for (const root of items) {
@@ -595,7 +625,12 @@ function rollup(node: OfferItem): Rollup {
   const selfWeight = unitWeight !== null ? unitWeight * (qty || 1) : null;
   const selfSubtotal = parseNum(node.subtotal);
   if (!node.children?.length) {
-    return { priceTotal: selfSubtotal, weightTotal: selfWeight, leavesPriceTotal: selfSubtotal, leavesWeightTotal: selfWeight };
+    return {
+      priceTotal: selfSubtotal,
+      weightTotal: selfWeight,
+      leavesPriceTotal: selfSubtotal,
+      leavesWeightTotal: selfWeight,
+    };
   }
   let priceTotal = selfSubtotal;
   let weightTotal = selfWeight;
@@ -647,10 +682,15 @@ export function approvalItemRows(items: readonly OfferItem[], mode: string): App
       const qty = node.quantity != null ? Number.parseInt(String(node.quantity), 10) : 1;
       const unitPrice = parseNum(node.unit_price);
       const weightKg = parseNum(node.weight_kg);
-      const subtotal = parseNum(node.subtotal) ?? (unitPrice !== null ? unitPrice * (qty || 1) : null);
+      const subtotal =
+        parseNum(node.subtotal) ?? (unitPrice !== null ? unitPrice * (qty || 1) : null);
       const parentLeaf = mode === 'leaf' && Boolean(node.children?.length);
       const r = parentLeaf ? rollup(node) : null;
-      const lineWeight = parentLeaf ? (r?.weightTotal ?? null) : weightKg !== null ? weightKg * (qty || 1) : null;
+      const lineWeight = parentLeaf
+        ? (r?.weightTotal ?? null)
+        : weightKg !== null
+          ? weightKg * (qty || 1)
+          : null;
       rows.push({
         key: String(node.id),
         depth,
@@ -680,7 +720,12 @@ export function approvalItemRows(items: readonly OfferItem[], mode: string): App
 
 export function personName(user: ApprovalUser | null | undefined): string {
   if (!user) return '';
-  return user.full_name || [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username || '';
+  return (
+    user.full_name ||
+    [user.first_name, user.last_name].filter(Boolean).join(' ') ||
+    user.username ||
+    ''
+  );
 }
 
 export interface WorkflowRow {
@@ -701,7 +746,10 @@ export interface WorkflowRow {
 }
 
 /** The "Onay Geçmişi" table: one row per workflow, newest first. */
-export function workflowRows(workflows: readonly ApprovalWorkflow[], currency: string): WorkflowRow[] {
+export function workflowRows(
+  workflows: readonly ApprovalWorkflow[],
+  currency: string,
+): WorkflowRow[] {
   return workflows
     .slice()
     .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
@@ -748,7 +796,9 @@ export function workflowRows(workflows: readonly ApprovalWorkflow[], currency: s
 }
 
 /** Customer fields a job order needs (legacy getMissingCustomerFieldsForConversion). */
-export function missingCustomerFields(detail: Record<string, unknown> | null | undefined): string[] {
+export function missingCustomerFields(
+  detail: Record<string, unknown> | null | undefined,
+): string[] {
   const fields = [
     { key: 'phone', label: 'Telefon' },
     { key: 'address', label: 'Adres' },
@@ -756,7 +806,9 @@ export function missingCustomerFields(detail: Record<string, unknown> | null | u
     { key: 'tax_office', label: 'Vergi Dairesi' },
   ];
   if (!detail) return fields.map((f) => f.label);
-  return fields.filter((f) => !detail[f.key] || String(detail[f.key]).trim() === '').map((f) => f.label);
+  return fields
+    .filter((f) => !detail[f.key] || String(detail[f.key]).trim() === '')
+    .map((f) => f.label);
 }
 
 /** Legacy toDateInputValue: an API date as YYYY-MM-DD. */
@@ -787,5 +839,11 @@ export function shortDateTime(value: string | null | undefined): string {
   if (!value) return '-';
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return '-';
-  return d.toLocaleString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleString('tr-TR', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

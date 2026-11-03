@@ -346,7 +346,11 @@ export interface ApprovalWorkflow {
   is_complete?: boolean;
   is_rejected?: boolean;
   is_cancelled?: boolean;
-  snapshot?: { round?: number | null; amount?: string | number | null; currency?: string | null } | null;
+  snapshot?: {
+    round?: number | null;
+    amount?: string | number | null;
+    currency?: string | null;
+  } | null;
   stage_instances?: ApprovalStage[];
 }
 
@@ -516,7 +520,10 @@ export function resolveOfferQueryOptions(offerNo: string) {
       const page = await listOffers({ search: offerNo, page: 1, page_size: 25 }, signal);
       const wanted = offerNo.trim().toLowerCase();
       const exact = page.results.find(
-        (o) => String(o.offer_no || '').trim().toLowerCase() === wanted,
+        (o) =>
+          String(o.offer_no || '')
+            .trim()
+            .toLowerCase() === wanted,
       );
       if (exact?.id) return exact.id;
       if (page.results.length === 1 && page.results[0]?.id) return page.results[0].id;
