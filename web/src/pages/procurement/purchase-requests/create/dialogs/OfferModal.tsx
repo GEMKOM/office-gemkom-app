@@ -1,5 +1,6 @@
 import { Alert, Button, Group, Modal, Table, Text, TextInput } from '@mantine/core';
 import { useRef, useState, type KeyboardEvent } from 'react';
+import { formatNumber } from '@/lib/format';
 import { ModalBody, ModalFooter, ModalHeader, modalClassNames, notify } from '@/ui';
 import { CURRENCY_SYMBOLS } from '../../shared/comparison';
 import { buildOffer, type OfferRow, type PrItem, type PrOffer, type PrSupplier } from '../model';
@@ -143,7 +144,7 @@ export function OfferModal({
                       />
                     </Table.Td>
                   ))}
-                  <Table.Td>{(price * item.quantity).toFixed(2)}</Table.Td>
+                  <Table.Td>{formatNumber(price * item.quantity, 2)}</Table.Td>
                 </Table.Tr>
               );
             })}
