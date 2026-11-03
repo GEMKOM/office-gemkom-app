@@ -2,6 +2,7 @@ import { createBrowserRouter, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
 import { RootLayout } from '@/shell/RootLayout';
+import { RouteLoading } from './RouteLoading';
 
 const hub: RouteAccessHandle = { access: 'hub' };
 
@@ -1098,11 +1099,18 @@ export const publicRoutes: RouteObject[] = [
   },
 ];
 
+// The pathless top route only gives the first load something to show while
+// the opened page's lazy chunk loads (React Router warns without one).
 export const routeTree: RouteObject[] = [
-  ...publicRoutes,
   {
-    Component: RootLayout,
-    children: [...appRoutes, ...devRoutes, { path: '*', Component: NotFound }],
+    HydrateFallback: RouteLoading,
+    children: [
+      ...publicRoutes,
+      {
+        Component: RootLayout,
+        children: [...appRoutes, ...devRoutes, { path: '*', Component: NotFound }],
+      },
+    ],
   },
 ];
 
