@@ -25,6 +25,7 @@ export const EDITABLE_STATUS_OPTIONS = [
 export const STORAGE_KEYS = {
   columns: 'imalatPlanlama.columns',
   zoom: 'imalatPlanlama.zoom',
+  zoomScale: 'imalatPlanlama.zoomScale',
   gridWidth: 'imalatPlanlama.gridWidth',
   sort: 'imalatPlanlama.sort',
   scope: 'imalatPlanlama.scope',

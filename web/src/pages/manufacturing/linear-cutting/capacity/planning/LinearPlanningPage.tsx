@@ -27,14 +27,21 @@ import {
   PageHeader,
   Panel,
   useUrlFilters,
+  type CellEdit,
   type DataTableColumn,
   type DetailSection,
   type FilterConfig,
+  type RowMove,
 } from '@/ui';
 import { Gantt, machineCalendarWindows, type GanttBarChange } from '@/ui/Gantt';
 import { cuttingGantt, type TaskBar } from '../../../capacity-shared/ganttAdapters';
 import { MachineList, type MachineListItem } from '../../../capacity-shared/MachineList';
-import { cuttingSaveItems } from '../../../capacity-shared/planLogic';
+import {
+  cuttingSaveItems,
+  moveInQueue,
+  orderEditor,
+  reorderCutting,
+} from '../../../capacity-shared/planLogic';
 import { SaveStatus, useBeforeUnload, usePlanDraft } from '../../../capacity-shared/usePlanDraft';
 
 const MODULE = 'linear_cutting';
@@ -220,6 +227,7 @@ export function LinearPlanningPage() {
         width: '6%',
         sortable: true,
         render: (r) => String(r.plan_order ?? '-'),
+        editable: orderEditor(() => planned.length),
       },
       { ...keyLink, width: '18%' },
       { key: 'name', header: 'Ad', width: '36%', sortable: true },
@@ -238,7 +246,7 @@ export function LinearPlanningPage() {
         render: (r) => formatDateTime(r.planned_start_ms),
       },
     ];
-  }, []);
+  }, [planned.length]);
   const unplannedColumns = useMemo(
     () => columns.filter((c) => c.key !== 'plan_order' && c.key !== 'planned_start_ms'),
     [columns],
@@ -250,6 +258,25 @@ export function LinearPlanningPage() {
         new Map([[change.bar.id, { planned_start_ms: change.start, planned_end_ms: change.end }]]),
       ),
     [draft],
+  );
+
+  // Queue order: drag in the table or the timeline, or type a new "#" (legacy
+  // had neither here; the CNC planner did). Saved with "Planı Kaydet".
+  const onOrderEdit = useCallback(
+    ({ row, columnKey, value }: CellEdit<CuttingPlanTask>) => {
+      if (columnKey === 'plan_order' && typeof value === 'number')
+        draft.edit(moveInQueue(planned, row.key, value));
+    },
+    [draft, planned],
+  );
+  const onTableReorder = useCallback(
+    (_ids: string[], move: RowMove) => draft.edit(moveInQueue(planned, move.id, move.to + 1)),
+    [draft, planned],
+  );
+  const onRowReorder = useCallback(
+    (key: string, target: string, position: 'before' | 'after') =>
+      draft.edit(reorderCutting(tasks, key, target, position)),
+    [draft, tasks],
   );
 
   const save = async () => {
@@ -345,6 +372,8 @@ export function LinearPlanningPage() {
                   loading={loadingRows}
                   sortable
                   striped
+                  reorder={{ onReorder: onTableReorder }}
+                  onCellEdit={onOrderEdit}
                   emptyMessage="Görev bulunamadı"
                 />
                 {showUnplanned ? (
@@ -367,6 +396,7 @@ export function LinearPlanningPage() {
                   defaultScale="month"
                   editable={{ move: true, resize: true }}
                   onBarChange={onBarChange}
+                  onRowReorder={onRowReorder}
                   onBarOpen={(bar) => setDetailKey(bar.task.key)}
                   workingWindows={workingWindows}
                   loading={loadingRows}

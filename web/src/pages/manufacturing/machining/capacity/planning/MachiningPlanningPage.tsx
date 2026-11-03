@@ -33,7 +33,9 @@ import {
   Panel,
   StatusBadge,
   useUrlFilters,
+  type CellEdit,
   type DataTableColumn,
+  type RowMove,
 } from '@/ui';
 import { Gantt, machineCalendarWindows } from '@/ui/Gantt';
 import {
@@ -42,7 +44,12 @@ import {
   UNPLANNED_GROUP,
 } from '../../../capacity-shared/ganttAdapters';
 import { MachineList, type MachineListItem } from '../../../capacity-shared/MachineList';
-import { machiningSaveItems, reorderMachining } from '../../../capacity-shared/planLogic';
+import {
+  machiningSaveItems,
+  moveMachiningTo,
+  orderEditor,
+  reorderMachining,
+} from '../../../capacity-shared/planLogic';
 import { SaveStatus, useBeforeUnload, usePlanDraft } from '../../../capacity-shared/usePlanDraft';
 
 const EMPTY: MachiningPlanOperation[] = [];
@@ -207,7 +214,22 @@ export function MachiningPlanningPage() {
     apply({ machine: String(machine.id) });
   };
 
-  // ---- queue order (legacy: drag rows in the table; here: in the Gantt) ----
+  // ---- queue order: drag in the table (legacy) or the Gantt, or type a new "Sıra" ----
+  // A moved row is locked and an unplanned one joins the queue, as legacy.
+  const plannedCount = useMemo(() => ops.filter((t) => t.in_plan).length, [ops]);
+  const onOrderEdit = useCallback(
+    ({ row, columnKey, value }: CellEdit<MachiningPlanOperation>) => {
+      if (columnKey === 'plan_order' && typeof value === 'number')
+        draft.edit(moveMachiningTo(ops, row.key, value), [row.key]);
+    },
+    [draft, ops],
+  );
+  const onTableReorder = useCallback(
+    // The table lists the queue first, so a drop below it is the end of the queue.
+    (_ids: string[], move: RowMove) =>
+      draft.edit(moveMachiningTo(ops, move.id, move.to + 1), [move.id]),
+    [draft, ops],
+  );
   const onRowReorder = useCallback(
     (key: string, targetKey: string, position: 'before' | 'after') => {
       let target = targetKey;
@@ -320,6 +342,8 @@ export function MachiningPlanningPage() {
             {r.plan_order || '-'}
           </Text>
         ),
+        // An unplanned row can take one more place: the end of the queue.
+        editable: orderEditor((r) => plannedCount + (r.in_plan ? 0 : 1)),
       },
       {
         key: 'key',
@@ -531,11 +555,10 @@ export function MachiningPlanningPage() {
         },
       },
     ],
-    [toggleLock],
+    [toggleLock, plannedCount],
   );
 
   const loadingRows = Boolean(selectedId) && planQuery.isFetching;
-  const plannedCount = ops.filter((t) => t.in_plan).length;
   const figure = (n: number) =>
     selectedId && !planQuery.isPending ? n.toLocaleString('tr-TR') : '–';
 
@@ -598,8 +621,8 @@ export function MachiningPlanningPage() {
               <Text size="sm" c="dimmed">
                 <FaIcon icon="fas fa-info-circle" style={{ marginRight: 6 }} />
                 Tarihler termine göre otomatik hesaplanır; sırayı sabitlemek için satırı kilitleyin.
-                Sırayı değiştirmek için zaman çizelgesinde satırı tutamağından sürükleyin (veya
-                Alt+↑/↓).
+                Sırayı değiştirmek için satırı tablo ya da zaman çizelgesinde tutamağından
+                sürükleyin veya Sıra hücresine yeni sırayı yazın; taşınan satır kilitlenir.
               </Text>
               <DataTable
                 title="Planlanmış Operasyonlar"
@@ -610,6 +633,8 @@ export function MachiningPlanningPage() {
                 loading={loadingRows}
                 sortable
                 rowStyle={(r) => (r.in_plan ? undefined : { background: '#f1f3f5' })}
+                reorder={{ onReorder: onTableReorder }}
+                onCellEdit={onOrderEdit}
                 onRefresh={() =>
                   selectedId ? void refetch() : notify.warning('Önce bir makine seçin')
                 }
