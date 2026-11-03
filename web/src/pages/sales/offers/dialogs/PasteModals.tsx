@@ -102,9 +102,7 @@ function PasteBody({
           label="Yapıştır"
           placeholder={placeholder}
           description={help}
-          autosize
-          minRows={6}
-          maxRows={14}
+          rows={6}
           data-autofocus
           classNames={{ input: css.mono }}
           value={text}
