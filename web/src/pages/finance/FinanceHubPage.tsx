@@ -170,7 +170,6 @@ export function FinanceHubPage() {
       title="Finans Modülü"
       subtitle="Finansal süreçlerinizi yönetin ve mali durumunuzu takip edin"
       stats={stats}
-      compact={canOrders}
       cards={cards}
     >
       {canOrders ? (

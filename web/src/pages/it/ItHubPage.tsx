@@ -269,7 +269,6 @@ export function ItHubPage() {
       title="Bilgi İşlem Departmanı"
       subtitle="IT sistemlerini yönetin, teknik destek sağlayın ve güvenlik süreçlerini takip edin"
       stats={figures}
-      compact={queues.length > 0}
       cards={cards}
     >
       {queues.length > 0 ? (

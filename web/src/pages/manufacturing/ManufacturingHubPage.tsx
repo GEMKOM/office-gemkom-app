@@ -331,7 +331,9 @@ export function ManufacturingHubPage() {
       title={hub.title}
       subtitle={hub.subtitle}
       stats={stats}
-      compact={shown.length > 0}
+      // Compact cards only where no card lists feature links: a tall feature card
+      // would leave its compact neighbours mostly empty.
+      compact={shown.length > 0 && hub.cards.every((card) => !card.features?.length)}
       cards={cards}
     >
       {shown.length > 0 ? (

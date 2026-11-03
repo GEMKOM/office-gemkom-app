@@ -249,7 +249,6 @@ export function ProcurementHubPage() {
       title="Satın Alma Modülü"
       subtitle="Tedarik süreçlerinizi yönetin ve optimize edin"
       stats={stats}
-      compact={panels}
       cards={cards}
     >
       {panels ? (
