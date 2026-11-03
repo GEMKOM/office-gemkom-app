@@ -40,6 +40,14 @@ export interface ApprovalContext {
   departmentCode: string | null;
 }
 
+/** The user's department code, from their position or, failing that, their own record. */
+export function userDepartment(user: {
+  position?: { department_code?: unknown } | null;
+  department_code?: string | null;
+}): string | null {
+  return (typeof user.position?.department_code === 'string' && user.position.department_code) || user.department_code || null;
+}
+
 const priority = (row: Row): HubRecord['status'] => {
   if (row.priority === 'critical') return { label: 'Kritik', color: 'red' };
   if (row.priority === 'urgent') return { label: 'Acil', color: 'orange' };

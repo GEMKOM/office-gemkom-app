@@ -2,8 +2,7 @@ import { expect, mockBackend, paginated, seedSession, test } from './fixtures';
 
 // The landing page and the Genel / Bilgi İşlem / İSG hubs (MenuCards).
 // Contracts used here:
-//   /                       the personal home; under it "Çalışma Alanları",
-//                           one card per work area
+//   /                       the personal home; no work-area cards (the menu has them)
 //   /general/               title "Genel Modülü"; Mesailer shows a pill when
 //                           GET /overtime/requests/pending_approval/ counts any
 //   /general/overtime/      title "Mesai Talepleri"
@@ -34,15 +33,18 @@ test('admin: landing page -> Genel -> Mesailer, all client-side', async ({ page,
   await page.goto('/');
   const main = page.getByRole('main');
   await expect(main.getByRole('heading', { level: 1, name: /, E2E$/ })).toBeVisible();
-  await expect(main.getByRole('heading', { level: 2, name: 'Çalışma Alanları' })).toBeVisible();
-  expect(await cardTitles(page)).toHaveLength(14);
+  await expect(main.getByRole('heading', { name: 'Çalışma Alanları' })).toHaveCount(0);
+  expect(await cardTitles(page)).toHaveLength(0);
   await expect(page.locator('#root')).toHaveCount(1);
 
   // A full page load would wipe this.
   await page.evaluate(() => {
     window.__spaMarker = 'still-here';
   });
-  await main.getByRole('link', { name: 'Genel', exact: true }).click();
+  // The menu's Genel entry wears the red badge for the 4 overtime requests waiting.
+  const genel = page.getByRole('navigation', { name: 'Ana menü' }).getByRole('button', { name: 'Genel, 4 bekleyen' });
+  await expect(genel).toBeVisible();
+  await genel.click();
   await expect(page).toHaveURL(/\/general\/?$/);
   await expect(main.getByRole('heading', { level: 1, name: 'Genel Modülü' })).toBeVisible();
   const overtime = main.locator('article').filter({ has: page.getByRole('heading', { name: 'Mesailer' }) });
@@ -63,8 +65,8 @@ test.describe('a user with only some grants', () => {
     const backend = await mockBackend(page, {}, { session });
 
     await page.goto('/');
-    await expect(page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' })).toBeVisible();
-    await expect.poll(() => cardTitles(page)).toEqual(['Genel', 'Satış']);
+    await expect(page.getByRole('main').getByRole('heading', { level: 1, name: /, E2E$/ })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('heading', { name: 'Çalışma Alanları' })).toHaveCount(0);
 
     await page.goto('/general/');
     await expect.poll(() => cardTitles(page)).toEqual(['Mesailer', 'İSG Bildirimleri', 'Tartışmalarım']);

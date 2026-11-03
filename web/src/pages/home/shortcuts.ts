@@ -1,8 +1,9 @@
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { findNavPage, topVisitedRoutes, type NavPage } from '@/shell/pageVisits';
 
-// "Kısayollar": the pages the user opens most on this browser, topped up with
-// their department's everyday pages until there are enough.
+// "Kısayollar": the pages the user pinned, then those they open most on this
+// browser, topped up with their department's everyday pages until there are
+// enough.
 
 /** Department names by users' department_code (organization's seed data). */
 export const DEPARTMENT_LABELS: Record<string, string> = {
@@ -72,17 +73,33 @@ const COMMON_PAGES = ['/general/vacation/requests', '/general/overtime/registry'
 
 export const SHORTCUT_COUNT = 6;
 
-export function shortcuts(userId: number, departmentCode: string | null, limit = SHORTCUT_COUNT): NavPage[] {
+export interface Shortcut extends NavPage {
+  pinned: boolean;
+}
+
+/**
+ * The pinned pages first (all of them), then the most visited ones, then the
+ * department's and everyone's everyday pages, up to `limit` in all. Pages the
+ * user cannot open are left out.
+ */
+export function shortcuts(
+  userId: number,
+  departmentCode: string | null,
+  pinned: readonly string[] = [],
+  limit = SHORTCUT_COUNT,
+): Shortcut[] {
   const candidates = [
+    ...pinned,
     ...topVisitedRoutes(userId, limit * 2),
     ...(departmentCode ? (DEPARTMENT_PAGES[departmentCode] ?? []) : []),
     ...COMMON_PAGES,
   ];
-  const pages: NavPage[] = [];
+  const pages: Shortcut[] = [];
   for (const route of new Set(candidates)) {
-    if (pages.length >= limit) break;
+    const isPinned = pinned.includes(route);
+    if (!isPinned && pages.length >= limit) break;
     const page = findNavPage(route);
-    if (page && hasRouteAccess(route)) pages.push(page);
+    if (page && hasRouteAccess(route)) pages.push({ ...page, pinned: isPinned });
   }
   return pages;
 }
