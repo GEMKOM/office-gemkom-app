@@ -9,6 +9,7 @@ import type {
   MachiningPlanOperation,
   MachiningPlanSaveItem,
 } from '@/api/manufacturing/capacityPlanning';
+import type { ColumnEditor } from '@/ui';
 import { localDateKey, parseClock, type MachineCalendar } from '@/ui/Gantt';
 
 export type Patches<T> = Map<string, Partial<T>>;
@@ -63,6 +64,51 @@ function byPlanOrder<T extends { plan_order?: number | null }>(a: T, b: T): numb
 function hours(value: unknown): number {
   const n = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+// ---------------------------------------------------------------------------
+// Queue order (drag in the table, or type a new "Sıra")
+
+/**
+ * `keys` with `key` moved to place `position` (1-based): the rows in between
+ * shift by one, so places stay 1..n. Out-of-range places clamp to the first
+ * or last; a position that is not a number changes nothing.
+ */
+export function moveToPosition(keys: readonly string[], key: string, position: number): string[] {
+  if (!keys.includes(key) || !Number.isFinite(position)) return [...keys];
+  const rest = keys.filter((k) => k !== key);
+  const at = Math.min(Math.max(Math.trunc(position), 1), keys.length) - 1;
+  rest.splice(at, 0, key);
+  return rest;
+}
+
+/** plan_order 1..n in the order of `keys`, for the rows whose number changes. */
+export function renumber<T extends Keyed & { plan_order?: number | null }>(
+  rows: readonly T[],
+  keys: readonly string[],
+): Patches<T> {
+  const current = new Map(rows.map((r) => [r.key, r.plan_order]));
+  const patches: Patches<T> = new Map();
+  keys.forEach((key, i) => {
+    if (current.get(key) !== i + 1) patches.set(key, { plan_order: i + 1 } as Partial<T>);
+  });
+  return patches;
+}
+
+/**
+ * The "Sıra" cell editor: a whole number from 1 to `max(row)` (the queue
+ * length, or one more for a row that would join the queue).
+ */
+export function orderEditor<T>(max: (row: T) => number): ColumnEditor<T> {
+  return {
+    type: 'number',
+    validate: (value, row) => {
+      const last = max(row);
+      return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= last
+        ? true
+        : `1 ile ${last} arasında bir sıra girin`;
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -138,6 +184,48 @@ export function reorderCutting(
   const target = planned.findIndex((t) => t.key === targetKey);
   planned.splice(position === 'before' ? target : target + 1, 0, dragged!);
   return new Map(planned.map((t, i) => [t.key, { plan_order: i + 1 }]));
+}
+
+/**
+ * Moves a planned row to place `position` of `queue` (the planned rows as the
+ * table shows them); the others shift and every row is renumbered 1..n.
+ */
+export function moveInQueue(
+  queue: readonly CuttingPlanTask[],
+  key: string,
+  position: number,
+): Patches<CuttingPlanTask> {
+  if (!queue.some((t) => t.key === key)) return new Map();
+  return renumber(
+    queue,
+    moveToPosition(
+      queue.map((t) => t.key),
+      key,
+      position,
+    ),
+  );
+}
+
+/**
+ * "Görev Düzenle": the fields as given; a new "Sıra" moves the row in the
+ * queue instead of copying the number (legacy could leave two rows on one
+ * place). An emptied "Sıra" keeps the row where it is.
+ */
+export function editPlannedTask(
+  queue: readonly CuttingPlanTask[],
+  key: string,
+  values: Pick<
+    Partial<CuttingPlanTask>,
+    'planned_start_ms' | 'planned_end_ms' | 'plan_order' | 'plan_locked'
+  >,
+): Patches<CuttingPlanTask> {
+  const { plan_order: order, ...fields } = values;
+  const patches: Patches<CuttingPlanTask> = new Map([[key, { ...fields }]]);
+  if (order != null) {
+    for (const [k, patch] of moveInQueue(queue, key, order))
+      patches.set(k, { ...patches.get(k), ...patch });
+  }
+  return patches;
 }
 
 /** "Plana Ekle": last in the queue, unlocked, no dates. */
@@ -332,9 +420,31 @@ export function autoschedule(
 // Machining queue
 
 /**
- * Legacy reorderTasks of the machining planner: the dragged row joins the
- * plan, is locked (the server keeps hand-placed rows where they are) and every
- * planned row is numbered by its place in planned-then-unplanned order.
+ * Moves an operation to place `position` of the queue (planned rows by
+ * plan_order). An unplanned row joins the queue there. As in legacy the moved
+ * row is locked (the server keeps hand-placed rows where they are); the
+ * queue is renumbered 1..n.
+ */
+export function moveMachiningTo(
+  tasks: readonly MachiningPlanOperation[],
+  key: string,
+  position: number,
+): Patches<MachiningPlanOperation> {
+  const moved = tasks.find((t) => t.key === key);
+  if (!moved || !Number.isFinite(position)) return new Map();
+  const queue = tasks.filter((t) => t.in_plan).sort(byPlanOrder);
+  const keys = queue.map((t) => t.key);
+  if (!moved.in_plan) keys.push(key);
+  const patches = renumber(tasks, moveToPosition(keys, key, position));
+  patches.set(key, { ...patches.get(key), in_plan: true, plan_locked: true });
+  return patches;
+}
+
+/**
+ * Legacy reorderTasks of the machining planner (drop on a row): the dragged
+ * row goes before/after the target in planned-then-unplanned order. Legacy
+ * numbered planned rows by that combined place, which left gaps when a row
+ * was dropped among the unplanned ones; here it lands at the end of the queue.
  */
 export function reorderMachining(
   tasks: readonly MachiningPlanOperation[],
@@ -343,25 +453,12 @@ export function reorderMachining(
   position: 'before' | 'after',
 ): Patches<MachiningPlanOperation> {
   const planned = tasks.filter((t) => t.in_plan).sort(byPlanOrder);
-  const unplanned = tasks.filter((t) => !t.in_plan);
-  const all = [...planned, ...unplanned];
-  const from = all.findIndex((t) => t.key === dragKey);
-  const to = all.findIndex((t) => t.key === targetKey);
-  if (from < 0 || to < 0 || from === to) return new Map();
-  const patches: Patches<MachiningPlanOperation> = new Map();
-  const dragged = { ...all[from]!, in_plan: true, plan_locked: true };
-  patches.set(dragKey, { in_plan: true, plan_locked: true });
-  all.splice(from, 1);
-  let index = position === 'before' ? (from < to ? to - 1 : to) : from < to ? to : to + 1;
-  index = Math.max(0, Math.min(index, all.length));
-  all.splice(index, 0, dragged);
-  all.forEach((task, i) => {
-    if (!task.in_plan) return;
-    if (task.plan_order !== i + 1 || task.key === dragKey) {
-      patches.set(task.key, { ...patches.get(task.key), plan_order: i + 1 });
-    }
-  });
-  return patches;
+  const all = [...planned, ...tasks.filter((t) => !t.in_plan)].map((t) => t.key);
+  if (dragKey === targetKey || !all.includes(dragKey) || !all.includes(targetKey)) return new Map();
+  const rest = all.filter((k) => k !== dragKey);
+  const target = rest.indexOf(targetKey);
+  rest.splice(position === 'before' ? target : target + 1, 0, dragKey);
+  return moveMachiningTo(tasks, dragKey, rest.indexOf(dragKey) + 1);
 }
 
 /** Rows whose membership, order or lock differs (dates are server-computed). */

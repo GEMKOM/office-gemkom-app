@@ -12,16 +12,19 @@
   --pg-row-h: 30px;
   --pg-col-w: 46px;
   --pg-time-w: 0px;
-  --pg-header-h: 46px;
-  --pg-line: #e3e6ea;
+  --pg-header-h: 50px;
+  --pg-line: #eceef1;
   --pg-line-strong: #c9ced4;
-  --pg-nonwork: #f1f3f5;
+  --pg-nonwork: #f4f5f7;
   --pg-nonwork-bg: none;
+  --pg-boundary-bg: none;
+  --pg-today: var(--gk-red-700, #8b0000);
 
-  border: 1px solid var(--pg-line-strong);
-  border-radius: 6px;
+  position: relative;
+  border-top: 1px solid var(--gk-line, #e3e6ea);
   overflow: hidden;
   background: #fff;
+  font-family: var(--gk-font-sans, 'IBM Plex Sans', sans-serif);
 }
 
 /* The only scroller. Both axes live here so the header can stick to the top
@@ -31,8 +34,9 @@
   overflow: auto;
   /* Nearly the whole viewport: this grid IS the page, and every row it can
        show is a row the planner does not have to scroll to. */
-  max-height: calc(100vh - 172px);
+  max-height: calc(100vh - 230px);
   min-height: 520px;
+  overscroll-behavior: contain;
 }
 
 .pg-canvas {
@@ -49,8 +53,11 @@
   z-index: 4;
   display: flex;
   height: var(--pg-header-h);
-  background: #f8f9fa;
-  border-bottom: 2px solid var(--pg-line-strong);
+  background: var(--gk-surface-subtle, #f8f9fb);
+  border-bottom: 1px solid var(--gk-line, #e3e6ea);
+  box-shadow:
+    0 1px 0 rgba(16, 24, 40, 0.04),
+    0 4px 8px -6px rgba(16, 24, 40, 0.18);
 }
 
 .pg-header-grid {
@@ -60,8 +67,8 @@
   display: flex;
   width: var(--pg-grid-w);
   flex: 0 0 var(--pg-grid-w);
-  background: #f8f9fa;
-  border-right: 2px solid var(--pg-line-strong);
+  background: var(--gk-surface-subtle, #f8f9fb);
+  border-right: 1px solid var(--pg-line-strong);
   /* Clip, do not spill: the cells inside have fixed widths, so a pane
        dragged narrower than their total would otherwise paint straight over
        the timeline and the two would read as one tangled row. The column
@@ -73,11 +80,11 @@
   display: flex;
   align-items: center;
   padding: 0 8px;
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #495057;
+  color: var(--gk-ink-2, #4a525b);
   border-right: 1px solid var(--pg-line);
   overflow: hidden;
   white-space: nowrap;
@@ -138,43 +145,99 @@ body.pg-resizing * {
 }
 
 .pg-header-time {
+  position: relative;
   flex: 0 0 auto;
 }
 
 .pg-tier {
   display: flex;
-  height: calc(var(--pg-header-h) / 2);
+}
+
+.pg-tier-top {
+  height: 20px;
+}
+
+.pg-tier-bottom {
+  height: calc(var(--pg-header-h) - 20px);
 }
 
 .pg-tier-top .pg-tier-cell {
-  font-weight: 700;
-  font-size: 0.68rem;
-  color: #343a40;
+  font-weight: 600;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-ink-2, #4a525b);
   justify-content: flex-start;
   padding-left: 6px;
-  border-bottom: 1px solid var(--pg-line);
-  /* A month label stays readable when its first weeks scroll off. */
+  border-left-color: var(--pg-line-strong);
+  /* A month label stays readable when its first weeks scroll off. `clip`,
+     not `hidden`: a hidden overflow makes the cell its own scroller and the
+     sticky label would stick inside the cell instead of to the sheet. */
   position: relative;
+  overflow: clip;
 }
 
+/* Sticks just right of the frozen columns, not under them. */
 .pg-tier-top .pg-tier-cell span {
   position: sticky;
-  left: 4px;
+  left: calc(var(--pg-grid-w) + 6px);
   white-space: nowrap;
 }
 
 .pg-tier-bottom .pg-tier-cell {
-  font-size: 0.66rem;
-  color: #6c757d;
+  flex-direction: column;
   justify-content: center;
+  gap: 1px;
+  line-height: 1.05;
 }
 
+.pg-tier-bottom .pg-tier-cell[data-boundary] {
+  border-left-color: var(--pg-line-strong);
+}
+
+.pg-tick {
+  font-family: var(--gk-font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--gk-ink, #1f2933);
+}
+
+.pg-tick-sub {
+  font-size: 0.58rem;
+  color: var(--gk-muted, #6b7480);
+  letter-spacing: 0.02em;
+}
+
+/* Rules on the LEFT edge, where the lanes draw theirs. */
 .pg-tier-cell {
   display: flex;
   align-items: center;
-  border-right: 1px solid var(--pg-line);
+  border-left: 1px solid var(--pg-line);
   overflow: hidden;
   flex: 0 0 auto;
+}
+
+/* Today: its column tinted on the scale, and a notch where the line starts. */
+.pg-tier-bottom .pg-tier-cell[data-today] {
+  background: var(--gk-red-050, #fff0f0);
+}
+
+.pg-tier-cell[data-today] .pg-tick,
+.pg-tier-cell[data-today] .pg-tick-sub {
+  color: var(--pg-today);
+}
+
+.pg-today-tag {
+  position: absolute;
+  bottom: 0;
+  z-index: 2;
+  width: 0;
+  height: 0;
+  margin-left: -5px;
+  border: 5px solid transparent;
+  border-bottom: 0;
+  border-top: 6px solid var(--pg-today);
+  pointer-events: none;
 }
 
 /* ---- rows ---- */
@@ -197,21 +260,24 @@ body.pg-resizing * {
 }
 
 .pg-row:hover .pg-row-grid {
-  background: #eef4fb;
+  background: #f3f5f8;
 }
 .pg-row:hover .pg-row-time {
-  background-color: rgba(13, 110, 253, 0.04);
+  background-color: rgba(31, 41, 51, 0.035);
 }
 
+/* Above everything in the lane (bars, end dates, termin tags, a dragged
+   bar), which slides underneath it as the timeline scrolls. */
 .pg-row-grid {
   position: sticky;
   left: 0;
-  z-index: 2;
+  z-index: 6;
   display: flex;
   width: var(--pg-grid-w);
   flex: 0 0 var(--pg-grid-w);
   background: #fff;
-  border-right: 2px solid var(--pg-line-strong);
+  border-right: 1px solid var(--pg-line-strong);
+  box-shadow: 4px 0 6px -4px rgba(16, 24, 40, 0.12);
   overflow: hidden;
 }
 
@@ -254,14 +320,15 @@ body.pg-resizing * {
   cursor: cell;
 }
 .pg-editable:hover {
-  box-shadow: inset 0 0 0 1px rgba(13, 110, 253, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(139, 0, 0, 0.35);
 }
 
 .pg-editor {
   width: 100%;
   height: calc(var(--pg-row-h) - 6px);
-  border: 1px solid #0d6efd;
-  border-radius: 3px;
+  border: 1px solid var(--gk-red-700, #8b0000);
+  border-radius: 4px;
+  box-shadow: var(--gk-focus-ring, 0 0 0 3px rgba(139, 0, 0, 0.25));
   padding: 0 4px;
   font-size: 0.78rem;
   outline: none;
@@ -309,8 +376,18 @@ body.pg-resizing * {
        of elements: at ~70 rows a div per column per row is thousands of nodes
        for something a background can draw for free. */
   background-image:
-    var(--pg-nonwork-bg),
+    var(--pg-boundary-bg), var(--pg-nonwork-bg),
     repeating-linear-gradient(90deg, var(--pg-line) 0 1px, transparent 1px var(--pg-col-w));
+}
+
+/* Behind the rows: the today line and the dependency arrows. The rows are
+   transparent over the timeline, so both show through, under the bars and
+   under the frozen columns. */
+.pg-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .pg-today {
@@ -318,9 +395,39 @@ body.pg-resizing * {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: #dc3545;
+  margin-left: -1px;
+  background: var(--pg-today);
   z-index: 3;
   pointer-events: none;
+}
+
+.pg-links {
+  position: absolute;
+  top: 0;
+  left: var(--pg-grid-w);
+  overflow: visible;
+}
+
+.pg-link {
+  fill: none;
+  stroke: #8a929b;
+  stroke-width: 1.25;
+}
+
+.pg-link-head {
+  fill: #8a929b;
+  stroke: none;
+}
+
+/* The next step starts before this one ends. */
+path.pg-link-broken {
+  stroke: #c92a2a;
+  stroke-dasharray: 3 2;
+}
+
+.pg-link-head.pg-link-broken {
+  fill: #c92a2a;
+  stroke: none;
 }
 
 /* İş emri hedef bitişi: dashed so it never reads as the solid "today" line.
@@ -335,7 +442,7 @@ body.pg-resizing * {
   top: 0;
   bottom: 0;
   width: 0;
-  border-left: 1px dashed rgba(124, 58, 237, 0.45);
+  border-left: 1px dashed rgba(122, 82, 209, 0.55);
   z-index: 1;
   pointer-events: none;
 }
@@ -350,17 +457,18 @@ body.pg-resizing * {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  height: 17px;
-  padding: 0 6px;
+  height: 18px;
+  padding: 0 7px;
   border-radius: 9px;
-  font-size: 10.5px;
+  font-family: var(--gk-font-mono, 'IBM Plex Mono', monospace);
+  font-size: 10px;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
-  color: #5b21b6;
-  background: #f5f3ff;
-  border: 1px solid rgba(124, 58, 237, 0.35);
+  color: #5530a8;
+  background: #efeafd;
+  border: 1px solid #d3c7f4;
   /* Opaque, and lifted off whatever is under it: on rows whose bar brackets
        the termin there is no clear side to sit on. */
   box-shadow: 0 1px 3px rgba(15, 23, 42, 0.18);
@@ -379,9 +487,10 @@ body.pg-resizing * {
   top: 50%;
   transform: translateY(-50%);
   margin-left: 5px;
+  font-family: var(--gk-font-mono, 'IBM Plex Mono', monospace);
   font-size: 10px;
   line-height: 1;
-  color: #64748b;
+  color: var(--gk-muted, #6b7480);
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   pointer-events: none;
@@ -397,15 +506,15 @@ body.pg-resizing * {
 /* Late and early are the only states worth a colour — the neutral tag is just
    "here is the termin". */
 .pg-target-tag.is-late {
-  color: #b02a37;
-  background: #fef2f2;
-  border-color: rgba(220, 38, 38, 0.4);
+  color: #a31d1d;
+  background: #fde8e8;
+  border-color: #f1bdbd;
 }
 
 .pg-target-tag.is-early {
-  color: #15803d;
-  background: #f0fdf4;
-  border-color: rgba(22, 163, 74, 0.35);
+  color: #11633d;
+  background: #e7f6ee;
+  border-color: #b9e2cb;
 }
 
 /* The group's promised end turns red when the projection overshoots it.
@@ -440,81 +549,147 @@ body.pg-resizing * {
   text-decoration: line-through;
 }
 
+/* Bars: the Gantt's look (ui/Gantt): a soft fill in the status family set by
+   [data-tone], a solid left edge, the progress as a deeper shade. The tones
+   come with ui/Gantt's stylesheet (GanttTooltip imports it). */
 .pg-bar {
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  height: calc(var(--pg-row-h) - 12px);
+  height: calc(var(--pg-row-h) - 10px);
   min-height: 12px;
-  border-radius: 3px;
-  overflow: hidden;
   display: flex;
   align-items: center;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+  border: 1px solid var(--tone-line, #bfd3f6);
+  border-left: 3px solid var(--tone-solid, #2f6fd6);
+  border-radius: 5px;
+  background: var(--tone-bg, #e6effd);
+  color: var(--tone-fg, #1a4fa0);
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-/* Bar colour is the SCHEDULE state; the fill inside is progress. Keeping the
-   two on separate channels is what stops an overdue bar from drawing red
-   progress on a red bar and reading as 0%. */
-.pg-bar-on-time {
-  background: linear-gradient(180deg, #34ad51 0%, #248239 100%);
+.pg-bar[data-move] {
+  cursor: grab;
+  touch-action: none;
 }
-.pg-bar-late {
-  background: linear-gradient(180deg, #e2515f 0%, #bd2130 100%);
+
+@media (prefers-reduced-motion: no-preference) {
+  .pg-bar {
+    transition: box-shadow 120ms ease;
+  }
 }
-.pg-bar-hold {
-  background: linear-gradient(180deg, #f0bf3f 0%, #d99e00 100%);
+
+.pg-bar:hover {
+  box-shadow: 0 2px 8px rgba(16, 24, 40, 0.16);
 }
-.pg-bar-done {
-  background: linear-gradient(180deg, #34ad51 0%, #248239 100%);
-}
+
 /* A row nobody planned: the forecast drawn in the plan bar's place. Hollow
    and dashed so it never reads as a commitment somebody made. */
 .pg-bar-projected {
+  border-style: dashed;
   background: repeating-linear-gradient(
     135deg,
-    rgba(108, 117, 125, 0.2) 0 6px,
-    rgba(108, 117, 125, 0.06) 6px 12px
+    rgba(138, 146, 155, 0.16) 0 6px,
+    rgba(138, 146, 155, 0.05) 6px 12px
   );
-  border: 1px dashed #8b949e;
-  box-shadow: none;
-}
-.pg-bar-projected .pg-bar-fill {
-  background: rgba(108, 117, 125, 0.38);
-}
-.pg-bar-projected .pg-bar-label {
-  color: #5a6570;
 }
 
+/* Progress: a deeper shade of the bar's own colour, so state and progress
+   stay on separate channels and an overdue bar never reads as 0%. */
 .pg-bar-fill {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  background: linear-gradient(180deg, rgba(13, 110, 253, 0.95) 0%, rgba(0, 86, 179, 0.95) 100%);
-}
-
-.pg-bar-done .pg-bar-fill {
-  background: linear-gradient(180deg, rgba(25, 135, 60, 0) 0%, rgba(25, 135, 60, 0) 100%);
+  background: var(--tone-fill, rgba(47, 111, 214, 0.25));
 }
 
 .pg-bar-label {
   position: relative;
   z-index: 1;
-  padding: 0 6px;
-  font-size: 0.66rem;
+  flex: 1;
+  min-width: 0;
+  padding: 0 7px;
+  overflow: hidden;
+  font-size: 0.68rem;
   font-weight: 600;
-  color: #fff;
   white-space: nowrap;
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.35);
+  text-overflow: ellipsis;
+}
+
+.pg-bar-pct {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  padding-right: 7px;
+  font-family: var(--gk-font-mono, 'IBM Plex Mono', monospace);
+  font-size: 0.62rem;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
+/* The right edge sets the end (a duration) where the page allows it. */
+.pg-bar-handle {
+  position: absolute;
+  top: 0;
+  right: -1px;
+  bottom: 0;
+  z-index: 2;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.pg-bar-handle::after {
+  content: '';
+  position: absolute;
+  top: 22%;
+  bottom: 22%;
+  left: 3px;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--tone-solid, #2f6fd6);
+  opacity: 0;
+}
+
+.pg-bar:hover .pg-bar-handle::after {
+  opacity: 0.7;
+}
+
+.pg-bar-dragging {
+  z-index: 5;
+  border-style: dashed;
+  box-shadow: var(--gk-shadow-popover, 0 12px 32px rgba(16, 24, 40, 0.18));
+}
+
+body.pg-dragging,
+body.pg-dragging * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
 
 /* A summary row's bar reads as a bracket, the way a project plan draws a
    parent task — otherwise it is indistinguishable from the work beneath it. */
 .pg-row-group .pg-bar {
-  height: 10px;
-  border-radius: 2px;
+  height: 8px;
+  min-height: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 2px 2px 0 0;
+  background: var(--tone-line, #bfd3f6);
   box-shadow: none;
+}
+
+.pg-row-group .pg-bar-fill {
+  background: var(--tone-solid, #2f6fd6);
+  border-top-left-radius: 2px;
+}
+
+.pg-row-group .pg-bar-label,
+.pg-row-group .pg-bar-pct {
+  display: none;
 }
 
 .pg-row-group .pg-bar::before,
@@ -522,7 +697,7 @@ body.pg-resizing * {
   content: '';
   position: absolute;
   top: 100%;
-  border-top: 5px solid #1f6f31;
+  border-top: 5px solid var(--tone-solid, #2f6fd6);
   height: 0;
   width: 0;
 }
@@ -539,15 +714,15 @@ body.pg-resizing * {
 /* ---- row kinds ---- */
 
 .pg-row-group .pg-row-grid {
-  background: #f1f3f5;
+  background: var(--gk-surface-subtle, #f8f9fb);
   font-weight: 600;
 }
 
 .pg-row-group {
-  border-bottom: 1px solid var(--pg-line-strong);
+  border-bottom-color: #d9dde2;
 }
 .pg-row-group:hover .pg-row-grid {
-  background: #e7ebef;
+  background: #eef0f3;
 }
 
 .pg-row-block .pg-row-grid {
@@ -557,14 +732,14 @@ body.pg-resizing * {
   color: #6b7280;
 }
 .pg-row-manufacturing .pg-row-grid {
-  background: #eef6ff;
+  background: #f4f7fd;
   font-weight: 600;
 }
 .pg-row-welding .pg-row-grid {
-  background: #fff6f2;
+  background: #fffaf7;
 }
 .pg-row-painting .pg-row-grid {
-  background: #f7f5ff;
+  background: #faf8ff;
 }
 .pg-indent-4 .pg-cell:first-child {
   padding-left: 68px;
@@ -631,16 +806,80 @@ body.pg-resizing * {
   margin-left: 6px;
   padding: 0 6px;
   border-radius: 8px;
-  background: #dee2e6;
+  background: #e6e9ed;
   font-size: 0.64rem;
   font-weight: 600;
   color: #495057;
 }
 
 .pg-empty {
-  padding: 48px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 72px 16px;
   text-align: center;
-  color: #6b7280;
+  color: var(--gk-muted, #6b7480);
+}
+
+.pg-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--gk-red-050, #fff0f0);
+  color: var(--gk-red-700, #8b0000);
+  font-size: 1.25rem;
+}
+
+.pg-empty-text {
+  max-width: 440px;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+/* Rows on their way: the sheet's shape, not a spinner over nothing. */
+.pg-skeleton {
+  padding: 8px 0;
+}
+
+.pg-skeleton-row {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--pg-line);
+}
+
+.pg-skeleton-cell,
+.pg-skeleton-bar {
+  display: block;
+  height: 10px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #eef0f3 0%, #f7f8fa 50%, #eef0f3 100%);
+  background-size: 200% 100%;
+}
+
+.pg-skeleton-bar {
+  height: 14px;
+  background-image: linear-gradient(90deg, #e6effd 0%, #f2f6fe 50%, #e6effd 100%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pg-skeleton-cell,
+  .pg-skeleton-bar {
+    animation: pg-shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@keyframes pg-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 @media (max-width: 991.98px) {
@@ -722,6 +961,10 @@ body.pg-resizing * {
 .pg-pdf-page .pg-row {
   content-visibility: visible;
   contain-intrinsic-size: none;
+}
+
+.pg-pdf-page .pg-tier-top .pg-tier-cell span {
+  position: static;
 }
 
 /* The timeline domain is built from BARS, so a job order whose hedef sits

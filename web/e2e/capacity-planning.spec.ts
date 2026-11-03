@@ -134,6 +134,78 @@ test('CNC planner: drag a task to another slot and save the plan', async ({
   consoleErrors.expectNone();
 });
 
+test('CNC planner: reorder the queue in the table by drag and by typing a Sıra', async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: true });
+  const tasks = ['A', 'B', 'C'].map((name, i) => ({
+    key: `CNC-60${i + 1}`,
+    name: `Sac ${name}`,
+    nesting_id: `N-6${i + 1}`,
+    in_plan: true,
+    plan_order: i + 1,
+    plan_locked: false,
+    planned_start_ms: DAY10 + i * 2 * HOUR,
+    planned_end_ms: DAY10 + (i + 1) * 2 * HOUR,
+    machine_fk: 3,
+  }));
+  const backend = await mockBackend(
+    page,
+    {
+      'GET /machines/': { json: paginated([{ id: 3, name: 'Plazma 1', tasks_count: 3 }]) },
+      'GET /cnc_cutting/planning/list/': { json: tasks },
+      'GET /machines/calendar': { json: CALENDAR },
+      'POST /cnc_cutting/planning/bulk-save/': { json: { ok: true } },
+    },
+    { session },
+  );
+
+  await page.goto('/manufacturing/cnc-cutting/capacity/planning/?machine=3');
+  const main = page.getByRole('main');
+  const queue = main.locator('tbody').filter({ hasText: 'N-61' });
+  const order = () =>
+    queue.locator('tr[data-row-id]').evaluateAll((rows) => rows.map((r) => r.dataset.rowId));
+  const timeline = () =>
+    main
+      .locator('div[data-row-id]')
+      .evaluateAll((rows) => rows.map((r) => (r as HTMLElement).dataset.rowId));
+  await expect(queue.getByText('N-63')).toBeVisible();
+
+  // Drag the last row onto the top half of the first: it becomes first.
+  const first = queue.locator('tr[data-row-id="CNC-601"]');
+  await queue
+    .locator('tr[data-row-id="CNC-603"] [data-drag-handle]')
+    .dragTo(first, { targetPosition: { x: 200, y: 3 } });
+  await expect.poll(order).toEqual(['CNC-603', 'CNC-601', 'CNC-602']);
+  await expect.poll(timeline).toEqual(['CNC-603', 'CNC-601', 'CNC-602']);
+
+  // Type 3 into the first row's Sıra: it goes last, the others move up.
+  await queue.locator('tr[data-row-id="CNC-603"] td[data-col="plan_order"]').click();
+  await queue.getByRole('textbox', { name: 'Sıra' }).fill('3');
+  await queue.getByRole('textbox', { name: 'Sıra' }).press('Enter');
+  await expect.poll(order).toEqual(['CNC-601', 'CNC-602', 'CNC-603']);
+
+  // And 1 for the middle one.
+  await queue.locator('tr[data-row-id="CNC-602"] td[data-col="plan_order"]').click();
+  await queue.getByRole('textbox', { name: 'Sıra' }).fill('1');
+  await queue.getByRole('textbox', { name: 'Sıra' }).press('Enter');
+  await expect.poll(order).toEqual(['CNC-602', 'CNC-601', 'CNC-603']);
+  await expect.poll(timeline).toEqual(['CNC-602', 'CNC-601', 'CNC-603']);
+
+  await expect(main.getByText('Kaydedilmemiş değişiklik: 2')).toBeVisible();
+  await main.getByRole('button', { name: 'Planı Kaydet' }).click();
+  await expect(page.getByText('Plan başarıyla kaydedildi')).toBeVisible();
+  const saves = backend.callsTo('/cnc_cutting/planning/bulk-save/', 'POST');
+  expect(saves).toHaveLength(1);
+  const items = (saves[0]!.body as { items: { key: string; plan_order: number }[] }).items;
+  expect(items.map((i) => [i.key, i.plan_order])).toEqual([
+    ['CNC-601', 2],
+    ['CNC-602', 1],
+  ]);
+  consoleErrors.expectNone();
+});
+
 test('machining planner: reorder the queue in the Gantt and save', async ({
   page,
   consoleErrors,

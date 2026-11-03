@@ -2,7 +2,16 @@ import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { bar, json, mockBackend, stubLayout } from '../../../capacity-shared/testSupport';
+import {
+  bar,
+  dragRowBefore,
+  ganttOrder,
+  json,
+  mockBackend,
+  stubLayout,
+  tableOrder,
+  typeOrder,
+} from '../../../capacity-shared/testSupport';
 import { formatDueDate, MachiningPlanningPage } from './MachiningPlanningPage';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
@@ -127,6 +136,41 @@ it('reorders the queue in the Gantt and saves dragged rows locked', async () => 
       'Plan kaydedildi; sıra ve tarihler yeniden hesaplandı',
     ),
   );
+});
+
+/** The operations table's rows (the machine list is a table too). */
+const queue = () => tableOrder(screen.getByText('Mil').closest('tbody')!);
+const put = () => backend.calls().find((c) => c.method === 'PUT')?.body;
+
+it('drags an unplanned row into the queue in the table, locked where it is dropped', async () => {
+  renderPage();
+  await screen.findByText('Mil');
+  expect(queue()).toEqual(['OP-1', 'OP-2', 'OP-3', 'OP-9']);
+  dragRowBefore('OP-9', 'OP-2');
+  expect(queue()).toEqual(['OP-1', 'OP-9', 'OP-2', 'OP-3']);
+  await waitFor(() => expect(ganttOrder().slice(0, 4)).toEqual(['OP-1', 'OP-9', 'OP-2', 'OP-3']));
+  fireEvent.click(screen.getByRole('button', { name: 'Planı Kaydet' }));
+  await waitFor(() => expect(put()).toBeDefined());
+  expect(put()).toEqual([
+    { key: 'OP-2', in_plan: true, plan_order: 3 },
+    { key: 'OP-3', in_plan: true, plan_order: 4 },
+    { key: 'OP-9', in_plan: true, plan_order: 2, plan_locked: true },
+  ]);
+});
+
+it('moves an operation to a typed Sıra and pulls the ones in between up', async () => {
+  renderPage();
+  await screen.findByText('Mil');
+  typeOrder('OP-1', '3');
+  expect(queue()).toEqual(['OP-2', 'OP-3', 'OP-1', 'OP-9']);
+  expect(await screen.findByText('Kaydedilmemiş değişiklik: 3')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Planı Kaydet' }));
+  await waitFor(() => expect(put()).toBeDefined());
+  expect(put()).toEqual([
+    { key: 'OP-1', in_plan: true, plan_order: 3, plan_locked: true },
+    { key: 'OP-2', in_plan: true, plan_order: 1 },
+    { key: 'OP-3', in_plan: true, plan_order: 2 },
+  ]);
 });
 
 it('does not change a lock while the queue has unsaved changes', async () => {
