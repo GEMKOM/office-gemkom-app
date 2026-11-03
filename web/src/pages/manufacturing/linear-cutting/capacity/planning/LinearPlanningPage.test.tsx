@@ -2,7 +2,16 @@ import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { bar, json, mockBackend, stubLayout } from '../../../capacity-shared/testSupport';
+import {
+  bar,
+  dragRowBefore,
+  ganttOrder,
+  json,
+  mockBackend,
+  stubLayout,
+  tableOrder,
+  typeOrder,
+} from '../../../capacity-shared/testSupport';
 import { linearApiFilters, LinearPlanningPage } from './LinearPlanningPage';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
@@ -37,6 +46,8 @@ beforeEach(() => {
             machine_fk: 5,
           },
           { key: 'LC-2', name: 'Bar 2', material: 'Boru', in_plan: false },
+          { key: 'LC-3', name: 'Bar 3', item_name: 'HEA 200', in_plan: true, plan_order: 2 },
+          { key: 'LC-4', name: 'Bar 4', item_name: 'IPE 80', in_plan: true, plan_order: 3 },
         ],
       });
     }
@@ -92,4 +103,36 @@ it('reads the { tasks } list, edits a bar and saves', async () => {
       },
     ],
   });
+});
+
+it('reorders by dragging a row and by typing a new #', async () => {
+  renderWithProviders(
+    <ModalsProvider>
+      <LinearPlanningPage />
+    </ModalsProvider>,
+    { route: '/manufacturing/linear-cutting/capacity/planning/?machine=5' },
+  );
+  await screen.findByText('NPU 100');
+  const queue = () => tableOrder(screen.getByText('NPU 100').closest('tbody')!);
+  expect(queue()).toEqual(['LC-1', 'LC-3', 'LC-4']);
+
+  dragRowBefore('LC-4', 'LC-1');
+  expect(queue()).toEqual(['LC-4', 'LC-1', 'LC-3']);
+  typeOrder('LC-3', '2', '#');
+  expect(queue()).toEqual(['LC-4', 'LC-3', 'LC-1']);
+  await waitFor(() => expect(ganttOrder()).toEqual(['LC-4', 'LC-3', 'LC-1']));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Planı Kaydet' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Plan kaydedildi'));
+  const saved = backend.calls().filter((c) => c.method === 'POST');
+  expect(saved).toHaveLength(1);
+  expect(
+    (saved[0]!.body as { items: { key: string; plan_order: number }[] }).items.map((i) => [
+      i.key,
+      i.plan_order,
+    ]),
+  ).toEqual([
+    ['LC-1', 3],
+    ['LC-4', 1],
+  ]); // LC-3 is back on 2
 });

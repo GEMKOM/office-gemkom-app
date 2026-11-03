@@ -11,24 +11,30 @@
 //       pg-header                 sticky top
 //         pg-header-grid          sticky left, above everything
 //         pg-header-time          two tiers: month/year over week/day
-//       pg-row *                  fixed height, hence perfect alignment
-//         pg-row-grid             sticky left, opaque
-//         pg-row-time             the bar, positioned by date
+//       pg-rows
+//         pg-bg                   behind the rows: today line, dependency links
+//         pg-row *                fixed height, hence perfect alignment
+//           pg-row-grid           sticky left, opaque
+//           pg-row-time           the bar, positioned by date
 //
 // Speed: every row is a memoized component and its output is a pure function
 // of its row object (plus the shared timeline and column set). The page hands
 // over the same object for a row that did not change, so an edit re-renders
 // only the rows whose values moved. The legacy grid rebuilt every row through
 // innerHTML on each edit. Row-level callbacks (isCellEditable, rowClassName,
-// bar, target, actions) must therefore read nothing but the row, and be stable.
+// bar, target, actions, barEditing) must therefore read nothing but the row,
+// and be stable. Hover, drag and links are handled once, on the rows'
+// container, and never re-render a row.
 //
-// Bars are read-only: dates are typed into the grid cells, and the timeline
-// reflects them.
+// Dates are typed into the grid cells. Where the page allows it (barEditing),
+// a bar can also be dragged along its row or by its right edge; the page turns
+// that into the same edits a typed date or duration makes.
 
 import {
   memo,
   useCallback,
   useEffect,
+  useId,
   useImperativeHandle,
   useLayoutEffect,
   useMemo,
@@ -51,14 +57,21 @@ import {
   type SelectOption,
 } from '@/features/plan-sheet/dateEntry';
 import {
+  boundaryBackground,
   buildTimeline,
+  dateAt,
+  dayWidth,
   isZoomUnit,
   nonWorkingBackground,
   timelineTiers,
+  toDate,
   toKey,
   type Timeline,
   type ZoomUnit,
 } from '@/features/plan-sheet/timeline';
+import type { GanttTone } from '@/ui/Gantt';
+import { GanttTooltip, type GanttTooltipRect } from '@/ui/Gantt/GanttTooltip';
+import { createStore, useStore, type Store } from '@/ui/Gantt/store';
 import './grid.css';
 
 export interface GridRowBase {
@@ -97,7 +110,49 @@ export interface GridBar {
   /** Printed just past the bar's right edge (dd.mm). */
   endDate?: string | null;
   hideEndLabel?: boolean;
+  /** Bar colour; by default from `state` (see STATE_TONES). */
+  tone?: GanttTone;
 }
+
+/** What a row's bar may be dragged for; null or both false = fixed. */
+export interface GridBarEditing {
+  /** Drag the whole bar: a new start, the same length. */
+  move?: boolean;
+  /** Drag the right edge: a new end. */
+  resize?: boolean;
+}
+
+/** A finished bar drag, in whole calendar days. */
+export interface GridBarChange {
+  mode: 'move' | 'end';
+  start: string;
+  end: string;
+  /** How far the dragged edge moved, in days (negative = earlier). */
+  days: number;
+}
+
+/** Finish-to-start: `to` follows `from` (row keys). */
+export interface GridLink {
+  from: string;
+  to: string;
+}
+
+/** The hover card over a bar. */
+export interface GridTooltip {
+  title: ReactNode;
+  lines: readonly ReactNode[];
+}
+
+// Bar colour is the SCHEDULE state; the darker fill inside is progress. The
+// tones are the Gantt's status families (ui/Gantt), so a bar here reads the
+// same as one on the capacity planners.
+const STATE_TONES: Record<string, GanttTone> = {
+  'on-time': 'blue',
+  late: 'red',
+  hold: 'yellow',
+  done: 'green',
+  projected: 'grey',
+};
 
 /** The job's termin: a dashed line on the row, and on summary rows a tag. */
 export interface GridTarget {
@@ -119,6 +174,8 @@ export interface GridAction<R> {
 export interface PlanningGridHandle {
   /** Scroll a row into view (vertically centred), optionally pulsing it. */
   scrollToRow(key: string, options?: { pulse?: boolean }): boolean;
+  /** Bring today into view, a third of the way into the timeline. */
+  scrollToToday(): void;
   /** The rendered sheet: the PDF export clones its rows. */
   element(): HTMLDivElement | null;
   timeline(): Timeline | null;
@@ -150,10 +207,23 @@ export interface PlanningGridProps<R extends GridRowBase> {
   onToggleAll?: () => void;
   allCollapsed?: boolean;
   onZoomChange?: (zoom: ZoomUnit) => void;
+  /** Ctrl/⌘ + wheel: one step in (+1) or out (−1). Without it the wheel
+   *  steps the unit through onZoomChange. */
+  onZoomStep?: (direction: 1 | -1) => void;
   onGridWidthChange?: (px: number) => void;
   onAction?: (action: string, row: R) => void;
+  /** Which bars can be dragged (read only from the row, like the others). */
+  barEditing?: (row: R) => GridBarEditing | null;
+  /** A dragged bar was dropped; refusals go to onEditError like an edit's. */
+  onBarChange?: (row: R, change: GridBarChange) => void | Promise<unknown>;
+  /** Hover card body; default: the bar's dates and progress. */
+  tooltip?: (row: R) => GridTooltip | null;
+  /** Arrows from one row's bar to another's (stage sequence). */
+  links?: (rows: readonly R[]) => readonly GridLink[];
   /** Rendered at the right end of the frozen header (the column picker). */
   headerActions?: ReactNode;
+  /** No rows yet because they are still loading: placeholder rows. */
+  loading?: boolean;
   emptyText?: ReactNode;
   /** false: no grip, no toggles, no editing (the export copy). */
   interactive?: boolean;
@@ -168,6 +238,48 @@ interface GridCtx<R> {
   toggleGroup(row: R): void;
   action(key: string, row: R): void;
   scrollToBar(row: R): void;
+  barChange(row: R, change: GridBarChange): void;
+}
+
+interface HoverState {
+  key: string;
+  rect: GanttTooltipRect;
+}
+
+/** While a bar is dragged: where it would land. */
+interface DragTip {
+  rect: GanttTooltipRect;
+  text: string;
+}
+
+interface BarGesture<R> {
+  row: R;
+  el: HTMLElement;
+  mode: 'move' | 'end';
+  pointerId: number;
+  startX: number;
+  startScroll: number;
+  left: number;
+  width: number;
+  dayW: number;
+  start: string;
+  end: string;
+  /** Inclusive length in days, so an end is never dragged before the start. */
+  spanDays: number;
+  days: number;
+  active: boolean;
+}
+
+function shiftKey(iso: string, days: number): string {
+  const d = toDate(iso);
+  if (!d) return iso;
+  d.setDate(d.getDate() + days);
+  return toKey(d);
+}
+
+function rectOf(el: Element): GanttTooltipRect {
+  const r = el.getBoundingClientRect();
+  return { left: r.left, top: r.top, bottom: r.bottom, width: r.width };
 }
 
 export function normalizeZoom(zoom: unknown): ZoomUnit {
@@ -318,18 +430,21 @@ function CellEditor({ type, options, min, max, step, initial, onDone }: EditorPr
 // ---- bar lane ---------------------------------------------------------------
 
 function BarLane({
+  rowKey,
   bar,
   target,
   timeline,
+  editing,
+  interactive,
 }: {
+  rowKey: string;
   bar: GridBar | null;
   target: GridTarget | null;
   timeline: Timeline;
+  editing: GridBarEditing | null;
+  interactive: boolean;
 }) {
-  const oneUnit =
-    timeline.unit === 'day'
-      ? timeline.colWidth
-      : timeline.colWidth / (timeline.unit === 'week' ? 7 : 30);
+  const oneUnit = dayWidth(timeline);
   const startX = bar ? timeline.xOf(bar.start || bar.end) : null;
   const endX = bar ? timeline.xOf(bar.end || bar.start) : null;
   const drawn = bar && startX !== null && endX !== null ? { startX, endX } : null;
@@ -384,17 +499,27 @@ function BarLane({
   const width = Math.max(6, drawn.endX - drawn.startX + oneUnit);
   const pct = Math.max(0, Math.min(100, Number(bar.progress || 0)));
   const barEnd = drawn.startX + width;
+  const state = bar.state || 'on-time';
+  const move = interactive && !!editing?.move;
+  const resize = interactive && !!editing?.resize;
   return (
     <div className="pg-row-time">
       {targetLine}
       {targetTag}
       <div
-        className={`pg-bar pg-bar-${bar.state || 'on-time'}`}
+        className={`pg-bar pg-bar-${state}`}
+        data-tone={bar.tone ?? STATE_TONES[state] ?? 'blue'}
+        data-bar={rowKey}
+        data-move={move || undefined}
         style={{ left: drawn.startX, width }}
-        title={bar.title || ''}
+        // On screen the hover card says this; paper keeps the plain title.
+        title={interactive ? undefined : bar.title || ''}
+        aria-label={bar.title || bar.label || undefined}
       >
         <div className="pg-bar-fill" style={{ width: `${pct}%` }} />
         {width > 54 ? <span className="pg-bar-label">{bar.label || ''}</span> : null}
+        {width > 130 && pct > 0 ? <span className="pg-bar-pct">%{Math.round(pct)}</span> : null}
+        {resize ? <span className="pg-bar-handle" data-handle="end" /> : null}
       </div>
       {bar.endDate && !bar.hideEndLabel ? (
         <div
@@ -420,6 +545,7 @@ interface GridRowProps<R extends GridRowBase> {
   actions?: readonly GridAction<R>[];
   bar: (row: R) => GridBar | null;
   target?: (row: R) => GridTarget | null;
+  barEditing?: (row: R) => GridBarEditing | null;
   ctx: GridCtx<R>;
   interactive: boolean;
 }
@@ -433,6 +559,7 @@ function GridRowInner<R extends GridRowBase>({
   actions,
   bar,
   target,
+  barEditing,
   ctx,
   interactive,
 }: GridRowProps<R>) {
@@ -540,7 +667,14 @@ function GridRowInner<R extends GridRowBase>({
         {cells}
         <div className="pg-cell pg-cell-actions">{buttons}</div>
       </div>
-      <BarLane bar={bar(row)} target={target ? target(row) : null} timeline={timeline} />
+      <BarLane
+        rowKey={row.key}
+        bar={bar(row)}
+        target={target ? target(row) : null}
+        timeline={timeline}
+        editing={barEditing ? barEditing(row) : null}
+        interactive={interactive}
+      />
     </div>
   );
 }
@@ -561,6 +695,7 @@ interface HeaderProps {
     headerClass?: string;
   }[];
   timeline: Timeline;
+  todayX: number | null;
   allCollapsed: boolean;
   interactive: boolean;
   headerActions?: ReactNode;
@@ -571,6 +706,7 @@ interface HeaderProps {
 const GridHeader = memo(function GridHeader({
   columns,
   timeline,
+  todayX,
   allCollapsed,
   interactive,
   headerActions,
@@ -578,6 +714,8 @@ const GridHeader = memo(function GridHeader({
   onGripDown,
 }: HeaderProps) {
   const tiers = timelineTiers(timeline);
+  // Today's column is marked on the scale itself, so its label stays legible.
+  const todayCol = todayX === null ? -1 : Math.floor(todayX / timeline.colWidth);
   const toggleTitle = allCollapsed ? 'Tümünü aç' : 'Tümünü kapat';
   return (
     <div className="pg-header">
@@ -629,24 +767,137 @@ const GridHeader = memo(function GridHeader({
           ))}
         </div>
         <div className="pg-tier pg-tier-bottom">
-          {timeline.columns.map((c) => (
+          {timeline.columns.map((c, i) => (
             <div
               key={c.start.getTime()}
               className="pg-tier-cell"
+              data-boundary={c.boundary || undefined}
+              data-today={i === todayCol || undefined}
               style={{ width: timeline.colWidth }}
             >
-              {c.label}
+              <span className="pg-tick">{c.label}</span>
+              {/* A day column too narrow for "Pt" keeps just its number. */}
+              {c.sub && timeline.colWidth >= 24 ? (
+                <span className="pg-tick-sub">{c.sub}</span>
+              ) : null}
             </div>
           ))}
         </div>
+        {todayX === null ? null : (
+          <span className="pg-today-tag" style={{ left: todayX }} title="Bugün" aria-hidden />
+        )}
       </div>
     </div>
   );
 });
 
+// ---- overlays ---------------------------------------------------------------
+
+interface LinkPath {
+  key: string;
+  d: string;
+  /** `to` starts before `from` ends: the sequence is broken. */
+  broken: boolean;
+}
+
+/** Dependency arrows, behind the rows (finish → start, elbowed). */
+const LinkLayer = memo(function LinkLayer({
+  paths,
+  width,
+  height,
+}: {
+  paths: readonly LinkPath[];
+  width: number;
+  height: number;
+}) {
+  // Per chart: the PDF export renders a second grid on the same page.
+  const id = `pg-arrow${useId().replace(/[^\w-]/g, '')}`;
+  if (!paths.length) return null;
+  return (
+    <svg className="pg-links" width={width} height={height} aria-hidden>
+      <defs>
+        <marker
+          id={id}
+          viewBox="0 0 6 6"
+          refX="5"
+          refY="3"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto"
+        >
+          <path d="M0,0 L6,3 L0,6 z" className="pg-link-head" />
+        </marker>
+        <marker
+          id={`${id}-broken`}
+          viewBox="0 0 6 6"
+          refX="5"
+          refY="3"
+          markerWidth="6"
+          markerHeight="6"
+          orient="auto"
+        >
+          <path d="M0,0 L6,3 L0,6 z" className="pg-link-head pg-link-broken" />
+        </marker>
+      </defs>
+      {paths.map((p) => (
+        <path
+          key={p.key}
+          d={p.d}
+          className={p.broken ? 'pg-link pg-link-broken' : 'pg-link'}
+          markerEnd={p.broken ? `url(#${id}-broken)` : `url(#${id})`}
+        />
+      ))}
+    </svg>
+  );
+});
+
+function HoverCard<R extends GridRowBase>({
+  hover,
+  drag,
+  rowsByKey,
+  bar,
+  tooltip,
+}: {
+  hover: Store<HoverState | null>;
+  drag: Store<DragTip | null>;
+  rowsByKey: ReadonlyMap<string, R>;
+  bar: (row: R) => GridBar | null;
+  tooltip?: (row: R) => GridTooltip | null;
+}) {
+  const h = useStore(hover, (v) => v);
+  const d = useStore(drag, (v) => v);
+  if (d) return <GanttTooltip rect={d.rect}>{d.text}</GanttTooltip>;
+  if (!h) return null;
+  const row = rowsByKey.get(h.key);
+  if (!row) return null;
+  const custom = tooltip?.(row);
+  if (custom) {
+    return (
+      <GanttTooltip rect={h.rect} title={custom.title}>
+        {custom.lines.map((line, i) => (
+          <div key={i}>{line}</div>
+        ))}
+      </GanttTooltip>
+    );
+  }
+  const b = bar(row);
+  if (!b) return null;
+  return (
+    <GanttTooltip rect={h.rect} title={b.label}>
+      <div>
+        {formatDMY(b.start)} – {formatDMY(b.end)}
+      </div>
+      {b.progress != null ? <div>İlerleme: %{Math.round(b.progress)}</div> : null}
+    </GanttTooltip>
+  );
+}
+
 // ---- grid -------------------------------------------------------------------
 
 const ZOOM_ORDER: ZoomUnit[] = ['month', 'week', 'day'];
+/** Pointer travel before a press on a bar becomes a drag. */
+const DRAG_THRESHOLD = 4;
+const DAY_MS = 86_400_000;
 
 export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>) {
   const {
@@ -663,10 +914,14 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
     actions,
     bar,
     target,
+    barEditing,
+    links,
+    tooltip,
     isNonWorkingDay,
     today,
     allCollapsed = false,
     headerActions,
+    loading = false,
     emptyText = 'Bu kaynağa atanmış iş yok. "İş Ekle" ile başlayın.',
     interactive = true,
     className,
@@ -701,6 +956,7 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
     () => (collapsed?.size ? rows.filter((r) => !(r.groupKey && collapsed.has(r.groupKey))) : rows),
     [rows, collapsed],
   );
+  const rowsByKey = useMemo(() => new Map(visible.map((r) => [r.key, r])), [visible]);
 
   const rawTimeline = useMemo(
     () => buildTimeline(visible, zoom, effectiveToday, bar, lane, colWidth),
@@ -716,38 +972,87 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
     () => nonWorkingBackground(timeline, isNonWorkingDay),
     [timeline, isNonWorkingDay],
   );
+  const boundaryBg = useMemo(() => boundaryBackground(timeline), [timeline]);
+
+  // Finish-to-start arrows between visible rows that both have a bar.
+  const linkPaths = useMemo<LinkPath[]>(() => {
+    if (!links || !visible.length) return [];
+    const index = new Map(visible.map((r, i) => [r.key, i]));
+    const one = dayWidth(timeline);
+    const out: LinkPath[] = [];
+    for (const link of links(visible)) {
+      const a = index.get(link.from);
+      const b = index.get(link.to);
+      if (a === undefined || b === undefined || b <= a) continue;
+      const from = bar(visible[a]!);
+      const to = bar(visible[b]!);
+      const endX = from ? timeline.xOf(from.end || from.start) : null;
+      const x2 = to ? timeline.xOf(to.start || to.end) : null;
+      if (endX === null || x2 === null) continue;
+      const x1 = endX + one;
+      const y1 = a * rowHeight + rowHeight / 2;
+      const y2 = b * rowHeight + rowHeight / 2;
+      const elbow = x1 + 5;
+      // Room for a straight drop: down from just past the end, then in.
+      // Otherwise along the gap above the next bar's row, then down to it.
+      const d =
+        x2 >= elbow + 4
+          ? `M${x1},${y1} H${elbow} V${y2} H${x2 - 1}`
+          : `M${x1},${y1} H${elbow} V${b * rowHeight} H${x2 - 8} V${y2} H${x2 - 1}`;
+      out.push({ key: `${link.from}>${link.to}`, d, broken: x2 < x1 - 0.5 });
+    }
+    return out;
+  }, [links, visible, bar, timeline, rowHeight]);
 
   const toggleAll = useCallback(() => latest.current.onToggleAll?.(), []);
 
-  const scrollToBar = useCallback((row: R) => {
+  const laneWidth = useCallback(
+    () => (scrollRef.current?.clientWidth ?? 0) - (latest.current.gridWidth ?? 560),
+    [],
+  );
+
+  const scrollToBar = useCallback(
+    (row: R) => {
+      const tl = timelineRef.current;
+      const scroller = scrollRef.current;
+      const b = latest.current.bar(row);
+      if (!b || !tl || !scroller) return;
+      const x = tl.xOf(b.start || b.end);
+      if (x === null) return;
+      // Left-ish rather than centred so what comes after it is visible too.
+      // Assigned, not animated: a jump is the useful answer to "take me there".
+      scroller.scrollLeft = Math.max(0, x - Math.max(40, laneWidth() * 0.15));
+    },
+    [laneWidth],
+  );
+
+  const scrollToToday = useCallback(() => {
     const tl = timelineRef.current;
     const scroller = scrollRef.current;
-    const b = latest.current.bar(row);
-    if (!b || !tl || !scroller) return;
-    const x = tl.xOf(b.start || b.end);
+    if (!tl || !scroller) return;
+    const x = tl.xOf(toKey(latest.current.today ?? todayDate));
     if (x === null) return;
-    const lane = scroller.clientWidth - (latest.current.gridWidth ?? 560);
-    // Left-ish rather than centred so what comes after it is visible too.
-    // Assigned, not animated: a jump is the useful answer to "take me there".
-    scroller.scrollLeft = Math.max(0, x - Math.max(40, lane * 0.15));
-  }, []);
+    scroller.scrollLeft = Math.max(0, Math.round(x - laneWidth() / 3));
+  }, [laneWidth, todayDate]);
 
-  const ctx = useMemo<GridCtx<R>>(
-    () => ({
-      edit(row, field, value) {
-        const p = latest.current;
-        try {
-          const result = p.onEdit?.(row, field, value);
-          if (result && typeof (result as Promise<unknown>).catch === 'function') {
-            (result as Promise<unknown>).catch((err) =>
-              latest.current.onEditError?.(err, row, field),
-            );
-          }
-        } catch (err) {
-          // The page owns the rules; it hands the reason back so the planner
-          // is told WHY the edit was refused.
-          p.onEditError?.(err, row, field);
+  const ctx = useMemo<GridCtx<R>>(() => {
+    // The page owns the rules; it hands the reason back so the planner is
+    // told WHY the edit was refused.
+    const guarded = (run: () => unknown, row: R, field: string) => {
+      try {
+        const result = run();
+        if (result && typeof (result as Promise<unknown>).catch === 'function') {
+          (result as Promise<unknown>).catch((err) =>
+            latest.current.onEditError?.(err, row, field),
+          );
         }
+      } catch (err) {
+        latest.current.onEditError?.(err, row, field);
+      }
+    };
+    return {
+      edit(row, field, value) {
+        guarded(() => latest.current.onEdit?.(row, field, value), row, field);
       },
       editError(error, row, field) {
         latest.current.onEditError?.(error, row, field);
@@ -759,9 +1064,12 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
         latest.current.onAction?.(key, row);
       },
       scrollToBar,
-    }),
-    [scrollToBar],
-  );
+      barChange(row, change) {
+        const field = change.mode === 'move' ? 'start_date' : 'duration_wd';
+        guarded(() => latest.current.onBarChange?.(row, change), row, field);
+      },
+    };
+  }, [scrollToBar]);
 
   useImperativeHandle(
     ref,
@@ -778,11 +1086,157 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
         }
         return true;
       },
+      scrollToToday,
       element: () => hostRef.current,
       timeline: () => timelineRef.current,
     }),
-    [],
+    [scrollToToday],
   );
+
+  // ---- horizontal position: today on arrival, the same date across zooms ----
+  // The date in the middle of the lane is kept as the planner scrolls. A new
+  // geometry (another zoom, a longer domain) brings that date back to the
+  // middle, instead of leaving the scroll at a pixel that now means another
+  // week.
+  const centre = useRef<Date | null>(null);
+  const hasRows = visible.length > 0;
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    if (!interactive || !scroller || !hostWidth) return;
+    const visibleLane = laneWidth();
+    if (visibleLane <= 0) return;
+    if (!centre.current) {
+      // A plan longer than the lane would open on its distant past.
+      if (timeline.width > visibleLane) scrollToToday();
+    } else {
+      const x = timeline.xOf(toKey(centre.current));
+      if (x !== null) scroller.scrollLeft = Math.max(0, Math.round(x - visibleLane / 2));
+    }
+    centre.current = dateAt(timeline, scroller.scrollLeft + visibleLane / 2);
+  }, [timeline, hostWidth, hasRows, interactive, laneWidth, scrollToToday]);
+
+  // ---- hover card and bar drag (delegated on the rows) ----
+  const [stores] = useState(() => ({
+    hover: createStore<HoverState | null>(null),
+    drag: createStore<DragTip | null>(null),
+  }));
+  const gesture = useRef<BarGesture<R> | null>(null);
+  const stopGesture = useRef<(() => void) | null>(null);
+  useEffect(() => () => stopGesture.current?.(), []);
+
+  const onScroll = () => {
+    const scroller = scrollRef.current;
+    const tl = timelineRef.current;
+    if (scroller && tl) centre.current = dateAt(tl, scroller.scrollLeft + laneWidth() / 2);
+    if (stores.hover.get()) stores.hover.set(null);
+  };
+
+  const onPointerOver = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (gesture.current?.active) return;
+    const el = (e.target as HTMLElement).closest<HTMLElement>('.pg-bar[data-bar]');
+    if (!el) return;
+    stores.hover.set({ key: el.dataset.bar!, rect: rectOf(el) });
+  };
+  const onPointerOut = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const from = (e.target as HTMLElement).closest('.pg-bar');
+    const to = (e.relatedTarget as HTMLElement | null)?.closest?.('.pg-bar');
+    if (from && from !== to) stores.hover.set(null);
+  };
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || gesture.current) return;
+    const target = e.target as HTMLElement;
+    const el = target.closest<HTMLElement>('.pg-bar[data-bar]');
+    if (!el) return;
+    const mode = target.closest('[data-handle="end"]') ? 'end' : 'move';
+    if (mode === 'move' && !el.hasAttribute('data-move')) return;
+    const row = rowsByKey.get(el.dataset.bar!);
+    const b = row ? bar(row) : null;
+    const start = b ? b.start || b.end : null;
+    const end = b ? b.end || b.start : null;
+    const s = toDate(start);
+    const en = toDate(end);
+    if (!row || !start || !end || !s || !en) return;
+    e.preventDefault();
+    gesture.current = {
+      row,
+      el,
+      mode,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startScroll: scrollRef.current?.scrollLeft ?? 0,
+      left: el.offsetLeft,
+      width: el.offsetWidth,
+      dayW: dayWidth(timeline),
+      start,
+      end,
+      spanDays: Math.round((en.getTime() - s.getTime()) / DAY_MS) + 1,
+      days: 0,
+      active: false,
+    };
+
+    const landing = (g: BarGesture<R>) => ({
+      start: g.mode === 'move' ? shiftKey(g.start, g.days) : g.start,
+      end: shiftKey(g.end, g.days),
+    });
+    const move = (ev: PointerEvent) => {
+      const g = gesture.current;
+      if (!g || ev.pointerId !== g.pointerId) return;
+      const dx = ev.clientX - g.startX + ((scrollRef.current?.scrollLeft ?? 0) - g.startScroll);
+      if (!g.active) {
+        if (Math.abs(dx) < DRAG_THRESHOLD) return;
+        g.active = true;
+        stores.hover.set(null);
+        document.body.classList.add('pg-dragging');
+        g.el.classList.add('pg-bar-dragging');
+      }
+      let days = Math.round(dx / g.dayW);
+      // The end never crosses the start: a one-day bar is the shortest.
+      if (g.mode === 'end') days = Math.max(days, 1 - g.spanDays);
+      g.days = days;
+      if (g.mode === 'move') g.el.style.left = `${g.left + days * g.dayW}px`;
+      else g.el.style.width = `${Math.max(g.dayW, g.width + days * g.dayW)}px`;
+      const to = landing(g);
+      stores.drag.set({
+        rect: rectOf(g.el),
+        text:
+          g.mode === 'move'
+            ? `${formatDMY(to.start)} – ${formatDMY(to.end)}`
+            : `Bitiş ${formatDMY(to.end)}`,
+      });
+    };
+    const finish = (commit: boolean) => {
+      const g = gesture.current;
+      gesture.current = null;
+      stopGesture.current = null;
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', cancel);
+      window.removeEventListener('keydown', onKey, true);
+      stores.drag.set(null);
+      document.body.classList.remove('pg-dragging');
+      if (!g) return;
+      // Back where React drew it; an accepted change redraws it from the row.
+      g.el.classList.remove('pg-bar-dragging');
+      g.el.style.left = `${g.left}px`;
+      g.el.style.width = `${g.width}px`;
+      if (!commit || !g.active || !g.days) return;
+      ctx.barChange(g.row, { mode: g.mode, ...landing(g), days: g.days });
+    };
+    const up = () => finish(true);
+    const cancel = () => finish(false);
+    const onKey = (ev: KeyboardEvent) => {
+      if (ev.key !== 'Escape') return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      finish(false);
+    };
+    stopGesture.current = cancel;
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', cancel);
+    window.addEventListener('keydown', onKey, true);
+  };
 
   // Ctrl/⌘ + wheel over the timeline zooms. Native and non-passive: React's
   // wheel listener cannot preventDefault.
@@ -793,11 +1247,16 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
       if (!e.ctrlKey && !e.metaKey) return;
       if (!(e.target as HTMLElement).closest('.pg-row-time, .pg-header-time')) return;
       e.preventDefault();
-      const current = latest.current.zoom ?? 'week';
+      const p = latest.current;
+      if (p.onZoomStep) {
+        p.onZoomStep(e.deltaY < 0 ? 1 : -1);
+        return;
+      }
+      const current = p.zoom ?? 'week';
       const at = ZOOM_ORDER.indexOf(current);
       const next =
         ZOOM_ORDER[Math.min(ZOOM_ORDER.length - 1, Math.max(0, at + (e.deltaY < 0 ? 1 : -1)))];
-      if (next && next !== current) latest.current.onZoomChange?.(next);
+      if (next && next !== current) p.onZoomChange?.(next);
     };
     host.addEventListener('wheel', onWheel, { passive: false });
     return () => host.removeEventListener('wheel', onWheel);
@@ -835,53 +1294,102 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
     '--pg-col-w': `${timeline.colWidth}px`,
     '--pg-time-w': `${timeline.width}px`,
     '--pg-nonwork-bg': nonWorkBg,
+    '--pg-boundary-bg': boundaryBg,
   } as CSSProperties;
 
-  return (
-    <div ref={hostRef} className={className ? `pg ${className}` : 'pg'} style={style}>
-      {visible.length ? (
-        <div ref={scrollRef} className="pg-scroll">
-          <div className="pg-canvas">
-            <GridHeader
-              columns={columns}
-              timeline={timeline}
-              allCollapsed={allCollapsed}
-              interactive={interactive}
-              headerActions={headerActions}
-              onToggleAll={toggleAll}
-              onGripDown={onGripDown}
-            />
-            <div className="pg-rows">
+  let body: ReactNode;
+  if (visible.length) {
+    body = (
+      <div ref={scrollRef} className="pg-scroll" onScroll={interactive ? onScroll : undefined}>
+        <div className="pg-canvas">
+          <GridHeader
+            columns={columns}
+            timeline={timeline}
+            todayX={todayX}
+            allCollapsed={allCollapsed}
+            interactive={interactive}
+            headerActions={headerActions}
+            onToggleAll={toggleAll}
+            onGripDown={onGripDown}
+          />
+          <div
+            className="pg-rows"
+            onPointerDown={interactive ? onPointerDown : undefined}
+            onPointerOver={interactive ? onPointerOver : undefined}
+            onPointerOut={interactive ? onPointerOut : undefined}
+          >
+            {/* Painted before the rows, so the frozen columns cover it and
+                the bars sit on top of it. */}
+            <div className="pg-bg" aria-hidden>
+              <LinkLayer
+                paths={linkPaths}
+                width={timeline.width}
+                height={visible.length * rowHeight}
+              />
               {todayX === null ? null : (
                 <div
                   className="pg-today"
                   style={{ left: `calc(var(--pg-grid-w) + ${todayX}px)` }}
                 />
               )}
-              {visible.map((row) => (
-                <GridRow
-                  key={row.key}
-                  row={row}
-                  columns={columns}
-                  timeline={timeline}
-                  isCellEditable={isCellEditable}
-                  rowClassName={rowClassName}
-                  actions={actions}
-                  bar={bar}
-                  target={target}
-                  ctx={ctx}
-                  interactive={interactive}
-                />
-              ))}
             </div>
+            {visible.map((row) => (
+              <GridRow
+                key={row.key}
+                row={row}
+                columns={columns}
+                timeline={timeline}
+                isCellEditable={isCellEditable}
+                rowClassName={rowClassName}
+                actions={actions}
+                bar={bar}
+                target={target}
+                barEditing={barEditing}
+                ctx={ctx}
+                interactive={interactive}
+              />
+            ))}
           </div>
         </div>
-      ) : (
-        <div className="pg-empty">
-          <i className="fas fa-inbox fa-2x" style={{ display: 'block', marginBottom: 8 }} />
-          {emptyText}
-        </div>
-      )}
+      </div>
+    );
+  } else if (loading) {
+    body = (
+      <div className="pg-skeleton" role="status" aria-label="Plan yükleniyor">
+        {Array.from({ length: 8 }, (_, i) => (
+          <div key={i} className="pg-skeleton-row">
+            <span className="pg-skeleton-cell" style={{ width: `${18 + ((i * 17) % 12)}%` }} />
+            <span
+              className="pg-skeleton-bar"
+              style={{ marginLeft: `${6 + ((i * 23) % 30)}%`, width: `${10 + ((i * 13) % 20)}%` }}
+            />
+          </div>
+        ))}
+      </div>
+    );
+  } else {
+    body = (
+      <div className="pg-empty">
+        <span className="pg-empty-icon" aria-hidden>
+          <i className="fas fa-chart-gantt" />
+        </span>
+        <div className="pg-empty-text">{emptyText}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={hostRef} className={className ? `pg ${className}` : 'pg'} style={style}>
+      {body}
+      {interactive ? (
+        <HoverCard
+          hover={stores.hover}
+          drag={stores.drag}
+          rowsByKey={rowsByKey}
+          bar={bar}
+          tooltip={tooltip}
+        />
+      ) : null}
     </div>
   );
 }

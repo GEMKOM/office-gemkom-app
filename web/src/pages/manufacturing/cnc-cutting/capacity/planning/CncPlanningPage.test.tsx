@@ -2,7 +2,16 @@ import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { bar, json, mockBackend, stubLayout } from '../../../capacity-shared/testSupport';
+import {
+  bar,
+  dragRowBefore,
+  ganttOrder,
+  json,
+  mockBackend,
+  stubLayout,
+  tableOrder,
+  typeOrder,
+} from '../../../capacity-shared/testSupport';
 import { cncApiFilters, CncPlanningPage } from './CncPlanningPage';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
@@ -44,7 +53,24 @@ const TASKS = [
   },
 ];
 
+// A third planned row, for the reorder tests.
+const QUEUE = [
+  ...TASKS,
+  {
+    key: 'CNC-4',
+    name: 'Sac D',
+    nesting_id: 'N-4',
+    in_plan: true,
+    plan_order: 3,
+    plan_locked: false,
+    planned_start_ms: T0 + 6 * HOUR,
+    planned_end_ms: T0 + 7 * HOUR,
+    machine_fk: 3,
+  },
+];
+
 let saveStatus = 200;
+let planTasks: typeof TASKS = TASKS;
 let backend: ReturnType<typeof mockBackend>;
 let restoreLayout: () => void;
 
@@ -55,10 +81,11 @@ afterAll(() => restoreLayout());
 
 beforeEach(() => {
   saveStatus = 200;
+  planTasks = TASKS;
   backend = mockBackend((url, method) => {
     if (url.pathname === '/machines/')
       return json({ count: 1, results: [{ id: 3, name: 'Plazma 1', tasks_count: 3 }] });
-    if (url.pathname === '/cnc_cutting/planning/list/') return json(TASKS);
+    if (url.pathname === '/cnc_cutting/planning/list/') return json(planTasks);
     if (url.pathname === '/machines/calendar') return json({});
     if (url.pathname === '/cnc_cutting/planning/bulk-save/' && method === 'POST') {
       return saveStatus === 200
@@ -196,4 +223,73 @@ it('says there is nothing to save', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Planı Kaydet' }));
   expect(notify.info).toHaveBeenCalledWith('Kaydedilecek değişiklik bulunmuyor');
   expect(saves()).toHaveLength(0);
+});
+
+/** The planned table's rows (the machine list is a table too). */
+const queue = () => tableOrder(screen.getByText('N-1').closest('tbody')!);
+const orders = (body: unknown) =>
+  Object.fromEntries(
+    (body as { items: { key: string; plan_order?: number }[] }).items.map((i) => [
+      i.key,
+      i.plan_order,
+    ]),
+  );
+
+it('drags a row in the table: the timeline follows and one save sends the new sequence', async () => {
+  planTasks = QUEUE;
+  renderPage();
+  await screen.findByText('N-4');
+  await waitFor(() => expect(ganttOrder()).toEqual(['CNC-1', 'CNC-2', 'CNC-4']));
+  expect(queue()).toEqual(['CNC-1', 'CNC-2', 'CNC-4']);
+
+  dragRowBefore('CNC-4', 'CNC-1');
+  expect(queue()).toEqual(['CNC-4', 'CNC-1', 'CNC-2']);
+  expect(ganttOrder()).toEqual(['CNC-4', 'CNC-1', 'CNC-2']);
+  expect(screen.getByText('Kaydedilmemiş değişiklik: 3')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Planı Kaydet' }));
+  await waitFor(() => expect(saves()).toHaveLength(1));
+  expect(orders(saves()[0]!.body)).toEqual({ 'CNC-1': 2, 'CNC-2': 3, 'CNC-4': 1 });
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Plan başarıyla kaydedildi'));
+});
+
+it('moves a row to a typed Sıra, shifting the others, and keeps it when the save fails', async () => {
+  planTasks = QUEUE;
+  saveStatus = 500;
+  renderPage();
+  await screen.findByText('N-4');
+
+  // 1 -> 3: the rows in between move up.
+  typeOrder('CNC-1', '3');
+  expect(queue()).toEqual(['CNC-2', 'CNC-4', 'CNC-1']);
+  expect(ganttOrder()).toEqual(['CNC-2', 'CNC-4', 'CNC-1']);
+  const sira = (key: string) =>
+    document.querySelector(`tr[data-row-id="${key}"] td[data-col="plan_order"]`);
+  expect(sira('CNC-2')).toHaveTextContent('1');
+  expect(sira('CNC-1')).toHaveTextContent('3');
+
+  // 3 -> 1 through "Görev Düzenle": the others move down.
+  fireEvent.click(
+    within(screen.getByText('N-4').closest('tr')!).getByRole('button', { name: 'Düzenle' }),
+  );
+  const dialog = await screen.findByRole('dialog');
+  fireEvent.change(within(dialog).getByRole('textbox', { name: 'Sıra' }), {
+    target: { value: '1' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(queue()).toEqual(['CNC-4', 'CNC-2', 'CNC-1']));
+
+  // Out of range: refused in the cell, nothing moves.
+  typeOrder('CNC-2', '9');
+  expect(sira('CNC-2')).toHaveAttribute('data-cell-state', 'error');
+  expect(queue()).toEqual(['CNC-4', 'CNC-2', 'CNC-1']);
+
+  fireEvent.click(screen.getByRole('button', { name: 'Planı Kaydet' }));
+  // CNC-2 is back on its server place, so only the two others go out.
+  expect(await screen.findByText('Kaydedilemedi: 2 değişiklik bekliyor')).toBeInTheDocument();
+  expect(saves()).toHaveLength(1);
+  expect(orders(saves()[0]!.body)).toEqual({ 'CNC-1': 3, 'CNC-4': 1 });
+  // Rolled back into the draft: the new order is still on screen.
+  expect(queue()).toEqual(['CNC-4', 'CNC-2', 'CNC-1']);
+  expect(ganttOrder()).toEqual(['CNC-4', 'CNC-2', 'CNC-1']);
 });
