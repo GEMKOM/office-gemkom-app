@@ -744,3 +744,28 @@ a.figureTile:focus-visible {
   font-weight: 500;
   color: var(--gk-ink);
 }
+
+/* ---- CountBadge: the red "something waits" pill ----------------------------- */
+.countBadge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gk-red-700);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.panelTitleGroup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}

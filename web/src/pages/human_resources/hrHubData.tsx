@@ -13,6 +13,7 @@ import { BreakdownPanel, RecordsPanel, type HubRecord } from '../hub/HubPanels';
 // What the HR and PDKS hubs share: the off-site check-ins waiting for HR and
 // today's attendance.
 
+export const ATTENDANCE = '/human_resources/attendance';
 export const PENDING_OVERRIDES = '/human_resources/attendance/pending-overrides';
 export const RECORDS = '/human_resources/attendance/records';
 

@@ -2,8 +2,9 @@ import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { useQuery } from '@tanstack/react-query';
 import { shippingPendingCountQueryOptions } from '@/api/finance/hubs';
 import { MenuCards, type MenuCard, type PageFigure } from '@/ui';
-import { TaskDeadlinesPanel, useDepartmentTaskFigures } from '../hub/departmentTasks';
+import { useDepartmentTaskFigures } from '../hub/departmentTasks';
 import { AttentionPanel, HubPanels, type AttentionItem } from '../hub/HubPanels';
+import { JobOrderDeadlinesPanel } from '../hub/jobOrderDeadlines';
 import { countFigure, countValue } from '../hubCount';
 
 const PROJECTS = '/logistics/projects';
@@ -97,7 +98,7 @@ export function LogisticsHubPage() {
     >
       {queues.length > 0 ? (
         <HubPanels>
-          {tasks.enabled ? <TaskDeadlinesPanel department="logistics" route={PROJECTS} /> : null}
+          {tasks.enabled ? <JobOrderDeadlinesPanel route={PROJECTS} /> : null}
           <AttentionPanel title="Lojistiği Bekleyenler" icon="fas fa-inbox" items={queues} />
         </HubPanels>
       ) : null}

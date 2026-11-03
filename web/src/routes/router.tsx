@@ -13,6 +13,12 @@ const manufacturingHub = async () => ({
   Component: (await import('@/pages/manufacturing/ManufacturingHubPage')).ManufacturingHubPage,
 });
 
+// /manufacturing itself: a lane per area with live figures, not cards.
+const manufacturingSectionHub = async () => ({
+  Component: (await import('@/pages/manufacturing/section/ManufacturingSectionHubPage'))
+    .ManufacturingSectionHubPage,
+});
+
 // Every report hub is the Rapor Merkezi filtered to its departments.
 const reportHub = async () => ({
   Component: (await import('@/pages/reports/ReportHubPage')).ReportHubPage,
@@ -140,7 +146,7 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/sales/offers/OffersPage')).OffersPage,
     }),
   },
-  { path: '/manufacturing', handle: hub, lazy: manufacturingHub },
+  { path: '/manufacturing', handle: hub, lazy: manufacturingSectionHub },
   // CNC and linear cutting sit under Planlama; the page picks their cards by path.
   { path: '/planning/cnc-cutting', handle: hub, lazy: manufacturingHub },
   { path: '/planning/linear-cutting', handle: hub, lazy: manufacturingHub },

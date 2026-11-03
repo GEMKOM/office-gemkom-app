@@ -1,4 +1,4 @@
-/* The personal home page: two columns of panels, then the work areas. */
+/* The personal home page: the shortcuts bar, then two columns of panels. */
 .column {
   min-width: 0;
 }
@@ -154,21 +154,57 @@
   flex: none;
 }
 
-/* ---- Kısayollar ----------------------------------------------------------------- */
-.shortcuts {
+/* ---- Kısayollar: the bar under the band ------------------------------------------ */
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px 16px;
+  margin-bottom: 16px;
+  padding: 10px 16px;
+  background: var(--gk-surface);
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-lg);
+  box-shadow: var(--gk-shadow-card);
+}
+
+.barTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gk-ink);
+}
+
+.barTitle i {
+  color: var(--gk-red-700);
+}
+
+.chips {
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
 }
 
-.shortcut {
+.chipItem {
+  position: relative;
+  display: flex;
+  min-width: 0;
+}
+
+.chip {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
+  gap: 8px;
+  max-width: 220px;
+  padding: 5px 30px 5px 6px;
   border: 1px solid var(--gk-line);
   border-radius: var(--gk-radius-md);
   color: var(--gk-ink);
@@ -178,26 +214,140 @@
     border-color 150ms ease-out;
 }
 
-.shortcut:hover {
+.chipItem[data-pinned] .chip {
+  border-color: var(--gk-red-700);
+}
+
+.chip:hover {
   background: var(--gk-surface-subtle);
   border-color: var(--gk-line-strong);
 }
 
-.shortcut:focus-visible {
+.chip:focus-visible {
   outline: none;
   box-shadow: var(--gk-focus-ring);
 }
 
-.shortcutIcon {
-  width: 28px;
-  height: 28px;
+.chipIcon {
+  width: 24px;
+  height: 24px;
   border-radius: var(--gk-radius-sm);
   display: grid;
   place-items: center;
   flex: none;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--gk-red-700);
   background: var(--gk-red-050);
+}
+
+.chipLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* The pin sits inside the chip's right edge: shown on hover or focus, always when pinned. */
+.pin {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--gk-radius-sm);
+  background: none;
+  color: var(--gk-muted);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease-out;
+}
+
+.chipItem:hover .pin,
+.chipItem:focus-within .pin,
+.pin[aria-pressed='true'] {
+  opacity: 1;
+}
+
+.pin[aria-pressed='true'] {
+  color: var(--gk-red-700);
+}
+
+.pin:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.pin:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+@media (hover: none) {
+  .pin {
+    opacity: 1;
+  }
+}
+
+.addShortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  padding: 5px 10px;
+  border: 1px dashed var(--gk-line-strong);
+  border-radius: var(--gk-radius-md);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gk-red-700);
+}
+
+.addShortcut:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.addShortcut:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.picker {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.pickerRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--gk-radius-md);
+  text-align: left;
+  color: var(--gk-ink);
+}
+
+.pickerRow > i {
+  width: 16px;
+  text-align: center;
+  color: var(--gk-red-700);
+}
+
+.pickerRow:hover,
+.pickerRow:focus-visible {
+  outline: none;
+  background: var(--gk-surface-subtle);
+}
+
+.pickerEmpty {
+  padding: 8px;
+  font-size: 13px;
+  color: var(--gk-muted);
 }
 
 .shortcutText {
@@ -223,14 +373,21 @@
   color: var(--gk-muted);
 }
 
-/* ---- Çalışma Alanları ------------------------------------------------------------ */
-.areas {
-  margin-top: 28px;
-}
+@media (max-width: 48em) {
+  .bar {
+    flex-wrap: wrap;
+  }
 
-.areasTitle {
-  margin: 0 0 12px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--gk-ink);
+  .chips {
+    flex-basis: 100%;
+    order: 3;
+  }
+
+  .addShortcut {
+    margin-left: auto;
+  }
+
+  .addShortcutText {
+    display: none;
+  }
 }

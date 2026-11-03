@@ -1,5 +1,5 @@
 import { isSuperuser } from '@legacy/authService.js';
-import { Button, Text } from '@mantine/core';
+import { Alert, Button, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { qk } from '@/api';
@@ -25,6 +25,7 @@ import {
   type FilterConfig,
   type RowAction,
 } from '@/ui';
+import { useUserIssues, userIssue, visibleUserIssues } from '../dataQuality';
 import { userColumns } from './columns';
 import { UserCreateModal } from './UserCreateModal';
 import { UserEditModal } from './UserEditModal';
@@ -41,6 +42,9 @@ const URL_DEFAULTS = {
   page: '1',
   page_size: '20',
   ordering: 'username',
+  // A data check from the HR hub (dataQuality.tsx): lists the employees it
+  // flags instead of the server page.
+  issue: '',
 };
 
 type FilterKeys = 'username' | 'position' | 'position_level' | 'department_code' | 'is_active';
@@ -93,14 +97,29 @@ export function UsersPage() {
   const sort = fromOrdering(values.ordering || 'username');
   const ordering = toOrdering(sort.sortBy, sort.sortDir) ?? 'username';
 
+  const issue = useMemo(() => {
+    const found = userIssue(values.issue);
+    return found && visibleUserIssues().includes(found) ? found : undefined;
+  }, [values.issue]);
+  const [check] = useUserIssues(issue ? [issue] : []);
+
   const params: HrUsersParams = { page, page_size: pageSize, ...filters, ordering };
-  const list = useQuery({ ...hrUsersQueryOptions(params), placeholderData: keepPreviousData });
-  const rows = list.data?.results ?? EMPTY_ROWS;
-  const total = list.data?.count ?? 0;
+  const list = useQuery({
+    ...hrUsersQueryOptions(params),
+    placeholderData: keepPreviousData,
+    enabled: !issue,
+  });
+  const rows = (issue ? check?.users : list.data?.results) ?? EMPTY_ROWS;
+  const total = issue ? rows.length : (list.data?.count ?? 0);
+  const pending = issue ? Boolean(check?.isPending) : list.isPending;
 
   useEffect(() => {
     if (list.isError) notify.error('Çalışanlar yüklenemedi');
   }, [list.isError, list.errorUpdatedAt]);
+  const checkFailed = Boolean(check?.isError);
+  useEffect(() => {
+    if (checkFailed) notify.error('Veri kontrolü yüklenemedi');
+  }, [checkFailed]);
 
   const positions = useQuery(orgPositionsQueryOptions());
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(() => {
@@ -231,7 +250,7 @@ export function UsersPage() {
           {
             id: 'total-users-count',
             label: 'Toplam',
-            value: list.isPending ? '–' : total.toLocaleString('tr-TR'),
+            value: pending ? '–' : total.toLocaleString('tr-TR'),
           },
         ]}
         actions={
@@ -241,39 +260,75 @@ export function UsersPage() {
         }
       />
 
+      {issue ? (
+        <Alert
+          mb="md"
+          color="yellow"
+          icon={<FaIcon icon={issue.icon} />}
+          title={`Veri kontrolü: ${issue.label}`}
+          data-testid="user-issue"
+        >
+          <Text size="sm">
+            {issue.hint}. Aktif çalışanlardan bu kontrole takılanlar listeleniyor; düzenleyince
+            listeden düşerler.
+          </Text>
+          <Button
+            mt="xs"
+            size="xs"
+            variant="default"
+            onClick={() => apply({ issue: '', page: '1' })}
+          >
+            Tüm Çalışanlar
+          </Button>
+        </Alert>
+      ) : null}
+
       <DataTable
-        title="Çalışan Listesi"
+        title={issue ? issue.label : 'Çalışan Listesi'}
         filters={
-          <FilterBar
-            inline
-            filters={filterConfig}
-            values={filters}
-            onApply={(next) => apply({ ...next, page: '1' })}
-            onClear={() => apply({ ...FILTER_DEFAULTS, page: '1' })}
-          />
+          issue ? undefined : (
+            <FilterBar
+              inline
+              filters={filterConfig}
+              values={filters}
+              onApply={(next) => apply({ ...next, page: '1' })}
+              onClear={() => apply({ ...FILTER_DEFAULTS, page: '1' })}
+            />
+          )
         }
         data={rows}
         columns={userColumns}
         getRowId={(row) => String(row.id)}
-        loading={list.isFetching}
+        loading={issue ? Boolean(check?.isPending) : list.isFetching}
         sortable
-        sort={{
-          sortBy: sort.sortBy,
-          sortDir: sort.sortDir,
-          onSortChange: (sortBy, sortDir) =>
-            apply({ ordering: toOrdering(sortBy, sortDir) ?? 'username', page: '1' }),
-        }}
-        pagination={{
-          page,
-          pageSize,
-          total,
-          onPageChange: (next) => apply({ page: String(next) }),
-          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
-        }}
+        // A data check holds every flagged row: sorted and paged here.
+        sort={
+          issue
+            ? undefined
+            : {
+                sortBy: sort.sortBy,
+                sortDir: sort.sortDir,
+                onSortChange: (sortBy, sortDir) =>
+                  apply({ ordering: toOrdering(sortBy, sortDir) ?? 'username', page: '1' }),
+              }
+        }
+        pagination={
+          issue
+            ? { pageSize: 20 }
+            : {
+                page,
+                pageSize,
+                total,
+                onPageChange: (next) => apply({ page: String(next) }),
+                onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
+              }
+        }
         rowActions={rowActions}
         extraData={superuser}
-        emptyMessage={<Text size="sm">Çalışan bulunamadı</Text>}
-        onRefresh={() => void list.refetch()}
+        emptyMessage={
+          <Text size="sm">{issue ? 'Bu kontrole takılan çalışan yok' : 'Çalışan bulunamadı'}</Text>
+        }
+        onRefresh={() => void (issue ? check?.refetch() : list.refetch())}
         exportable={{ fileName: exportFileName() }}
       />
 
@@ -292,6 +347,7 @@ export function UsersPage() {
           user={editing}
           positions={positions.data ?? []}
           onClose={() => setEditing(null)}
+          initialTab={issue?.tab}
         />
       ) : null}
     </>

@@ -66,7 +66,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
           { label: 'Dashboard', icon: 'fas fa-chart-line', link: '/manufacturing/machining/dashboard' },
           { label: 'Görevler', icon: 'fas fa-tasks', link: '/manufacturing/machining/tasks' },
           { label: 'Raporlar', icon: 'fas fa-chart-pie', link: '/manufacturing/machining/reports' },
-          { label: 'Kapasite Yönetimi', icon: 'fas fa-industry', link: '/manufacturing/machining/capacity' },
+          { label: 'Kapasite Planlayıcı', icon: 'fas fa-calendar-alt', link: '/manufacturing/machining/capacity/planning' },
         ],
       },
       {

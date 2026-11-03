@@ -11,33 +11,63 @@ const PENDING = {
 const cardTitles = (page: import('@playwright/test').Page) =>
   page.getByRole('main').locator('article h3');
 
-test('admin: the procurement hub shows every card and the requests awaiting approval', async ({
+test('admin: the procurement hub shows its cards, live queues and band buttons', async ({
   page,
   consoleErrors,
 }) => {
   const session = await seedSession(page, { admin: true });
-  const backend = await mockBackend(page, PENDING, { session });
+  const backend = await mockBackend(
+    page,
+    {
+      'GET /procurement/purchase-requests/pending_approval/': {
+        json: paginated(
+          [
+            {
+              id: 418,
+              request_number: 'PR-2026-0418',
+              title: 'Paslanmaz sac 4 mm',
+              requestor_username: 'ayse.kaya',
+              status: 'submitted',
+              priority: 'urgent',
+              total_amount_eur: '12480.00',
+            },
+          ],
+          { count: 5 },
+        ),
+      },
+    },
+    { session },
+  );
 
   await page.goto('/procurement/');
   const main = page.getByRole('main');
-  await expect(main.getByRole('heading', { name: 'Satın Alma Modülü' })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Satın Alma', exact: true })).toBeVisible();
   await expect(cardTitles(page)).toHaveText([
-    'Projeler',
-    'Tedarikçiler',
-    'Kritik Malzemeler',
-    'Ödeme Listeleri',
     'Satın Alma Talepleri',
-    'Raporlar',
+    'Ödeme Listeleri',
+    'Tedarikçiler',
+    'Projeler',
   ]);
   await expect(page.locator('#pending-requests')).toContainText('5');
-  await expect(main.locator('article').filter({ hasText: 'Satın Alma Talepleri' })).toContainText(
-    '5 talep onayınızı bekliyor',
+  const pending = main.locator('section').filter({
+    has: page.getByRole('heading', { name: 'Onayınızı Bekleyen Talepler' }),
+  });
+  await expect(pending.getByRole('link', { name: /PR-2026-0418/ })).toHaveAttribute(
+    'href',
+    '/procurement/purchase-requests/pending?talep=PR-2026-0418',
   );
+  for (const title of [
+    'Talep Bekleyen Malzemeler',
+    'Teslim Bekleyen Kritik Malzemeler',
+    'Bu Hafta Ödenecekler',
+  ]) {
+    await expect(main.getByRole('heading', { name: title })).toBeVisible();
+  }
   expect(backend.callsTo('/procurement/purchase-requests/pending_approval/')[0]?.query).toBe(
-    '?page_size=1',
+    '?page_size=5',
   );
 
-  // Sub-hubs open client-side.
+  // The band's Raporlar opens the report hub client-side.
   await main.getByRole('link', { name: 'Raporlar', exact: true }).click();
   await expect(page).toHaveURL(/\/procurement\/reports\/?$/);
   await expect(cardTitles(page)).toHaveText(['Ürün Raporu', 'Tedarikçi Raporu', 'Personel Raporu']);

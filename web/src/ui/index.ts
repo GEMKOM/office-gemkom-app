@@ -28,6 +28,7 @@ export type {
 
 export { PageHeader, type PageFigure, type PageHeaderProps } from './PageHeader';
 export { Panel, type PanelProps } from './Panel';
+export { CountBadge, badgeText, type CountBadgeProps } from './CountBadge';
 export { StatusBadge, type StatusBadgeProps, type StatusFamily } from './StatusBadge';
 
 export { FilterBar, type FilterBarProps, type FilterConfig, type FilterOption } from './FilterBar/FilterBar';
