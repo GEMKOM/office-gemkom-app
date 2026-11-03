@@ -1,178 +1,173 @@
-import { MenuCards, type MenuCard } from '@/ui';
+import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { useAuth } from '@/auth/AuthProvider';
+import { AttentionPanel, HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';
+import { useUnreadCount } from '@/shell/notifications';
+import { formatDate, formatNumber } from '@/lib/format';
+import { MenuCards, PageHeader, Panel, PendingValue, type PageFigure } from '@/ui';
+import { useApprovals } from './approvals';
+import { greeting } from './homeFormat';
+import { NotificationsPanel, ShortcutsPanel, TodayPanel } from './HomePanels';
+import { DEPARTMENT_LABELS, shortcuts } from './shortcuts';
+import { TASK_PAGES, useMyIsg, useMyRequests, useMyTasks } from './work';
+import { WORK_AREAS } from './workAreas';
+import css from './HomePage.module.css';
 
-// Ported from main.js (the landing page at /). Legacy painted every feature
-// icon dark red; here they take their card's colour, since red is kept for
-// the band. Cards and feature links the user cannot open hide themselves.
-const CARDS: MenuCard[] = [
-  {
-    title: 'Genel',
-    description: 'Çalışanlar, makineler, mesai ve İSG bildirimleri ile genel iş süreçlerini yönetin.',
-    icon: 'fas fa-cogs',
-    iconColor: 'secondary',
-    link: '/general',
-    features: [
-      { label: 'Makineler', icon: 'fas fa-cogs', link: '/general/machines' },
-      { label: 'Mesailer', icon: 'fas fa-clock', link: '/general/overtime' },
-      { label: 'Departman Talepleri', icon: 'fas fa-boxes', link: '/general/department-requests' },
-      { label: 'İSG Bildirimleri', icon: 'fas fa-helmet-safety', link: '/isg/issues' },
-    ],
-  },
-  {
-    title: 'Projeler',
-    description: 'Proje takibi ve yönetim işlemlerinizi gerçekleştirin.',
-    icon: 'fas fa-project-diagram',
-    iconColor: 'primary',
-    link: '/projects',
-    features: [{ label: 'Proje Takibi', icon: 'fas fa-tasks', link: '/projects/project-tracking' }],
-  },
-  {
-    title: 'Dizayn',
-    description: 'Dizayn süreçlerinizi yönetin ve optimize edin.',
-    icon: 'fas fa-drafting-compass',
-    iconColor: 'dark',
-    link: '/design',
-    features: [
-      { label: 'Projeler', icon: 'fas fa-project-diagram', link: '/design/projects' },
-      { label: 'Revizyon Talepleri', icon: 'fas fa-edit', link: '/design/revision-requests' },
-      { label: 'Çizim İncelemesi', icon: 'fas fa-search', link: '/design/release-approvals' },
-    ],
-  },
-  {
-    title: 'Planlama',
-    description: 'Planlama süreçlerini yönetin, stok takibi yapın ve görev şablonlarını oluşturun.',
-    icon: 'fas fa-calendar-alt',
-    iconColor: 'info',
-    link: '/planning',
-    features: [
-      { label: 'Departman Talepleri', icon: 'fas fa-boxes', link: '/planning/department-requests' },
-      { label: 'Görev Şablonları', icon: 'fas fa-tasks', link: '/planning/task-templates' },
-      { label: 'Stok', icon: 'fas fa-warehouse', link: '/planning/inventory' },
-      { label: 'Projeler', icon: 'fas fa-project-diagram', link: '/planning/projects' },
-    ],
-  },
-  {
-    title: 'Kalite Kontrol',
-    description: 'KK incelemeleri, uygunsuzluk raporları (NCR) ve kalite maliyet satırlarını yönetin.',
-    icon: 'fas fa-clipboard-check',
-    iconColor: 'success',
-    link: '/quality-control',
-    features: [
-      { label: 'KK İncelemeleri', icon: 'fas fa-search', link: '/quality-control/qc-reviews' },
-      { label: 'Uygunsuzluk Raporları', icon: 'fas fa-exclamation-triangle', link: '/quality-control/ncrs' },
-      { label: 'Maliyet Satırları', icon: 'fas fa-euro-sign', link: '/quality-control/cost-lines' },
-      { label: 'Kalite Evrakları', icon: 'fas fa-file-alt', link: '/quality-control/documents' },
-    ],
-  },
-  {
-    title: 'İmalat',
-    description:
-      'Üretim süreçlerini yönetin, üretim planlarını takip edin ve kalite standartlarını izleyin.',
-    icon: 'fas fa-industry',
-    iconColor: 'danger',
-    link: '/manufacturing',
-    features: [
-      { label: 'Talaşlı İmalat', icon: 'fas fa-cog', link: '/manufacturing/machining' },
-      { label: 'CNC Kesim', icon: 'fas fa-cut', link: '/manufacturing/cnc-cutting' },
-      { label: 'Bakım', icon: 'fas fa-wrench', link: '/manufacturing/maintenance' },
-    ],
-  },
-  {
-    title: 'Lojistik',
-    description:
-      'Lojistik süreçlerini yönetin, sevkiyat takibi yapın ve depo yönetimini optimize edin.',
-    icon: 'fas fa-truck',
-    iconColor: 'warning',
-    link: '/logistics',
-    features: [{ label: 'Projeler', icon: 'fas fa-project-diagram', link: '/logistics/projects' }],
-  },
-  {
-    title: 'Satın Alma',
-    description: 'Tedarikçi yönetimi, sipariş takibi ve satın alma süreçlerini yönetin.',
-    icon: 'fas fa-shopping-cart',
-    iconColor: 'success',
-    link: '/procurement',
-    features: [
-      { label: 'Tedarikçi', icon: 'fas fa-truck', link: '/procurement/suppliers' },
-      { label: 'Sipariş', icon: 'fas fa-file-invoice', link: '/procurement/purchase-requests' },
-      { label: 'Raporlar', icon: 'fas fa-balance-scale', link: '/procurement/reports' },
-      { label: 'Ödeme Listeleri', icon: 'fas fa-money-check-dollar', link: '/procurement/payment-lists' },
-    ],
-  },
-  {
-    title: 'Finans',
-    description:
-      'Finansal süreçleri yönetin, mali durumu takip edin ve finansal raporlar oluşturun.',
-    icon: 'fas fa-dollar-sign',
-    iconColor: 'primary',
-    link: '/finance',
-    features: [{ label: 'Finans İşlemleri', icon: 'fas fa-coins', link: '/finance/purchase-orders' }],
-  },
-  {
-    title: 'Muhasebe',
-    description: 'Muhasebe işlemleri, dışa aktarımlar ve finansal entegrasyonlar.',
-    icon: 'fas fa-file-invoice',
-    iconColor: 'primary',
-    link: '/accounting',
-    features: [
-      {
-        label: 'Hakedişler',
-        icon: 'fas fa-file-invoice-dollar',
-        link: '/accounting/subcontracting-statements',
-      },
-    ],
-  },
-  {
-    title: 'Bilgi İşlem',
-    description: 'IT cihazlarını yönetin, envanter takibi yapın ve donanım durumunu izleyin.',
-    icon: 'fas fa-laptop-code',
-    iconColor: 'dark',
-    link: '/it',
-    features: [{ label: 'Envanter', icon: 'fas fa-desktop', link: '/it/inventory' }],
-  },
-  {
-    title: 'İnsan Kaynakları',
-    description: 'Çalışan yönetimi, maaş süreçleri ve insan kaynakları işlemlerini yönetin.',
-    icon: 'fas fa-users-cog',
-    iconColor: 'info',
-    link: '/human_resources',
-    features: [
-      { label: 'Çalışanlar', icon: 'fas fa-users', link: '/human_resources/users' },
-      { label: 'PDKS', icon: 'fas fa-user-check', link: '/human_resources/attendance' },
-      { label: 'Organizasyon', icon: 'fas fa-sitemap', link: '/human_resources/org' },
-    ],
-  },
-  {
-    title: 'Satış',
-    description: 'Müşteri yönetimi, teklif oluşturma ve satış süreçlerini yönetin.',
-    icon: 'fas fa-handshake',
-    iconColor: 'success',
-    link: '/sales',
-    features: [
-      { label: 'Müşteriler', icon: 'fas fa-users', link: '/sales/customers' },
-      { label: 'Teklifler', icon: 'fas fa-file-invoice-dollar', link: '/sales/offers' },
-      { label: 'Ürün Kataloğu', icon: 'fas fa-book', link: '/sales/catalog' },
-    ],
-  },
-  {
-    title: 'Yönetim',
-    description: 'Şirket yönetimi ve analitik işlemlerinizi gerçekleştirin.',
-    icon: 'fas fa-chart-line',
-    iconColor: 'primary',
-    link: '/management',
-    features: [
-      { label: 'Dashboard', icon: 'fas fa-tachometer-alt', link: '/management/dashboard' },
-      { label: 'Raporlar', icon: 'fas fa-chart-bar', link: '/management/reports' },
-      { label: 'Analitik', icon: 'fas fa-chart-pie', link: '/management/analytics' },
-    ],
-  },
-];
+const figure = (value: number | undefined, failed = false) =>
+  failed ? '-' : value === undefined ? <PendingValue /> : formatNumber(value);
 
+const sum = (...values: (number | undefined)[]) =>
+  values.some((v) => v === undefined) ? undefined : values.reduce<number>((a, b) => a + (b ?? 0), 0);
+
+/**
+ * The landing page at /: what needs the signed-in user right now. Approvals
+ * waiting on them, their tasks and İSG actions, their own requests, today's
+ * PDKS, notifications and shortcuts; the work areas come last. Every request
+ * starts at once, and nothing is asked for a list the user cannot open.
+ */
 export function HomePage() {
+  const { user } = useAuth();
+  const departmentCode =
+    (typeof user.position?.department_code === 'string' && user.position.department_code) ||
+    user.department_code ||
+    null;
+  const positionTitle = typeof user.position_title === 'string' ? user.position_title : null;
+
+  const approvals = useApprovals({ departmentCode });
+  const tasks = useMyTasks(user.id);
+  const isg = useMyIsg();
+  const requests = useMyRequests(user.id);
+  const unread = useUnreadCount();
+
+  // Tasks are any department's; the panel shows for task departments and for
+  // anyone who has some.
+  const ownTaskPage = departmentCode ? TASK_PAGES[departmentCode] : undefined;
+  const showTasks = Boolean(ownTaskPage) || Boolean(tasks.count);
+  const tasksMore = ownTaskPage && hasRouteAccess(ownTaskPage) ? `${ownTaskPage}?assigned_to=${user.id}` : undefined;
+  const showIsg = Boolean(isg.count);
+
+  const stats: PageFigure[] = [];
+  if (!approvals.none) {
+    stats.push({
+      id: 'home-approvals',
+      label: 'Onayınızı Bekleyen',
+      value: figure(approvals.total),
+      icon: 'fas fa-stamp',
+      link: approvals.onlyRoute ?? undefined,
+    });
+  }
+  if (showTasks || showIsg) {
+    stats.push({
+      id: 'home-tasks',
+      label: 'Açık İşim',
+      value: figure(sum(tasks.count, isg.count)),
+      icon: 'fas fa-list-check',
+      link: tasksMore,
+    });
+    stats.push({
+      id: 'home-overdue',
+      label: 'Geciken',
+      value: figure(sum(tasks.overdue.data, isg.overdue.data), tasks.overdue.isError && isg.overdue.isError),
+      icon: 'fas fa-triangle-exclamation',
+      link: tasksMore,
+    });
+  }
+  stats.push({
+    id: 'home-unread',
+    label: 'Okunmamış Bildirim',
+    value: figure(unread.data, unread.isError),
+    icon: 'fas fa-bell',
+    link: '/general/notifications',
+  });
+
+  const firstName = user.first_name || user.username;
+  const subtitle = [
+    formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }),
+    positionTitle,
+    departmentCode ? DEPARTMENT_LABELS[departmentCode] : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const left = [
+    !approvals.none ? (
+      <RecordsPanel
+        key="approvals"
+        title="Onayınızı Bekleyenler"
+        icon="fas fa-stamp"
+        query={approvals.records}
+        noun="Onay bekleyen kayıtlar"
+        empty="Şu an onayınızı bekleyen bir şey yok. Yeni bir talep geldiğinde burada görünür."
+      />
+    ) : null,
+    showTasks ? (
+      <RecordsPanel
+        key="tasks"
+        title="Görevlerim"
+        icon="fas fa-list-check"
+        more={tasksMore}
+        query={tasks.records}
+        noun="Görevler"
+        empty="Üzerinize atanmış açık bir görev yok."
+      />
+    ) : null,
+    showIsg ? (
+      <RecordsPanel
+        key="isg"
+        title="İSG Aksiyonlarım"
+        icon="fas fa-helmet-safety"
+        more="/isg/issues?mine=true"
+        query={isg.records}
+        noun="İSG aksiyonları"
+        empty="Size atanmış açık bir İSG aksiyonu yok."
+      />
+    ) : null,
+    requests.visible ? (
+      <RecordsPanel
+        key="requests"
+        title="Taleplerim"
+        icon="fas fa-paper-plane"
+        query={requests.records}
+        noun="Talepleriniz"
+        empty="Henüz bir izin ya da mesai talebiniz yok."
+      />
+    ) : null,
+  ].filter(Boolean);
+
   return (
-    <MenuCards
-      title="Çalışma Alanları"
-      subtitle="Takımınıza göre ilgili alanı seçin ve verimliliğinizi artırın"
-      cards={CARDS}
-    />
+    <>
+      <PageHeader
+        title={`${greeting()}, ${firstName}`}
+        subtitle={subtitle}
+        stats={stats}
+        figureStyle="tiles"
+      />
+      <HubPanels>
+        <div key="main" className={css.column}>
+          {left.length > 0 ? (
+            left
+          ) : (
+            <Panel title="Sizi Bekleyenler" icon="fas fa-mug-hot">
+              <p className={css.calm}>
+                Üzerinizde bekleyen bir onay, görev ya da talep yok. Aşağıdaki çalışma alanlarından devam edebilirsiniz.
+              </p>
+            </Panel>
+          )}
+        </div>
+        <div key="side" className={css.column}>
+          {!approvals.none ? (
+            <AttentionPanel title="Onay Kuyruklarım" icon="fas fa-inbox" items={approvals.items} />
+          ) : null}
+          <TodayPanel />
+          <NotificationsPanel />
+          <ShortcutsPanel pages={shortcuts(user.id, departmentCode)} />
+        </div>
+      </HubPanels>
+      <section className={css.areas} aria-labelledby="home-areas">
+        <h2 id="home-areas" className={css.areasTitle}>
+          Çalışma Alanları
+        </h2>
+        <MenuCards cards={WORK_AREAS} />
+      </section>
+    </>
   );
 }

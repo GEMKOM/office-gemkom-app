@@ -7,6 +7,7 @@ import { bindNeoUser, DailySummaryPrompt, NeoAside, NeoEntry, useNeo } from '@/n
 import { AppLink } from './AppLink';
 import { AttendanceButton } from './AttendanceButton';
 import { NotificationBell } from './NotificationBell';
+import { useRecordVisits } from './pageVisits';
 import { Rail } from './Rail';
 import { useRailExpanded } from './railState';
 import logoMark from './gemkom-mark-on-dark.png';
@@ -25,6 +26,8 @@ export function AppLayout() {
   const rail = useRailExpanded();
   const { user } = useAuth();
   bindNeoUser(user.id);
+  // Feeds the home page's shortcuts (the pages this user opens most).
+  useRecordVisits();
   const neoOpen = useNeo((s) => s.open);
   const reduceMotion = useReducedMotion();
 

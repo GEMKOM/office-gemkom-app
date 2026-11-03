@@ -2,7 +2,8 @@ import { expect, mockBackend, paginated, seedSession, test } from './fixtures';
 
 // The landing page and the Genel / Bilgi İşlem / İSG hubs (MenuCards).
 // Contracts used here:
-//   /                       title "Çalışma Alanları", one card per work area
+//   /                       the personal home; under it "Çalışma Alanları",
+//                           one card per work area
 //   /general/               title "Genel Modülü"; Mesailer shows a pill when
 //                           GET /overtime/requests/pending_approval/ counts any
 //   /general/overtime/      title "Mesai Talepleri"
@@ -32,7 +33,8 @@ test('admin: landing page -> Genel -> Mesailer, all client-side', async ({ page,
 
   await page.goto('/');
   const main = page.getByRole('main');
-  await expect(main.getByRole('heading', { level: 1, name: 'Çalışma Alanları' })).toBeVisible();
+  await expect(main.getByRole('heading', { level: 1, name: /, E2E$/ })).toBeVisible();
+  await expect(main.getByRole('heading', { level: 2, name: 'Çalışma Alanları' })).toBeVisible();
   expect(await cardTitles(page)).toHaveLength(14);
   await expect(page.locator('#root')).toHaveCount(1);
 
@@ -61,7 +63,7 @@ test.describe('a user with only some grants', () => {
     const backend = await mockBackend(page, {}, { session });
 
     await page.goto('/');
-    await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' })).toBeVisible();
+    await expect(page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' })).toBeVisible();
     await expect.poll(() => cardTitles(page)).toEqual(['Genel', 'Satış']);
 
     await page.goto('/general/');

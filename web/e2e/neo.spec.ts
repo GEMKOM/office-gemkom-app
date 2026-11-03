@@ -72,7 +72,7 @@ test('opens from the rail, answers, and keeps the conversation across pages', as
 
   await page.goto('/');
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+    page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
   ).toBeVisible();
   await expect(neoEntry(page)).toHaveAttribute('aria-expanded', 'false');
   await expect(panel(page)).toHaveCount(0); // inert while closed: not in the accessibility tree
@@ -379,7 +379,7 @@ test('the daily summary pops up on the first page, and "Okudum" reads it for goo
   // Read: a reload (a new visit in the same tab) is quiet.
   await page.reload();
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+    page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
   ).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByTestId('daily-summary-banner')).toHaveCount(0);
@@ -467,7 +467,7 @@ test('first visit: a hint points at Neo, once', async ({ page, consoleErrors }) 
   await expect(hint).toHaveCount(0);
   await page.reload();
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+    page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
   ).toBeVisible();
   await expect(hint).toHaveCount(0);
 
@@ -483,7 +483,7 @@ test.describe('phone', () => {
 
     await page.goto('/');
     await expect(
-      page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+      page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
     ).toBeVisible();
     await shot(page, '40-phone-closed');
     await neoEntry(page).click();
