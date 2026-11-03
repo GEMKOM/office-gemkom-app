@@ -5,9 +5,14 @@ import {
   applyOverrides,
   autoschedule,
   cuttingSaveItems,
+  editPlannedTask,
   machiningSaveItems,
   mergeOverrides,
+  moveInQueue,
+  moveMachiningTo,
+  moveToPosition,
   nextWorkingTime,
+  orderEditor,
   removeFromPlan,
   reorderCutting,
   reorderMachining,
@@ -67,6 +72,90 @@ describe('draft overrides', () => {
     const undone = mergeOverrides(overrides, new Map([['CNC-1', { plan_order: 1 }]]), byKey);
     expect(undone.size).toBe(0);
     expect(applyOverrides(cnc, undone)).toBe(cnc);
+  });
+});
+
+describe('queue order', () => {
+  const keys = ['a', 'b', 'c', 'd', 'e'];
+
+  it('moves a row up: the rows in between shift down', () => {
+    expect(moveToPosition(keys, 'd', 2)).toEqual(['a', 'd', 'b', 'c', 'e']);
+  });
+
+  it('moves a row down: the rows in between shift up', () => {
+    expect(moveToPosition(keys, 'b', 4)).toEqual(['a', 'c', 'd', 'b', 'e']);
+  });
+
+  it('moves to the first and the last place', () => {
+    expect(moveToPosition(keys, 'c', 1)).toEqual(['c', 'a', 'b', 'd', 'e']);
+    expect(moveToPosition(keys, 'a', 5)).toEqual(['b', 'c', 'd', 'e', 'a']);
+  });
+
+  it('clamps out-of-range places and ignores non-numbers and unknown rows', () => {
+    expect(moveToPosition(keys, 'c', 0)).toEqual(['c', 'a', 'b', 'd', 'e']);
+    expect(moveToPosition(keys, 'c', -3)).toEqual(['c', 'a', 'b', 'd', 'e']);
+    expect(moveToPosition(keys, 'c', 99)).toEqual(['a', 'b', 'd', 'e', 'c']);
+    expect(moveToPosition(keys, 'c', 2.7)).toEqual(['a', 'c', 'b', 'd', 'e']);
+    expect(moveToPosition(keys, 'c', Number.NaN)).toEqual(keys);
+    expect(moveToPosition(keys, 'x', 1)).toEqual(keys);
+    expect(moveToPosition(keys, 'c', 3)).toEqual(keys);
+  });
+
+  it('renumbers the cutting queue 1..n, sending only the rows that change', () => {
+    const queue = cnc.filter((t) => t.in_plan);
+    const patches = moveInQueue(queue, 'CNC-3', 1);
+    expect(Object.fromEntries(patches)).toEqual({
+      'CNC-3': { plan_order: 1 },
+      'CNC-1': { plan_order: 2 },
+      'CNC-2': { plan_order: 3 },
+    });
+    // Moving one later pulls the rows in between up; the rows after it keep their place.
+    expect(Object.fromEntries(moveInQueue(queue, 'CNC-1', 2))).toEqual({
+      'CNC-2': { plan_order: 1 },
+      'CNC-1': { plan_order: 2 },
+    });
+    expect(moveInQueue(queue, 'CNC-4', 1).size).toBe(0); // not in the queue
+    expect(moveInQueue(queue, 'CNC-2', 2).size).toBe(0);
+  });
+
+  it('closes gaps and duplicates in the server numbering', () => {
+    const queue: CuttingPlanTask[] = [
+      { key: 'A', in_plan: true, plan_order: 1 },
+      { key: 'B', in_plan: true, plan_order: 4 },
+      { key: 'C', in_plan: true, plan_order: 4 },
+    ];
+    expect(Object.fromEntries(moveInQueue(queue, 'A', 3))).toEqual({
+      B: { plan_order: 1 },
+      C: { plan_order: 2 },
+      A: { plan_order: 3 },
+    });
+  });
+
+  it('applies a new Sıra from "Görev Düzenle" as a move', () => {
+    const queue = cnc.filter((t) => t.in_plan);
+    const patches = editPlannedTask(queue, 'CNC-1', {
+      planned_start_ms: 10,
+      planned_end_ms: 20,
+      plan_order: 3,
+      plan_locked: true,
+    });
+    expect(Object.fromEntries(patches)).toEqual({
+      'CNC-1': { planned_start_ms: 10, planned_end_ms: 20, plan_locked: true, plan_order: 3 },
+      'CNC-2': { plan_order: 1 },
+      'CNC-3': { plan_order: 2 },
+    });
+    // An emptied Sıra keeps the place.
+    expect(Object.fromEntries(editPlannedTask(queue, 'CNC-2', { plan_order: null }))).toEqual({
+      'CNC-2': {},
+    });
+  });
+
+  it('accepts whole numbers from 1 to the queue length in the Sıra cell', () => {
+    const validate = orderEditor<{ key: string }>(() => 3).validate!;
+    expect(validate(1, { key: 'a' })).toBe(true);
+    expect(validate(3, { key: 'a' })).toBe(true);
+    for (const bad of [0, 4, 1.5, null, 'x'])
+      expect(validate(bad, { key: 'a' })).toBe('1 ile 3 arasında bir sıra girin');
   });
 });
 
@@ -270,6 +359,31 @@ describe('machining queue', () => {
     expect(patches.get('OP-9')).toEqual({ in_plan: true, plan_locked: true, plan_order: 2 });
     expect(patches.get('OP-2')).toEqual({ plan_order: 3 });
     expect(patches.get('OP-3')).toEqual({ plan_order: 4 });
+  });
+
+  it('moves to a typed place, locks the row and keeps the queue gapless', () => {
+    expect(Object.fromEntries(moveMachiningTo(ops, 'OP-1', 3))).toEqual({
+      'OP-2': { plan_order: 1 },
+      'OP-3': { plan_order: 2 },
+      'OP-1': { in_plan: true, plan_locked: true, plan_order: 3 },
+    });
+    // An unplanned row joins the queue at the typed place, or at its end.
+    expect(moveMachiningTo(ops, 'OP-9', 1).get('OP-9')).toEqual({
+      in_plan: true,
+      plan_locked: true,
+      plan_order: 1,
+    });
+    expect(Object.fromEntries(moveMachiningTo(ops, 'OP-9', 50))).toEqual({
+      'OP-9': { in_plan: true, plan_locked: true, plan_order: 4 },
+    });
+    expect(moveMachiningTo(ops, 'OP-1', Number.NaN).size).toBe(0);
+  });
+
+  it('puts a row dropped among the unplanned ones at the end of the queue', () => {
+    const more = [...ops, { key: 'OP-8', in_plan: false, plan_order: null, plan_locked: false }];
+    expect(Object.fromEntries(reorderMachining(more, 'OP-9', 'OP-8', 'after'))).toEqual({
+      'OP-9': { in_plan: true, plan_locked: true, plan_order: 4 },
+    });
   });
 
   it('sends changed rows with the moved ones locked (bare array)', () => {
