@@ -3,7 +3,15 @@
 // by object identity.
 
 import { StatusBadge } from '@/ui';
-import type { GridAction, GridBar, GridColumn, GridTarget } from './grid/PlanningGrid';
+import type {
+  GridAction,
+  GridBar,
+  GridBarEditing,
+  GridColumn,
+  GridLink,
+  GridTarget,
+  GridTooltip,
+} from './grid/PlanningGrid';
 import { EDITABLE_STATUS_OPTIONS, STATUS_META } from './model/constants';
 import { fmtDate, fmtDuration, fmtKg, round2, todayStr } from './model/format';
 import type { SheetRow } from './model/rowTypes';
@@ -616,6 +624,82 @@ export function rowBar(row: SheetRow): GridBar | null {
     hideEndLabel: row.kind === 'group',
     title: `${row.title} · ${fmtDate(row.start_date)} – ${fmtDate(row.end_date)}`,
   };
+}
+
+// A bar can be dragged exactly where its cells can be typed: the body where
+// the START is an entry, the right edge where the DURATION is. The page turns
+// a drop into those same edits, so the same rules refuse the same things.
+export function rowBarEditing(row: SheetRow): GridBarEditing | null {
+  if (!row.start_date || row.kind === 'band') return null;
+  const move = isCellEditable(row, 'start_date');
+  const resize = isCellEditable(row, 'duration_wd');
+  return move || resize ? { move, resize } : null;
+}
+
+const OUT_OF_PLAN = ['cancelled', 'skipped'];
+
+// The sequence the plan is built on (derive.ts): an assignment's stages run
+// one after another, and Boya starts after Kaynaklı and Talaşlı İmalat.
+export function rowLinks(rows: readonly SheetRow[]): GridLink[] {
+  const links: GridLink[] = [];
+  let lastStage: SheetRow | null = null;
+  let feeders: string[] = [];
+  for (const row of rows) {
+    if (row.kind === 'group') {
+      lastStage = null;
+      feeders = [];
+      continue;
+    }
+    const live = !OUT_OF_PLAN.includes(row.status ?? '');
+    if (row.kind === 'stage') {
+      if (!live) continue;
+      if (lastStage && lastStage.blockRef === row.blockRef)
+        links.push({ from: lastStage.key, to: row.key });
+      lastStage = row;
+      continue;
+    }
+    lastStage = null;
+    if (!live) continue;
+    if ((row.kind === 'dept' && row.slot === 'welding') || row.kind === 'machining') {
+      feeders.push(row.key);
+    } else if (row.kind === 'dept' && row.slot === 'painting') {
+      feeders.forEach((from) => links.push({ from, to: row.key }));
+      feeders = [];
+    }
+  }
+  return links;
+}
+
+// The hover card: what the bar is, when, how far along, and against the termin.
+export function rowTooltip(row: SheetRow): GridTooltip | null {
+  const bar = rowBar(row);
+  if (!bar) return null;
+  const status = STATUS_META[row.status ?? '']?.label;
+  const pct = Math.round(Math.max(0, Math.min(100, Number(row.progress || 0))));
+  const lines: string[] = [
+    `${fmtDate(bar.start)} – ${fmtDate(bar.end)}` +
+      (row.duration_wd != null ? ` · ${fmtDuration(row.duration_wd)}` : ''),
+    [`İlerleme %${pct}`, status].filter(Boolean).join(' · '),
+  ];
+  if (isRowOverdue(row)) lines.push('Bitiş tarihi geçti');
+  if (row.job_target) {
+    const d = row.job_target_delta_wd;
+    const gap =
+      row.kind === 'group' && d
+        ? ` — plan ${Math.abs(d)} iş günü ${d > 0 ? 'sonra bitiyor' : 'önce bitiyor'}`
+        : '';
+    lines.push(`Termin ${fmtDate(row.job_target)}${gap}`);
+  }
+  if (row.forecast_date && row.forecast_kind !== 'actual' && row.forecast_date !== bar.end)
+    lines.push(`Öngörü ${fmtDate(row.forecast_date)}`);
+  const editing = rowBarEditing(row);
+  if (editing?.move) lines.push('Sürükleyin: başlangıcı taşır');
+  if (editing?.resize) lines.push('Sağ kenar: süreyi değiştirir');
+  const title =
+    row.kind === 'group' && row.job_order_title
+      ? `${row.title} — ${row.job_order_title}`
+      : row.title;
+  return { title, lines };
 }
 
 // İş emri hedef bitişi: the same tick on every row of the job; ONE tag per job.
