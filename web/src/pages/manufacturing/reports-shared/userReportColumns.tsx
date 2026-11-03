@@ -326,7 +326,7 @@ const cutCol: Col = {
   render: (row) =>
     row.task_key
       ? badgeLink(
-          `/manufacturing/cnc-cutting/cuts/?cut=${encodeURIComponent(row.task_key)}`,
+          `/planning/cnc-cutting/cuts/?cut=${encodeURIComponent(row.task_key)}`,
           row.task_key,
         )
       : '-',

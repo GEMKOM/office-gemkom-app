@@ -1,8 +1,10 @@
 import { NAVIGATION_STRUCTURE } from '@legacy/navigationStructure.js';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
+import { hasHubAccess } from '@/auth/RequireRoute';
+import { isMigratedRoute, normalizeRoute } from '@/routes/migrated';
 import { AppLink } from '@/shell/AppLink';
-import { findTrail } from '@/shell/navModel';
+import { findParent, findTrail } from '@/shell/navModel';
 import { FaIcon } from './FaIcon';
 import classes from './ui.module.css';
 
@@ -34,7 +36,12 @@ export interface PageHeaderProps {
    * default one becomes a ghost, e.g. <Button leftSection={...}>Yeni Müşteri</Button>.
    */
   actions?: ReactNode;
-  /** Shows a back arrow linking here (legacy backUrl). */
+  /**
+   * Where the back arrow leads when the menu does not decide it. The arrow
+   * normally goes one level up in the menu (useBackLink); this is for pages
+   * the menu does not place, and for a view inside the page itself (a payment
+   * list's detail back to the lists), which it always wins for.
+   */
   backTo?: string;
   backLabel?: string;
 }
@@ -54,6 +61,25 @@ function Breadcrumbs() {
       ))}
     </nav>
   );
+}
+
+// A parent the user can open: a React page their grants reach. Hubs open
+// for anyone with a page under them, so this is the hub rule (RequireRoute).
+const canOpenParent = (path: string) => isMigratedRoute(path) && hasHubAccess(path);
+
+/**
+ * The band's back arrow: one level up in the menu hierarchy (never the
+ * browser history), so every page below a hub has a way up.
+ */
+function useBackLink(backTo: string | undefined, backLabel: string) {
+  const { pathname } = useLocation();
+  return useMemo(() => {
+    const current = normalizeRoute(pathname);
+    if (backTo && normalizeRoute(backTo) === current) return { to: backTo, label: backLabel };
+    const parent = findParent(NAVIGATION_STRUCTURE, current, canOpenParent);
+    if (parent) return { to: parent.path, label: `${parent.label} sayfasına dön` };
+    return backTo ? { to: backTo, label: backLabel } : null;
+  }, [pathname, backTo, backLabel]);
 }
 
 /**
@@ -102,14 +128,15 @@ export function PageHeader({
   backTo,
   backLabel = 'Geri Dön',
 }: PageHeaderProps) {
+  const back = useBackLink(backTo, backLabel);
   return (
     <header className={classes.band}>
       <Breadcrumbs />
       <div className={classes.bandRow}>
         <div style={{ minWidth: 0 }}>
           <div className={classes.bandTitleRow}>
-            {backTo ? (
-              <AppLink to={backTo} className={classes.bandBack} aria-label={backLabel} title={backLabel}>
+            {back ? (
+              <AppLink to={back.to} className={classes.bandBack} aria-label={back.label} title={back.label}>
                 <FaIcon icon="fas fa-arrow-left" />
               </AppLink>
             ) : null}

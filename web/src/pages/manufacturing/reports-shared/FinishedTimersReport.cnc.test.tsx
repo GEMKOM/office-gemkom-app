@@ -86,7 +86,7 @@ afterEach(() => {
 it('links the nesting to its cut and filters by Nesting ID', async () => {
   renderPage();
   const link = await screen.findByRole('link', { name: 'E9035' });
-  expect(link).toHaveAttribute('href', '/manufacturing/cnc-cutting/cuts?cut=CNC-12');
+  expect(link).toHaveAttribute('href', '/planning/cnc-cutting/cuts?cut=CNC-12');
   expect(screen.getByText('10 mm')).toBeInTheDocument();
   const machines = calls().find((c) => c.url.pathname === '/machines/')!;
   expect(machines.url.searchParams.get('used_in')).toBe('cnc_cutting');

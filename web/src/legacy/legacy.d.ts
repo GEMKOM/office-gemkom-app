@@ -82,6 +82,10 @@ declare module '@legacy/apis/accessControl.js' {
   export function hasSectionAccess(section: string): boolean;
   export function filterNavigationByAccess(tree: NavTree): NavTree;
   export function inheritedAccessRoutes(): string[];
+  /** Moved pages, old route -> new route. */
+  export const MOVED_ROUTES: Record<string, string>;
+  /** The old route of a moved page, or undefined. */
+  export function movedFrom(route: string): string | undefined;
 }
 
 declare module '@legacy/reportCatalog.js' {

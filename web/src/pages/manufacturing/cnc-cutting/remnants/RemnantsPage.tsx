@@ -302,7 +302,7 @@ export function RemnantsPage() {
       <PageHeader
         title="Fire Plakalar"
         subtitle="CNC kesim fire plakaları yönetimi ve takibi"
-        backTo="/manufacturing/cnc-cutting/"
+        backTo="/planning/cnc-cutting/"
         stats={[
           { id: 'total-remnants-count', label: 'Plaka Kaydı', value: figure(summary.plates) },
           { id: 'total-quantity-count', label: 'Kalan Adet', value: figure(summary.available) },

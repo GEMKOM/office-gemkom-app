@@ -51,7 +51,7 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
 }
 
-function renderPage(route = '/manufacturing/cnc-cutting/reports/parts-search/') {
+function renderPage(route = '/planning/cnc-cutting/reports/parts-search/') {
   return renderWithProviders(
     <>
       <PartsSearchPage />
@@ -83,7 +83,7 @@ it('loads the first page, shows plate sources and the weight total', async () =>
 });
 
 it('search fields go to the URL and the request', async () => {
-  renderPage('/manufacturing/cnc-cutting/reports/parts-search/?image_no=R-1&page=3');
+  renderPage('/planning/cnc-cutting/reports/parts-search/?image_no=R-1&page=3');
   await screen.findByText('R-10');
   expect(Object.fromEntries(searchCalls()[0]!.searchParams)).toEqual({
     image_no: 'R-1',
@@ -111,7 +111,7 @@ it('search fields go to the URL and the request', async () => {
 
 it('says why the table is empty', async () => {
   fetchMock.mockImplementation(() => json({ count: 0, next: null, previous: null, results: [] }));
-  renderPage('/manufacturing/cnc-cutting/reports/parts-search/?job_no=999');
+  renderPage('/planning/cnc-cutting/reports/parts-search/?job_no=999');
   expect(await screen.findByText('Arama kriterlerine uygun sonuç bulunamadı.')).toBeInTheDocument();
 });
 

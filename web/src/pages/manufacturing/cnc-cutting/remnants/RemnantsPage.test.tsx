@@ -86,7 +86,7 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
 }
 
-function renderPage(route = '/manufacturing/cnc-cutting/remnants/') {
+function renderPage(route = '/planning/cnc-cutting/remnants/') {
   return renderWithProviders(
     <ModalsProvider>
       <RemnantsPage />
@@ -174,7 +174,7 @@ it('flags malformed dimensions and filters to them', async () => {
 });
 
 it('filters write the URL and send the legacy params', async () => {
-  renderPage('/manufacturing/cnc-cutting/remnants/?page=2&thickness_mm=10');
+  renderPage('/planning/cnc-cutting/remnants/?page=2&thickness_mm=10');
   await screen.findByText('1200x800');
   expect(listCalls()[0]!.url.searchParams.get('thickness_mm')).toBe('10');
 

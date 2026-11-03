@@ -130,7 +130,7 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
 }
 
-function renderPage(route = '/manufacturing/cnc-cutting/cuts/') {
+function renderPage(route = '/planning/cnc-cutting/cuts/') {
   return renderWithProviders(
     <ModalsProvider>
       <CncCutsPage />
@@ -221,7 +221,7 @@ it('lists the cuts with the legacy columns, figures and default query', async ()
 });
 
 it('reads legacy URL aliases and maps the status filter', async () => {
-  renderPage('/manufacturing/cnc-cutting/cuts/?nesting-id=NST&thickness-mm=10&status=pending');
+  renderPage('/planning/cnc-cutting/cuts/?nesting-id=NST&thickness-mm=10&status=pending');
   await screen.findByText('CNC-7');
   await waitFor(() => expect(location().get('nesting_id')).toBe('NST'));
   expect(location().has('nesting-id')).toBe(false);
@@ -242,7 +242,7 @@ it('reads legacy URL aliases and maps the status filter', async () => {
 });
 
 it('?cut opens the details and filters the list to that cut', async () => {
-  renderPage('/manufacturing/cnc-cutting/cuts/?cut=CNC-7');
+  renderPage('/planning/cnc-cutting/cuts/?cut=CNC-7');
   const dialog = await screen.findByRole('dialog', { name: 'Kesim Detayları' });
   expect(await within(dialog).findByText('P8-B')).toBeInTheDocument();
   expect(within(dialog).getByText('38.33 kg')).toBeInTheDocument();
@@ -260,7 +260,7 @@ it('?cut opens the details and filters the list to that cut', async () => {
 });
 
 it('a missing ?cut reports it and cleans the URL', async () => {
-  renderPage('/manufacturing/cnc-cutting/cuts/?cut=CNC-404&mode=edit');
+  renderPage('/planning/cnc-cutting/cuts/?cut=CNC-404&mode=edit');
   await waitFor(() => expect(notify.error).toHaveBeenCalledWith('Kesim bulunamadı'));
   await waitFor(() => expect(location().has('cut')).toBe(false));
   expect(location().has('mode')).toBe(false);
@@ -366,7 +366,7 @@ it('create needs a plate source and a part, then posts the multipart body', asyn
 });
 
 it('edit keeps the plate source, saves with PATCH and updates pasted parts together', async () => {
-  renderPage('/manufacturing/cnc-cutting/cuts/?cut=CNC-7&mode=edit');
+  renderPage('/planning/cnc-cutting/cuts/?cut=CNC-7&mode=edit');
   const dialog = await screen.findByRole('dialog', { name: 'Kesim Düzenle' });
   expect(await within(dialog).findByLabelText(/^Kesim Adı/)).toHaveValue('Kazan sacı');
   expect(within(dialog).getByText('Seçili: 0100-20 — 20 mm P265GH')).toBeInTheDocument();
@@ -430,7 +430,7 @@ it('edit keeps the plate source, saves with PATCH and updates pasted parts toget
 });
 
 it('a refused part delete shows the backend reason', async () => {
-  renderPage('/manufacturing/cnc-cutting/cuts/?cut=CNC-7&mode=edit');
+  renderPage('/planning/cnc-cutting/cuts/?cut=CNC-7&mode=edit');
   const dialog = await screen.findByRole('dialog', { name: 'Kesim Düzenle' });
   await within(dialog).findByText('P8-B');
   const base = fetchMock.getMockImplementation()!;

@@ -111,7 +111,7 @@ it('the detail lists cuts with their nesting, material and part count', async ()
 
   expect(await within(dialog).findByRole('link', { name: 'CNC-77' })).toHaveAttribute(
     'href',
-    '/manufacturing/cnc-cutting/cuts/?cut=CNC-77',
+    '/planning/cnc-cutting/cuts/?cut=CNC-77',
   );
   expect(within(dialog).getByText('S235')).toBeInTheDocument();
   expect(within(dialog).getByText('12 mm')).toBeInTheDocument();

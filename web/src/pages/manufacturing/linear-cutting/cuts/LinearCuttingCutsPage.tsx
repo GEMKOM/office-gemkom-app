@@ -391,7 +391,7 @@ export function LinearCuttingCutsPage() {
         title="Lineer Kesim"
         subtitle="Kesim planları, parça yönetimi ve optimizasyon"
         icon="ruler-horizontal"
-        backTo="/manufacturing/linear-cutting/"
+        backTo="/planning/linear-cutting/"
         actions={
           <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating(true)}>
             Yeni Kesim Planı

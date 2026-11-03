@@ -69,7 +69,7 @@ afterEach(() => {
 
 it('shows running timers, machine status from them and the task count', async () => {
   renderWithProviders(<LinearCuttingDashboardPage />, {
-    route: '/manufacturing/linear-cutting/dashboard/',
+    route: '/planning/linear-cutting/dashboard/',
   });
   expect(await screen.findByText('LC-5')).toBeInTheDocument();
   expect(screen.getByText('Profil kesim')).toBeInTheDocument();
@@ -101,7 +101,7 @@ it('shows running timers, machine status from them and the task count', async ()
 
 it('stops a timer with an empty comment', async () => {
   renderWithProviders(<LinearCuttingDashboardPage />, {
-    route: '/manufacturing/linear-cutting/dashboard/',
+    route: '/planning/linear-cutting/dashboard/',
   });
   await screen.findByText('LC-5');
   fireEvent.click(screen.getByRole('button', { name: 'Durdur' }));

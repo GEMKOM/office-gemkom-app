@@ -73,7 +73,7 @@ export const WORK_AREAS: MenuCard[] = [
     link: '/manufacturing',
     features: [
       { label: 'Talaşlı İmalat', icon: 'fas fa-cog', link: '/manufacturing/machining' },
-      { label: 'CNC Kesim', icon: 'fas fa-cut', link: '/manufacturing/cnc-cutting' },
+      { label: 'CNC Kesim', icon: 'fas fa-cut', link: '/planning/cnc-cutting' },
       { label: 'Bakım', icon: 'fas fa-wrench', link: '/manufacturing/maintenance' },
     ],
   },

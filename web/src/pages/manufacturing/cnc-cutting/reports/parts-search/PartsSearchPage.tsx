@@ -163,7 +163,7 @@ export function PartsSearchPage() {
       <PageHeader
         title="CNC Parça Arama"
         subtitle="İş No, Resim No veya Pozisyon No ile CNC parçalarını arayın"
-        backTo="/manufacturing/cnc-cutting/reports/"
+        backTo="/planning/cnc-cutting/reports/"
       />
 
       <DataTable

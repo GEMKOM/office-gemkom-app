@@ -59,7 +59,7 @@ const DEPARTMENT_PAGES: Record<string, string[]> = {
   maintenance: ['/manufacturing/maintenance/fault-requests', '/manufacturing/maintenance/dashboard', '/general/machines'],
   logistics: ['/logistics/projects', '/logistics/cost-lines'],
   qualitycontrol: ['/quality-control/qc-reviews', '/quality-control/ncrs', '/quality-control/documents'],
-  cutting: ['/manufacturing/cnc-cutting/cuts', '/manufacturing/cnc-cutting/remnants', '/manufacturing/cnc-cutting/capacity/planning'],
+  cutting: ['/planning/cnc-cutting/cuts', '/planning/cnc-cutting/remnants', '/planning/cnc-cutting/capacity'],
   warehouse: ['/manufacturing/material-tracking/pull-requests', '/planning/inventory/cards'],
   sales: ['/sales/offers', '/sales/customers', '/sales/cost-table'],
   human_resources: ['/human_resources/users', '/human_resources/attendance/records', '/human_resources/vacation'],

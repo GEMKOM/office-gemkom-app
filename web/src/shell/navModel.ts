@@ -93,3 +93,24 @@ export function findTrail(tree: NavTree, currentPath: string): TrailStep[] {
   }
   return [];
 }
+
+const trimSlash = (path: string) => (path.length > 1 ? path.replace(/\/$/, '') : path);
+
+/**
+ * The page one level up from the current one in the menu: the nearest entry
+ * above it in the trail that `canOpen` accepts (skipping menu groups without a
+ * page of their own). Undefined on a top-level page or one the menu does not place.
+ */
+export function findParent(
+  tree: NavTree,
+  currentPath: string,
+  canOpen: (path: string) => boolean,
+): TrailStep | undefined {
+  const current = trimSlash(currentPath);
+  const trail = findTrail(tree, current);
+  for (let index = trail.length - 1; index >= 0; index--) {
+    const step = trail[index]!;
+    if (trimSlash(step.path) !== current && canOpen(step.path)) return step;
+  }
+  return undefined;
+}

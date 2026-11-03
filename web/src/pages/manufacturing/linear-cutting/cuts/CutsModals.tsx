@@ -143,7 +143,7 @@ export function ConfirmResultModal({
                         variant="outline"
                         target="_blank"
                         rel="noopener"
-                        href={`/manufacturing/linear-cutting/cuts/?task=${encodeURIComponent(key)}`}
+                        href={`/planning/linear-cutting/cuts/?task=${encodeURIComponent(key)}`}
                       >
                         Aç
                       </Button>

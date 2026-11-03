@@ -33,7 +33,7 @@ const HEADERS: Record<TimerModule, { title: string; subtitle: string; backTo: st
     title: 'CNC Kesim — Kullanıcı Raporu',
     subtitle:
       'Seçilen tarih aralığında CNC kesim ekibi kullanıcı performansı, parça ve zaman kullanımı analizi',
-    backTo: '/manufacturing/cnc-cutting/reports',
+    backTo: '/planning/cnc-cutting/reports',
   },
 };
 

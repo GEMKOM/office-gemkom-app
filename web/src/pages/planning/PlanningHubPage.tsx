@@ -91,6 +91,35 @@ export function PlanningHubPage() {
       iconColor: 'info',
       link: '/planning/items',
     },
+    // CNC and linear cutting moved here from İmalat (kesim planı, nesting,
+    // fire plakalar, kapasite planı); their hubs are in manufacturing/hubs.ts.
+    {
+      title: 'CNC Kesim',
+      description: 'CNC kesim operasyonları, nesting dosyaları ve kesim görevleri yönetimi.',
+      icon: 'fas fa-cut',
+      iconColor: 'primary',
+      link: '/planning/cnc-cutting',
+      features: [
+        { label: 'Dashboard', icon: 'fas fa-chart-line', link: '/planning/cnc-cutting/dashboard' },
+        { label: 'Kesimler', icon: 'fas fa-scissors', link: '/planning/cnc-cutting/cuts' },
+        { label: 'Fire Plakalar', icon: 'fas fa-layer-group', link: '/planning/cnc-cutting/remnants' },
+        { label: 'Raporlar', icon: 'fas fa-chart-bar', link: '/planning/cnc-cutting/reports' },
+        { label: 'Kapasite Planlayıcı', icon: 'fas fa-calendar-alt', link: '/planning/cnc-cutting/capacity' },
+      ],
+    },
+    {
+      title: 'Lineer Kesim',
+      description: 'Profil ve çubuk kesim optimizasyonu, oturum ve bar görevleri yönetimi.',
+      icon: 'fas fa-ruler-horizontal',
+      iconColor: 'success',
+      link: '/planning/linear-cutting',
+      features: [
+        { label: 'Dashboard', icon: 'fas fa-chart-line', link: '/planning/linear-cutting/dashboard' },
+        { label: 'Kesimler', icon: 'fas fa-ruler-horizontal', link: '/planning/linear-cutting/cuts' },
+        { label: 'Görevler', icon: 'fas fa-tasks', link: '/planning/linear-cutting/tasks' },
+        { label: 'Kapasite Planlayıcı', icon: 'fas fa-calendar-alt', link: '/planning/linear-cutting/capacity' },
+      ],
+    },
   ];
 
   const stats: PageFigure[] = [

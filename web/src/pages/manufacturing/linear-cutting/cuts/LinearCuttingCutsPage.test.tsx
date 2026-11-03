@@ -118,7 +118,7 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().search}</div>;
 }
 
-function renderPage(route = '/manufacturing/linear-cutting/cuts/?session=LC-0001') {
+function renderPage(route = '/planning/linear-cutting/cuts/?session=LC-0001') {
   return renderWithProviders(
     <ModalsProvider>
       <LinearCuttingCutsPage />
@@ -163,7 +163,7 @@ const partRow = (id: number | string) =>
   screen.getAllByRole('row').find((r) => r.getAttribute('data-row-id') === `p-${id}`)!;
 
 it('shows the empty state until a plan is chosen', async () => {
-  renderPage('/manufacturing/linear-cutting/cuts/');
+  renderPage('/planning/linear-cutting/cuts/');
   expect(screen.getByRole('heading', { name: 'Lineer Kesim' })).toBeInTheDocument();
   expect(screen.getByText(/Bir kesim planı seçin veya/)).toBeInTheDocument();
   await waitFor(() => expect(callsTo('GET', '/linear_cutting/sessions/')).toHaveLength(1));
@@ -210,7 +210,7 @@ it('loads the plan from ?session=: details, parts in order, stock bars and the r
 });
 
 it('opens the plan of a ?task= link', async () => {
-  renderPage('/manufacturing/linear-cutting/cuts/?task=LC-0001-01');
+  renderPage('/planning/linear-cutting/cuts/?task=LC-0001-01');
   await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('?session=LC-0001'));
   expect(await screen.findByDisplayValue('Korkuluk')).toBeInTheDocument();
 });
@@ -426,7 +426,7 @@ it('confirms the plan and lists what was created', async () => {
   expect(within(modal).getByText('LC-0001-01')).toBeInTheDocument();
   const links = within(modal).getAllByRole('link', { name: 'Aç' });
   expect(links.map((a) => a.getAttribute('href'))).toEqual([
-    '/manufacturing/linear-cutting/cuts/?task=LC-0001-01',
+    '/planning/linear-cutting/cuts/?task=LC-0001-01',
     '/planning/department-requests/?talep=PR-0042',
   ]);
   expect(await screen.findByText('Görevler Oluşturuldu')).toBeInTheDocument();
@@ -455,7 +455,7 @@ it('creates a plan and opens it', async () => {
     }
     return null;
   };
-  renderPage('/manufacturing/linear-cutting/cuts/');
+  renderPage('/planning/linear-cutting/cuts/');
   fireEvent.click(screen.getByRole('button', { name: 'Yeni Kesim Planı' }));
   const dialog = await screen.findByRole('dialog');
   fireEvent.click(within(dialog).getByRole('button', { name: 'Plan Oluştur' }));

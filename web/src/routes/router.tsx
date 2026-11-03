@@ -1,3 +1,4 @@
+import { MOVED_ROUTES } from '@legacy/apis/accessControl.js';
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
@@ -32,6 +33,28 @@ function mergedInto(path: string, target: string, preset: Record<string, string>
     },
   };
 }
+
+/**
+ * The old URL of a page that moved (MOVED_ROUTES in apis/accessControl.js), or
+ * of a hub that gave way to its only page: forwards there with the query and
+ * hash (?machine=, ?cut=). Listed in migrated-routes.json like mergedInto().
+ */
+function movedTo(path: string, target: string): RouteObject {
+  return {
+    path,
+    loader: ({ request }) => {
+      const url = new URL(request.url);
+      return redirect(`${target}/${url.search}${url.hash}`);
+    },
+  };
+}
+
+// The capacity hubs held one card each, the planner; their URLs open it.
+const CAPACITY_HUB_REDIRECTS: Record<string, string> = {
+  '/manufacturing/cnc-cutting/capacity': '/planning/cnc-cutting/capacity',
+  '/manufacturing/linear-cutting/capacity': '/planning/linear-cutting/capacity',
+  '/manufacturing/machining/capacity': '/manufacturing/machining/capacity/planning',
+};
 
 // Each migrated page is a lazy route so it ships as its own chunk. A route added
 // here must also be listed in migrated-routes.json (router.test.ts checks this).
@@ -125,12 +148,10 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   { path: '/manufacturing', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/cnc-cutting', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/cnc-cutting/capacity', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/linear-cutting', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/linear-cutting/capacity', handle: hub, lazy: manufacturingHub },
+  // CNC and linear cutting sit under Planlama; the page picks their cards by path.
+  { path: '/planning/cnc-cutting', handle: hub, lazy: manufacturingHub },
+  { path: '/planning/linear-cutting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/machining', handle: hub, lazy: manufacturingHub },
-  { path: '/manufacturing/machining/capacity', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/machining/tasks', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/maintenance', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/subcontracting', handle: hub, lazy: manufacturingHub },
@@ -554,18 +575,18 @@ export const appRoutes: RouteObject[] = [
         .NotificationsPage,
     }),
   },
-  // Phase 3b: CNC kesim, lineer kesim and talaşlı imalat lists and reports.
-  { path: '/manufacturing/cnc-cutting/reports', handle: hub, lazy: reportHub },
+  // Phase 3b: CNC kesim, lineer kesim (now under Planlama) and talaşlı imalat lists and reports.
+  { path: '/planning/cnc-cutting/reports', handle: hub, lazy: reportHub },
   { path: '/manufacturing/machining/reports', handle: hub, lazy: reportHub },
   {
-    path: '/manufacturing/cnc-cutting/dashboard',
+    path: '/planning/cnc-cutting/dashboard',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/dashboard/CncDashboardPage'))
         .CncDashboardPage,
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/dashboard',
+    path: '/planning/linear-cutting/dashboard',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/linear-cutting/dashboard/LinearCuttingDashboardPage')
@@ -573,14 +594,14 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/cuts',
+    path: '/planning/linear-cutting/cuts',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/linear-cutting/cuts/LinearCuttingCutsPage'))
         .LinearCuttingCutsPage,
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/tasks',
+    path: '/planning/linear-cutting/tasks',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/linear-cutting/tasks/LinearCuttingTasksPage'))
         .LinearCuttingTasksPage,
@@ -594,20 +615,20 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/cnc-cutting/cuts',
+    path: '/planning/cnc-cutting/cuts',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/cuts/CncCutsPage')).CncCutsPage,
     }),
   },
   {
-    path: '/manufacturing/cnc-cutting/remnants',
+    path: '/planning/cnc-cutting/remnants',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/cnc-cutting/remnants/RemnantsPage'))
         .RemnantsPage,
     }),
   },
   {
-    path: '/manufacturing/cnc-cutting/reports/parts-search',
+    path: '/planning/cnc-cutting/reports/parts-search',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/cnc-cutting/reports/parts-search/PartsSearchPage')
@@ -637,6 +658,9 @@ export const appRoutes: RouteObject[] = [
   },
   ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
     mergedInto(path, to, preset),
+  ),
+  ...Object.entries({ ...MOVED_ROUTES, ...CAPACITY_HUB_REDIRECTS }).map(([path, to]) =>
+    movedTo(path, to),
   ),
   // Manufacturing shop-floor lists and reports (Phase 3b).
   {
@@ -971,7 +995,7 @@ export const appRoutes: RouteObject[] = [
   },
   // Capacity planning and machining reports on the React Gantt.
   {
-    path: '/manufacturing/cnc-cutting/capacity/planning',
+    path: '/planning/cnc-cutting/capacity',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/cnc-cutting/capacity/planning/CncPlanningPage')
@@ -979,7 +1003,7 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/linear-cutting/capacity/planning',
+    path: '/planning/linear-cutting/capacity',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/linear-cutting/capacity/planning/LinearPlanningPage')
