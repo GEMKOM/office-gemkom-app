@@ -60,6 +60,36 @@ export const FLAG_META: Record<string, FlagMeta> = {
 
 export const FLAG_ORDER = Object.keys(FLAG_META);
 
+/** What to do about a flagged day (the guidance line of the drill-down). */
+export const FLAG_FIX: Record<string, string> = {
+  no_record: 'Kaynakçının o güne ait zaman kaydını ekleyin.',
+  pending_entry: 'Zaman kayıtları girildiğinde bu uyarı kendiliğinden kalkar.',
+  no_overtime_record: 'Zaman kaydındaki saatleri mesai (1.5x / 2x) olarak düzeltin.',
+  unapproved: 'O gün için mesai talebi oluşturun ya da zaman kaydındaki mesaiyi düzeltin.',
+  under: 'Zaman kaydındaki mesai saatlerini tamamlayın ya da talebi düzeltin.',
+  over: 'Zaman kaydındaki mesai saatlerini düşürün ya da talebi güncelleyin.',
+  job_mismatch: 'İş numarasını zaman kaydında veya talepte düzeltin.',
+};
+
+/** The welding time entries of one welder on one day: where most deviations get fixed. */
+export function timeEntriesLink(row: { user_id?: number; date: string }): string {
+  const params = new URLSearchParams();
+  if (row.user_id != null) params.set('employee', String(row.user_id));
+  params.set('date', row.date.slice(0, 10));
+  return `/manufacturing/welding/time-entries?${params}`;
+}
+
+/** The overtime request's details modal in the registry. */
+export function requestLink(id: number): string {
+  return `/general/overtime/registry?request=${id}`;
+}
+
+/** The registry narrowed to one welding day, for days with overtime but no request. */
+export function registryDayLink(date: string): string {
+  const day = date.slice(0, 10);
+  return `/general/overtime/registry?start_date=${day}&end_date=${day}&team=welding`;
+}
+
 export function flagMeta(flag: string): FlagMeta {
   return FLAG_META[flag] ?? { label: flag, family: 'grey', icon: 'fas fa-question', hint: '' };
 }
@@ -234,6 +264,11 @@ export function countFlags(rows: DecoratedRow[]): FlagCount[] {
     const base = f === 'pending_entry' ? rows.length : judgedCount;
     return { ...flagMeta(f), flag: f, count, share: base ? (count / base) * 100 : 0 };
   });
+}
+
+/** The rows carrying one flag: the records behind a "Sapma Dağılımı" count. */
+export function rowsWithFlag(rows: DecoratedRow[], flag: string): DecoratedRow[] {
+  return rows.filter((r) => r.flags.includes(flag));
 }
 
 export interface Totals {

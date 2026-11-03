@@ -90,16 +90,14 @@ test.describe('navigation', () => {
     consoleErrors.expectNone();
   });
 
-  test('SPA -> legacy -> SPA keeps the session', async ({ page }) => {
+  test('moving between SPA pages keeps the session', async ({ page }) => {
     const session = await seedSession(page, { admin: true });
     await mockBackend(page, {}, { session });
 
     await page.goto('/planning/');
     await expectSpa(page);
 
-    // A hub card to a page that is still legacy (Proje Planlama, the last one
-    // with the legacy navbar): a full load. The PR that ports it removes or
-    // rewrites this test.
+    // Every page is React now: a hub card is a client-side move, no reload.
     await page.evaluate(() => {
       window.__spaMarker = 'spa';
     });
@@ -110,18 +108,15 @@ test.describe('navigation', () => {
       .click();
 
     await expect(page).toHaveURL(/\/planning\/project-planning\/?$/);
-    await expect(page.locator('#navbar-container')).toHaveCount(1);
-    await expect(page.locator('#root')).toHaveCount(0);
-    expect(await page.evaluate(() => window.__spaMarker)).toBeUndefined();
-    // The legacy navbar renders from the same session.
-    const legacyNav = page.locator('#navbar-container #main-nav-items');
-    await expect(legacyNav.locator('a[data-path="/general"]')).toBeVisible();
+    await expect(
+      page.getByRole('main').getByRole('heading', { name: 'İmalat Planlama' }),
+    ).toBeVisible();
+    expect(await page.evaluate(() => window.__spaMarker)).toBe('spa');
     let stored = await readSession(page);
     expect(stored.refreshToken).toBe(session.refreshToken);
     expect(stored.accessToken).toBe(session.accessToken);
 
-    // Back to the SPA hub with a full load, as any legacy link does. (Driving
-    // the legacy navbar's nested Bootstrap dropdowns here was flaky.)
+    // A full load of another page keeps it too.
     await page.goto('/it/');
 
     await expect(page).toHaveURL(/\/it\/$/);

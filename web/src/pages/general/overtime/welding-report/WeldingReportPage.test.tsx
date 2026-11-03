@@ -1,7 +1,16 @@
 import { authedFetch } from '@legacy/authService.js';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
-import { countFlags, decorate, summarize, totals } from './weldingReport';
+import {
+  countFlags,
+  decorate,
+  registryDayLink,
+  requestLink,
+  rowsWithFlag,
+  summarize,
+  timeEntriesLink,
+  totals,
+} from './weldingReport';
 import { weldingDefaults, weldingParams, WeldingReportPage } from './WeldingReportPage';
 
 vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
@@ -138,6 +147,46 @@ it('renders the notice, the summary, the flags and the rows; Detay opens the day
   fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
   const dialog = await screen.findByRole('dialog');
   expect(within(dialog).getByText('Kaynak Zaman Kayıtları')).toBeInTheDocument();
+});
+
+it('links a flagged day to the pages that fix it', () => {
+  const [, veli] = decorate(ROWS);
+  expect(timeEntriesLink(veli!)).toBe(
+    '/manufacturing/welding/time-entries?employee=2&date=2026-10-06',
+  );
+  expect(requestLink(502)).toBe('/general/overtime/registry?request=502');
+  expect(registryDayLink('2026-10-06')).toBe(
+    '/general/overtime/registry?start_date=2026-10-06&end_date=2026-10-06&team=welding',
+  );
+  expect(rowsWithFlag(decorate(ROWS), 'no_record').map((r) => r.user_full_name)).toEqual([
+    'Veli Can',
+  ]);
+});
+
+it('a Sapma Dağılımı row lists the records behind it with links to fix them', async () => {
+  renderWithProviders(<WeldingReportPage />, {
+    route: '/general/overtime/welding-report?start_date=2026-10-01&end_date=2026-10-31',
+  });
+  await screen.findByText('Veli Can');
+  // The distribution table comes before the day list, which repeats the badge per row.
+  fireEvent.click(screen.getAllByText('Kayıt yok')[0]!);
+
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('Kayıt yok — 1 kayıt')).toBeInTheDocument();
+  expect(within(dialog).getByText('Veli Can')).toBeInTheDocument();
+  expect(within(dialog).queryByText('Ali Kaya')).not.toBeInTheDocument();
+  expect(within(dialog).getByText('#502').closest('a')).toHaveAttribute(
+    'href',
+    '/general/overtime/registry?request=502',
+  );
+  expect(within(dialog).getByText('Zaman kayıtları').closest('a')).toHaveAttribute(
+    'href',
+    '/manufacturing/welding/time-entries?employee=2&date=2026-10-06',
+  );
+
+  fireEvent.click(within(dialog).getByRole('button', { name: /Detay/ }));
+  await waitFor(() => expect(screen.getByText('Kaynak Zaman Kayıtları')).toBeInTheDocument());
+  expect(screen.queryByText('Kayıt yok — 1 kayıt')).not.toBeInTheDocument();
 });
 
 it('the outlier pill reaches the request', async () => {

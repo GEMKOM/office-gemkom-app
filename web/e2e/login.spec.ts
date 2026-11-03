@@ -15,7 +15,6 @@ import {
 // answered by the mock with the fake tokens from fixtures.ts.
 
 const CUSTOMERS = '/sales/customers/';
-const LEGACY_PAGE = '/planning/project-planning/'; // still legacy, and guarded by guardRoute()
 
 // Chrome logs the 401 of a refused sign-in as a console error.
 const REFUSED_LOGIN = /status of 401/;
@@ -72,21 +71,6 @@ test.describe('login', () => {
     expect(backend.callsTo('/users/me/permissions/', 'GET').length).toBeGreaterThan(0);
     expect(await page.evaluate(() => sessionStorage.getItem('postLoginReturnUrl'))).toBeNull();
     consoleErrors.expectNone();
-  });
-
-  test('a legacy page sends a signed-out user to the React login and gets them back', async ({
-    page,
-  }) => {
-    const session = buildSession({ admin: true });
-    await mockBackend(page, tokenHandler([]), { session });
-
-    await page.goto(LEGACY_PAGE);
-    await expect(page).toHaveURL(/\/login\/$/);
-    await expect(page.getByRole('heading', { name: 'Ofis Çalışanları' })).toBeVisible();
-    await signIn(page);
-
-    await expect(page).toHaveURL(LEGACY_PAGE);
-    await expect(page.locator('#navbar-container')).toHaveCount(1);
   });
 
   test('a wrong password shows the message and keeps the user on the form', async ({
