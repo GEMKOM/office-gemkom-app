@@ -174,6 +174,10 @@ export function Rail({ expanded, onToggle }: { expanded: boolean; onToggle: () =
       </AppLink>
       <NeoEntry variant={expanded ? 'row' : 'icon'} />
       <NeoRule expanded={expanded} />
+      {/* At the top, under Neo, where people look for it; it opens to the right from here. */}
+      <div className={classes.railBell}>
+        <NotificationBell variant={expanded ? 'row' : 'icon'} position="right-start" />
+      </div>
       <ScrollArea className={classes.railScroll} type={expanded ? 'hover' : 'never'} scrollbarSize={6}>
         {expanded ? (
           <RailRows tree={tree} onOpen={open} currentPath={currentPath} />
@@ -188,7 +192,6 @@ export function Rail({ expanded, onToggle }: { expanded: boolean; onToggle: () =
       <div className={classes.railEnd}>
         <ToggleButton expanded={expanded} onToggle={onToggle} />
         <AttendanceButton variant={expanded ? 'row' : 'icon'} position="right-end" />
-        <NotificationBell variant={expanded ? 'row' : 'icon'} position="right-end" />
         <UserMenu variant={expanded ? 'row' : 'icon'} position="right-end" />
       </div>
     </nav>
