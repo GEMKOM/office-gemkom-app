@@ -17,6 +17,7 @@ const ADJUSTMENTS = [
     created_at: '2026-03-01T10:00:00Z',
     statement_year: 2026,
     statement_month: 3,
+    subcontractor: 7,
     subcontractor_name: 'Kaya Kaynak',
     job_no: '094-175',
     weight_kg: '120.50',
@@ -31,7 +32,8 @@ const ADJUSTMENTS = [
     created_at: '2026-04-01T10:00:00Z',
     statement_year: 2026,
     statement_month: 4,
-    subcontractor_name: 'Demir Montaj',
+    subcontractor: 8,
+    subcontractor_name: 'Demir Montaj Ltd. Şti.',
     job_no: '094-180',
     weight_kg: '0',
     amount: '200.00',
@@ -45,7 +47,8 @@ const ADJUSTMENTS = [
     created_at: '2026-04-02T10:00:00Z',
     statement_year: 2026,
     statement_month: 4,
-    subcontractor_name: 'Kaya Kaynak',
+    subcontractor: 9,
+    subcontractor_name: 'Eski Taşeron A.Ş.',
     job_no: null,
     weight_kg: null,
     amount: '75.25',
@@ -91,8 +94,9 @@ beforeEach(() => {
         next: null,
         previous: null,
         results: [
-          { id: 7, name: 'Kaya Kaynak' },
-          { id: 8, name: '', short_name: 'Demir' },
+          { id: 7, name: 'Kaya Kaynak', short_name: 'Kaya', is_active: true },
+          { id: 8, name: 'Demir Montaj Ltd. Şti.', short_name: 'Demir', is_active: true },
+          { id: 9, name: 'Eski Taşeron A.Ş.', short_name: 'Eski', is_active: false },
         ],
       });
     }
@@ -109,23 +113,42 @@ it('splits the report into additions and deductions with per-currency totals', a
 
   const additions = panel('Ek Ödemeler');
   const deductions = panel('Kesintiler');
-  expect(within(additions).getByText('Demir Montaj')).toBeInTheDocument();
+  // Short names in the table, the full name only on hover.
+  expect(within(additions).getByText('Demir')).toBeInTheDocument();
+  expect(within(additions).getByTitle('Demir Montaj Ltd. Şti.')).toBeInTheDocument();
+  expect(within(additions).queryByText('Demir Montaj Ltd. Şti.')).toBeNull();
   expect(within(additions).queryByText('Fire')).toBeNull();
   expect(within(deductions).getByText('Fire')).toBeInTheDocument();
 
   // Newest first (legacy initial sort created_at desc).
   const firstRow = within(additions).getAllByRole('row')[1]!;
-  expect(within(firstRow).getByText('Demir Montaj')).toBeInTheDocument();
+  expect(within(firstRow).getByText('Demir')).toBeInTheDocument();
   expect(within(firstRow).getByText('Nisan 2026')).toBeInTheDocument();
+
+  // An inactive subcontractor's rows still resolve to their short name.
+  expect(within(deductions).getByText('Eski')).toBeInTheDocument();
 
   expect(within(additions).getByText('Toplam: 200,00 EUR + 1.500,00 TRY')).toBeInTheDocument();
   expect(within(deductions).getByText('Toplam: 75,25 TRY')).toBeInTheDocument();
   expect(within(additions).getByText('120,50 kg')).toBeInTheDocument();
 
-  // The subcontractor dropdown is fed by the active subcontractors, as legacy.
+  // One unfiltered subcontractor list feeds both the lookup and the dropdown.
   const sub = urls().find((u) => u.pathname === '/subcontracting/subcontractors/')!;
-  expect(Object.fromEntries(sub.searchParams)).toEqual({ is_active: 'true' });
+  expect(Object.fromEntries(sub.searchParams)).toEqual({});
   expect(Object.fromEntries(reportCalls()[0]!.searchParams)).toEqual({});
+});
+
+it('lists only active subcontractors in the filter and shows their short names', async () => {
+  renderPage();
+  await screen.findByText('094-175');
+  const filters = panel('Düzeltme Filtreleri');
+  fireEvent.click(within(filters).getByRole('button', { name: /Taşeron/ }));
+  // The menu opens with a transition, so its items are queried as hidden-inclusive.
+  const items = await screen.findByRole('menu', { hidden: true });
+  const names = within(items)
+    .getAllByRole('menuitem', { hidden: true })
+    .map((item) => item.textContent);
+  expect(names).toEqual(['Tümü', 'Kaya', 'Demir']);
 });
 
 it('sends the filters from the URL and writes new ones back', async () => {
@@ -136,8 +159,8 @@ it('sends the filters from the URL and writes new ones back', async () => {
     year: '2026',
     month: '4',
   });
-  // The pill names the picked subcontractor once the dropdown list arrives.
-  expect(await screen.findByText(/Kaya Kaynak/, { selector: 'span' })).toBeInTheDocument();
+  // The pill names the picked subcontractor by its short name once the list arrives.
+  expect(await screen.findByText('Kaya', { selector: 'span' })).toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText('İş No'), { target: { value: '094' } });
   fireEvent.keyDown(screen.getByLabelText('İş No'), { key: 'Enter' });
