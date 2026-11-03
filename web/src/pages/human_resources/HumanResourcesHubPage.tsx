@@ -6,7 +6,9 @@ import { MenuCards, type MenuCard, type PageFigure } from '@/ui';
 import { AwayThisWeek } from '../general/generalHubData';
 import { HubPanels } from '../hub/HubPanels';
 import { countFigure, countValue } from '../hubCount';
+import { DataQualityPanel, SUMMARY, USERS, VACATION } from './dataQuality';
 import {
+  ATTENDANCE,
   AttendanceTodayPanel,
   PENDING_OVERRIDES,
   PendingOverridesPanel,
@@ -15,8 +17,12 @@ import {
   usePendingOverridesCount,
 } from './hrHubData';
 
-const USERS = '/human_resources/users';
-const VACATION = '/human_resources/vacation';
+// The PDKS card opens the PDKS hub, or else the one PDKS page the user has.
+function pdksLink(): string {
+  return (
+    [ATTENDANCE, PENDING_OVERRIDES, RECORDS].find((route) => hasRouteAccess(route)) ?? ATTENDANCE
+  );
+}
 
 export function HumanResourcesHubPage() {
   // Figures follow the cards: nothing is fetched for a page the user cannot open.
@@ -35,9 +41,8 @@ export function HumanResourcesHubPage() {
   });
 
   // Ported from human_resources/human_resources.js. Cards the user cannot
-  // open hide themselves. Both PDKS cards linked to the PDKS hub; they now
-  // open the page each one describes. PDKS Kayıtları was blue like
-  // Çalışanlar; purple keeps them apart.
+  // open hide themselves. PDKS Onayları and PDKS Kayıtları are one PDKS card:
+  // who is in now, with the approvals waiting as its badge.
   const cards: MenuCard[] = [
     {
       title: 'Çalışanlar',
@@ -55,20 +60,19 @@ export function HumanResourcesHubPage() {
       link: '/human_resources/org',
     },
     {
-      title: 'PDKS Onayları',
-      description: 'Ofis dışı giriş taleplerini onaylayın veya reddedin',
-      icon: 'fas fa-user-check',
-      iconColor: 'warning',
-      link: PENDING_OVERRIDES,
-      stat: { value: countValue(pending), label: 'onay bekliyor' },
-    },
-    {
-      title: 'PDKS Kayıtları',
-      description: 'PDKS kayıtlarını filtreleyin ve inceleyin',
-      icon: 'fas fa-clipboard-list',
+      title: 'PDKS',
+      description: 'Giriş-çıkış kayıtları, ofis dışı giriş onayları ve vardiyalar',
+      icon: 'fas fa-id-card',
       iconColor: 'purple',
-      link: RECORDS,
-      stat: { value: countValue(today.inside), label: 'kişi şu an içeride' },
+      link: pdksLink(),
+      ...(today.canRecords
+        ? { stat: { value: countValue(today.inside), label: 'kişi şu an içeride' } }
+        : canApprove
+          ? { stat: { value: countValue(pending), label: 'onay bekliyor' } }
+          : {}),
+      ...(today.canRecords && pending.data
+        ? { badge: { label: `${pending.data} onay bekliyor`, color: 'yellow' as const } }
+        : {}),
     },
     {
       title: 'İzin Yönetimi',
@@ -130,7 +134,10 @@ export function HumanResourcesHubPage() {
         ]
       : []),
   ];
-  const panels = canApprove || today.canRecords;
+  // Veri Eksikleri lists only checks the user can open; its rows come from
+  // the users, PDKS and leave pages.
+  const checks = canUsers || today.canRecords || canVacation || hasRouteAccess(SUMMARY);
+  const panels = checks || canApprove;
 
   return (
     <MenuCards
@@ -143,10 +150,16 @@ export function HumanResourcesHubPage() {
       {panels ? (
         <HubPanels>
           <>
-            {canApprove ? <PendingOverridesPanel /> : null}
+            {checks ? <DataQualityPanel /> : null}
             <AwayThisWeek />
           </>
-          {today.canRecords ? <AttendanceTodayPanel counts={today.counts} /> : null}
+          {/* Everything PDKS in one column: today, then what waits on HR. */}
+          {today.canRecords || canApprove ? (
+            <>
+              {today.canRecords ? <AttendanceTodayPanel counts={today.counts} /> : null}
+              {canApprove ? <PendingOverridesPanel /> : null}
+            </>
+          ) : null}
         </HubPanels>
       ) : null}
     </MenuCards>

@@ -16,7 +16,10 @@ export interface WageRate {
   [key: string]: unknown;
 }
 
-export const userWagesKey = (userId: number) => ['users', 'wages', String(userId)] as const;
+/** Prefix of every wage query: one user's history and the overview. */
+export const WAGES_KEY = ['users', 'wages'] as const;
+
+export const userWagesKey = (userId: number) => [...WAGES_KEY, String(userId)] as const;
 
 /** Port of fetchWageRatesForUser. */
 export function userWagesQueryOptions(userId: number) {
