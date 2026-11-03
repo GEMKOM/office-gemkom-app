@@ -18,9 +18,8 @@ export function listCountQueryOptions(
   return queryOptions({
     queryKey: [...key, 'count', cleanParams(params)] as QueryKey,
     queryFn: async ({ signal }) =>
-      toPaginated<unknown>(
-        await apiFetch<unknown>(path, { params: { ...params, page_size: 1 }, signal }),
-      ).count,
+      toPaginated<unknown>(await apiFetch<unknown>(path, { params: { ...params, page_size: 1 }, signal }))
+        .count,
     staleTime,
   });
 }
