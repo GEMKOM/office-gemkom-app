@@ -1,0 +1,994 @@
+/* Sunum Modu: the full-screen slide deck (legacy meetingView.css and the
+   tile / sheet-head / share-dialog parts of planSheet.css). Projector-first
+   light theme: white cards on a light stage. */
+
+/* ---- the deck: one viewport, nothing behind it ---------------------------- */
+
+.deck {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  height: 100vh;
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  padding: 12px 22px 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(1100px 500px at 18% -12%, rgba(59, 130, 246, 0.06), transparent 60%),
+    #eef1f5;
+  color: #3a4150;
+}
+
+/* Slide entrance: content rises in, staggered */
+.deck > * {
+  min-width: 0;
+  animation: slideIn 0.28s ease-out backwards;
+}
+
+.deck > *:nth-child(2) { animation-delay: 0.05s; }
+.deck > *:nth-child(3) { animation-delay: 0.1s; }
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---- top strip ------------------------------------------------------------ */
+
+.strip {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.stripNav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stripCount {
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: #1f2530;
+  min-width: 64px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.stripTitle {
+  flex: 1;
+  min-width: 0;
+}
+
+.stripActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.stripHint {
+  color: #9aa3b2;
+  font-size: 0.78rem;
+  margin-right: 6px;
+}
+
+/* Age of the numbers on the slide: quiet, but always on screen. */
+.stripStamp {
+  color: #9aa3b2;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.04em;
+  margin-right: 2px;
+}
+
+@media (max-width: 991.98px) {
+  .stripHint { display: none; }
+}
+
+@media (max-width: 1199.98px) {
+  .stripStamp { display: none; }
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 31px;
+  padding: 4px 10px;
+  border: 1px solid #d3d9e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #3a4150;
+  font: inherit;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: #f1f4f8;
+  border-color: #b9c2cd;
+  color: #1f2530;
+}
+
+.btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.btnPrimary {
+  border-color: #8b0000;
+  color: #8b0000;
+}
+
+.stripSearch {
+  width: 130px;
+  background: #ffffff;
+  border: 1px solid #d3d9e1;
+  border-radius: 8px;
+  color: #1f2530;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 5px 10px;
+  outline: none;
+}
+
+.stripSearch::placeholder { color: #9aa3b2; }
+.stripSearch:focus { border-color: #60a5fa; }
+
+/* ---- number colours ------------------------------------------------------- */
+
+.numRed { color: #dc2626; }
+.numGreen { color: #059669; }
+.numOrange { color: #ea580c; }
+.textMuted { color: #8a919c; }
+.textDanger { color: #dc3545; }
+
+/* ---- empty / loading / error slide ---------------------------------------- */
+
+.slideEmpty {
+  grid-row: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #8a919c;
+}
+
+.slideEmpty p { margin: 0; }
+.slideEmpty .small { font-size: 0.875em; }
+.slideEmptyIcon { font-size: 2em; margin-bottom: 8px; }
+
+.slideEmptyActions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ---- skeleton ------------------------------------------------------------- */
+
+.skeleton {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #eceef2 25%, #f6f7f9 50%, #eceef2 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+  margin-bottom: 10px;
+}
+
+.skeletonTitle { width: 40%; }
+.skeletonBig { height: 34px; width: 55%; }
+.skeletonShort { width: 65%; }
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ---- slot placeholders ---------------------------------------------------- */
+
+.heroSlot {
+  background: #ffffff;
+  border: 1px solid #e2e6ec;
+  border-left: 5px solid #6c757d;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+  padding: 12px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 24px;
+}
+
+.heroSlot[data-theme='green'] { border-left-color: #198754; }
+.heroSlot[data-theme='orange'] { border-left-color: #fd7e14; }
+.heroSlot[data-theme='red'] { border-left-color: #dc3545; }
+
+.heroJobNo {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #1f2530;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.heroTitle { font-weight: 600; color: #1f2530; }
+.heroCustomer { font-size: 0.85rem; color: #8a919c; }
+.heroLines { font-size: 0.86rem; color: #59616d; flex: 1 1 320px; min-width: 0; }
+.heroLines p { margin: 0; }
+.heroProgress { font-weight: 700; color: #1f2530; white-space: nowrap; }
+
+.sheetSlot {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  color: #8a919c;
+  font-size: 0.9rem;
+}
+
+/* ---- tiles ---------------------------------------------------------------- */
+
+.tiles {
+  display: flex;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.tile {
+  flex: 1 1 0;
+  min-width: 0;
+  background: #ffffff;
+  border: 1px solid #e2e6ec;
+  border-top: 3px solid #cdd3db;
+  border-radius: 12px;
+  box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+  padding: 9px 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tileClick {
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.tileClick:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 22px rgba(31, 37, 48, 0.14);
+}
+
+.tile[data-theme='green'] { border-top-color: #198754; }
+.tile[data-theme='orange'] { border-top-color: #fd7e14; }
+.tile[data-theme='red'] { border-top-color: #dc3545; }
+.tile[data-theme='blue'] { border-top-color: #0d6efd; }
+.tile[data-theme='purple'] { border-top-color: #6f42c1; }
+.tile[data-theme='grey'] { border-top-color: #cdd3db; }
+
+/* The only glow: quality problems must pop */
+.tileAlert {
+  box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06), 0 0 18px rgba(239, 68, 68, 0.14);
+}
+
+.tileHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8a919c;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.tileHead > i { color: #b6bcc6; }
+
+.tileHint {
+  margin-left: auto;
+  color: #c9d0d9;
+  font-size: 0.62rem;
+}
+
+.tileClick:hover .tileHint { color: #6c757d; }
+
+.tileBig {
+  font-size: 1.55rem;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: #1f2530;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tileBigDim {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #9aa1ab;
+}
+
+.tileBig .numRed { color: #c62839; }
+.tileBig .numOrange { color: #d9670b; }
+.tileBig .numGreen { color: #1f8a4c; }
+
+.tileLabel,
+.tileSub {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tileLabel {
+  font-size: 0.74rem;
+  color: #6c757d;
+}
+
+.tileSub {
+  font-size: 0.72rem;
+  color: #4b5563;
+}
+
+.tileSub .numRed { color: #c62839; font-weight: 600; }
+.tileSub .numOrange { color: #d9670b; font-weight: 600; }
+.tileSub .numGreen { color: #1f8a4c; font-weight: 600; }
+
+.tileSkeleton .skeleton { margin: 5px 0; }
+
+/* Finans seal: a coloured disc with the verdict's icon, the word beside it;
+   Riskli / Kritik pulse a sonar ring so the eye lands on them. */
+.tileFin {
+  --fin-color: #6c757d;
+  --fin-halo: rgba(108, 117, 125, 0.16);
+  --fin-tint: #f4f5f7;
+  background: linear-gradient(135deg, #ffffff 30%, var(--fin-tint) 100%);
+}
+
+.tileFin[data-theme='green'] { --fin-color: #198754; --fin-halo: rgba(25, 135, 84, 0.18); --fin-tint: #e6f5ec; }
+.tileFin[data-theme='orange'] { --fin-color: #fd7e14; --fin-halo: rgba(253, 126, 20, 0.18); --fin-tint: #fff1e3; }
+.tileFin[data-theme='red'] { --fin-color: #dc3545; --fin-halo: rgba(220, 53, 69, 0.18); --fin-tint: #fde8ea; }
+
+.finSeal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0;
+  min-width: 0;
+}
+
+.finSeal > i {
+  position: relative;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  color: #ffffff;
+  background: var(--fin-color);
+  box-shadow: 0 0 0 4px var(--fin-halo);
+}
+
+.finWord {
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--fin-color);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tileFin[data-theme='orange'] .finSeal > i::after,
+.tileFin[data-theme='red'] .finSeal > i::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--fin-color);
+  opacity: 0;
+  animation: finPing 2s ease-out infinite;
+}
+
+@keyframes finPing {
+  0% { transform: scale(1); opacity: 0.6; }
+  70%,
+  100% { transform: scale(1.7); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .finSeal > i::after { animation: none; }
+  .deck > * { animation: none; }
+}
+
+@media (max-width: 1200px) {
+  .tiles { flex-wrap: wrap; }
+  .tile { flex: 1 1 calc(25% - 10px); }
+}
+
+/* ---- the sheet card ------------------------------------------------------- */
+
+.sheet {
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e2e6ec;
+  border-radius: 14px;
+  box-shadow: 0 2px 10px rgba(31, 37, 48, 0.06);
+  overflow: hidden;
+}
+
+.sheetBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sheetHead {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  row-gap: 4px;
+  align-items: center;
+  gap: 14px;
+  padding: 7px 14px;
+  border-bottom: 1px solid #eef1f5;
+  font-size: 0.74rem;
+  color: #6c757d;
+}
+
+.sheetTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8a919c;
+  white-space: nowrap;
+}
+
+.sheetTitle > i { color: #b6bcc6; }
+
+.sheetChips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.chipLate { background: #fde2e5; color: #a71d2a; }
+.chipChain { background: #e9ecef; color: #495057; }
+.chipEarly { background: #d9f2e3; color: #146c43; }
+.chipOk { background: #d9f2e3; color: #146c43; }
+.chipMuted { background: #f1f3f5; color: #9aa1ab; font-weight: 500; }
+
+.sheetLegend {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.sheetLegend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sheetLegend i {
+  width: 12px;
+  height: 8px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.lgOntime { background: #34ad51; }
+.lgLate { background: #e2515f; }
+.lgTermin { background: #6f42c1; width: 3px !important; height: 12px !important; }
+.lgToday { background: #dc3545; width: 3px !important; height: 12px !important; }
+.lgExt {
+  background: repeating-linear-gradient(135deg, rgba(220, 53, 69, 0.6) 0 3px, rgba(220, 53, 69, 0.2) 3px 6px);
+}
+
+.zoomGroup {
+  display: inline-flex;
+}
+
+.zoomBtn {
+  padding: 1px 9px;
+  border: 1px solid #6c757d;
+  background: #ffffff;
+  color: #6c757d;
+  font: inherit;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.zoomBtn + .zoomBtn { margin-left: -1px; }
+.zoomBtn:first-child { border-radius: 4px 0 0 4px; }
+.zoomBtn:last-child { border-radius: 0 4px 4px 0; }
+.zoomBtn:hover,
+.zoomBtn[aria-pressed='true'] {
+  background: #6c757d;
+  color: #ffffff;
+}
+
+.sheetPdfBtn {
+  font: inherit;
+  font-size: 0.68rem;
+  padding: 1px 9px;
+  margin-left: 6px;
+  border: 1px solid #d5dae1;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #495057;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sheetPdfBtn:hover {
+  background: #1f2530;
+  border-color: #1f2530;
+  color: #ffffff;
+}
+
+.sheetSkeleton {
+  padding: 16px 18px;
+}
+
+.sheetEmpty,
+.sheetError {
+  padding: 18px;
+  color: #8a919c;
+  font-size: 0.9rem;
+}
+
+.sheetError {
+  color: #b02a37;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---- in-slide modal --------------------------------------------------------- */
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1010;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(31, 37, 48, 0.45);
+  backdrop-filter: blur(3px);
+  padding: 4vh 4vw;
+}
+
+.modal {
+  width: min(880px, 94vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border: 1px solid #e2e6ec;
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(31, 37, 48, 0.35);
+  color: #3a4150;
+  animation: modalIn 0.18s ease-out;
+}
+
+/* The column picker: a narrow dialog */
+.modalNarrow { width: min(560px, 94vw); }
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.modalHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #eef1f5;
+  flex-shrink: 0;
+}
+
+.modalTitle {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1f2530;
+}
+
+.modalJob {
+  color: #8a919c;
+  font-weight: 600;
+}
+
+.modalActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.modalClose {
+  border: 1px solid #d3d9e1;
+  background: #ffffff;
+  color: #3a4150;
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.modalClose:hover {
+  background: #f1f4f8;
+  color: #1f2530;
+}
+
+.modalPdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid #d3d9e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #3a4150;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.modalPdf:hover:not(:disabled) {
+  background: #f1f4f8;
+  color: #1f2530;
+}
+
+.modalPdf:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.modalPdf > i { color: #c0392b; }
+
+.modalBody {
+  padding: 14px 20px 18px;
+  overflow-y: auto;
+  min-height: 80px;
+}
+
+.modalLoading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #8a919c;
+  padding: 20px 0;
+}
+
+.modalStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 0.9rem;
+  color: #59616d;
+  margin-bottom: 12px;
+}
+
+.modalStats strong { color: #1f2530; }
+.modalStats strong.numRed { color: #dc2626; }
+.modalStats strong.numGreen { color: #059669; }
+.modalStats strong.numOrange { color: #ea580c; }
+
+.modalNote {
+  font-size: 0.82rem;
+  color: #8a919c;
+  margin: 10px 0;
+}
+
+.modalSection {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #59616d;
+  margin: 16px 0 8px;
+}
+
+.modalSection:first-child { margin-top: 0; }
+
+.empty {
+  padding: 4px 0;
+  font-size: 0.88rem;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.table th {
+  position: sticky;
+  top: -1px;
+  z-index: 2;
+  background: #ffffff;
+  box-shadow: 0 1px 0 #e2e6ec;
+  text-align: left;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #8a919c;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid #d8dde3;
+  white-space: nowrap;
+}
+
+.table .thNum { text-align: right; }
+
+.table td {
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid #eef1f5;
+  color: #3a4150;
+  vertical-align: middle;
+}
+
+.table td strong { color: #1f2530; }
+.table tbody tr:hover td { background: #f8fafc; }
+.table tr:last-child td { border-bottom: none; }
+
+.table .tdMain {
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table .tdMuted {
+  color: #8a919c;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table .tdNum {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.table .tdCrit { text-align: center; }
+
+.table .tdDate {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tdMutedSm {
+  color: #8a919c;
+  font-size: 0.82em;
+  font-weight: 500;
+}
+
+.critToggle {
+  width: 16px;
+  height: 16px;
+  accent-color: #dc3545;
+  cursor: pointer;
+  vertical-align: middle;
+}
+
+.miniBar {
+  width: 110px;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  display: inline-block;
+  vertical-align: middle;
+  background: #e7e9ee;
+}
+
+.miniFill {
+  height: 100%;
+  border-radius: 4px;
+  background: #3b82f6;
+}
+
+/* ---- Plan ve Sapmalar: print / share dialog --------------------------------- */
+
+.sheetpdf { padding: 4px 2px 2px; }
+
+.sheetpdfHint {
+  font-size: 0.86rem;
+  color: #6c757d;
+  margin: 0 0 12px;
+}
+
+.sheetpdfCols {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 22px;
+  margin-bottom: 14px;
+}
+
+.sheetpdfCol,
+.sheetpdfOpt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  cursor: pointer;
+  color: #2b3240;
+}
+
+.sheetpdfCol { font-size: 0.92rem; }
+.sheetpdfCol[data-locked] { color: #8a919c; cursor: default; }
+.sheetpdfCol small { font-size: 0.68rem; color: #9aa1ab; }
+
+.sheetpdfCol input,
+.sheetpdfOpt input {
+  width: 16px;
+  height: 16px;
+  accent-color: #8b0000;
+  flex: 0 0 auto;
+}
+
+.sheetpdfOpt {
+  font-size: 0.88rem;
+  padding-top: 10px;
+  border-top: 1px solid #eef1f5;
+  margin-bottom: 14px;
+}
+
+.optTight { padding-top: 0; border-top: 0; margin-top: -6px; }
+
+.sheetpdfRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: #3a4150;
+  margin-bottom: 14px;
+}
+
+.rowTight { margin-top: -6px; }
+
+.sheetpdfRow select {
+  font: inherit;
+  font-size: 0.875rem;
+  padding: 3px 28px 3px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background-color: #ffffff;
+}
+
+.sheetpdfLink {
+  background: #f4f5f7;
+  border: 1px solid #e2e6ec;
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.linkHead {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #146c43;
+  margin-bottom: 8px;
+}
+
+.linkRow {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.linkInput {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.8rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  padding: 4px 8px;
+  border: 1px solid #ced4da;
+  border-radius: 4px;
+  background: #ffffff;
+}
+
+.sheetpdfActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+/* ---- PDF export: the modal cloned off-screen, unclipped ------------------- */
+
+.pdfStage { pointer-events: none; }
+
+.pdfCapture {
+  display: block !important;
+  width: 100% !important;
+  height: auto !important;
+  max-height: none !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  animation: none !important;
+}
+
+.pdfCapture .modalBody {
+  overflow: visible !important;
+  max-height: none !important;
+}
+
+/* Paper has no hover tooltip: cut cells wrap out in full. */
+.pdfCapture .table .tdMain,
+.pdfCapture .table .tdMuted {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  max-width: none !important;
+}
+
+.pdfMeta {
+  padding: 10px 20px 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #8a919c;
+}
+
+/* ---- short screens (1366x768 laptops) ------------------------------------ */
+
+@media (max-height: 860px) {
+  .deck {
+    gap: 8px;
+    padding: 8px 14px 10px;
+  }
+
+  .tile { padding: 6px 10px 6px; gap: 1px; }
+  .tileBig { font-size: 1.25rem; }
+  .finSeal > i { flex-basis: 30px; width: 30px; height: 30px; font-size: 0.95rem; }
+  .finWord { font-size: 1.15rem; }
+}
