@@ -1,7 +1,8 @@
 import type { QueryParams } from '../client';
 import { listCountQueryOptions, listPageQueryOptions } from '../counts';
 import type { PlanningItem } from '../planning/planningItems';
-import type { PurchaseRequestRow } from './purchaseRequests';
+import type { PoolRow } from './paymentLists';
+import type { ProcurementPlanningItem, PurchaseRequestRow } from './purchaseRequests';
 
 // Counts and short lists for the procurement hubs, under each list's own key root.
 
@@ -21,6 +22,41 @@ export function myPurchaseRequestsQueryOptions(userId: number, pageSize: number)
     '/procurement/purchase-requests/',
     { requestor: userId, ordering: '-created_at', page_size: pageSize },
   );
+}
+
+/**
+ * The first requests awaiting the user's approval, newest first; the page's
+ * count is the Bekleyen Talepler figure. Under pendingApproval, so approving
+ * on the pending page refreshes it.
+ */
+export function pendingApprovalPageQueryOptions(pageSize: number) {
+  return listPageQueryOptions<PurchaseRequestRow & { needed_date?: string | null }>(
+    ['purchaseRequests', 'pendingApproval'],
+    '/procurement/purchase-requests/pending_approval/',
+    { page_size: pageSize },
+  );
+}
+
+/**
+ * Planning items not yet in an active purchase request (what the create
+ * page's planning list offers), newest first.
+ */
+export function requestablePlanningItemsQueryOptions(pageSize: number) {
+  return listPageQueryOptions<ProcurementPlanningItem & { quantity_in_active_prs?: string | number | null }>(
+    ['planningItems', 'list'],
+    '/planning/items/',
+    { available_for_procurement: true, ordering: '-id', page_size: pageSize },
+  );
+}
+
+/** Unpaid instalments due on or before a day (overdue ones too), soonest first. */
+export function paymentsDueQueryOptions(dueBefore: string, pageSize: number) {
+  return listPageQueryOptions<PoolRow>(['paymentPool', 'list'], '/procurement/payment-pool/', {
+    basis: 'all',
+    due_before: dueBefore,
+    ordering: 'due_date',
+    page_size: pageSize,
+  });
 }
 
 /** Payment lists in one status (submitted = waiting for the general manager). */
