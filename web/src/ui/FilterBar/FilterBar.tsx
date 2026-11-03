@@ -4,6 +4,7 @@ import {
   Popover,
   ScrollArea,
   Stack,
+  Text,
   TextInput,
   UnstyledButton,
 } from '@mantine/core';
@@ -132,6 +133,90 @@ function PillFace({ label, set, summary, onClear, chevron = true }: PillProps) {
   );
 }
 
+const NAV_KEYS = new Set(['ArrowDown', 'ArrowUp', 'Escape', 'Tab']);
+
+/**
+ * A select pill's menu items. Searchable ones get a box above the list that
+ * narrows it (Enter picks the first match) and a scrolling list for long ones.
+ */
+function SelectOptions({
+  options,
+  value,
+  allLabel,
+  searchable = false,
+  onPick,
+  onClear,
+}: {
+  options: FilterOption[];
+  value: FilterValue | undefined;
+  allLabel: string;
+  searchable?: boolean;
+  onPick: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const needle = query.trim().toLocaleLowerCase('tr');
+  const shown = needle
+    ? options.filter((o) => o.label.toLocaleLowerCase('tr').includes(needle))
+    : options;
+  const items = (
+    <>
+      {needle ? null : (
+        <Menu.Item onClick={onClear} fw={value ? undefined : 600}>
+          {allLabel}
+        </Menu.Item>
+      )}
+      {shown.map((option) => (
+        <Menu.Item
+          key={option.value}
+          onClick={() => onPick(option.value)}
+          fw={value === option.value ? 600 : undefined}
+          rightSection={value === option.value ? <i className="fas fa-check" aria-hidden /> : null}
+        >
+          {option.label}
+        </Menu.Item>
+      ))}
+    </>
+  );
+  if (!searchable) return items;
+  return (
+    <>
+      <TextInput
+        data-autofocus
+        size="xs"
+        m={4}
+        mb={6}
+        w={240}
+        placeholder="Ara..."
+        aria-label="Seçeneklerde ara"
+        leftSection={<i className="fas fa-search" aria-hidden style={{ fontSize: 11 }} />}
+        value={query}
+        onChange={(event) => setQuery(event.currentTarget.value)}
+        onKeyDown={(event) => {
+          // Letters and Space are the box's, not the menu's; arrows still reach the items.
+          if (!NAV_KEYS.has(event.key)) event.stopPropagation();
+          // Enter takes the first match, through its item so the menu closes too.
+          if (event.key === 'Enter' && needle && shown.length > 0) {
+            event.preventDefault();
+            event.currentTarget
+              .closest('[role="menu"]')
+              ?.querySelector<HTMLElement>('[role="menuitem"]')
+              ?.click();
+          }
+        }}
+      />
+      <ScrollArea.Autosize mah={300} type="auto">
+        {items}
+        {shown.length === 0 ? (
+          <Text size="sm" c="dimmed" px="sm" py={6}>
+            Sonuç bulunamadı
+          </Text>
+        ) : null}
+      </ScrollArea.Autosize>
+    </>
+  );
+}
+
 /**
  * Replaces components/filters/filters.js: a search box and one pill per
  * filter. Pills apply at once; the search applies on Enter or after a pause.
@@ -232,19 +317,14 @@ export function FilterBar<T extends FilterValues>({
               </UnstyledButton>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item onClick={clearOne} fw={set ? undefined : 600}>
-                {filter.placeholder ?? 'Tümü'}
-              </Menu.Item>
-              {filter.options.map((option) => (
-                <Menu.Item
-                  key={option.value}
-                  onClick={() => setAndApply(filter.key, option.value)}
-                  fw={value === option.value ? 600 : undefined}
-                  rightSection={value === option.value ? <i className="fas fa-check" aria-hidden /> : null}
-                >
-                  {option.label}
-                </Menu.Item>
-              ))}
+              <SelectOptions
+                options={filter.options}
+                value={value}
+                allLabel={filter.placeholder ?? 'Tümü'}
+                searchable={filter.searchable}
+                onPick={(picked) => setAndApply(filter.key, picked)}
+                onClear={clearOne}
+              />
             </Menu.Dropdown>
           </Menu>
         );

@@ -1,4 +1,4 @@
-import { Text } from '@mantine/core';
+import { Stack, Text, Tooltip } from '@mantine/core';
 import type { MachineFault } from '@/api/maintenance/faults';
 import { formatDate, toDate } from '@/lib/format';
 import { FaIcon, StatusBadge, type DataTableColumn } from '@/ui';
@@ -28,6 +28,8 @@ export function resolverName(fault: MachineFault): string {
   return fault.resolved_by_full_name || fault.resolved_by_username || '';
 }
 
+const nowrap = { whiteSpace: 'nowrap' } as const;
+
 function openSeconds(fault: MachineFault): number | null {
   const start = toDate(fault.reported_at);
   if (!start) return null;
@@ -55,7 +57,7 @@ function OpenDuration({ fault }: { fault: MachineFault }) {
   const text = openDuration(fault);
   if (fault.resolved_at) {
     return (
-      <Text span size="sm" c="dimmed" title="Açıkken geçen süre">
+      <Text span size="sm" c="dimmed" title="Açıkken geçen süre" style={nowrap}>
         {text}
       </Text>
     );
@@ -64,26 +66,54 @@ function OpenDuration({ fault }: { fault: MachineFault }) {
   const hours = total / 3600;
   const color = hours > 24 ? 'red.7' : hours > 8 ? 'orange.7' : 'green.7';
   return (
-    <Text span size="sm" fw={600} c={color} title="Hâlâ açık" style={{ whiteSpace: 'nowrap' }}>
+    <Text span size="sm" fw={600} c={color} title="Hâlâ açık" style={nowrap}>
       {text}{' '}
       <FaIcon icon="fas fa-circle" style={{ fontSize: '0.45rem', verticalAlign: 'middle' }} />
     </Text>
   );
 }
 
-function StatusCell({ fault }: { fault: MachineFault }) {
+export function FaultStatusBadge({ fault }: { fault: MachineFault }) {
   const color = fault.resolved_at ? 'green' : fault.is_breaking ? 'red' : 'yellow';
   return <StatusBadge color={color}>{faultStatusLabel(fault)}</StatusBadge>;
 }
 
-// Legacy table: day, short month, year and time ("12 Oca 2026 14:05").
+// Short so the table fits: "30.10.26 11:05".
 const DATE_TIME: Intl.DateTimeFormatOptions = {
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
+  year: '2-digit',
+  month: '2-digit',
+  day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
 };
+
+/** One line cut to `width`; the whole text on hover when it may not fit. */
+function Clipped({ text, width }: { text: string; width: number }) {
+  // About 7px a character at the table's font size.
+  const long = text.length * 7 > width;
+  return (
+    <Tooltip label={text} multiline maw={360} openDelay={250} disabled={!long} withinPortal>
+      <Text span size="sm" display="block" maw={width} truncate="end">
+        {text}
+      </Text>
+    </Tooltip>
+  );
+}
+
+/** A person with the time under it, small and muted. */
+function PersonAt({ name, at }: { name: string; at: string | null | undefined }) {
+  if (!name && !at) return <>-</>;
+  return (
+    <Stack gap={0}>
+      <Clipped text={name || '-'} width={130} />
+      {at ? (
+        <Text span size="xs" c="dimmed" style={nowrap}>
+          {formatDate(at, DATE_TIME)}
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
 
 // Module scope so DataTable rows stay memoized. Legacy marked these sortable
 // but never handled the sort (no onSort), so the headers did nothing; the
@@ -92,12 +122,13 @@ export const faultColumns: DataTableColumn<MachineFault>[] = [
   {
     key: 'id',
     header: 'ID',
+    width: 56,
     render: (row) => <span className={uiClasses.code}>{row.id || '-'}</span>,
   },
   {
     key: 'machine_name',
     header: 'Ekipman',
-    render: (row) => equipmentName(row),
+    render: (row) => <Clipped text={equipmentName(row)} width={170} />,
     exportValue: (row) => equipmentName(row),
   },
   {
@@ -105,15 +136,14 @@ export const faultColumns: DataTableColumn<MachineFault>[] = [
     header: 'Açıklama',
     render: (row) => {
       const text = row.description?.trim();
-      if (!text) return '-';
-      return <span title={text}>{text.length > 80 ? `${text.slice(0, 80)}…` : text}</span>;
+      return text ? <Clipped text={text} width={280} /> : '-';
     },
     exportValue: (row) => row.description || '',
   },
   {
     key: 'status',
     header: 'Durum',
-    render: (row) => <StatusCell fault={row} />,
+    render: (row) => <FaultStatusBadge fault={row} />,
     exportValue: (row) => faultStatusLabel(row),
   },
   {
@@ -122,16 +152,17 @@ export const faultColumns: DataTableColumn<MachineFault>[] = [
     render: (row) => <FaultTypeBadge fault={row} />,
     exportValue: (row) => faultTypeLabel(row),
   },
+  // Who and when share a cell on screen; the export keeps them apart.
   {
     key: 'reported_by_full_name',
     header: 'Bildiren',
-    render: (row) => reporterName(row),
+    render: (row) => <PersonAt name={reporterName(row)} at={row.reported_at} />,
     exportValue: (row) => reporterName(row),
   },
   {
     key: 'reported_at',
     header: 'Bildirilme',
-    render: (row) => formatDate(row.reported_at, DATE_TIME),
+    exportOnly: true,
     exportValue: (row) => toDate(row.reported_at),
   },
   {
@@ -143,13 +174,13 @@ export const faultColumns: DataTableColumn<MachineFault>[] = [
   {
     key: 'resolved_by_full_name',
     header: 'Çözen',
-    render: (row) => resolverName(row) || '-',
+    render: (row) => <PersonAt name={resolverName(row)} at={row.resolved_at} />,
     exportValue: (row) => resolverName(row),
   },
   {
     key: 'resolved_at',
     header: 'Çözüm Tarihi',
-    render: (row) => formatDate(row.resolved_at, DATE_TIME),
+    exportOnly: true,
     exportValue: (row) => toDate(row.resolved_at),
   },
 ];
