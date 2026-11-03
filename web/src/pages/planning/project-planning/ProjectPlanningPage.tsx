@@ -4,6 +4,7 @@
 // rules live in model/store.ts, the sheet in grid/PlanningGrid.tsx.
 
 import {
+  ActionIcon,
   Alert,
   Button,
   Checkbox,
@@ -13,9 +14,11 @@ import {
   Select,
   Switch,
   TextInput,
+  Tooltip,
 } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { memo, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { addDaysIso } from '@/lib/workdays';
 import { priceTiersQueryOptions } from '@/api/subcontracting/assignments';
 import {
   bulkSavePlanning,
@@ -45,11 +48,19 @@ import {
   GRID_COLUMNS,
   isCellEditable,
   rowBar,
+  rowBarEditing,
   rowClassName,
+  rowLinks,
   rowTarget,
+  rowTooltip,
 } from './columns';
-import type { ZoomUnit } from '@/features/plan-sheet/timeline';
-import { normalizeZoom, PlanningGrid, type PlanningGridHandle } from './grid/PlanningGrid';
+import { ZOOMS, type ZoomUnit } from '@/features/plan-sheet/timeline';
+import {
+  normalizeZoom,
+  PlanningGrid,
+  type GridBarChange,
+  type PlanningGridHandle,
+} from './grid/PlanningGrid';
 import { readStored, STORAGE_KEYS, writeStored } from './model/constants';
 import { fmtKg, round2 } from './model/format';
 import type { SheetRow } from './model/rowTypes';
@@ -73,6 +84,18 @@ function storedColumnKeys(): string[] {
 
 function storedNumber(key: string, fallback: number): number {
   return Number(readStored(key)) || fallback;
+}
+
+// Ctrl + wheel and the −/+ buttons walk this ladder: each unit at three
+// column widths, so zooming is gradual instead of a jump from weeks to days.
+const ZOOM_SCALES = [0.7, 1, 1.4] as const;
+const ZOOM_STEPS: readonly { unit: ZoomUnit; scale: number }[] = (
+  ['month', 'week', 'day'] as const
+).flatMap((unit) => ZOOM_SCALES.map((scale) => ({ unit, scale })));
+
+function storedScale(): number {
+  const n = Number(readStored(STORAGE_KEYS.zoomScale));
+  return (ZOOM_SCALES as readonly number[]).includes(n) ? n : 1;
 }
 
 function storedDifficulty(): boolean {
@@ -241,59 +264,49 @@ const FilterStrip = memo(function FilterStrip({
 }: FilterStripProps) {
   const timer = useRef<number | undefined>(undefined);
   useEffect(() => () => window.clearTimeout(timer.current), []);
+  // One row, no field labels: the placeholders and the accessible names say
+  // what each box filters, and the sheet keeps the height.
   return (
-    <div className={s.filters}>
-      <span className={s.pfTitle}>
-        <i className="fas fa-filter" />
-        Filtre
-      </span>
-      <div className={s.pfField}>
-        <span className={s.pfLabel}>Ara</span>
-        <TextInput
-          key={resetCount}
-          size="xs"
-          w={200}
-          aria-label="Ara"
-          placeholder="İş emri, başlık, müşteri…"
-          autoComplete="off"
-          defaultValue={initialText}
-          onChange={(e) => {
-            const text = e.currentTarget.value;
-            // Debounced: re-rendering 700 rows per keystroke would lag.
-            window.clearTimeout(timer.current);
-            timer.current = window.setTimeout(() => store.setFilters({ text }), 200);
-          }}
-        />
-      </div>
-      <div className={s.pfField}>
-        <span className={s.pfLabel}>İş Emri</span>
-        <MultiSelect
-          size="xs"
-          w={240}
-          aria-label="İş Emri"
-          placeholder={jobNos.length ? undefined : 'Tüm iş emirleri'}
-          data={jobOptions}
-          value={jobNos}
-          searchable={jobOptions.length > 7}
-          clearable
-          maxDropdownHeight={360}
-          onChange={(jobNos) => store.setFilters({ jobNos })}
-        />
-      </div>
-      <div className={s.pfField}>
-        <span className={s.pfLabel}>Sorumlu</span>
-        <Select
-          size="xs"
-          w={200}
-          aria-label="Sorumlu"
-          placeholder="Tüm sorumlular"
-          data={assigneeOptions}
-          value={assignee || null}
-          searchable={assigneeOptions.length > 7}
-          clearable
-          onChange={(v) => store.setFilters({ assignee: v || '' })}
-        />
-      </div>
+    <div className={s.filterGroup}>
+      <TextInput
+        key={resetCount}
+        size="xs"
+        w={190}
+        aria-label="Ara"
+        placeholder="İş emri, başlık, müşteri…"
+        autoComplete="off"
+        leftSection={<FaIcon icon="fas fa-search" />}
+        defaultValue={initialText}
+        onChange={(e) => {
+          const text = e.currentTarget.value;
+          // Debounced: re-rendering 700 rows per keystroke would lag.
+          window.clearTimeout(timer.current);
+          timer.current = window.setTimeout(() => store.setFilters({ text }), 200);
+        }}
+      />
+      <MultiSelect
+        size="xs"
+        w={200}
+        aria-label="İş Emri"
+        placeholder={jobNos.length ? undefined : 'Tüm iş emirleri'}
+        data={jobOptions}
+        value={jobNos}
+        searchable={jobOptions.length > 7}
+        clearable
+        maxDropdownHeight={360}
+        onChange={(jobNos) => store.setFilters({ jobNos })}
+      />
+      <Select
+        size="xs"
+        w={170}
+        aria-label="Sorumlu"
+        placeholder="Tüm sorumlular"
+        data={assigneeOptions}
+        value={assignee || null}
+        searchable={assigneeOptions.length > 7}
+        clearable
+        onChange={(v) => store.setFilters({ assignee: v || '' })}
+      />
       {summary !== null ? (
         <Button
           size="compact-xs"
@@ -350,27 +363,63 @@ function Warnings({ store }: { store: PlanningStore }) {
 }
 
 const Legend = ({ ref }: { ref?: React.Ref<HTMLDivElement> }) => (
-  // Two channels at once: the bar is the schedule state, the blue fill inside
-  // it is progress.
+  // Two channels at once: the bar's colour is the schedule state, the deeper
+  // fill inside it is progress. Copied onto the PDF's first page.
   <div ref={ref} className={`${s.legend} pg-legend`}>
     <span className={s.legendItem}>
-      <i className={`${s.swatch} ${s.swatchOnTime}`} />
+      <i className={s.swatch} data-tone="blue" />
       Zamanında
     </span>
     <span className={s.legendItem}>
-      <i className={`${s.swatch} ${s.swatchLate}`} />
+      <i className={s.swatch} data-tone="red" />
       Gecikmiş
     </span>
     <span className={s.legendItem}>
-      <i className={`${s.swatch} ${s.swatchHold}`} />
+      <i className={s.swatch} data-tone="yellow" />
       Beklemede
     </span>
     <span className={s.legendItem}>
-      <i className={`${s.swatch} ${s.swatchProgress}`} />
+      <i className={s.swatch} data-tone="green" />
+      Tamamlandı
+    </span>
+    <span className={s.legendItem}>
+      <i className={`${s.swatch} ${s.swatchProgress}`} data-tone="blue" />
       Tamamlanan kısım
+    </span>
+    <span className={s.legendItem}>
+      <i className={s.legendTermin} />
+      Termin
+    </span>
+    <span className={s.legendItem}>
+      <i className={s.legendToday} />
+      Bugün
+    </span>
+    <span className={s.legendItem}>
+      <i className={`fas fa-arrow-right-long ${s.legendLink}`} />
+      Aşama sırası
     </span>
   </div>
 );
+
+interface Figures {
+  jobs: number;
+  late: number;
+}
+
+// The band's numbers, read off the rows on the sheet: the jobs it shows and
+// how many of them the plan finishes after their termin.
+function sheetFigures(rows: readonly SheetRow[]): Figures {
+  const jobs = new Set<string>();
+  const late = new Set<string>();
+  for (const r of rows) {
+    if (!r.job_no) continue;
+    if (r.kind === 'group' || r.flat_assignment || r.unassignedRow) jobs.add(r.job_no);
+    const assignmentLate =
+      !!r.flat_assignment && !!r.end_date && !!r.job_target && r.end_date > r.job_target;
+    if ((r.kind === 'group' && r.job_target_late) || assignmentLate) late.add(r.job_no);
+  }
+  return { jobs: jobs.size, late: late.size };
+}
 
 export function ProjectPlanningPage() {
   const store = useStore();
@@ -379,6 +428,7 @@ export function ProjectPlanningPage() {
   const legendRef = useRef<HTMLDivElement>(null);
 
   const [zoom, setZoom] = useState<ZoomUnit>(() => normalizeZoom(readStored(STORAGE_KEYS.zoom)));
+  const [zoomScale, setZoomScale] = useState(storedScale);
   const [gridWidth, setGridWidth] = useState(() => storedNumber(STORAGE_KEYS.gridWidth, 560));
   const [columnKeys, setColumnKeys] = useState(storedColumnKeys);
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -413,9 +463,38 @@ export function ProjectPlanningPage() {
     return GRID_COLUMNS.filter((c) => c.always || keys.has(c.field));
   }, [columnKeys]);
 
-  const applyZoom = (next: ZoomUnit) => {
+  const figures = useMemo(() => sheetFigures(rows), [rows]);
+  const tabStrip = store.tabStrip();
+  const activeTab = tabStrip.tabs.find((t) => t.active);
+
+  const applyZoom = (next: ZoomUnit, scale = 1) => {
     writeStored(STORAGE_KEYS.zoom, next);
+    writeStored(STORAGE_KEYS.zoomScale, String(scale));
     setZoom(next);
+    setZoomScale(scale);
+  };
+  const zoomAt = ZOOM_STEPS.findIndex((z) => z.unit === zoom && z.scale === zoomScale);
+  const stepZoom = (direction: 1 | -1) => {
+    const next = ZOOM_STEPS[Math.max(0, Math.min(ZOOM_STEPS.length - 1, zoomAt + direction))];
+    if (next) applyZoom(next.unit, next.scale);
+  };
+  // The unit's own width at scale 1: the same geometry the sheet always had.
+  const colWidth = zoomScale === 1 ? null : Math.round(ZOOMS[zoom].colWidth * zoomScale);
+
+  // A dropped bar is the edit its cells would have made: a new start, or a
+  // new duration counted in working days. A start never lands on a day off.
+  const onBarChange = (row: SheetRow, change: GridBarChange) => {
+    if (change.mode === 'move') {
+      let start = change.start;
+      for (let i = 0; i < 14 && store.calendar.isNonWorkingDay(start); i++) {
+        start = addDaysIso(start, change.days < 0 ? -1 : 1);
+      }
+      store.editCell(row, 'start_date', start);
+      return;
+    }
+    const days = store.calendar.workingDaysInclusive(change.start, change.end);
+    if (!days || days <= 0) throw new Error('Bitiş bir iş gününe denk gelmeli.');
+    store.editCell(row, 'duration_wd', String(days));
   };
 
   const confirmDiscard = (message: string) =>
@@ -729,18 +808,76 @@ export function ProjectPlanningPage() {
         subtitle="İş emri bazında imalat takibi — talaşlı, kaynak, boya; süreler ve ilerleme"
         icon="fas fa-industry"
         backTo="/planning"
+        stats={
+          store.loaded
+            ? [
+                { id: 'pp-jobs', label: 'İş emri', value: figures.jobs },
+                {
+                  id: 'pp-late',
+                  label: 'Termini aşan',
+                  value: figures.late,
+                },
+                activeTab?.remainingKg != null
+                  ? {
+                      id: 'pp-kg',
+                      label: 'Kalan iş',
+                      value: `${fmtKg(activeTab.remainingKg)} kg`,
+                    }
+                  : { id: 'pp-assignments', label: 'Atama', value: tabStrip.allCount ?? 0 },
+                ...(lateBlocks
+                  ? [{ id: 'pp-cap', label: 'Gecikme riski (blok)', value: lateBlocks }]
+                  : []),
+              ]
+            : undefined
+        }
         actions={
-          <Button
-            leftSection={<FaIcon icon="fas fa-sync-alt" />}
-            loading={store.loading}
-            onClick={() =>
-              void confirmDiscard(
-                'Kaydedilmemiş değişiklikler var. Yenilemek istediğinize emin misiniz?',
-              ).then((ok) => ok && void store.load())
-            }
-          >
-            Yenile
-          </Button>
+          <>
+            {/* Advisory only: the drawer explains and proposes. */}
+            <Button
+              variant="default"
+              leftSection={<FaIcon icon="fas fa-gauge-high" />}
+              title="Kapasite önerileri — ekip/taşeron yükü, termin riski, önerilen başlangıçlar"
+              onClick={toggleCapacity}
+            >
+              Kapasite
+              {lateBlocks ? (
+                <span className={s.capBtnBadge} title={`${lateBlocks} blok gecikme riskinde`}>
+                  {lateBlocks}
+                </span>
+              ) : null}
+            </Button>
+            <Button
+              variant="default"
+              leftSection={<FaIcon icon="fas fa-file-pdf" />}
+              title="Görünen tabloyu ve zaman çizelgesini PDF olarak indir"
+              loading={pdfProgress === ''}
+              disabled={pdfProgress !== null}
+              onClick={() => void exportPdf()}
+            >
+              {pdfProgress ? pdfProgress : 'PDF'}
+            </Button>
+            <Button
+              variant="default"
+              leftSection={<FaIcon icon="fas fa-sync-alt" />}
+              loading={store.loading}
+              onClick={() =>
+                void confirmDiscard(
+                  'Kaydedilmemiş değişiklikler var. Yenilemek istediğinize emin misiniz?',
+                ).then((ok) => ok && void store.load())
+              }
+            >
+              Yenile
+            </Button>
+            <Button
+              leftSection={<FaIcon icon="fas fa-save" />}
+              disabled={!dirty}
+              loading={store.saveInFlight}
+              title={dirty ? 'Kaydedilmemiş değişiklikleri kaydet' : 'Kaydedilecek değişiklik yok'}
+              onClick={() => void store.save()}
+            >
+              Kaydet
+            </Button>
+          </>
         }
       />
       <Warnings store={store} />
@@ -749,6 +886,12 @@ export function ProjectPlanningPage() {
           <ResourceTabs store={store} />
           {/* Sheet-wide actions only; what acts on the grid itself lives on its header. */}
           <div className={s.actions}>
+            {dirty ? (
+              <span className={s.unsaved} role="status">
+                <span className={s.dirtyDot} />
+                Kaydedilmemiş değişiklik
+              </span>
+            ) : null}
             <Switch
               size="xs"
               label="Tamamlananlar"
@@ -769,46 +912,56 @@ export function ProjectPlanningPage() {
             >
               İş Ekle
             </Button>
-            <Button
+          </div>
+        </div>
+        <div className={s.viewBar}>
+          <FilterStrip
+            store={store}
+            jobOptions={store.jobFilterOptions()}
+            assigneeOptions={store.assigneeFilterOptions()}
+            jobNos={store.filterJobNos}
+            assignee={store.filterAssignee}
+            text={store.filterText}
+            resetCount={store.filterResetCount}
+            summary={filterSummary?.text ?? null}
+            summaryEmpty={!!filterSummary?.empty}
+          />
+          <div className={s.viewControls}>
+            <SegmentedControl
               size="xs"
-              color="green"
-              leftSection={<FaIcon icon="fas fa-save" />}
-              disabled={!dirty}
-              loading={store.saveInFlight}
-              onClick={() => void store.save()}
-            >
-              Kaydet
-            </Button>
-            <Button
+              aria-label="Görünüm"
+              title="Ne görünsün — işin tamamı, ya da yalnızca Kaynaklı İmalat ve altındaki ekip/taşeron atamaları (ekip dağılımını okumak için)"
+              color="#8b0000"
+              value={store.viewScope}
+              onChange={(v) => {
+                store.setViewScope(v);
+                writeStored(STORAGE_KEYS.scope, store.viewScope);
+              }}
+              data={[
+                { value: 'full', label: 'Tam' },
+                { value: 'welding', label: 'Kaynak' },
+              ]}
+            />
+            <SegmentedControl
               size="xs"
-              variant="default"
-              leftSection={<FaIcon icon="fas fa-file-pdf" />}
-              title="Görünen tabloyu ve zaman çizelgesini PDF olarak indir"
-              loading={pdfProgress === ''}
-              disabled={pdfProgress !== null}
-              onClick={() => void exportPdf()}
-            >
-              {pdfProgress ? pdfProgress : 'PDF'}
-            </Button>
-            {/* Advisory only: the drawer explains and proposes. */}
-            <Button
-              size="xs"
-              variant="default"
-              leftSection={<FaIcon icon="fas fa-gauge-high" />}
-              title="Kapasite önerileri — ekip/taşeron yükü, termin riski, önerilen başlangıçlar"
-              onClick={toggleCapacity}
-            >
-              Kapasite
-              {lateBlocks ? (
-                <span className={s.capBtnBadge} title={`${lateBlocks} blok gecikme riskinde`}>
-                  {lateBlocks}
-                </span>
-              ) : null}
-            </Button>
+              aria-label="Sıralama"
+              title="İş emirlerinin sırası — numaraya göre ya da bu kaynaktaki en erken başlangıca göre (en erken üstte)"
+              color="#8b0000"
+              value={store.sortMode}
+              onChange={(v) => {
+                store.setSortMode(v);
+                writeStored(STORAGE_KEYS.sort, store.sortMode);
+              }}
+              data={[
+                { value: 'job_no', label: 'İş No' },
+                { value: 'start', label: 'Başlangıç' },
+              ]}
+            />
+            <span className={s.divider} aria-hidden />
             <SegmentedControl
               size="xs"
               aria-label="Zaman ölçeği"
-              title="Zaman ölçeği — zaman çizelgesi üzerinde Ctrl + fare tekerleği ile de değiştirebilirsiniz"
+              title="Zaman ölçeği — zaman çizelgesi üzerinde Ctrl + fare tekerleği ile yakınlaşıp uzaklaşabilirsiniz"
               color="#8b0000"
               value={zoom}
               onChange={(v) => applyZoom(normalizeZoom(v))}
@@ -818,59 +971,41 @@ export function ProjectPlanningPage() {
                 { value: 'month', label: 'Ay' },
               ]}
             />
-            <span
-              className={s.segmentWrap}
-              title="Ne görünsün — işin tamamı, ya da yalnızca Kaynaklı İmalat ve altındaki ekip/taşeron atamaları (ekip dağılımını okumak için)"
+            <ActionIcon.Group>
+              <Tooltip label="Uzaklaştır">
+                <ActionIcon
+                  variant="default"
+                  size={26}
+                  aria-label="Uzaklaştır"
+                  disabled={zoomAt <= 0}
+                  onClick={() => stepZoom(-1)}
+                >
+                  <FaIcon icon="fas fa-minus" />
+                </ActionIcon>
+              </Tooltip>
+              <Tooltip label="Yakınlaştır">
+                <ActionIcon
+                  variant="default"
+                  size={26}
+                  aria-label="Yakınlaştır"
+                  disabled={zoomAt >= ZOOM_STEPS.length - 1}
+                  onClick={() => stepZoom(1)}
+                >
+                  <FaIcon icon="fas fa-plus" />
+                </ActionIcon>
+              </Tooltip>
+            </ActionIcon.Group>
+            <Button
+              size="compact-sm"
+              variant="default"
+              leftSection={<FaIcon icon="fas fa-crosshairs" />}
+              title="Zaman çizelgesini bugüne kaydır"
+              onClick={() => gridRef.current?.scrollToToday()}
             >
-              <span>Görünüm</span>
-              <SegmentedControl
-                size="xs"
-                aria-label="Görünüm"
-                color="#8b0000"
-                value={store.viewScope}
-                onChange={(v) => {
-                  store.setViewScope(v);
-                  writeStored(STORAGE_KEYS.scope, store.viewScope);
-                }}
-                data={[
-                  { value: 'full', label: 'Tam' },
-                  { value: 'welding', label: 'Kaynak' },
-                ]}
-              />
-            </span>
-            <span
-              className={s.segmentWrap}
-              title="İş emirlerinin sırası — numaraya göre ya da bu kaynaktaki en erken başlangıca göre (en erken üstte)"
-            >
-              <span>Sırala</span>
-              <SegmentedControl
-                size="xs"
-                aria-label="Sıralama"
-                color="#8b0000"
-                value={store.sortMode}
-                onChange={(v) => {
-                  store.setSortMode(v);
-                  writeStored(STORAGE_KEYS.sort, store.sortMode);
-                }}
-                data={[
-                  { value: 'job_no', label: 'İş No' },
-                  { value: 'start', label: 'Başlangıç' },
-                ]}
-              />
-            </span>
+              Bugün
+            </Button>
           </div>
         </div>
-        <FilterStrip
-          store={store}
-          jobOptions={store.jobFilterOptions()}
-          assigneeOptions={store.assigneeFilterOptions()}
-          jobNos={store.filterJobNos}
-          assignee={store.filterAssignee}
-          text={store.filterText}
-          resetCount={store.filterResetCount}
-          summary={filterSummary?.text ?? null}
-          summaryEmpty={!!filterSummary?.empty}
-        />
         <PlanningGrid<SheetRow>
           ref={gridRef}
           rows={rows}
@@ -878,15 +1013,30 @@ export function ProjectPlanningPage() {
           collapsed={collapsed}
           gridWidth={gridWidth}
           zoom={zoom}
+          colWidth={colWidth}
           isCellEditable={isCellEditable}
           rowClassName={rowClassName}
           actions={GRID_ACTIONS}
           bar={rowBar}
           target={rowTarget}
+          barEditing={rowBarEditing}
+          links={rowLinks}
+          tooltip={rowTooltip}
           isNonWorkingDay={store.calendar.isNonWorkingDay}
           allCollapsed={store.expandedJobCount() === 0}
+          loading={!store.loaded}
           emptyText={
-            store.loaded ? 'Bu kaynağa atanmış iş yok. "İş Ekle" ile başlayın.' : 'Plan yükleniyor…'
+            store.onAllTab() ? (
+              'Gösterilecek iş emri yok.'
+            ) : (
+              <>
+                Bu kaynağa atanmış iş yok.
+                <br />
+                <span className={s.muted}>
+                  Bir iş emrini bu ekibe vermek için <strong>İş Ekle</strong>.
+                </span>
+              </>
+            )
           }
           headerActions={
             <ColumnPicker
@@ -899,10 +1049,12 @@ export function ProjectPlanningPage() {
           }
           onEdit={(row, field, value) => store.editCell(row, field, value)}
           onEditError={(err) => notify.error(err, { fallback: 'Düzenleme başarısız' })}
+          onBarChange={onBarChange}
           onToggleGroup={(row) => row.job_no && store.toggleJob(row.job_no)}
           onToggleAll={() => store.toggleAll()}
           onAction={onAction}
           onZoomChange={applyZoom}
+          onZoomStep={stepZoom}
           onGridWidthChange={(px) => {
             writeStored(STORAGE_KEYS.gridWidth, String(px));
             setGridWidth(px);

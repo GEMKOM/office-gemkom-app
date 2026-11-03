@@ -32,8 +32,21 @@ const MONTHS_EN = [
 ];
 const MONTHS_EN_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+const WEEKDAYS_TR = ['Pz', 'Pt', 'Sa', 'Ça', 'Pe', 'Cu', 'Ct'];
+const WEEKDAYS_EN = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
 const monthName = (i: number) => (sheetLang() === 'en' ? MONTHS_EN : MONTHS_TR)[i]!;
 const monthShort = (i: number) => (sheetLang() === 'en' ? MONTHS_EN_SHORT : MONTHS_TR_SHORT)[i]!;
+const weekdayShort = (i: number) => (sheetLang() === 'en' ? WEEKDAYS_EN : WEEKDAYS_TR)[i]!;
+
+/** ISO 8601 week number (Monday weeks; week 1 holds the year's first Thursday). */
+export function isoWeek(date: Date): number {
+  // In UTC so a DST switch cannot shorten a day.
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = Date.UTC(d.getUTCFullYear(), 0, 1);
+  return Math.ceil(((d.getTime() - yearStart) / DAY_MS + 1) / 7);
+}
 
 export function toDate(value: string | Date | null | undefined): Date | null {
   if (!value) return null;
@@ -78,6 +91,12 @@ export interface TimelineColumn {
   /** The upper tier: "Eylül 2026" (day / week) or "2026" (month). */
   top: string;
   label: string;
+  /** A second, smaller header line: the ISO week ("H45") on week columns,
+   *  the weekday on day columns. */
+  sub?: string;
+  /** First column under a new upper-tier label (a month, or a year on the
+   *  month scale): where the lanes draw a stronger rule. */
+  boundary?: boolean;
 }
 
 export interface Timeline {
@@ -158,10 +177,17 @@ export function buildTimeline<R>(
         start: new Date(cursor.getTime()),
         top: `${monthName(cursor.getMonth())} ${cursor.getFullYear()}`,
         label: String(cursor.getDate()),
+        sub:
+          unit === 'week'
+            ? `${sheetLang() === 'en' ? 'W' : 'H'}${isoWeek(cursor)}`
+            : weekdayShort(cursor.getDay()),
       });
       cursor = addDays(cursor, step);
     }
   }
+  columns.forEach((col, i) => {
+    if (i > 0 && columns[i - 1]!.top !== col.top) col.boundary = true;
+  });
 
   const posOf = (value: string | Date | null | undefined): number | null => {
     const date = toDate(value);
@@ -185,6 +211,21 @@ export function buildTimeline<R>(
       return pos === null ? null : pos * colWidth;
     },
   };
+}
+
+/** The day under pixel `x`: the inverse of xOf, to the day. */
+export function dateAt(
+  timeline: Pick<Timeline, 'unit' | 'colWidth' | 'domainStart'>,
+  x: number,
+): Date {
+  const pos = x / timeline.colWidth;
+  const start = timeline.domainStart;
+  if (timeline.unit === 'month') {
+    const whole = Math.floor(pos);
+    const first = new Date(start.getFullYear(), start.getMonth() + whole, 1);
+    return addDays(first, Math.floor((pos - whole) * daysInMonth(first)));
+  }
+  return addDays(start, Math.floor(pos * (timeline.unit === 'week' ? 7 : 1)));
 }
 
 /** Width of one day on this timeline (a week column is 7 days, a month 30). */
@@ -222,6 +263,24 @@ export function nonWorkingBackground(
     const from = idx * timeline.colWidth;
     const to = from + timeline.colWidth;
     stops.push(`transparent ${from}px`, `${color} ${from}px`, `${color} ${to}px`, `transparent ${to}px`);
+  });
+  if (!stops.length) return 'none';
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
+// The month (or year) rules down the lanes, in the same one-gradient form:
+// the columns' own hairlines cannot say where a month begins.
+export function boundaryBackground(timeline: Timeline, color = 'var(--pg-line-strong)'): string {
+  const stops: string[] = [];
+  timeline.columns.forEach((col, idx) => {
+    if (!col.boundary) return;
+    const x = idx * timeline.colWidth;
+    stops.push(
+      `transparent ${x}px`,
+      `${color} ${x}px`,
+      `${color} ${x + 1}px`,
+      `transparent ${x + 1}px`,
+    );
   });
   if (!stops.length) return 'none';
   return `linear-gradient(90deg, ${stops.join(', ')})`;
