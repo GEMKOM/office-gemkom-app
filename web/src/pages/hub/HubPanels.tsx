@@ -77,6 +77,8 @@ export interface RecordsPanelProps {
   icon: string;
   /** Where "Tümü" goes; no link without it. */
   more?: string;
+  /** The link's text instead of "Tümü", e.g. "Talep Oluştur". */
+  moreLabel?: ReactNode;
   query: HubQuery<HubRecord[]>;
   /** "Talepler" → "Talepler yüklenemedi." */
   noun: string;
@@ -89,7 +91,17 @@ export interface RecordsPanelProps {
 }
 
 /** A short list of records, each row a link: recent requests, overdue tasks. */
-export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5, badge }: RecordsPanelProps) {
+export function RecordsPanel({
+  title,
+  icon,
+  more,
+  moreLabel,
+  query,
+  noun,
+  empty,
+  rows = 5,
+  badge,
+}: RecordsPanelProps) {
   const records = query.data ?? [];
   let body;
   if (query.isPending) {
@@ -147,7 +159,7 @@ export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5, 
       title={title}
       icon={icon}
       badge={<CountBadge count={badge} label="bekliyor" />}
-      actions={more ? <MoreLink to={more} /> : undefined}
+      actions={more ? <MoreLink to={more}>{moreLabel}</MoreLink> : undefined}
       padded={false}
     >
       {body}
