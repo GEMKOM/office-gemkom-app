@@ -1,0 +1,160 @@
+/* Fixed header (note + percent), a scrolling body of supplier tables with
+   sticky column heads, fixed footer: the modal never outgrows the screen. */
+.content {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.top {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--gk-line);
+}
+
+.note {
+  flex: 1 1 340px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gk-ink-2);
+}
+
+.percent {
+  flex: none;
+}
+
+.percentLabel {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+}
+
+.percentHint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--gk-muted);
+}
+
+.scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px 20px;
+}
+
+.supplier + .supplier {
+  margin-top: 20px;
+}
+
+.supplierHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--gk-ink);
+}
+
+.supplierCurrency {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.table {
+  width: 100%;
+  min-width: 780px;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--gk-line);
+  vertical-align: middle;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding-block: 8px;
+  background: var(--gk-surface-subtle);
+  border-top: 1px solid var(--gk-line);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-ink-2);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.table tbody tr:hover td {
+  background: var(--gk-surface-subtle);
+}
+
+.table .num {
+  text-align: right;
+  font-family: var(--gk-font-mono, 'IBM Plex Mono', monospace);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.table thead .num {
+  font-family: inherit;
+}
+
+.muted {
+  color: var(--gk-muted);
+}
+
+.colQty {
+  width: 90px;
+}
+
+.colMoney {
+  width: 112px;
+}
+
+.colInput {
+  width: 160px;
+}
+
+.colRange {
+  width: 190px;
+}
+
+.itemCell {
+  overflow-wrap: anywhere;
+}
+
+.badges {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.input input {
+  text-align: right;
+  font-family: var(--gk-font-mono, 'IBM Plex Mono', monospace);
+  font-variant-numeric: tabular-nums;
+}
