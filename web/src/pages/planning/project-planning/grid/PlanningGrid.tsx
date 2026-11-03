@@ -48,19 +48,17 @@ import {
   maskDMY,
   optionsWithCurrentValue,
   parseDMY,
-  shortDMY,
-  type GridOption,
-} from './dateEntry';
+  type SelectOption,
+} from '@/features/plan-sheet/dateEntry';
 import {
   buildTimeline,
-  headerTiers,
+  isZoomUnit,
   nonWorkingBackground,
-  sameTimeline,
+  timelineTiers,
   toKey,
-  type GridLocale,
   type Timeline,
   type ZoomUnit,
-} from './timeline';
+} from '@/features/plan-sheet/timeline';
 import './grid.css';
 
 export interface GridRowBase {
@@ -77,7 +75,7 @@ export interface GridColumn<R> {
   /** Takes the frozen table's spare width when the grip drags it wider. */
   grow?: boolean;
   type?: 'text' | 'number' | 'date' | 'select';
-  options?: readonly GridOption[];
+  options?: readonly SelectOption[];
   min?: number;
   max?: number;
   step?: number;
@@ -146,7 +144,6 @@ export interface PlanningGridProps<R extends GridRowBase> {
   target?: (row: R) => GridTarget | null;
   isNonWorkingDay?: ((date: string) => boolean) | null;
   today?: Date;
-  locale?: GridLocale;
   onEdit?: (row: R, field: string, value: string) => void | Promise<unknown>;
   onEditError?: (error: unknown, row: R, field: string) => void;
   onToggleGroup?: (row: R) => void;
@@ -173,6 +170,29 @@ interface GridCtx<R> {
   scrollToBar(row: R): void;
 }
 
+export function normalizeZoom(zoom: unknown): ZoomUnit {
+  return isZoomUnit(zoom) ? zoom : 'week';
+}
+
+/** dd.mm: the year is on the header tiers and in every tooltip, and a bar
+ *  label has to stay narrow enough not to reach the next row's work. */
+function shortDMY(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso ?? '').trim());
+  return m ? `${m[3]}.${m[2]}` : '';
+}
+
+/** Same geometry: every bar and label lands on the same pixel. */
+function sameTimeline(a: Timeline | null, b: Timeline): boolean {
+  return (
+    !!a &&
+    a.unit === b.unit &&
+    a.colWidth === b.colWidth &&
+    a.columns.length === b.columns.length &&
+    a.domainStart.getTime() === b.domainStart.getTime() &&
+    a.columns[0]?.top === b.columns[0]?.top
+  );
+}
+
 function colStyle(col: { width: string; grow?: boolean }): CSSProperties {
   return col.grow ? { width: col.width, flex: `1 0 ${col.width}` } : { width: col.width };
 }
@@ -194,7 +214,7 @@ function useStable<T>(value: T, same: (a: T, b: T) => boolean): T {
 
 interface EditorProps {
   type: GridColumn<unknown>['type'];
-  options?: readonly GridOption[];
+  options?: readonly SelectOption[];
   min?: number;
   max?: number;
   step?: number;
@@ -542,7 +562,6 @@ interface HeaderProps {
   }[];
   timeline: Timeline;
   allCollapsed: boolean;
-  locale: GridLocale;
   interactive: boolean;
   headerActions?: ReactNode;
   onToggleAll?: () => void;
@@ -553,21 +572,13 @@ const GridHeader = memo(function GridHeader({
   columns,
   timeline,
   allCollapsed,
-  locale,
   interactive,
   headerActions,
   onToggleAll,
   onGripDown,
 }: HeaderProps) {
-  const tiers = headerTiers(timeline);
-  const toggleTitle =
-    locale === 'en'
-      ? allCollapsed
-        ? 'Expand all'
-        : 'Collapse all'
-      : allCollapsed
-        ? 'Tümünü aç'
-        : 'Tümünü kapat';
+  const tiers = timelineTiers(timeline);
+  const toggleTitle = allCollapsed ? 'Tümünü aç' : 'Tümünü kapat';
   return (
     <div className="pg-header">
       <div className="pg-header-grid">
@@ -654,7 +665,6 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
     target,
     isNonWorkingDay,
     today,
-    locale = 'tr',
     allCollapsed = false,
     headerActions,
     emptyText = 'Bu kaynağa atanmış iş yok. "İş Ekle" ile başlayın.',
@@ -693,8 +703,8 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
   );
 
   const rawTimeline = useMemo(
-    () => buildTimeline(visible, zoom, effectiveToday, bar, lane, colWidth, locale),
-    [visible, zoom, effectiveToday, bar, lane, colWidth, locale],
+    () => buildTimeline(visible, zoom, effectiveToday, bar, lane, colWidth),
+    [visible, zoom, effectiveToday, bar, lane, colWidth],
   );
   const timeline = useStable(rawTimeline, sameTimeline);
   const timelineRef = useRef<Timeline | null>(null);
@@ -836,7 +846,6 @@ export function PlanningGrid<R extends GridRowBase>(props: PlanningGridProps<R>)
               columns={columns}
               timeline={timeline}
               allCollapsed={allCollapsed}
-              locale={locale}
               interactive={interactive}
               headerActions={headerActions}
               onToggleAll={toggleAll}

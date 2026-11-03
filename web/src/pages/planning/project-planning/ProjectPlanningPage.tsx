@@ -48,8 +48,8 @@ import {
   rowClassName,
   rowTarget,
 } from './columns';
-import { PlanningGrid, type PlanningGridHandle } from './grid/PlanningGrid';
-import { normalizeZoom, type ZoomUnit } from './grid/timeline';
+import type { ZoomUnit } from '@/features/plan-sheet/timeline';
+import { normalizeZoom, PlanningGrid, type PlanningGridHandle } from './grid/PlanningGrid';
 import { readStored, STORAGE_KEYS, writeStored } from './model/constants';
 import { fmtKg, round2 } from './model/format';
 import type { SheetRow } from './model/rowTypes';

@@ -24,7 +24,13 @@ import {
   type GridTarget,
   type PlanningGridHandle,
 } from './grid/PlanningGrid';
-import { buildTimeline, toKey, ZOOMS, type Timeline, type ZoomUnit } from './grid/timeline';
+import {
+  buildTimeline,
+  toKey,
+  ZOOMS,
+  type Timeline,
+  type ZoomUnit,
+} from '@/features/plan-sheet/timeline';
 
 // A4 landscape, 8 mm margins: 281 × 189 mm of content. 1460 px across 281 mm
 // puts the sheet's 0.8rem text at roughly 7 pt, the smallest that still reads.

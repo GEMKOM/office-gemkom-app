@@ -1,6 +1,6 @@
 /* Planning grid (React port of planning/project-planning/grid.css): global and
-   pg- prefixed, like the legacy sheet, so the PDF export's cloned pages and the
-   plan sheet's overrides keep working on the same class names.
+   pg- prefixed, like the legacy sheet, so the PDF export's cloned pages keep
+   their styling outside the React tree.
 
    Spreadsheet on the left, timeline on the right, one row.
    Every measurement flows from --pg-row-h: the bar lane, the header tiers and
