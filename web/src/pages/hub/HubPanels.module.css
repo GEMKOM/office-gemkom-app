@@ -13,10 +13,8 @@
   }
 }
 
-/* Panels in a column stack with the grid's gap, not a margin. */
-.column {
-  display: grid;
-  gap: 16px;
+/* A cell per child; panels stacked in one keep the usual panel spacing. */
+.cell {
   min-width: 0;
 }
 

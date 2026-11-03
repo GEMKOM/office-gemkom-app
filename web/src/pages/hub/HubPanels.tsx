@@ -1,5 +1,5 @@
 import { Skeleton } from '@mantine/core';
-import type { ReactNode } from 'react';
+import { Children, isValidElement, type ReactNode } from 'react';
 import { formatNumber } from '@/lib/format';
 import { AppLink } from '@/shell/AppLink';
 import { FaIcon, Panel, PendingValue, StatusBadge, type StatusFamily } from '@/ui';
@@ -16,14 +16,21 @@ export interface HubQuery<T> {
   refetch?: () => unknown;
 }
 
-/** Main panels left and a narrower column right; one column on small screens. */
+/**
+ * Main panels left and a narrower column right; one column on small screens.
+ * Each child sits in a cell of its own, so panels side by side are not
+ * siblings and keep no stacking margin.
+ */
 export function HubPanels({ children }: { children: ReactNode }) {
-  return <div className={css.panels}>{children}</div>;
-}
-
-/** A column of panels in HubPanels; each panel keeps its own height. */
-export function HubColumn({ children }: { children: ReactNode }) {
-  return <div className={css.column}>{children}</div>;
+  return (
+    <div className={css.panels}>
+      {Children.toArray(children).map((child, index) => (
+        <div key={isValidElement(child) && child.key !== null ? child.key : index} className={css.cell}>
+          {child}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** The "Tümü →" link in a panel header. */
