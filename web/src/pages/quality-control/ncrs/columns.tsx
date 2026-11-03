@@ -46,7 +46,7 @@ function PendingAction({ row, user, groups }: { row: Ncr; user: LegacyUser; grou
         ) : null}
       </div>
       {next.actor ? (
-        <Text size="xs" c={next.actorMissing ? 'red' : 'dimmed'} mt={3} lh={1.3}>
+        <Text size="xs" c={next.actorMissing ? 'red' : 'dimmed'} mt={2} lh={1.3} truncate="end">
           {next.task}
         </Text>
       ) : null}
@@ -63,7 +63,6 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'ncr_number',
       header: 'NCR No',
       sortable: false,
-      width: 100,
       // NCR-2026-0001 → 2026-0001: the header already says "NCR".
       render: (row) =>
         row.ncr_number ? (
@@ -78,7 +77,6 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'job_order',
       header: 'İş Emri',
       sortable: false,
-      width: 110,
       render: (row) =>
         row.job_order ? (
           <span className={uiClasses.code} title={row.job_order_title ?? undefined}>
@@ -92,9 +90,10 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'title',
       header: 'Başlık',
       sortable: false,
+      maxWidth: 'clamp(160px, 17.5vw, 440px)',
       render: (row) =>
         row.title ? (
-          <Text size="sm" fw={600}>
+          <Text span fz="inherit" fw={600}>
             {row.title}
           </Text>
         ) : (
@@ -105,14 +104,13 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'status',
       header: 'Bekleyen Aksiyon',
       sortable: true,
-      width: 230,
+      maxWidth: 'clamp(180px, 14vw, 280px)',
       render: (row) => <PendingAction row={row} user={user} groups={groups} />,
     },
     {
       key: 'qc_review',
       header: 'KK İnceleme',
       sortable: false,
-      width: 100,
       render: (row) => {
         const id = qcReviewId(row);
         return id ? <QcReviewLink id={id} /> : '-';
@@ -122,7 +120,6 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'severity',
       header: 'Önem',
       sortable: true,
-      width: 70,
       align: 'center',
       render: (row) => {
         const severity = SEVERITY_ICON[String(row.severity)];
@@ -140,7 +137,6 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'defect_type_display',
       header: 'Kusur Tipi',
       sortable: false,
-      width: 110,
       render: (row) =>
         row.defect_type_display ? (
           <StatusBadge color="grey">{row.defect_type_display}</StatusBadge>
@@ -152,7 +148,7 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'submission_count',
       header: 'Gönd.',
       sortable: false,
-      width: 65,
+      hideBelow: 1500,
       align: 'center',
       render: (row) => {
         const count = Number.parseInt(String(row.submission_count ?? 0), 10) || 0;
@@ -173,7 +169,6 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'assigned_team_name',
       header: 'Atanan Grup',
       sortable: false,
-      width: 120,
       render: (row) => {
         const team = assignedTeam(row);
         const group = groups.find((g) => String(g.id) === String(team.id));
@@ -186,7 +181,6 @@ export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColum
       key: 'created_at',
       header: 'Tarih',
       sortable: true,
-      width: 100,
       render: (row) => formatDate(row.created_at, CREATED_FORMAT),
     },
   ];

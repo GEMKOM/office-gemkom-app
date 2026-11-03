@@ -72,7 +72,6 @@ export const reviewColumns: DataTableColumn<QCReview>[] = [
     key: 'id',
     header: 'ID',
     sortable: false,
-    width: 100,
     render: (row) => (
       <Anchor
         href={`/quality-control/qc-reviews/?review=${row.id}`}
@@ -90,17 +89,16 @@ export const reviewColumns: DataTableColumn<QCReview>[] = [
     key: 'job_order',
     header: 'İş Emri',
     sortable: false,
-    width: 140,
     render: (row) =>
       row.job_order ? <span className={uiClasses.code}>{row.job_order}</span> : '-',
   },
   {
     key: 'task_title',
     header: 'Görev',
-    width: 300,
+    maxWidth: 'clamp(160px, 15vw, 440px)',
     render: (row) =>
       row.task_title ? (
-        <Text size="sm" fw={600} style={{ overflowWrap: 'break-word' }}>
+        <Text span fz="inherit" fw={600}>
           {row.task_title}
         </Text>
       ) : (
@@ -110,7 +108,6 @@ export const reviewColumns: DataTableColumn<QCReview>[] = [
   {
     key: 'submitted_by_name',
     header: 'Gönderen',
-    width: 150,
     render: (row) => person(row.submitted_by_name),
     exportValue: (row) => row.submitted_by_name || '',
   },
@@ -118,7 +115,6 @@ export const reviewColumns: DataTableColumn<QCReview>[] = [
     key: 'submitted_at',
     header: 'Gönderilme Tarihi',
     sortable: true,
-    width: 180,
     render: (row) => formatDate(row.submitted_at, DATETIME),
     exportValue: (row) => toDate(row.submitted_at),
   },
@@ -126,34 +122,29 @@ export const reviewColumns: DataTableColumn<QCReview>[] = [
     key: 'status',
     header: 'Durum',
     sortable: true,
-    width: 150,
     render: (row) => <ReviewStatusBadge status={row.status} />,
     exportValue: (row) => reviewStatusLabel(row.status),
   },
   {
     key: 'ncr_number',
     header: 'NCR No',
-    width: 160,
     render: (row) => <NcrLink ncrNumber={row.ncr_number} />,
     exportValue: (row) => row.ncr_number || '',
   },
   {
     key: 'open_ncr_count',
     header: 'Açık NCR',
-    width: 100,
     render: (row) => <OpenNcrCount count={row.open_ncr_count} />,
   },
   {
     key: 'reviewed_by_name',
     header: 'İnceleyen',
-    width: 150,
     render: (row) => person(row.reviewed_by_name),
     exportValue: (row) => row.reviewed_by_name || '',
   },
   {
     key: 'reviewed_at',
     header: 'İnceleme Tarihi',
-    width: 180,
     render: (row) => formatDate(row.reviewed_at, DATETIME),
     exportValue: (row) => toDate(row.reviewed_at),
   },

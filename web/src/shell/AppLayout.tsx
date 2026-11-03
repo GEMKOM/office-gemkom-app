@@ -3,10 +3,11 @@ import { useDisclosure, useReducedMotion } from '@mantine/hooks';
 import { Outlet } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';
 import { RequireRoute } from '@/auth/RequireRoute';
-import { bindNeoUser, NeoAside, NeoEntry, useNeo } from '@/neo';
+import { bindNeoUser, DailySummaryPrompt, NeoAside, NeoEntry, useNeo } from '@/neo';
 import { AppLink } from './AppLink';
 import { AttendanceButton } from './AttendanceButton';
 import { NotificationBell } from './NotificationBell';
+import { useRecordVisits } from './pageVisits';
 import { Rail } from './Rail';
 import { useRailExpanded } from './railState';
 import logoMark from './gemkom-mark-on-dark.png';
@@ -25,6 +26,8 @@ export function AppLayout() {
   const rail = useRailExpanded();
   const { user } = useAuth();
   bindNeoUser(user.id);
+  // Feeds the home page's shortcuts (the pages this user opens most).
+  useRecordVisits();
   const neoOpen = useNeo((s) => s.open);
   const reduceMotion = useReducedMotion();
 
@@ -71,6 +74,7 @@ export function AppLayout() {
 
       <AppShell.Main>
         <ImpersonationBadge />
+        <DailySummaryPrompt />
         <div className={classes.content}>
           <RequireRoute>
             <Outlet />

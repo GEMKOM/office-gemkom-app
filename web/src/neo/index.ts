@@ -9,6 +9,7 @@
 // its "Neo'ya Sor" button (the legacy modal sends `assistant:open`, which the
 // panel also understands).
 
+export { DailySummaryPrompt } from './DailySummaryPrompt';
 export { NeoEntry, NeoRule } from './NeoEntry';
 export { NeoAside, NEO_PANEL_ID } from './NeoPanel';
 export { neoLinkTarget } from './neoLinks';

@@ -1,6 +1,7 @@
 import migratedRoutes from './migrated-routes.json';
 import { normalizeRoute } from './migrated';
-import { appRoutes, publicRoutes } from './router';
+import { appRoutes, publicRoutes, routeTree } from './router';
+import { RouteLoading } from './RouteLoading';
 
 // The router and migrated-routes.json have to agree: a route missing from the
 // JSON never gets its index.html at deploy time, and a JSON entry without a
@@ -14,6 +15,18 @@ describe('migrated routes', () => {
 
   it('stores routes normalized', () => {
     for (const route of migratedRoutes) expect(route).toBe(normalizeRoute(route));
+  });
+});
+
+describe('route tree', () => {
+  // Every page is lazy, so a full load needs a fallback above all of them.
+  it('has one top route with the loading fallback over every page', () => {
+    expect(routeTree).toHaveLength(1);
+    expect(routeTree[0]!.HydrateFallback).toBe(RouteLoading);
+    expect(routeTree[0]!.path).toBeUndefined();
+    const children = routeTree[0]!.children ?? [];
+    for (const route of publicRoutes) expect(children).toContain(route);
+    expect(children.some((r) => appRoutes.every((a) => r.children?.includes(a)))).toBe(true);
   });
 });
 

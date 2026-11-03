@@ -308,12 +308,98 @@ it('admins may delete every fault', async () => {
   expect(screen.getAllByRole('button', { name: 'Arıza talebini sil' })).toHaveLength(3);
 });
 
-it('the eye button opens the details', async () => {
+it('the eye button opens the fault as a GEMKOM report that prints on its own', async () => {
+  const print = vi.spyOn(window, 'print').mockImplementation(() => {});
   renderPage();
   await screen.findByText('CNC Torna 1');
   fireEvent.click(screen.getAllByRole('button', { name: 'Detayları görüntüle' })[1]!);
   const dialog = await screen.findByRole('dialog', { name: 'Arıza Talebi #102' });
-  expect(within(dialog).getByText('Kompresör - Bahçe')).toBeInTheDocument();
-  expect(within(dialog).getByText('Bakım')).toBeInTheDocument();
+
+  expect(within(dialog).getByText('Bakım Talep Formu')).toBeInTheDocument();
+  expect(within(dialog).getByText('GEMKOM · Bakım Onarım')).toBeInTheDocument();
+  expect(within(dialog).getByText('#102')).toBeInTheDocument();
+  // Equipment, timeline, people and resolution.
+  expect(within(dialog).getByText('Kompresör', { selector: 'strong' })).toBeInTheDocument();
+  expect(within(dialog).getByText('Bahçe')).toBeInTheDocument();
+  expect(within(dialog).getByText('Elle girilen ekipman')).toBeInTheDocument();
+  expect(within(dialog).getByText('Talep bildirildi')).toBeInTheDocument();
+  expect(within(dialog).getAllByText('Çözüldü').length).toBeGreaterThan(0);
   expect(within(dialog).getByText('2 saat 30 dakika')).toBeInTheDocument();
+  expect(within(dialog).getAllByText('Usta Bey').length).toBeGreaterThan(0);
+  expect(within(dialog).getAllByText('veli').length).toBeGreaterThan(0);
+  expect(within(dialog).getByText('Çözüm açıklaması girilmedi.')).toBeInTheDocument();
+
+  // Yazdır / PDF prints a top-level copy named after the fault (the PDF's file name).
+  const title = document.title;
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Yazdır / PDF' }));
+  await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
+  expect(document.body.classList.contains('paper-printing')).toBe(true);
+  expect(document.title).toBe('Ariza-Talebi-102');
+  expect(screen.getAllByText('Bakım Talep Formu')).toHaveLength(2);
+  expect(screen.getByText(/^Rapor tarihi:/)).toBeInTheDocument();
+
+  fireEvent(window, new Event('afterprint'));
+  await waitFor(() => expect(document.body.classList.contains('paper-printing')).toBe(false));
+  expect(document.title).toBe(title);
+  expect(screen.getAllByText('Bakım Talep Formu')).toHaveLength(1);
+});
+
+it('an open fault shows the pending step and no resolution yet', async () => {
+  renderPage();
+  await screen.findByText('CNC Torna 1');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Detayları görüntüle' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: 'Arıza Talebi #101' });
+  expect(within(dialog).getByText('Arıza Talep Formu')).toBeInTheDocument();
+  expect(within(dialog).getByText('Çözüm bekleniyor')).toBeInTheDocument();
+  expect(within(dialog).getByText('Henüz çözülmedi.')).toBeInTheDocument();
+  expect(within(dialog).getByText(/\(hâlâ açık\)$/)).toBeInTheDocument();
+  expect(within(dialog).getByText('Kayıtlı makine')).toBeInTheDocument();
+});
+
+it('the Ekipman pill searches the machines', async () => {
+  renderPage();
+  await screen.findByText('CNC Torna 1');
+  fireEvent.click(screen.getByRole('button', { name: /^Ekipman/ }));
+  // jsdom gives the dropdown no size, so Mantine soon hides it: query hidden items too.
+  const search = await screen.findByRole('textbox', { name: 'Seçeneklerde ara', hidden: true });
+  const item = (name: string) => screen.queryByRole('menuitem', { name, hidden: true });
+  await waitFor(() => expect(item('CNC Torna 1')).not.toBeNull());
+
+  fireEvent.change(search, { target: { value: 'PRES' } });
+  expect(item('CNC Torna 1')).toBeNull();
+  expect(item('Tümü')).toBeNull();
+  fireEvent.click(item('Pres 2')!);
+
+  await waitFor(() =>
+    expect(
+      new URLSearchParams(screen.getByTestId('location').textContent ?? '').get('machine_id'),
+    ).toBe('4'),
+  );
+  await waitFor(() => expect(lastListParams().machine_id).toBe('4'));
+});
+
+it('a search with no match says so', async () => {
+  renderPage();
+  await screen.findByText('CNC Torna 1');
+  fireEvent.click(screen.getByRole('button', { name: /^Ekipman/ }));
+  const search = await screen.findByRole('textbox', { name: 'Seçeneklerde ara', hidden: true });
+  fireEvent.change(search, { target: { value: 'kaynak' } });
+  expect(screen.getByText('Sonuç bulunamadı')).toBeInTheDocument();
+  expect(screen.queryAllByRole('menuitem', { hidden: true })).toHaveLength(0);
+});
+
+it('long text is cut to one line and shown whole on hover', async () => {
+  const long = 'Hidrolik ünitede basınç düşüyor, pompa sesi var ve yağ sıcaklığı normalin üstünde';
+  fetchMock.mockImplementation((url) => {
+    const path = new URL(String(url)).pathname;
+    if (path === '/machines/faults/') {
+      return json({ count: 1, results: [{ ...FAULTS[0], description: long }] });
+    }
+    return json([]);
+  });
+  renderPage();
+  const cell = await screen.findByText(long);
+  expect(cell).toHaveAttribute('data-truncate', 'end');
+  fireEvent.mouseEnter(cell);
+  expect(await screen.findByRole('tooltip')).toHaveTextContent(long);
 });

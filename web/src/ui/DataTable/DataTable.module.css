@@ -1,4 +1,44 @@
-/* DataTable extras: inline editing, grouped rows, row reordering. */
+/* DataTable extras: density, clipped cells, inline editing, grouped rows, row reordering. */
+
+/* ---- density and fit ----------------------------------------------------- */
+/* Narrow side padding between columns; the outer cells line up with the panel. */
+.table th:first-child,
+.table td:first-child {
+  padding-inline-start: 16px;
+}
+
+.table th:last-child,
+.table td:last-child {
+  padding-inline-end: 16px;
+}
+
+.table[data-density='compact'] td {
+  font-size: 13px;
+}
+
+/* Headers wrap at word breaks before the table has to scroll sideways. */
+.table th {
+  white-space: normal;
+  line-height: 1.3;
+}
+
+/* Inline, so the edit and sort marks follow the last word when a header wraps. */
+.sortButton {
+  display: inline;
+  text-align: inherit;
+}
+
+/* A column's maxWidth: one line, cut with "…" (the full text is the hover title). */
+.clip,
+.clip > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clip {
+  display: block;
+}
 
 .srOnly {
   position: absolute;

@@ -1,7 +1,6 @@
 import type { LegacyUser } from '@legacy/authService.js';
 import { ActionIcon, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
   useDeleteNcrFile,
   useNcr,
@@ -18,6 +17,10 @@ import {
   ModalHeader,
   modalClassNames,
   notify,
+  PaperBackdrop,
+  PaperPrintCopy,
+  paperClasses,
+  usePaperPrint,
 } from '@/ui';
 import {
   downloadFile,
@@ -125,7 +128,7 @@ function FileList({
               .filter(Boolean)
               .join(' · ')}
           </span>
-          <span className={classes.noPrint}>
+          <span className={paperClasses.noPrint}>
             <Group gap={2} wrap="nowrap">
               <ActionIcon
                 variant="subtle"
@@ -154,26 +157,6 @@ function FileList({
       ))}
     </Stack>
   );
-}
-
-/** Prints only the form: a copy at the body's top level while the print dialog is up. */
-function usePrint() {
-  const [printing, setPrinting] = useState(false);
-  useEffect(() => {
-    if (!printing) return;
-    const done = () => {
-      document.body.classList.remove('ncr-printing');
-      setPrinting(false);
-    };
-    document.body.classList.add('ncr-printing');
-    window.addEventListener('afterprint', done, { once: true });
-    window.print();
-    return () => {
-      window.removeEventListener('afterprint', done);
-      document.body.classList.remove('ncr-printing');
-    };
-  }, [printing]);
-  return { printing, print: () => setPrinting(true) };
 }
 
 export interface NcrDetailModalProps {
@@ -205,8 +188,8 @@ export function NcrDetailModal({
   const filesQuery = useNcrFiles(ncrId, detail.isSuccess);
   const [uploading, setUploading] = useState(false);
   const [zipping, setZipping] = useState(false);
-  const { printing, print } = usePrint();
   const ncr = detail.data;
+  const { printing, print } = usePaperPrint(ncr?.ncr_number || (ncr ? `NCR-${ncr.id}` : undefined));
 
   useEffect(() => {
     if (!detail.isError) return;
@@ -263,7 +246,7 @@ export function NcrDetailModal({
         forPrint={forPrint}
         attachments={
           <>
-            <Group justify="flex-end" gap="xs" mb="sm" className={classes.noPrint}>
+            <Group justify="flex-end" gap="xs" mb="sm" className={paperClasses.noPrint}>
               <Button
                 size="xs"
                 variant="default"
@@ -304,7 +287,7 @@ export function NcrDetailModal({
         />
         <ModalBody>
           {ncr ? (
-            <div className={classes.formBackdrop}>{form(false)}</div>
+            <PaperBackdrop>{form(false)}</PaperBackdrop>
           ) : (
             <Group justify="center" py="xl">
               <Loader />
@@ -371,9 +354,7 @@ export function NcrDetailModal({
         />
       ) : null}
 
-      {printing && ncr
-        ? createPortal(<div className={classes.printRoot}>{form(true)}</div>, document.body)
-        : null}
+      {printing && ncr ? <PaperPrintCopy>{form(true)}</PaperPrintCopy> : null}
     </>
   );
 }

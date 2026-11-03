@@ -4,6 +4,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
+import { paymentTermFieldValue } from './dialogs/OfferFormModal';
 import { OffersPage } from './OffersPage';
 
 vi.mock('@legacy/authService.js', () => ({
@@ -56,6 +57,7 @@ const DETAIL = {
   pricing_mode: 'flat',
   shipping_price: '0',
   approval_round: 1,
+  payment_terms: { id: 3, name: 'Peşin' },
 };
 
 const ITEMS = [
@@ -103,6 +105,8 @@ function calls(): Call[] {
 }
 const posts = (path: string) =>
   calls().filter((c) => c.method === 'POST' && c.url.pathname === path);
+const patches = (path: string) =>
+  calls().filter((c) => c.method === 'PATCH' && c.url.pathname === path);
 const listCalls = () =>
   calls().filter((c) => c.method === 'GET' && c.url.pathname === '/sales/offers/');
 
@@ -239,6 +243,28 @@ it('marks an offer won only after the confirm', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Evet' }));
   await waitFor(() => expect(posts('/sales/offers/2/mark-won/')).toHaveLength(1));
   expect(notify.success).toHaveBeenCalledWith('Kazanıldı olarak işaretlendi');
+});
+
+it('paymentTermFieldValue keeps a nested term id for the edit form', () => {
+  expect(paymentTermFieldValue({ id: 3, name: 'Peşin' })).toBe('3');
+  expect(paymentTermFieldValue(3)).toBe('3');
+  expect(paymentTermFieldValue('3')).toBe('3');
+  expect(paymentTermFieldValue(null)).toBe('');
+  expect(paymentTermFieldValue({ name: 'Peşin' })).toBe('');
+});
+
+it('editing an offer PATCHes the nested payment term id, not null', async () => {
+  renderPage('/sales/offers/?offer_no=TKL-001&tab=genel');
+  const dialog = await screen.findByRole('dialog', { name: 'TKL-001 — Konveyör hattı' });
+  expect(await within(dialog).findByText('Peşin')).toBeInTheDocument();
+  fireEvent.click(within(dialog).getAllByRole('button', { name: 'Düzenle' }).at(-1)!);
+  const edit = await screen.findByRole('dialog', { name: 'Teklifi Düzenle' });
+  fireEvent.click(within(edit).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(patches('/sales/offers/1/')).toHaveLength(1));
+  expect(patches('/sales/offers/1/')[0]!.body).toMatchObject({
+    title: 'Konveyör hattı',
+    payment_terms: '3',
+  });
 });
 
 it('the new offer form requires a customer and a title', async () => {

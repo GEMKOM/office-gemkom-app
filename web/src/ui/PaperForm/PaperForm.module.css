@@ -1,0 +1,429 @@
+/* A record drawn as a printed GEMKOM form (was the NCR's ncrForm.css). */
+
+.form {
+  --paper-line: var(--gk-line);
+  --paper-head-bg: var(--gk-surface-subtle);
+  --paper-pad: 20px;
+  max-width: 1080px;
+  margin: 0 auto;
+  background: var(--gk-surface);
+  border: 1px solid var(--paper-line);
+  border-radius: var(--gk-radius-lg);
+  color: var(--gk-ink);
+  font-size: 14px;
+  box-shadow: var(--gk-shadow-card);
+  overflow: hidden;
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: stretch;
+  gap: 24px;
+  padding: 18px var(--paper-pad);
+  border-bottom: 2px solid var(--gk-ink);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.logo {
+  width: 52px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.org {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-red-700);
+}
+
+.title {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.meta {
+  border-collapse: collapse;
+  min-width: 290px;
+  align-self: center;
+}
+
+.meta th,
+.meta td {
+  border: 1px solid var(--paper-line);
+  padding: 5px 10px;
+  font-size: 13px;
+  vertical-align: middle;
+  text-align: left;
+}
+
+.meta th {
+  background: var(--paper-head-bg);
+  color: var(--gk-muted);
+  font-weight: 600;
+  white-space: nowrap;
+  width: 1%;
+}
+
+.meta td {
+  font-weight: 600;
+}
+
+.mono {
+  font-family: var(--gk-font-mono);
+  font-weight: 600;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px var(--paper-pad);
+  background: var(--gk-red-050);
+  border-bottom: 1px solid var(--gk-red-100);
+  font-size: 13px;
+}
+
+.section {
+  border-bottom: 1px solid var(--paper-line);
+}
+
+.section:last-child {
+  border-bottom: 0;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px var(--paper-pad);
+  background: var(--paper-head-bg);
+  border-bottom: 1px solid var(--paper-line);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--gk-red-700);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* Cells share borders like a printed form: the grid's 1px gap shows the line colour. */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(var(--paper-cols, 4), minmax(0, 1fr));
+  gap: 1px;
+  background: var(--paper-line);
+}
+
+.cell {
+  background: var(--gk-surface);
+  padding: 9px var(--paper-pad) 10px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gk-muted);
+  margin-bottom: 3px;
+}
+
+.value {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.empty {
+  color: var(--gk-muted);
+  font-style: italic;
+}
+
+.sub {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.narrative {
+  padding: 14px var(--paper-pad);
+  min-height: 68px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  padding-top: 2px;
+}
+
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--gk-muted);
+  white-space: nowrap;
+}
+
+.check[data-checked] {
+  color: var(--gk-ink);
+  font-weight: 600;
+}
+
+.box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--gk-line-strong);
+  border-radius: 3px;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.check[data-checked] .box {
+  border-color: var(--gk-red-700);
+  background: var(--gk-red-700);
+  color: #fff;
+}
+
+.signs {
+  display: grid;
+  grid-template-columns: repeat(var(--paper-cols, 3), minmax(0, 1fr));
+  gap: 1px;
+  background: var(--paper-line);
+}
+
+.sign {
+  background: var(--gk-surface);
+  padding: 12px var(--paper-pad) 14px;
+  min-width: 0;
+}
+
+.signName {
+  margin-top: 18px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--gk-ink);
+  font-weight: 600;
+  min-height: 26px;
+}
+
+.signDate {
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.signNote {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.signComment {
+  margin-top: 6px;
+  font-size: 13px;
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.subhead {
+  padding: 10px var(--paper-pad) 6px;
+  border-top: 1px solid var(--paper-line);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--gk-muted);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.table th,
+.table td {
+  border-top: 1px solid var(--paper-line);
+  padding: 6px 12px;
+  vertical-align: top;
+  text-align: left;
+}
+
+.table th:first-child,
+.table td:first-child {
+  padding-left: var(--paper-pad);
+}
+
+.table th {
+  background: var(--paper-head-bg);
+  color: var(--gk-muted);
+  font-weight: 600;
+}
+
+/* A vertical timeline: a dot per step on a hairline; pending steps are hollow. */
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 14px var(--paper-pad);
+}
+
+.step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: 0 12px;
+  padding-bottom: 14px;
+}
+
+.step:last-child {
+  padding-bottom: 0;
+}
+
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 4.5px;
+  top: 16px;
+  bottom: 0;
+  width: 1px;
+  background: var(--paper-line);
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--gk-red-700);
+}
+
+.step[data-pending] .dot {
+  background: var(--gk-surface);
+  border: 2px solid var(--gk-line-strong);
+}
+
+.stepTitle {
+  font-weight: 600;
+}
+
+.step[data-pending] .stepTitle {
+  color: var(--gk-muted);
+}
+
+.stepDetail {
+  font-size: 12px;
+  color: var(--gk-muted);
+  overflow-wrap: anywhere;
+}
+
+.stepAt {
+  font-family: var(--gk-font-mono);
+  font-size: 12px;
+  color: var(--gk-ink-2);
+  white-space: nowrap;
+}
+
+.files {
+  padding: 10px var(--paper-pad) 16px;
+}
+
+.foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px var(--paper-pad);
+  border-top: 1px solid var(--paper-line);
+  font-size: 11px;
+  color: var(--gk-muted);
+}
+
+/* On screen the form sits on the page colour inside its modal. */
+.backdrop {
+  background: var(--gk-page);
+  margin: -4px;
+  padding: 4px;
+}
+
+.printRoot {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .head {
+    flex-direction: column;
+  }
+
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .grid > .cell {
+    grid-column: auto !important;
+  }
+
+  .signs {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Yazdır: only the print copy of the form, on white. */
+@media print {
+  :global(body.paper-printing) > *:not(.printRoot) {
+    display: none !important;
+  }
+
+  :global(body.paper-printing) {
+    background: #fff !important;
+  }
+
+  .printRoot {
+    display: block;
+  }
+
+  .printRoot .form {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    max-width: none;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .printRoot .section {
+    break-inside: avoid;
+  }
+
+  .printRoot .noPrint {
+    display: none !important;
+  }
+}

@@ -72,7 +72,7 @@ test('opens from the rail, answers, and keeps the conversation across pages', as
 
   await page.goto('/');
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+    page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
   ).toBeVisible();
   await expect(neoEntry(page)).toHaveAttribute('aria-expanded', 'false');
   await expect(panel(page)).toHaveCount(0); // inert while closed: not in the accessibility tree
@@ -322,6 +322,137 @@ test("daily summaries open in a modal whose Neo'ya Sor prefills the chat", async
   consoleErrors.expectNone();
 });
 
+// The morning check: an unread daily summary pops up on the first page of a
+// visit, a banner and Neo's dot carry it afterwards.
+const istanbulToday = () =>
+  new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Istanbul',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+function morningHandlers(read: { value: boolean }): MockHandlers {
+  const summary = () => ({
+    id: 62,
+    summary_date: istanbulToday(),
+    status: 'ok',
+    is_read: read.value,
+    generated_at: '2026-11-03T05:20:00Z',
+    headline: 'Dün üç iş emri açıldı',
+    payload: { headline: 'Dün üç iş emri açıldı', stats: {}, highlights: [] },
+  });
+  return {
+    ...chatHandlers,
+    'GET /assistant/daily-summary/latest/': () => ({ json: { summary: summary() } }),
+    'GET /assistant/daily-summary/62/': () => ({ json: summary() }),
+    'GET /assistant/daily-summary/': () => ({ json: paginated([summary()]) }),
+    'POST /assistant/daily-summary/62/read/': () => {
+      read.value = true;
+      return { json: { ok: true } };
+    },
+  };
+}
+
+test('the daily summary pops up on the first page, and "Okudum" reads it for good', async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: true });
+  const read = { value: false };
+  const backend = await mockBackend(page, morningHandlers(read), { session });
+
+  await page.goto('/');
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByText('Dün üç iş emri açıldı')).toBeVisible();
+  await expect(neoEntry(page).locator('[data-unread]')).toHaveCount(1);
+  await shot(page, '50-desktop-morning-summary');
+
+  await dialog.getByRole('button', { name: 'Okudum' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(neoEntry(page).locator('[data-unread]')).toHaveCount(0);
+  expect(backend.callsTo('/assistant/daily-summary/62/read/', 'POST')).toHaveLength(1);
+  expect(backend.callsTo('/assistant/daily-summary/62/read/', 'POST')[0]!.body).toMatchObject({
+    source: 'modal',
+  });
+
+  // Read: a reload (a new visit in the same tab) is quiet.
+  await page.reload();
+  await expect(
+    page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
+  ).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByTestId('daily-summary-banner')).toHaveCount(0);
+
+  consoleErrors.expectNone();
+});
+
+test('"Daha sonra" snoozes: no read, then a banner whose "Oku" opens it, and the dot leads to the list', async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: true });
+  const read = { value: false };
+  const backend = await mockBackend(page, morningHandlers(read), { session });
+
+  await page.goto('/');
+  await page.getByRole('dialog').getByRole('button', { name: 'Daha Sonra' }).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(backend.callsTo('/assistant/daily-summary/62/read/', 'POST')).toHaveLength(0);
+  await expect(neoEntry(page).locator('[data-unread]')).toHaveCount(1);
+
+  // Next load: no popup any more today, a banner in its place.
+  await page.reload();
+  const banner = page.getByTestId('daily-summary-banner');
+  await expect(banner.getByText('Bugünün özeti hazır')).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await shot(page, '51-desktop-morning-banner');
+
+  await banner.getByRole('button', { name: 'Oku' }).click();
+  await expect(page.getByRole('dialog').getByText('Dün üç iş emri açıldı')).toBeVisible();
+  await expect(banner).toHaveCount(0);
+  await page.getByRole('dialog').getByRole('button', { name: 'Okudum' }).click();
+  expect(backend.callsTo('/assistant/daily-summary/62/read/', 'POST')).toHaveLength(1);
+  expect(backend.callsTo('/assistant/daily-summary/62/read/', 'POST')[0]!.body).toMatchObject({
+    source: 'banner',
+  });
+
+  consoleErrors.expectNone();
+});
+
+test('the unread dot sends the first click to the summaries, the second just toggles', async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: true });
+  const read = { value: false };
+  await mockBackend(page, morningHandlers(read), { session });
+  // The popup has been dealt with: snoozed once, the banner twice.
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('__e2eSnoozed')) return;
+    sessionStorage.setItem('__e2eSnoozed', '1');
+    const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Istanbul' }).format(
+      new Date(),
+    );
+    localStorage.setItem('ds:snooze:990001', JSON.stringify({ id: 62, date: today, count: 2 }));
+  });
+
+  await page.goto('/');
+  await expect(neoEntry(page).locator('[data-unread]')).toHaveCount(1);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.getByTestId('daily-summary-banner')).toHaveCount(0);
+
+  await neoEntry(page).click();
+  await expect(panel(page).getByRole('heading', { name: 'Günlük Özetler' })).toBeVisible();
+  await expect(panel(page).getByText('Dün üç iş emri açıldı')).toBeVisible();
+  await neoEntry(page).click();
+  await expect(neoEntry(page)).toHaveAttribute('aria-expanded', 'false');
+  await neoEntry(page).click();
+  await expect(neoEntry(page)).toHaveAttribute('aria-expanded', 'true');
+
+  consoleErrors.expectNone();
+});
+
 test('first visit: a hint points at Neo, once', async ({ page, consoleErrors }) => {
   const session = await seedSession(page, { admin: true, neoHint: true });
   await mockBackend(page, chatHandlers, { session });
@@ -336,7 +467,7 @@ test('first visit: a hint points at Neo, once', async ({ page, consoleErrors }) 
   await expect(hint).toHaveCount(0);
   await page.reload();
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+    page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
   ).toBeVisible();
   await expect(hint).toHaveCount(0);
 
@@ -352,7 +483,7 @@ test.describe('phone', () => {
 
     await page.goto('/');
     await expect(
-      page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+      page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
     ).toBeVisible();
     await shot(page, '40-phone-closed');
     await neoEntry(page).click();

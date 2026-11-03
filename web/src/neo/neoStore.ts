@@ -35,6 +35,21 @@ export type ChatItem =
 
 export type AssistantItem = Extract<ChatItem, { role: 'assistant' }>;
 
+/** The id and dates of a daily summary the user has not read. */
+export interface UnreadSummary {
+  id: number;
+  summary_date: string | null;
+  generated_at: string | null;
+}
+
+/** What the morning check puts in front of the user: a popup, or a slim banner. */
+export interface SummaryPrompt {
+  kind: 'modal' | 'banner';
+  summary: UnreadSummary;
+  /** For a popup: how it came up (the read metric's source). Default 'modal'. */
+  source?: 'modal' | 'banner';
+}
+
 export interface NeoState {
   open: boolean;
   view: NeoView;
@@ -50,6 +65,11 @@ export interface NeoState {
   /** Summary to scroll to, and pop open when `open`. */
   summaryRequest: { id: number; open: boolean; nonce: number } | null;
   userId: number | null;
+  /** Newest summary this user has not read (the dot on Neo's entry). */
+  unreadSummary: UnreadSummary | null;
+  /** The dot's "first click lands on the summaries" shortcut has been used. */
+  unreadRedirected: boolean;
+  summaryPrompt: SummaryPrompt | null;
 }
 
 export interface OpenNeoOptions {
@@ -78,6 +98,9 @@ const initialState = (): NeoState => ({
   focusReportId: null,
   summaryRequest: null,
   userId: null,
+  unreadSummary: null,
+  unreadRedirected: false,
+  summaryPrompt: null,
 });
 
 let state: NeoState = initialState();
@@ -176,6 +199,32 @@ export function openNeo(options: OpenNeoOptions = {}) {
     if (options.prompt) patch.draft = { text: options.prompt, nonce: ++nonce };
     return s.open && !Object.keys(patch).some((k) => k !== 'open') ? {} : patch;
   });
+}
+
+/** Raises or clears the unread dot. A newer unread summary re-arms the first-click shortcut. */
+export function setUnreadSummary(summary: UnreadSummary | null) {
+  set((s) => ({
+    unreadSummary: summary,
+    unreadRedirected: summary && s.unreadSummary?.id === summary.id ? s.unreadRedirected : false,
+  }));
+}
+
+export function setSummaryPrompt(prompt: SummaryPrompt | null) {
+  set({ summaryPrompt: prompt });
+}
+
+/**
+ * The entry's click. While the dot shows, the first click lands on the
+ * summaries (once); after that the entry is a plain toggle again.
+ */
+export function clickNeoEntry() {
+  const { open, unreadSummary, unreadRedirected } = state;
+  if (!open && unreadSummary && !unreadRedirected) {
+    set({ unreadRedirected: true });
+    openNeo({ view: 'summaries', summaryId: unreadSummary.id });
+    return;
+  }
+  toggleNeo();
 }
 
 export function closeNeo() {

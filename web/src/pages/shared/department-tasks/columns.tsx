@@ -1,7 +1,17 @@
+import { Tooltip } from '@mantine/core';
+import { useQuery } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import type { DepartmentTask, StatusChoice } from '@/api/projects/departmentTasks';
+import { subcontractorsQueryOptions } from '@/api/subcontracting/subcontractors';
 import { AppLink } from '@/shell/AppLink';
-import { FaIcon, notify, StatusBadge, type DataTableColumn, type EditOption } from '@/ui';
+import {
+  FaIcon,
+  notify,
+  StatusBadge,
+  type DataTableColumn,
+  type EditOption,
+  type StatusFamily,
+} from '@/ui';
 import type { DepartmentTasksConfig } from './config';
 import classes from './DepartmentTasks.module.css';
 import {
@@ -38,6 +48,8 @@ export const TreeContext = createContext<TreeState>({
 });
 
 const LEVEL_WIDTH = 20;
+/** The toggle's slot; reserved on every row so the numbers line up. */
+const TOGGLE_WIDTH = 24;
 
 function TreeCell({ task }: { task: DepartmentTask }) {
   const tree = useContext(TreeContext);
@@ -69,7 +81,7 @@ function TreeCell({ task }: { task: DepartmentTask }) {
     );
   }
   return (
-    <div className={classes.tree}>
+    <div className={classes.tree} style={{ width: level * LEVEL_WIDTH + TOGGLE_WIDTH }}>
       {lines}
       {hasChildren ? (
         <button
@@ -113,9 +125,8 @@ function KeyLink({ href, children }: { href: string; children: string }) {
   );
 }
 
-/** The İş Emri cell: request number, part key, job order, or "Bağımsız". */
+/** The İş Emri value: request number, part key, job order, or "Bağımsız". */
 export function JobOrderCell({ task }: { task: DepartmentTask }) {
-  const indent = task.parent ? classes.indent : undefined;
   if (task.task_type === 'procurement_item') {
     const number = task.purchase_request_number || task.planning_request_number;
     if (number) {
@@ -123,7 +134,7 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
         ? `/procurement/purchase-requests/registry/?talep=${encodeURIComponent(number)}`
         : `/planning/department-requests/?talep=${encodeURIComponent(number)}`;
       return (
-        <div className={indent}>
+        <div>
           <SubtaskPrefix task={task} />
           <KeyLink href={href}>{number}</KeyLink>
         </div>
@@ -136,7 +147,7 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
       const md = task.machining_data ?? {};
       const others = Array.isArray(md.other_job_nos) ? md.other_job_nos.filter(Boolean) : [];
       return (
-        <div className={indent}>
+        <div>
           <SubtaskPrefix task={task} />
           <KeyLink href={`/manufacturing/machining/tasks/list/?key=${encodeURIComponent(key)}`}>
             {key}
@@ -159,7 +170,7 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
     const key = task.cnc_data?.cnc_task_key || task.key;
     if (key) {
       return (
-        <div className={indent}>
+        <div>
           <SubtaskPrefix task={task} />
           <KeyLink href={`/manufacturing/cnc-cutting/cuts/?cut=${encodeURIComponent(key)}`}>
             {key}
@@ -170,7 +181,7 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
   }
   if (task.job_order) {
     return (
-      <div className={indent}>
+      <div>
         <SubtaskPrefix task={task} />
         <AppLink to={`/projects/project-tracking/?job_no=${encodeURIComponent(task.job_order)}`}>
           <strong>{task.job_order}</strong>
@@ -180,14 +191,14 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
   }
   if (task.is_consultation) {
     return (
-      <div className={indent}>
+      <div>
         <SubtaskPrefix task={task} />
         <strong>{task.id != null ? String(task.id) : '-'}</strong>
       </div>
     );
   }
   return (
-    <div className={indent}>
+    <div>
       <SubtaskPrefix task={task} />
       <span title="İş emrine bağlı olmayan görev">
         <StatusBadge color="grey">
@@ -200,21 +211,22 @@ export function JobOrderCell({ task }: { task: DepartmentTask }) {
 }
 
 function TitleCell({ task }: { task: DepartmentTask }) {
-  const { full, short } = displayTitle(task);
+  // The column clips the text to its width; the hover title has all of it.
+  const { full } = displayTitle(task);
   return (
     <div
       className={task.parent ? classes.indent : undefined}
       title={full}
       style={isTitleEditable(task) ? { cursor: 'pointer' } : undefined}
     >
-      {short}
       {task.is_consultation ? (
-        <span title="Teklif Danışma" style={{ marginLeft: 4 }}>
+        <span title="Teklif Danışma" style={{ marginRight: 4 }}>
           <StatusBadge color="blue">
             <FaIcon icon="fas fa-handshake" />
           </StatusBadge>
         </span>
       ) : null}
+      {full}
       {task.is_consultation && task.offer_summary ? (
         <>
           <br />
@@ -246,40 +258,74 @@ function StatusCell({
   return (
     <div className={classes.badges}>
       <StatusBadge color={family}>{label}</StatusBadge>
-      {task.is_under_revision ? (
-        <StatusBadge color="red">
-          <FaIcon icon="fas fa-rotate" style={{ marginRight: 4 }} />
-          Revizyonda
-        </StatusBadge>
-      ) : null}
+      {task.is_under_revision ? <Flag color="red" icon="fas fa-rotate" label="Revizyonda" /> : null}
       {review?.kind === 'pending' ? (
-        <StatusBadge color="blue">
-          <FaIcon icon="fas fa-search" style={{ marginRight: 4 }} />
-          İncelemede{review.progress}
-        </StatusBadge>
+        <Flag
+          color="blue"
+          icon="fas fa-search"
+          label={`İncelemede${review.progress}`}
+          text={review.progress.replace(/[()\s]/g, '') || undefined}
+        />
       ) : null}
       {review?.kind === 'rejected' ? (
-        <StatusBadge color="red">
-          <FaIcon icon="fas fa-times-circle" style={{ marginRight: 4 }} />
-          İnceleme Reddedildi
-        </StatusBadge>
+        <Flag color="red" icon="fas fa-times-circle" label="İnceleme Reddedildi" />
       ) : null}
-      {qc ? (
-        <StatusBadge color={qc.family}>
-          <FaIcon icon={qc.icon} style={{ marginRight: 4 }} />
-          {qc.label}
-        </StatusBadge>
-      ) : null}
+      {qc ? <Flag color={qc.family} icon={qc.icon} label={qc.label} text="KK" /> : null}
     </div>
   );
 }
 
+/** A side state next to the status pill: an icon (and a word at most), named on hover. */
+function Flag({
+  color,
+  icon,
+  label,
+  text,
+}: {
+  color: StatusFamily;
+  icon: string;
+  label: string;
+  text?: string;
+}) {
+  return (
+    <Tooltip label={label} withArrow openDelay={150}>
+      <span className={classes.flag} data-family={color} role="img" aria-label={label}>
+        <FaIcon icon={icon} />
+        {text ? <span aria-hidden>{text}</span> : null}
+      </span>
+    </Tooltip>
+  );
+}
+
 function kg(value: unknown) {
-  const text = trNumber(value, 2);
+  const text = trNumber(value);
   return text ? <small className={classes.muted}> ({text} kg)</small> : null;
 }
 
+// Every subcontractor, inactive ones too: an old assignment can name one.
+const ALL_SUBCONTRACTORS = { page_size: 500 };
+const NO_SHORT_NAMES = new Map<number, string>();
+
+/**
+ * Short names by subcontractor id. The task payload only carries the full
+ * trade name (subcontractor__name), so the list is fetched once per page.
+ */
+function useSubcontractorShortNames(): Map<number, string> {
+  const query = useQuery({
+    ...subcontractorsQueryOptions(ALL_SUBCONTRACTORS),
+    staleTime: 10 * 60_000,
+    select: (page) =>
+      new Map(
+        page.results
+          .filter((s) => s.short_name?.trim())
+          .map((s) => [Number(s.id), String(s.short_name).trim()] as const),
+      ),
+  });
+  return query.data ?? NO_SHORT_NAMES;
+}
+
 function AllocationsCell({ task }: { task: DepartmentTask }) {
+  const shortNames = useSubcontractorShortNames();
   // Subcontractor 9 is the fixed paint subcontractor: on every painted job, so noise here.
   const subs = (
     Array.isArray(task.assigned_subcontractors) ? task.assigned_subcontractors : []
@@ -287,14 +333,18 @@ function AllocationsCell({ task }: { task: DepartmentTask }) {
   const teams = Array.isArray(task.assigned_teams) ? task.assigned_teams : [];
   if (subs.length + teams.length === 0) return <>-</>;
   return (
-    <div style={{ fontSize: '0.875em' }}>
-      {subs.map((item, i) => (
-        <div key={`s${i}`}>
-          <FaIcon icon="fas fa-handshake" className={classes.muted} style={{ marginRight: 4 }} />
-          {item?.subcontractor_name || '-'}
-          {kg(item?.allocated_weight_kg)}
-        </div>
-      ))}
+    <div className={classes.allocations}>
+      {subs.map((item, i) => {
+        const full = item?.subcontractor_name || '-';
+        const short = shortNames.get(Number(item?.subcontractor_id)) || full;
+        return (
+          <div key={`s${i}`} title={short !== full ? full : undefined}>
+            <FaIcon icon="fas fa-handshake" className={classes.muted} style={{ marginRight: 4 }} />
+            {short}
+            {kg(item?.allocated_weight_kg)}
+          </div>
+        );
+      })}
       {teams.map((item, i) => (
         <div key={`t${i}`}>
           <FaIcon icon="fas fa-users" className={classes.muted} style={{ marginRight: 4 }} />
@@ -375,6 +425,7 @@ export function buildColumns({
       key: 'assigned_subcontractors',
       header: 'Taşeron / Takım',
       sortable: false,
+      maxWidth: 'clamp(110px, 10vw, 240px)',
       render: (row) => <AllocationsCell task={row} />,
       exportValue: (row) =>
         [
@@ -403,23 +454,22 @@ export function buildColumns({
 
   const columns: DataTableColumn<DepartmentTask>[] = [
     {
-      key: '_expand',
-      header: '',
-      sortable: false,
-      width: 80,
-      exportable: false,
-      render: (row) => <TreeCell task={row} />,
-    },
-    {
       key: 'job_order',
       header: 'İş Emri',
       sortable: true,
-      render: (row) => <JobOrderCell task={row} />,
+      // The tree toggle and its lines lead the cell; deeper rows step right.
+      render: (row) => (
+        <div className={classes.jobCell}>
+          <TreeCell task={row} />
+          <JobOrderCell task={row} />
+        </div>
+      ),
     },
     {
       key: 'title',
       header: 'Görev Başlığı',
       sortable: true,
+      maxWidth: 'clamp(170px, 16vw, 380px)',
       accessor: (row) => displayTitle(row).full,
       render: (row) => <TitleCell task={row} />,
       editable: {
@@ -433,9 +483,8 @@ export function buildColumns({
       key: 'customer_name',
       header: 'Müşteri',
       sortable: true,
-      render: (row) => (
-        <div className={row.parent ? classes.indent : undefined}>{row.customer_name || '-'}</div>
-      ),
+      maxWidth: 'clamp(90px, 8vw, 220px)',
+      render: (row) => row.customer_name || '-',
     },
     {
       key: 'status',
@@ -448,6 +497,7 @@ export function buildColumns({
       key: 'assigned_to_name',
       header: 'Atanan',
       sortable: false,
+      maxWidth: 'clamp(90px, 7vw, 180px)',
       render: (row) => (
         <div title={editableTitle(row, 'Atanan kişiyi değiştirmek için tıklayın')}>
           {row.assigned_to_name || '-'}
@@ -506,6 +556,7 @@ export function buildColumns({
       key: 'estimated_duration_wd',
       header: 'Süre (iş g.)',
       sortable: true,
+      hideBelow: 1400,
       accessor: (row) =>
         row.estimated_duration_wd === null ||
         row.estimated_duration_wd === undefined ||
@@ -551,6 +602,7 @@ export function buildColumns({
       header: 'Ağırlık',
       sortable: true,
       align: 'center',
+      hideBelow: 1500,
       accessor: (row) =>
         row.weight === null || row.weight === undefined || row.weight === ''
           ? null
@@ -580,6 +632,8 @@ export function buildColumns({
       header: 'Alt Görevler',
       sortable: false,
       align: 'center',
+      // The tree toggle already marks a task with subtasks.
+      hideBelow: 1600,
       render: (row) => <>{row.subtasks_count ? String(row.subtasks_count) : '-'}</>,
     },
   ];

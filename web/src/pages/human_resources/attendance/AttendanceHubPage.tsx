@@ -1,15 +1,21 @@
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { useQuery } from '@tanstack/react-query';
-import { pendingOverridesCountQueryOptions } from '@/api/human_resources/attendance';
 import { MenuCards, type MenuCard, type PageFigure } from '@/ui';
+import { HubPanels } from '../../hub/HubPanels';
 import { countFigure, countValue } from '../../hubCount';
-
-const PENDING_OVERRIDES = '/human_resources/attendance/pending-overrides';
+import {
+  AttendanceTodayPanel,
+  PENDING_OVERRIDES,
+  PendingOverridesPanel,
+  RECORDS,
+  useAttendanceToday,
+  usePendingOverridesCount,
+} from '../hrHubData';
 
 export function AttendanceHubPage() {
   // Figures follow the cards: nothing is fetched for a page the user cannot open.
   const canApprove = hasRouteAccess(PENDING_OVERRIDES);
-  const pending = useQuery({ ...pendingOverridesCountQueryOptions(), enabled: canApprove });
+  const pending = usePendingOverridesCount();
+  const today = useAttendanceToday();
 
   // Ported from human_resources/attendance/attendance.js. Cards the user
   // cannot open hide themselves. Kayıtlar, Özet and Vardiya Kuralları were
@@ -29,7 +35,8 @@ export function AttendanceHubPage() {
       description: 'PDKS kayıtlarını filtreleyin ve inceleyin',
       icon: 'fas fa-clipboard-list',
       iconColor: 'purple',
-      link: '/human_resources/attendance/records',
+      link: RECORDS,
+      stat: { value: countValue(today.inside), label: 'kişi şu an içeride' },
     },
     {
       title: 'Özet',
@@ -47,26 +54,59 @@ export function AttendanceHubPage() {
     },
   ];
 
-  const stats: PageFigure[] = canApprove
-    ? [
-        countFigure(
-          {
-            id: 'pending-overrides',
-            label: 'Onay Bekleyen',
-            icon: 'fas fa-user-clock',
-            link: PENDING_OVERRIDES,
-          },
-          pending,
-        ),
-      ]
-    : [];
+  const stats: PageFigure[] = [
+    ...(canApprove
+      ? [
+          countFigure(
+            {
+              id: 'pending-overrides',
+              label: 'Onay Bekleyen',
+              icon: 'fas fa-user-clock',
+              link: PENDING_OVERRIDES,
+            },
+            pending,
+          ),
+        ]
+      : []),
+    ...(today.canRecords
+      ? [
+          countFigure(
+            {
+              id: 'inside-now',
+              label: 'Şu An İçeride',
+              icon: 'fas fa-building-user',
+              link: `${RECORDS}?status=active`,
+            },
+            today.inside,
+          ),
+          countFigure(
+            {
+              id: 'on-leave',
+              label: 'Bugün İzinli',
+              icon: 'fas fa-umbrella-beach',
+              link: `${RECORDS}?status=leave`,
+            },
+            today.onLeave,
+          ),
+        ]
+      : []),
+  ];
+  const panels = canApprove || today.canRecords;
 
   return (
     <MenuCards
       title="PDKS"
       subtitle="PDKS kayıtlarını yönetin ve ofis dışı giriş taleplerini değerlendirin"
       stats={stats}
+      compact={panels}
       cards={cards}
-    />
+    >
+      {panels ? (
+        <HubPanels>
+          {canApprove ? <PendingOverridesPanel /> : null}
+          {today.canRecords ? <AttendanceTodayPanel counts={today.counts} /> : null}
+        </HubPanels>
+      ) : null}
+    </MenuCards>
   );
 }

@@ -265,6 +265,26 @@ export function listDailySummaries(days: number, signal?: AbortSignal) {
   }).then(results);
 }
 
+/**
+ * The newest ready summary (full detail), or null when there is none or the
+ * account has no access (403/404): the morning check runs for everyone and
+ * "nothing to show" is not an error.
+ */
+export async function getLatestDailySummary(
+  signal?: AbortSignal,
+): Promise<DailySummaryDetail | null> {
+  try {
+    const data = await apiFetch<{ summary?: DailySummaryDetail | null }>(
+      '/assistant/daily-summary/latest/',
+      { signal },
+    );
+    return data?.summary ?? null;
+  } catch (error) {
+    if (error instanceof ApiError && (error.status === 403 || error.status === 404)) return null;
+    throw error;
+  }
+}
+
 export function getDailySummary(id: number, signal?: AbortSignal) {
   return apiFetch<DailySummaryDetail>(`/assistant/daily-summary/${id}/`, { signal });
 }

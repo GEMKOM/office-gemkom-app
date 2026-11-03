@@ -8,10 +8,8 @@ import {
   formatWindowLabel,
   relativeDayLabel,
   renderDailySummary,
-  seenValue,
-  setSeen,
 } from '@legacy/components/daily-summary/render.js';
-import { Button, Loader, Modal, UnstyledButton } from '@mantine/core';
+import { Button, Group, Loader, Modal, UnstyledButton } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -27,8 +25,9 @@ import { FaIcon } from '@/ui/FaIcon';
 import { ModalBody, ModalFooter, ModalHeader, modalClassNames } from '@/ui/ModalParts';
 import { StatusBadge } from '@/ui/StatusBadge';
 import classes from './neo.module.css';
+import { liteOf, noteSummaryRead, rememberShown, snoozeSummary } from './dailySummary';
 import { clearSummaryRequest, openNeo, useNeo } from './neoStore';
-import { neoKeys, useDailySummaries } from './queries';
+import { neoKeys, useDailySummaries, useNeoAccess } from './queries';
 
 // "Günlük Özetler": the company-wide daily brief, newest first. A row opens
 // the summary in the same layout the legacy morning popup uses (its renderer
@@ -57,21 +56,31 @@ function SummaryBody({ detail, onReveal }: { detail: DailySummaryDetail; onRevea
   );
 }
 
-function SummaryModal({
-  opened,
-  locked,
+export type SummarySource = 'pane' | 'deeplink' | 'modal' | 'banner';
+
+/**
+ * A summary in a popup. From the pane every way out is a read (the user went
+ * looking for it). The morning popup and banner ('modal' | 'banner') are
+ * offers: only "Okudum" reads, anything else snoozes.
+ */
+export function SummaryModal({
+  summary,
+  latest,
+  source,
   onClose,
 }: {
-  opened: Opened;
-  locked: boolean;
+  summary: Pick<DailySummaryRow, 'id' | 'summary_date' | 'is_read'>;
+  latest: boolean;
+  source: SummarySource;
   onClose: () => void;
 }) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
-  const { row, latest, source } = opened;
+  const offer = source === 'modal' || source === 'banner';
+  const { locked } = useNeoAccess(true);
   const { data: detail, isError } = useQuery({
-    queryKey: neoKeys.summary(row.id),
-    queryFn: ({ signal }) => getDailySummary(row.id, signal),
+    queryKey: neoKeys.summary(summary.id),
+    queryFn: ({ signal }) => getDailySummary(summary.id, signal),
     staleTime: Infinity,
   });
   const [openedAt] = useState(() => Date.now());
@@ -83,31 +92,39 @@ function SummaryModal({
   useEffect(() => {
     ensureDailySummaryStyles();
   }, []);
+  useEffect(() => {
+    if (offer) rememberShown(summary.id);
+  }, [offer, summary.id]);
 
-  // Opened from the pane, every close is a read. An admin browsing as
-  // someone else must not touch their read state.
-  const close = () => {
+  // An admin browsing as someone else must not touch their read state.
+  const finish = (read: boolean, then?: () => void) => {
     if (detail && !isImpersonating()) {
-      markDailySummaryRead(row.id, {
-        seconds_open: Math.round((Date.now() - openedAt) / 1000),
-        expanded: expanded.current,
-        source,
-      }).catch(() => undefined);
-      if (latest) setSeen(user.id, seenValue(detail));
-      for (const days of [30, 90]) {
-        queryClient.setQueryData<DailySummaryRow[]>(neoKeys.summaries(days), (rows) =>
-          rows?.map((r) => (r.id === row.id ? { ...r, is_read: true } : r)),
-        );
+      if (read) {
+        markDailySummaryRead(summary.id, {
+          seconds_open: Math.round((Date.now() - openedAt) / 1000),
+          expanded: expanded.current,
+          source,
+        }).catch(() => undefined);
+        noteSummaryRead(user.id, detail, { latest });
+        for (const days of [30, 90]) {
+          queryClient.setQueryData<DailySummaryRow[]>(neoKeys.summaries(days), (rows) =>
+            rows?.map((r) => (r.id === summary.id ? { ...r, is_read: true } : r)),
+          );
+        }
+      } else if (latest) {
+        snoozeSummary(user.id, liteOf(detail));
       }
     }
     onClose();
+    then?.();
   };
+  const dismiss = () => finish(!offer);
 
   return (
-    <Modal opened onClose={close} size="lg" withCloseButton={false} classNames={modalClassNames}>
+    <Modal opened onClose={dismiss} size="lg" withCloseButton={false} classNames={modalClassNames}>
       <ModalHeader
         icon="fas fa-newspaper"
-        title={formatSummaryDate(row.summary_date) || 'Günlük Özet'}
+        title={formatSummaryDate(summary.summary_date) || 'Günlük Özet'}
         subtitle={detail ? windowLabel(detail) || undefined : undefined}
       />
       <ModalBody>
@@ -122,21 +139,39 @@ function SummaryModal({
         )}
       </ModalBody>
       <ModalFooter>
-        {!locked && (
+        <Group gap="xs" mr="auto">
+          {offer && (
+            <Button
+              variant="default"
+              leftSection={<FaIcon icon="fas fa-newspaper" />}
+              onClick={() =>
+                finish(false, () => openNeo({ view: 'summaries', summaryId: summary.id }))
+              }
+            >
+              Geçmiş Özetler
+            </Button>
+          )}
+          {!locked && (
+            <Button
+              variant="default"
+              leftSection={<FaIcon icon="fas fa-robot" />}
+              onClick={() => finish(!offer, () => openNeo({ prompt: 'Dün neler oldu?' }))}
+            >
+              Neo&apos;ya Sor
+            </Button>
+          )}
+        </Group>
+        {offer && (
           <Button
             variant="default"
-            mr="auto"
-            leftSection={<FaIcon icon="fas fa-robot" />}
-            onClick={() => {
-              close();
-              openNeo({ prompt: 'Dün neler oldu?' });
-            }}
+            leftSection={<FaIcon icon="far fa-clock" />}
+            onClick={() => finish(false)}
           >
-            Neo&apos;ya Sor
+            Daha Sonra
           </Button>
         )}
-        <Button leftSection={<FaIcon icon="fas fa-check" />} onClick={close}>
-          {row.is_read ? 'Kapat' : 'Okudum'}
+        <Button leftSection={<FaIcon icon="fas fa-check" />} onClick={() => finish(true)}>
+          {summary.is_read ? 'Kapat' : 'Okudum'}
         </Button>
       </ModalFooter>
     </Modal>
@@ -144,7 +179,7 @@ function SummaryModal({
 }
 
 /** The summaries pane. */
-export function NeoSummaries({ locked }: { locked: boolean }) {
+export function NeoSummaries() {
   const [days, setDays] = useState(30);
   const { data, isPending, isError, error } = useDailySummaries(days, true);
   const request = useNeo((s) => s.summaryRequest);
@@ -244,7 +279,14 @@ export function NeoSummaries({ locked }: { locked: boolean }) {
     <div className={classes.scroll} ref={scrollRef}>
       <h3 className={classes.sectionTitle}>Günlük Özetler</h3>
       {body}
-      {opened && <SummaryModal opened={opened} locked={locked} onClose={() => setOpened(null)} />}
+      {opened && (
+        <SummaryModal
+          summary={opened.row}
+          latest={opened.latest}
+          source={opened.source}
+          onClose={() => setOpened(null)}
+        />
+      )}
     </div>
   );
 }

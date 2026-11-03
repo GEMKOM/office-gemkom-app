@@ -202,15 +202,15 @@ function positiveInt(value: string, fallback: number): number {
 }
 
 /** The legacy footer row: TOPLAM: before the Toplam (€) column, the page sum in it. */
-function totalFooter({ rows }: DataTableFooterContext<PlanningItem>) {
-  const totalIndex = planningItemColumns.findIndex((c) => c.key === TOTAL_COLUMN_KEY);
+function totalFooter({ rows, columns }: DataTableFooterContext<PlanningItem>) {
+  const totalIndex = columns.findIndex((c) => c.key === TOTAL_COLUMN_KEY);
   return (
     <Table.Tr>
-      {planningItemColumns.map((column, index) => (
+      {columns.map((column, index) => (
         <Table.Td
           key={column.key}
           fw={index === totalIndex || index === totalIndex - 1 ? 700 : undefined}
-          ta={index === totalIndex - 1 ? 'right' : undefined}
+          ta={index === totalIndex - 1 ? 'right' : column.align}
         >
           {index === totalIndex
             ? formatEuro(sumTotalEur(rows))
@@ -321,6 +321,7 @@ export function PlanningItemsPage() {
       />
 
       <DataTable
+        columnsKey="planning-items"
         title="Kalemler"
         icon="fas fa-list"
         filters={

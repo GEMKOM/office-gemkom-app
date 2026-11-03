@@ -22,6 +22,32 @@
   box-shadow: 0 0 0 2px var(--gk-rail);
 }
 
+/* An unread daily summary: the dot grows and pings, until it is read. */
+.entryIcon[data-unread] .entryDot {
+  top: -4px;
+  right: -6px;
+  width: 9px;
+  height: 9px;
+  background: #ff6b6f;
+  animation: neo-unread-ping 2.4s ease-out infinite;
+}
+
+@keyframes neo-unread-ping {
+  0% {
+    box-shadow: 0 0 0 2px var(--gk-rail), 0 0 0 2px rgba(229, 72, 77, 0.55);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 2px var(--gk-rail), 0 0 0 9px rgba(229, 72, 77, 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entryIcon[data-unread] .entryDot {
+    animation: none;
+  }
+}
+
 /* Collapsed: white on the rest wash, so it reads apart from the grey sections. */
 .entry {
   color: var(--gk-on-dark);
@@ -907,4 +933,27 @@
 /* Bootstrap's spacing helper, which the summary markup still carries. */
 .summaryBody :global(.me-1) {
   margin-right: 4px;
+}
+
+/* ---- the morning daily-summary banner (above the page, under the top bar) ---- */
+
+.dsBanner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px var(--gk-page-pad);
+  background: var(--gk-surface);
+  border-bottom: 1px solid var(--gk-line);
+  font-size: 13px;
+  color: var(--gk-ink);
+}
+
+.dsBannerIcon {
+  color: var(--gk-red-700);
+}
+
+.dsBannerText {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
 }

@@ -6,7 +6,25 @@ import type { MenuCard } from '@/ui';
 // system keeps red out of cards.
 
 /** Live counts a hub can show, defined in ManufacturingHubPage. */
-export type HubFigure = 'machiningTimers' | 'cncTimers' | 'openFaults' | 'stoppedMachines';
+export type HubFigure =
+  | 'machiningTimers'
+  | 'cncTimers'
+  | 'openFaults'
+  | 'stoppedMachines'
+  | 'incompleteParts'
+  | 'lateParts'
+  | 'cncPendingCuts'
+  | 'linearPendingTasks'
+  | 'weldingEntriesToday'
+  | 'timesheetsPending'
+  | 'pendingPullRequests'
+  | 'statementsInApproval';
+
+/**
+ * Panels under the cards, defined in ManufacturingHubPage: the open faults,
+ * the machining parts backlog, and the shop's queues (a count per area).
+ */
+export type HubPanel = 'openFaults' | 'partsBacklog' | 'shopQueues';
 
 export interface HubCard extends Omit<MenuCard, 'stat'> {
   /** Shown under the title as the card's figure. */
@@ -18,6 +36,7 @@ export interface ManufacturingHub {
   subtitle: string;
   /** Tiles on the band, in this order. */
   figures?: HubFigure[];
+  panels?: HubPanel[];
   cards: HubCard[];
 }
 
@@ -26,7 +45,8 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
   '/manufacturing': {
     title: 'İmalat Modülü',
     subtitle: 'İmalat süreçlerinizi yönetin ve optimize edin',
-    figures: ['machiningTimers', 'cncTimers', 'openFaults'],
+    figures: ['machiningTimers', 'cncTimers', 'openFaults', 'stoppedMachines'],
+    panels: ['openFaults', 'shopQueues'],
     cards: [
       {
         title: 'Projeler',
@@ -70,6 +90,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-ruler-horizontal',
         iconColor: 'success',
         link: '/manufacturing/linear-cutting',
+        figure: 'linearPendingTasks',
         features: [
           { label: 'Dashboard', icon: 'fas fa-chart-line', link: '/manufacturing/linear-cutting/dashboard' },
           { label: 'Kesimler', icon: 'fas fa-ruler-horizontal', link: '/manufacturing/linear-cutting/cuts' },
@@ -100,6 +121,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-fire',
         iconColor: 'danger',
         link: '/manufacturing/welding',
+        figure: 'weldingEntriesToday',
         features: [
           { label: 'Zaman Kayıtları', icon: 'fas fa-clock', link: '/manufacturing/welding/time-entries' },
           { label: 'Ekipler', icon: 'fas fa-users', link: '/manufacturing/welding/teams' },
@@ -124,6 +146,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-handshake',
         iconColor: 'primary',
         link: '/manufacturing/subcontracting',
+        figure: 'statementsInApproval',
         features: [
           { label: 'Genel Bakış', icon: 'fas fa-eye', link: '/manufacturing/subcontracting/overview' },
           { label: 'Taşeronlar', icon: 'fas fa-building', link: '/manufacturing/subcontracting/subcontractors' },
@@ -144,6 +167,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-dolly',
         iconColor: 'info',
         link: '/manufacturing/material-tracking/pull-requests',
+        figure: 'pendingPullRequests',
       },
     ],
   },
@@ -152,7 +176,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
   '/manufacturing/cnc-cutting': {
     title: 'CNC Kesim',
     subtitle: 'CNC kesim operasyonları yönetimi',
-    figures: ['cncTimers'],
+    figures: ['cncTimers', 'cncPendingCuts'],
     cards: [
       {
         title: 'Dashboard',
@@ -169,6 +193,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-scissors',
         iconColor: 'success',
         link: '/manufacturing/cnc-cutting/cuts/',
+        figure: 'cncPendingCuts',
       },
       {
         title: 'Fire Plakalar',
@@ -232,6 +257,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
   '/manufacturing/linear-cutting': {
     title: 'Lineer Kesim',
     subtitle: 'Lineer kesim optimizasyonu ve görev yönetimi',
+    figures: ['linearPendingTasks'],
     cards: [
       {
         title: 'Dashboard',
@@ -283,7 +309,8 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
   '/manufacturing/machining': {
     title: 'Talaşlı İmalat',
     subtitle: 'CNC işlemleri ve talaşlı imalat süreçleri yönetimi',
-    figures: ['machiningTimers'],
+    figures: ['machiningTimers', 'incompleteParts', 'lateParts'],
+    panels: ['partsBacklog'],
     cards: [
       {
         title: 'Dashboard',
@@ -300,6 +327,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-tasks',
         iconColor: 'success',
         link: '/manufacturing/machining/tasks',
+        figure: 'incompleteParts',
         features: [
           { label: 'Görev Listesi', icon: 'fas fa-list', link: '/manufacturing/machining/tasks/list' },
           { label: 'Görev Oluştur', icon: 'fas fa-plus-circle', link: '/manufacturing/machining/tasks/create' },
@@ -381,6 +409,8 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
   '/manufacturing/machining/tasks': {
     title: 'Görevler',
     subtitle: 'Görev yönetimi ve oluşturma işlemleri',
+    figures: ['incompleteParts', 'lateParts'],
+    panels: ['partsBacklog'],
     cards: [
       {
         title: 'Görev Listesi',
@@ -388,6 +418,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-list',
         iconColor: 'success',
         link: '/manufacturing/machining/tasks/list',
+        figure: 'incompleteParts',
       },
       {
         title: 'Görev Oluştur',
@@ -404,6 +435,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
     title: 'Bakım Modülü',
     subtitle: 'Ekipman bakım planları, arıza takibi ve önleyici bakım yönetimi',
     figures: ['openFaults', 'stoppedMachines'],
+    panels: ['openFaults'],
     cards: [
       {
         title: 'Dashboard',
@@ -453,6 +485,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
   '/manufacturing/subcontracting': {
     title: 'Taşeron Modülü',
     subtitle: 'Taşeron yönetimi, hakedişler ve düzeltmeler',
+    figures: ['statementsInApproval'],
     cards: [
       {
         title: 'Genel Bakış',
@@ -481,6 +514,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-file-invoice-dollar',
         iconColor: 'success',
         link: '/manufacturing/subcontracting/statements',
+        figure: 'statementsInApproval',
       },
       {
         title: 'Düzeltmeler',
@@ -496,6 +530,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
   '/manufacturing/welding': {
     title: 'Kaynak Modülü',
     subtitle: 'Kaynak işlemleri ve zaman kayıtları yönetimi',
+    figures: ['weldingEntriesToday', 'timesheetsPending'],
     cards: [
       {
         title: 'Zaman Kayıtları',
@@ -503,6 +538,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-clock',
         iconColor: 'primary',
         link: '/manufacturing/welding/time-entries',
+        figure: 'weldingEntriesToday',
       },
       {
         title: 'Puantaj Onayı',
@@ -511,6 +547,7 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-clipboard-check',
         iconColor: 'info',
         link: '/manufacturing/welding/timesheets',
+        figure: 'timesheetsPending',
       },
       {
         title: 'Ekipler',
