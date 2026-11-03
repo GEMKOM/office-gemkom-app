@@ -134,6 +134,7 @@
   "/procurement/purchase-requests/pending",
   "/procurement/purchase-requests/registry",
   "/planning/task-templates",
+  "/planning/project-planning",
   "/manufacturing/welding/time-entries",
   "/manufacturing/welding/timesheets",
   "/it/notifications",

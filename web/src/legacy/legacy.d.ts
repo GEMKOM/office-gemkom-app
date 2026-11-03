@@ -94,3 +94,19 @@ declare module '@legacy/navigationStructure.js' {
 
   export const NAVIGATION_STRUCTURE: NavTree;
 }
+
+declare module '@legacy/utils/pdfExport.js' {
+  /** Captures pre-built page elements (html2canvas + jsPDF from the CDN). */
+  export function exportPagesToPdf(
+    pages: HTMLElement[],
+    options: {
+      fileName: string;
+      orientation?: 'landscape' | 'portrait';
+      format?: string;
+      marginMm?: number;
+      /** ASCII only: jsPDF's core fonts cannot encode ı/ş/ğ. */
+      footerText?: string;
+      onProgress?: (done: number, total: number) => void;
+    },
+  ): Promise<void>;
+}
