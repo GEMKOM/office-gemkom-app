@@ -6,6 +6,7 @@ import { RequireRoute } from '@/auth/RequireRoute';
 import { bindNeoUser, DailySummaryPrompt, NeoAside, NeoEntry, useNeo } from '@/neo';
 import { AppLink } from './AppLink';
 import { AttendanceButton } from './AttendanceButton';
+import { NavBadgesProvider } from './navBadges';
 import { NotificationBell } from './NotificationBell';
 import { useRecordVisits } from './pageVisits';
 import { Rail } from './Rail';
@@ -60,14 +61,16 @@ export function AppLayout() {
       </AppShell.Header>
 
       <AppShell.Navbar className={classes.navbar}>
-        <div style={{ height: '100%' }}>
-          <AppShell.Section h="100%" visibleFrom="sm">
-            <Rail expanded={rail.expanded} onToggle={rail.toggle} />
-          </AppShell.Section>
-          <AppShell.Section h="100%" p="xs" hiddenFrom="sm">
-            <SideNav onNavigate={drawer.close} />
-          </AppShell.Section>
-        </div>
+        <NavBadgesProvider>
+          <div style={{ height: '100%' }}>
+            <AppShell.Section h="100%" visibleFrom="sm">
+              <Rail expanded={rail.expanded} onToggle={rail.toggle} />
+            </AppShell.Section>
+            <AppShell.Section h="100%" p="xs" hiddenFrom="sm">
+              <SideNav onNavigate={drawer.close} />
+            </AppShell.Section>
+          </div>
+        </NavBadgesProvider>
       </AppShell.Navbar>
 
       <NeoAside />

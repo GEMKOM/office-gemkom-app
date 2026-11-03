@@ -43,6 +43,14 @@ export function findNavPage(route: string, tree: NavTree = NAVIGATION_STRUCTURE,
   return null;
 }
 
+/** Every page the menu lists, in menu order (sections included, since they open hubs). */
+export function allNavPages(tree: NavTree = NAVIGATION_STRUCTURE, section: string | null = null): NavPage[] {
+  return Object.entries(tree).flatMap(([path, item]) => [
+    { path, label: item.label, icon: item.icon, section },
+    ...allNavPages(item.children ?? {}, section ?? item.label),
+  ]);
+}
+
 export function readVisits(userId: number): Visits {
   try {
     const raw = localStorage.getItem(storageKey(userId));

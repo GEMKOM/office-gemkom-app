@@ -1,6 +1,7 @@
 import { categoryMeta } from '@legacy/components/notificationBell/notificationCategories.js';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { Skeleton, UnstyledButton, VisuallyHidden } from '@mantine/core';
+import { Popover, Skeleton, TextInput, UnstyledButton, VisuallyHidden } from '@mantine/core';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { myVacationSummaryQueryOptions } from '@/api/general/vacation';
 import { formatNumber } from '@/lib/format';
@@ -9,8 +10,9 @@ import { MoreLink } from '@/pages/hub/HubPanels';
 import { useAttendanceToday } from '@/shell/attendance';
 import { AppLink, useAppNavigate } from '@/shell/AppLink';
 import { timeAgo, useLatestNotifications, useMarkRead, type AppNotification } from '@/shell/notifications';
-import { FaIcon, Panel, PendingValue, StatusBadge } from '@/ui';
+import { CountBadge, FaIcon, Panel, PendingValue, StatusBadge } from '@/ui';
 import type { NavPage } from '@/shell/pageVisits';
+import type { Shortcut } from './shortcuts';
 import { VACATION_PAGE } from './work';
 import css from './HomePage.module.css';
 
@@ -100,7 +102,7 @@ function NotificationRow({ item, onOpen }: { item: AppNotification; onOpen: (ite
 }
 
 /** The latest notifications (unread first), the same list the bell shows. */
-export function NotificationsPanel() {
+export function NotificationsPanel({ unread }: { unread?: number }) {
   const { data, isPending, isError, refetch } = useLatestNotifications(true);
   const markRead = useMarkRead();
   const navigate = useAppNavigate();
@@ -147,32 +149,121 @@ export function NotificationsPanel() {
   }
 
   return (
-    <Panel title="Son Bildirimler" icon="fas fa-bell" actions={<MoreLink to="/general/notifications" />} padded={false}>
+    <Panel
+      title="Son Bildirimler"
+      icon="fas fa-bell"
+      badge={<CountBadge count={unread} label="okunmamış" />}
+      actions={<MoreLink to="/general/notifications" />}
+      padded={false}
+    >
       {body}
     </Panel>
   );
 }
 
-/** The pages the user opens most, or their department's everyday pages. */
-export function ShortcutsPanel({ pages }: { pages: NavPage[] }) {
-  if (pages.length === 0) return null;
+const PICKER_ROWS = 8;
+const lower = (text: string) => text.toLocaleLowerCase('tr');
+
+/** Search the menu for a page to pin. */
+function AddShortcut({ pages, onPin }: { pages: NavPage[]; onPin: (route: string) => void }) {
+  const [opened, setOpened] = useState(false);
+  const [query, setQuery] = useState('');
+  const needle = lower(query.trim());
+  const matches = pages
+    .filter((page) => !needle || lower(`${page.section ?? ''} ${page.label}`).includes(needle))
+    .slice(0, PICKER_ROWS);
+
   return (
-    <Panel title="Kısayollar" icon="fas fa-bolt">
-      <ul className={css.shortcuts}>
+    <Popover opened={opened} onChange={setOpened} position="bottom-end" width={320} shadow="md" trapFocus returnFocus>
+      <Popover.Target>
+        <UnstyledButton className={css.addShortcut} onClick={() => setOpened((o) => !o)} aria-label="Kısayol ekle">
+          <FaIcon icon="fas fa-plus" /> <span className={css.addShortcutText}>Ekle</span>
+        </UnstyledButton>
+      </Popover.Target>
+      <Popover.Dropdown p="xs">
+        <TextInput
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+          placeholder="Sayfa ara..."
+          aria-label="Sayfa ara"
+          data-autofocus
+        />
+        <ul className={css.picker}>
+          {matches.map((page) => (
+            <li key={page.path}>
+              <UnstyledButton
+                className={css.pickerRow}
+                onClick={() => {
+                  onPin(page.path);
+                  setOpened(false);
+                  setQuery('');
+                }}
+              >
+                <FaIcon icon={page.icon} />
+                <span className={css.shortcutText}>
+                  <span className={css.shortcutLabel}>{page.label}</span>
+                  {page.section ? <span className={css.shortcutSection}>{page.section}</span> : null}
+                </span>
+              </UnstyledButton>
+            </li>
+          ))}
+          {matches.length === 0 ? <li className={css.pickerEmpty}>Eşleşen sayfa yok.</li> : null}
+        </ul>
+      </Popover.Dropdown>
+    </Popover>
+  );
+}
+
+/**
+ * "Kısayollar", right under the band: the pinned pages, the ones the user
+ * opens most and their department's everyday pages, one click away. The pin
+ * on a chip keeps it there; "Ekle" pins any page of the menu.
+ */
+export function ShortcutsBar({
+  pages,
+  addable,
+  onToggle,
+}: {
+  pages: Shortcut[];
+  /** Menu pages the user may open, to pick from. */
+  addable: NavPage[];
+  onToggle: (route: string) => void;
+}) {
+  const shown = new Set(pages.filter((page) => page.pinned).map((page) => page.path));
+  const choices = addable.filter((page) => !shown.has(page.path));
+  // Two pages can share a name ("Kayıt Defteri" in Satın Alma and in Mesai): say where.
+  const labels = pages.map((page) => page.label);
+  const nameOf = (page: Shortcut) =>
+    page.section && labels.filter((label) => label === page.label).length > 1 ? `${page.label} · ${page.section}` : page.label;
+  if (pages.length === 0 && choices.length === 0) return null;
+  return (
+    <section className={css.bar} aria-labelledby="home-shortcuts">
+      <h2 id="home-shortcuts" className={css.barTitle}>
+        <FaIcon icon="fas fa-bolt" /> Kısayollar
+      </h2>
+      <ul className={css.chips}>
         {pages.map((page) => (
-          <li key={page.path}>
-            <AppLink to={page.path} className={css.shortcut}>
-              <span className={css.shortcutIcon} aria-hidden>
+          <li key={page.path} className={css.chipItem} data-pinned={page.pinned || undefined}>
+            <AppLink to={page.path} className={css.chip} title={page.section ? `${page.section} › ${page.label}` : page.label}>
+              <span className={css.chipIcon} aria-hidden>
                 <FaIcon icon={page.icon} />
               </span>
-              <span className={css.shortcutText}>
-                <span className={css.shortcutLabel}>{page.label}</span>
-                {page.section ? <span className={css.shortcutSection}>{page.section}</span> : null}
-              </span>
+              <span className={css.chipLabel}>{nameOf(page)}</span>
             </AppLink>
+            <button
+              type="button"
+              className={css.pin}
+              aria-pressed={page.pinned}
+              aria-label={page.pinned ? `${page.label} sabitlemesini kaldır` : `${page.label} sabitle`}
+              title={page.pinned ? 'Sabitlemeyi kaldır' : 'Sabitle'}
+              onClick={() => onToggle(page.path)}
+            >
+              <FaIcon icon="fas fa-thumbtack" />
+            </button>
           </li>
         ))}
       </ul>
-    </Panel>
+      {choices.length > 0 ? <AddShortcut pages={choices} onPin={onToggle} /> : null}
+    </section>
   );
 }

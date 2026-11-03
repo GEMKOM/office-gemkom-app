@@ -1,5 +1,5 @@
 import { authedFetch } from '@legacy/authService.js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { HomePage } from './HomePage';
 
@@ -186,12 +186,14 @@ it('lists the latest notifications, unread marked, linking to all of them', asyn
   expect(notes.getByRole('link', { name: 'Tümü' })).toHaveAttribute('href', '/general/notifications');
 });
 
-it('offers the department pages as shortcuts until the user has favourites of their own', async () => {
-  const { unmount } = renderWithProviders(<HomePage />);
-  const first = within(panel('Kısayollar'))
+const shortcutLinks = () =>
+  within(panel('Kısayollar'))
     .getAllByRole('link')
     .map((link) => link.getAttribute('href'));
-  expect(first.slice(0, 2)).toEqual(['/procurement/purchase-requests/pending', '/procurement/purchase-requests/registry']);
+
+it('offers the department pages as shortcuts until the user has favourites of their own', async () => {
+  const { unmount } = renderWithProviders(<HomePage />);
+  expect(shortcutLinks().slice(0, 2)).toEqual(['/procurement/purchase-requests/pending', '/procurement/purchase-requests/registry']);
   unmount();
 
   localStorage.setItem(
@@ -199,58 +201,68 @@ it('offers the department pages as shortcuts until the user has favourites of th
     JSON.stringify({ '/sales/offers': { count: 9, last: 1 }, '/finance/purchase-orders': { count: 3, last: 2 } }),
   );
   renderWithProviders(<HomePage />);
-  const links = within(panel('Kısayollar')).getAllByRole('link');
-  expect(links.map((link) => link.getAttribute('href')).slice(0, 3)).toEqual([
+  expect(shortcutLinks().slice(0, 3)).toEqual([
     '/sales/offers',
     '/finance/purchase-orders',
     '/procurement/purchase-requests/pending',
   ]);
-  expect(links[0]).toHaveTextContent('Teklifler');
-  expect(links[0]).toHaveTextContent('Satış');
+  const first = within(panel('Kısayollar')).getAllByRole('link')[0]!;
+  expect(first).toHaveTextContent('Teklifler');
+  expect(first).toHaveAttribute('title', 'Satış › Teklifler');
 });
 
-describe('the work areas', () => {
-  const areaTitles = () =>
-    within(screen.getByRole('region', { name: 'Çalışma Alanları' }))
-      .getAllByRole('heading', { level: 3 })
-      .map((heading) => heading.textContent);
-  const card = (title: string) => screen.getByRole('heading', { level: 3, name: title }).closest('article')!;
+it('sits right under the band, before the panels', () => {
+  renderWithProviders(<HomePage />);
+  const bar = panel('Kısayollar');
+  const queues = panel('Onay Kuyruklarım');
+  expect(bar.compareDocumentPosition(queues) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Çalışma Alanları' })).not.toBeInTheDocument();
+});
 
-  it('come after the personal sections, in the legacy order', () => {
-    renderWithProviders(<HomePage />);
+it('keeps a pinned page first and remembers it for the next visit', async () => {
+  const { unmount } = renderWithProviders(<HomePage />);
 
-    expect(areaTitles()).toEqual([
-      'Genel',
-      'Projeler',
-      'Dizayn',
-      'Planlama',
-      'Kalite Kontrol',
-      'İmalat',
-      'Lojistik',
-      'Satın Alma',
-      'Finans',
-      'Muhasebe',
-      'Bilgi İşlem',
-      'İnsan Kaynakları',
-      'Satış',
-      'Yönetim',
-    ]);
-    expect(within(card('Satış')).getAllByRole('link').map((link) => link.getAttribute('href'))).toEqual([
-      '/sales',
-      '/sales/customers',
-      '/sales/offers',
-      '/sales/catalog',
-    ]);
-  });
+  fireEvent.click(within(panel('Kısayollar')).getByRole('button', { name: 'Tedarikçi Listesi sabitle' }));
+  expect(shortcutLinks()[0]).toBe('/procurement/suppliers/list');
+  expect(JSON.parse(localStorage.getItem('gk.pinnedPages.7')!)).toEqual(['/procurement/suppliers/list']);
+  unmount();
 
-  it('drop the areas and shortcuts the user cannot open', () => {
-    access.granted = new Set(['/sales', '/sales/customers']);
-    renderWithProviders(<HomePage />);
+  renderWithProviders(<HomePage />);
+  expect(shortcutLinks()[0]).toBe('/procurement/suppliers/list');
+  const bar = within(panel('Kısayollar'));
+  fireEvent.click(bar.getByRole('button', { name: 'Tedarikçi Listesi sabitlemesini kaldır' }));
+  expect(JSON.parse(localStorage.getItem('gk.pinnedPages.7')!)).toEqual([]);
+});
 
-    expect(areaTitles()).toEqual(['Genel', 'Satış']);
-    expect(within(card('Genel')).getAllByRole('link').map((link) => link.textContent)).toEqual([
-      'Genel',
-      'İSG Bildirimleri',
-    ]);
-  });
+it('pins any page of the menu from the picker', async () => {
+  renderWithProviders(<HomePage />);
+
+  fireEvent.click(within(panel('Kısayollar')).getByRole('button', { name: 'Kısayol ekle' }));
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Sayfa ara' }), { target: { value: 'takibi' } });
+  // The popover is still fading in (aria-hidden) under jsdom: reach the row by its text.
+  fireEvent.click((await screen.findByText('Proje Takibi', { selector: 'span' })).closest('button')!);
+
+  expect(shortcutLinks()[0]).toBe('/projects/project-tracking');
+  expect(JSON.parse(localStorage.getItem('gk.pinnedPages.7')!)).toEqual(['/projects/project-tracking']);
+});
+
+it('badges what waits on the user in red, and drops the badges when nothing does', async () => {
+  responses = {
+    '/procurement/purchase-requests/pending_approval/': page([{ id: 1, request_number: 'SAT-1', title: 'Rulman' }], 12),
+    '/notifications/unread_count/': { count: 3 },
+  };
+  const { unmount } = renderWithProviders(<HomePage />);
+
+  const approvals = panel('Onayınızı Bekleyenler');
+  await waitFor(() => expect(approvals.querySelector('[data-count-badge]')).toHaveTextContent('12'));
+  const queues = panel('Onay Kuyruklarım');
+  expect(queues.querySelector('[data-count-badge]')).toHaveTextContent('12');
+  expect(queues.querySelector('a[href="/procurement/purchase-requests/pending"] [data-count-badge]')).toHaveTextContent('12');
+  await waitFor(() => expect(panel('Son Bildirimler').querySelector('[data-count-badge]')).toHaveTextContent('3'));
+  unmount();
+
+  responses = {};
+  renderWithProviders(<HomePage />);
+  await within(panel('Onay Kuyruklarım')).findByText('Bekleyen bir iş yok');
+  expect(document.querySelector('[data-count-badge]')).toBeNull();
 });

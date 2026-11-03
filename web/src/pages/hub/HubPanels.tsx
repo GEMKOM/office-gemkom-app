@@ -2,7 +2,7 @@ import { Skeleton } from '@mantine/core';
 import { Children, isValidElement, type ReactNode } from 'react';
 import { formatNumber } from '@/lib/format';
 import { AppLink } from '@/shell/AppLink';
-import { FaIcon, Panel, PendingValue, StatusBadge, type StatusFamily } from '@/ui';
+import { CountBadge, FaIcon, Panel, PendingValue, StatusBadge, type StatusFamily } from '@/ui';
 import css from './HubPanels.module.css';
 
 // The panels under a hub's cards, generalised from the sales hub: a list of
@@ -84,10 +84,12 @@ export interface RecordsPanelProps {
   empty: ReactNode;
   /** Placeholder rows while loading. */
   rows?: number;
+  /** A red badge beside the title: how many wait on the user. Gone at 0. */
+  badge?: number;
 }
 
 /** A short list of records, each row a link: recent requests, overdue tasks. */
-export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5 }: RecordsPanelProps) {
+export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5, badge }: RecordsPanelProps) {
   const records = query.data ?? [];
   let body;
   if (query.isPending) {
@@ -141,7 +143,13 @@ export function RecordsPanel({ title, icon, more, query, noun, empty, rows = 5 }
     );
   }
   return (
-    <Panel title={title} icon={icon} actions={more ? <MoreLink to={more} /> : undefined} padded={false}>
+    <Panel
+      title={title}
+      icon={icon}
+      badge={<CountBadge count={badge} label="bekliyor" />}
+      actions={more ? <MoreLink to={more} /> : undefined}
+      padded={false}
+    >
       {body}
     </Panel>
   );
@@ -170,18 +178,23 @@ export function AttentionPanel({
   title = 'Sizi Bekleyenler',
   icon = 'fas fa-bell',
   items,
+  badges = false,
 }: {
   title?: ReactNode;
   icon?: string;
   items: AttentionItem[];
+  /** App-style: a red badge on the title and on every row that has something waiting. */
+  badges?: boolean;
 }) {
   if (items.length === 0) return null;
   const settled = items.every((item) => item.count.data !== undefined || item.count.isError);
   const clear = settled && items.every((item) => !item.count.data);
+  const total = items.reduce((sum, item) => sum + (item.count.data ?? 0), 0);
   return (
     <Panel
       title={title}
       icon={icon}
+      badge={badges ? <CountBadge count={total} label="bekliyor" /> : undefined}
       padded={false}
       footer={
         clear ? (
@@ -210,9 +223,13 @@ export function AttentionPanel({
                   <span className={css.attentionLabel}>{item.label}</span>
                   {item.hint ? <span className={css.attentionHint}>{item.hint}</span> : null}
                 </span>
-                <b className={css.attentionCount}>
-                  {isError ? '-' : data === undefined ? <PendingValue /> : formatNumber(data)}
-                </b>
+                {badges && waiting ? (
+                  <CountBadge count={data} />
+                ) : (
+                  <b className={css.attentionCount}>
+                    {isError ? '-' : data === undefined ? <PendingValue /> : formatNumber(data)}
+                  </b>
+                )}
                 <FaIcon icon="fas fa-chevron-right" className={css.attentionChevron} />
               </AppLink>
             </li>

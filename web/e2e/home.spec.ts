@@ -78,3 +78,50 @@ test('counts the pages a user opens and offers them as shortcuts', async ({ page
     .filter({ has: page.getByRole('heading', { name: 'Kısayollar' }) });
   await expect(shortcuts.getByRole('link').first()).toHaveAttribute('href', '/sales/customers');
 });
+
+test('what waits on the user wears a red badge on the home sections, the menu and the bell', async ({ page, consoleErrors }) => {
+  const session = await seedSession(page, { admin: true, user: { department_code: 'procurement' } });
+  await mockBackend(
+    page,
+    {
+      'GET /procurement/purchase-requests/pending_approval/': { json: { ...paginated([ROW]), count: 3 } },
+      'GET /notifications/unread_count/': { json: { count: 5 } },
+      'GET /approvals/inbox/': { json: [] },
+    },
+    { session },
+  );
+
+  await page.goto('/');
+  const main = page.getByRole('main');
+  const nav = page.getByRole('navigation', { name: 'Ana menü' });
+
+  const waiting = main.locator('section').filter({ has: page.getByRole('heading', { name: 'Onayınızı Bekleyenler' }) });
+  await expect(waiting.locator('[data-count-badge]')).toContainText('3');
+  const queues = main.locator('section').filter({ has: page.getByRole('heading', { name: 'Onay Kuyruklarım' }) });
+  await expect(queues.locator('[data-count-badge]')).toContainText(['3', '3']);
+  const latest = main.locator('section').filter({ has: page.getByRole('heading', { name: 'Son Bildirimler' }) });
+  await expect(latest.locator('[data-count-badge]')).toContainText('5');
+
+  await expect(nav.getByRole('button', { name: 'Satın Alma, 3 bekleyen' })).toBeVisible();
+  await expect(nav.getByRole('button', { name: 'Bildirimler, 5 okunmamış' })).toBeVisible();
+  // Sections with nothing waiting carry no badge.
+  await expect(nav.getByRole('button', { name: 'Satış' })).toBeVisible();
+  consoleErrors.expectNone();
+});
+
+test('a pinned page stays first among the shortcuts', async ({ page }) => {
+  const session = await seedSession(page, { admin: true });
+  await mockBackend(page, {}, { session });
+
+  await page.goto('/');
+  const bar = page.getByRole('main').locator('section').filter({ has: page.getByRole('heading', { name: 'Kısayollar' }) });
+  await bar.getByRole('button', { name: 'Kısayol ekle' }).click();
+  await page.getByRole('textbox', { name: 'Sayfa ara' }).fill('teklifler');
+  await page.getByRole('button', { name: /Teklifler/ }).click();
+  await expect(bar.getByRole('link').first()).toHaveAttribute('href', '/sales/offers');
+
+  await page.reload();
+  await expect(bar.getByRole('link').first()).toHaveAttribute('href', '/sales/offers');
+  await bar.getByRole('button', { name: 'Teklifler sabitlemesini kaldır' }).click();
+  await expect(bar.getByRole('button', { name: 'Teklifler sabitlemesini kaldır' })).toHaveCount(0);
+});
