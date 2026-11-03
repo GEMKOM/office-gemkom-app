@@ -112,6 +112,7 @@
   "/planning/inventory/cards",
   "/planning/inventory/equipment",
   "/planning/items",
+  "/planning/department-requests",
   "/procurement/critical-items",
   "/procurement/reports/items",
   "/procurement/reports/staff",

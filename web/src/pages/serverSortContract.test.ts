@@ -2,8 +2,12 @@ import type { LegacyUser } from '@legacy/authService.js';
 import type { DataTableColumn } from '@/ui';
 import { departmentRequestColumns } from './general/department-requests/list/columns';
 import { userColumns } from './human_resources/users/columns';
+import { approvedRequestColumns } from './planning/department-requests/columns';
 import { inventoryColumns } from './it/inventory/columns';
-import { cncTimerColumns, machiningTimerColumns } from './manufacturing/reports-shared/finishedTimerColumns';
+import {
+  cncTimerColumns,
+  machiningTimerColumns,
+} from './manufacturing/reports-shared/finishedTimerColumns';
 import { ncrColumns } from './quality-control/ncrs/columns';
 import { reviewColumns } from './quality-control/qc-reviews/columns';
 import { customerColumns } from './sales/customers/columns';
@@ -19,7 +23,11 @@ const CONTRACTS: {
   tableSortable?: boolean;
   orderable: string[];
 }[] = [
-  { name: 'customers', columns: customerColumns as never, orderable: ['code', 'name', 'created_at', 'updated_at'] },
+  {
+    name: 'customers',
+    columns: customerColumns as never,
+    orderable: ['code', 'name', 'created_at', 'updated_at'],
+  },
   {
     name: 'ncrs',
     columns: ncrColumns({ id: 1 } as LegacyUser, []) as never,
@@ -46,24 +54,54 @@ const CONTRACTS: {
     columns: departmentRequestColumns as never,
     orderable: ['id', 'created_at', 'needed_date', 'priority'],
   },
-  { name: 'it inventory', columns: inventoryColumns(() => {}) as never, orderable: ['id', 'name', 'machine_type', 'code'] },
+  {
+    name: 'approved department requests (planning)',
+    columns: approvedRequestColumns as never,
+    orderable: ['id', 'created_at', 'needed_date', 'priority'],
+  },
+  {
+    name: 'it inventory',
+    columns: inventoryColumns(() => {}) as never,
+    orderable: ['id', 'name', 'machine_type', 'code'],
+  },
   // The timer list takes any model field: these are the FinishedTimer columns it has.
   {
     name: 'cnc finished timers',
     columns: cncTimerColumns as never,
-    orderable: ['id', 'object_id', 'start_time', 'finish_time', 'duration', 'comment', 'manual_entry', 'machine_fk'],
+    orderable: [
+      'id',
+      'object_id',
+      'start_time',
+      'finish_time',
+      'duration',
+      'comment',
+      'manual_entry',
+      'machine_fk',
+    ],
   },
   {
     name: 'machining finished timers',
     columns: machiningTimerColumns as never,
-    orderable: ['id', 'object_id', 'start_time', 'finish_time', 'duration', 'comment', 'manual_entry', 'machine_fk'],
+    orderable: [
+      'id',
+      'object_id',
+      'start_time',
+      'finish_time',
+      'duration',
+      'comment',
+      'manual_entry',
+      'machine_fk',
+    ],
   },
 ];
 
-it.each(CONTRACTS)('$name: every sortable column is one the backend orders by', ({ columns, tableSortable, orderable }) => {
-  const sent = columns
-    .filter((column) => column.sortable ?? tableSortable ?? false)
-    .map((column) => column.sortKey ?? column.key);
-  expect(sent.length).toBeGreaterThan(0);
-  expect(sent.filter((field) => !orderable.includes(field))).toEqual([]);
-});
+it.each(CONTRACTS)(
+  '$name: every sortable column is one the backend orders by',
+  ({ columns, tableSortable, orderable }) => {
+    const sent = columns
+      .filter((column) => column.sortable ?? tableSortable ?? false)
+      .map((column) => column.sortKey ?? column.key);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.filter((field) => !orderable.includes(field))).toEqual([]);
+  },
+);

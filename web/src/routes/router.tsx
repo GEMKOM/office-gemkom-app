@@ -734,6 +734,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/planning/department-requests',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/department-requests/DepartmentRequestsPage'))
+        .DepartmentRequestsPage,
+    }),
+  },
+  {
     path: '/procurement/critical-items',
     lazy: async () => ({
       Component: (await import('@/pages/procurement/critical-items/CriticalItemsPage'))
