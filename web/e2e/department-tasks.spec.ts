@@ -63,6 +63,13 @@ for (const { path, department, title } of PAGES) {
     expect(query.get('department')).toBe(department);
     expect(query.get('main_only')).toBe('true');
 
+    // The Tamamlanma bar is drawn (it once collapsed to zero width inside the editable cell).
+    const bar = row
+      .locator('td[data-col="completion_percentage"] [role="progressbar"]')
+      .locator('..');
+    expect((await bar.boundingBox())?.width ?? 0).toBeGreaterThan(80);
+    await expect(row.locator('td[data-col="completion_percentage"]')).toContainText('0.0%');
+
     // Inline edit: one PATCH with the field.
     await row.locator('td[data-col="weight"]').click();
     const weight = page.getByRole('textbox', { name: 'Ağırlık' });
