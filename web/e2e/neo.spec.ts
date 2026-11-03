@@ -379,7 +379,7 @@ test('the daily summary pops up on the first page, and "Okudum" reads it for goo
   // Read: a reload (a new visit in the same tab) is quiet.
   await page.reload();
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Çalışma Alanları' }),
+    page.getByRole('main').getByRole('heading', { level: 2, name: 'Çalışma Alanları' }),
   ).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByTestId('daily-summary-banner')).toHaveCount(0);
