@@ -84,7 +84,7 @@ const columns: DataTableColumn<AttendanceSummaryRow>[] = [
 ];
 
 type FilterKeys =
-  'name' | 'date_from' | 'date_to' | 'user_id' | 'username' | 'group_id' | 'group_name';
+  'name' | 'date_from' | 'date_to' | 'user_id' | 'username' | 'group_id' | 'group_name' | 'absent';
 type FilterState = Record<FilterKeys, string>;
 
 const EMPTY_ROWS: AttendanceSummaryRow[] = [];
@@ -101,8 +101,11 @@ export function AttendanceSummaryPage() {
     username: '',
     group_id: '',
     group_name: '',
+    // '1': only people with an absent working day (the HR hub's data check).
+    absent: '',
   });
   const { values, apply, reset } = url;
+  const { absent, ...params } = values;
   // Temizle while already on the defaults changes no value, so the bar would
   // keep its emptied draft; a new key remounts it on the applied values.
   const [clears, setClears] = useState(0);
@@ -137,15 +140,28 @@ export function AttendanceSummaryPage() {
           .map((p) => ({ value: String(p.id), label: p.title || String(p.id) })),
       },
       { type: 'text', key: 'group_name', label: 'Grup adı', placeholder: 'Örn: Satış' },
+      {
+        type: 'select',
+        key: 'absent',
+        label: 'Devamsızlık',
+        placeholder: 'Tümü',
+        searchable: false,
+        options: [{ value: '1', label: 'Devamsız günü olanlar' }],
+      },
     ],
     [positions.data],
   );
 
   const list = useQuery({
-    ...attendanceSummaryQueryOptions(values),
+    ...attendanceSummaryQueryOptions(params),
     placeholderData: keepPreviousData,
   });
-  const rows = list.data ?? EMPTY_ROWS;
+  // The absence filter is not a backend param: the rows are all loaded.
+  const allRows = list.data ?? EMPTY_ROWS;
+  const rows = useMemo(
+    () => (absent === '1' ? allRows.filter((row) => (row.days_absent ?? 0) > 0) : allRows),
+    [allRows, absent],
+  );
 
   useEffect(() => {
     if (list.isError)

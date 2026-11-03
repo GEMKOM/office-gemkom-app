@@ -169,10 +169,13 @@ export interface AttentionItem {
 export function AttentionPanel({
   title = 'Sizi Bekleyenler',
   icon = 'fas fa-bell',
+  clearLabel = 'Bekleyen bir iş yok',
   items,
 }: {
   title?: ReactNode;
   icon?: string;
+  /** The footer once every count is zero. */
+  clearLabel?: ReactNode;
   items: AttentionItem[];
 }) {
   if (items.length === 0) return null;
@@ -186,7 +189,7 @@ export function AttentionPanel({
       footer={
         clear ? (
           <span className={css.clear}>
-            <FaIcon icon="fas fa-circle-check" /> Bekleyen bir iş yok
+            <FaIcon icon="fas fa-circle-check" /> {clearLabel}
           </span>
         ) : undefined
       }

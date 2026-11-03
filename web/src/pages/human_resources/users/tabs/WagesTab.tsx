@@ -9,8 +9,8 @@ import {
   createWageRate,
   deleteWageRate,
   formatWage,
-  userWagesKey,
   userWagesQueryOptions,
+  WAGES_KEY,
 } from '@/api/human_resources/wages';
 import { formatDate } from '@/lib/format';
 import { confirm, FaIcon, FormModal, ModalSection, notify } from '@/ui';
@@ -23,7 +23,8 @@ export function WagesTab({ user }: { user: HrUser }) {
   const queryClient = useQueryClient();
   const wages = useQuery(userWagesQueryOptions(user.id));
   const [adding, setAdding] = useState(false);
-  const refresh = () => void queryClient.invalidateQueries({ queryKey: userWagesKey(user.id) });
+  // The prefix also refreshes the wage overview behind the hub's wage checks.
+  const refresh = () => void queryClient.invalidateQueries({ queryKey: WAGES_KEY });
 
   // Newest first by created_at, else effective_from.
   const sorted = useMemo(
