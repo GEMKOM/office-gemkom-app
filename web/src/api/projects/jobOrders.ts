@@ -6,6 +6,8 @@ import { extractResults, toPaginated, type Paginated } from '../types';
 
 // Port of apis/projects/jobOrders.js: Proje Takibi (projects/project-tracking)
 // and its Sunum Modu. The dropdown lives in api/reference/jobOrders.ts.
+// Children come from the detail payload's `children` (there is no children/
+// route); files in detail/parts.tsx (`/files/` returns two groups).
 
 export type JobOrderStatus = 'draft' | 'active' | 'on_hold' | 'completed' | 'cancelled';
 
@@ -110,7 +112,6 @@ export const jobOrderKeys = {
   lists: () => [...qk.jobOrders.all, 'list'] as const,
   list: (params: JobOrderListParams) => qk.jobOrders.list(params),
   detail: (jobNo: string) => qk.jobOrders.detail(jobNo),
-  children: (jobNo: string) => [...qk.jobOrders.all, 'children', jobNo] as const,
   departmentTasks: (jobNo: string, params: Record<string, unknown> = {}) =>
     [...qk.jobOrders.all, 'departmentTasks', jobNo, params] as const,
   files: (jobNo: string) => [...qk.jobOrders.all, 'files', jobNo] as const,
@@ -163,15 +164,6 @@ export function jobOrderQueryOptions(jobNo: string) {
   });
 }
 
-export function jobOrderChildrenQueryOptions(jobNo: string) {
-  return queryOptions({
-    queryKey: jobOrderKeys.children(jobNo),
-    queryFn: async ({ signal }) =>
-      extractResults<JobOrder>(await apiFetch<unknown>(`${base(jobNo)}children/`, { signal })),
-    staleTime: JOB_ORDERS_STALE_TIME,
-  });
-}
-
 export type JobOrderDepartmentTaskParams = {
   department?: string;
   department__in?: string;
@@ -198,29 +190,6 @@ export function jobOrderDepartmentTasksQueryOptions<T = Record<string, unknown>>
           signal,
         }),
       ),
-    staleTime: JOB_ORDERS_STALE_TIME,
-  });
-}
-
-export interface JobOrderFile {
-  id: number;
-  file_url?: string;
-  file?: string;
-  name?: string;
-  file_name?: string;
-  file_type?: string;
-  file_type_display?: string;
-  file_size?: number | null;
-  uploaded_by_name?: string | null;
-  uploaded_at?: string | null;
-  [key: string]: unknown;
-}
-
-export function jobOrderFilesQueryOptions(jobNo: string) {
-  return queryOptions({
-    queryKey: jobOrderKeys.files(jobNo),
-    queryFn: async ({ signal }) =>
-      extractResults<JobOrderFile>(await apiFetch<unknown>(`${base(jobNo)}files/`, { signal })),
     staleTime: JOB_ORDERS_STALE_TIME,
   });
 }
@@ -410,7 +379,13 @@ export function uploadJobOrderFile(
 
 export interface PlanSheetShareInput {
   columns?: string[];
-  options?: { expand_all?: boolean; main_only?: boolean; collapsed?: string[] };
+  options?: {
+    expand_all?: boolean;
+    main_only?: boolean;
+    collapsed?: string[];
+    show_header?: boolean;
+    language?: string;
+  };
   expires_in_days?: number;
   language?: string;
   [key: string]: unknown;
