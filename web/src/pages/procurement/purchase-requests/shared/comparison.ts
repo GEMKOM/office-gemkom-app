@@ -3,6 +3,7 @@ import type {
   PurchaseRequestDetail,
   RequestFile,
 } from '@/api/procurement/purchaseRequests';
+import { formatNumber } from '@/lib/format';
 
 // Pure model of components/comparison-table (and the pages' Mali Özet). The
 // legacy table keyed offers and recommendations by item position; here they
@@ -66,12 +67,12 @@ export function convertCurrency(
   return (amount / rates[from]!) * rates[to]!;
 }
 
-/** Legacy table formatCurrency: symbol + toFixed(2), no thousands separator. */
+/** Currency symbol + Turkish number format: "₺2.408,74". Unknown codes print as the code. */
 export function formatMoney(amount: number, currency: string): string {
-  return `${CURRENCY_SYMBOLS[currency] ?? currency}${amount.toFixed(2)}`;
+  return `${CURRENCY_SYMBOLS[currency] ?? currency}${formatNumber(amount, 2)}`;
 }
 
-/** Pages' formatCurrencyDisplay: '-' for 0/NaN, else symbol + toFixed(2). */
+/** '-' for 0/NaN, else formatMoney. */
 export function formatMoneyOrDash(amount: number | null | undefined, currency: string): string {
   if (!amount || Number.isNaN(amount)) return '-';
   return formatMoney(Number(amount), currency);
@@ -240,7 +241,7 @@ export interface FinancialSummary {
   totalCheapestEUR: number;
   hasLowerPrices: boolean;
   savings: number;
-  /** "€1200.00 + -" (legacy joins every currency, '-' for zero). */
+  /** "₺1.000,00 + €250,00": only the currencies with a recommended total; '' when none. */
   recommendedCurrencyDisplay: string;
 }
 
@@ -287,7 +288,8 @@ export function financialSummary(
     hasLowerPrices,
     savings: totalRecommendedEUR - totalCheapestEUR,
     recommendedCurrencyDisplay: Object.entries(currencyTotals)
-      .map(([currency, amount]) => formatMoneyOrDash(amount, currency))
+      .filter(([, amount]) => amount > 0)
+      .map(([currency, amount]) => formatMoney(amount, currency))
       .join(' + '),
   };
 }

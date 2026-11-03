@@ -60,7 +60,9 @@ describe('comparison model', () => {
   });
 
   it('formats like the legacy table and converts through TRY rates', () => {
-    expect(formatMoney(12345.6, 'TRY')).toBe('₺12345.60');
+    expect(formatMoney(12345.6, 'TRY')).toBe('₺12.345,60');
+    expect(formatMoney(2408.74, 'TRY')).toBe('₺2.408,74');
+    expect(formatMoney(5, 'XYZ')).toBe('XYZ5,00');
     expect(formatMoneyOrDash(0, 'EUR')).toBe('-');
     expect(convertCurrency(1000, 'TRY', 'EUR', RATES)).toBeCloseTo(25);
     expect(convertCurrency(1000, 'TRY', 'EUR', null)).toBe(1000);
@@ -73,7 +75,7 @@ describe('comparison model', () => {
     // Cheapest: item 11 at Beta 10 × 1 EUR, item 12 at Acme 2 × 50 TRY = 2.5 EUR.
     expect(s.totalCheapestEUR).toBeCloseTo(12.5);
     expect(s.hasLowerPrices).toBe(true);
-    expect(s.recommendedCurrencyDisplay).toBe('₺1000.00 + -');
+    expect(s.recommendedCurrencyDisplay).toBe('₺1.000,00');
     expect(financialSummary(REQUEST, null).totalRecommendedEUR).toBe(0);
   });
 
