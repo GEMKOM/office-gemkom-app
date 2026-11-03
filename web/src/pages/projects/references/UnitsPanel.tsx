@@ -1,4 +1,4 @@
-import { formatDateTime } from '@legacy/components/estimate-report/report-view.js';
+import { formatDateTime } from '../estimate-report/reportParts';
 import { Button, Loader, Text, TextInput } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';

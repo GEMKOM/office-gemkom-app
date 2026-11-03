@@ -1,16 +1,15 @@
-import { SOURCE_LABELS } from '@legacy/apis/estimator.js';
-import { fmt } from '@legacy/components/estimate-report/report-model.js';
-import { JOINT_TYPE_LABELS, MATERIAL_LABELS, processLabel } from '@legacy/components/estimate-report/report-view.js';
 import { useMemo } from 'react';
 import type { WeldJoint } from '@/api/projects/estimator';
 import { DataTable, type DataTableColumn } from '@/ui';
+import css from './EstimateReport.module.css';
+import { JOINT_TYPE_LABELS, MATERIAL_LABELS, processLabel, SourcePill } from './reportParts';
+import { fmt } from './reportModel';
 
-/** çizim / çıkarım / kural: where a joint came from (legacy sourceBadge). */
+/** çizim / çıkarım / kural: where a joint came from, styled like the Tahmin card wherever it is shown. */
 export function SourceBadge({ source }: { source: string | null | undefined }) {
-  const s = SOURCE_LABELS[source || 'drawn'] ?? SOURCE_LABELS.drawn!;
   return (
-    <span className={`status-badge ${s.badge} est-badge-sm`} title={s.title}>
-      {s.label}
+    <span className={css.scope}>
+      <SourcePill source={source || 'drawn'} />
     </span>
   );
 }

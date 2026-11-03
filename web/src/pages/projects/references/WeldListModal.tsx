@@ -1,15 +1,12 @@
-import '@legacy/components/estimate-report/estimate-report.css';
-import { SCHEMA_LABELS, STRUCTURE_CLASS_LABELS, WORK_CENTRE_LABELS } from '@legacy/apis/estimator.js';
-import { fmt, isPlanBottomUp } from '@legacy/components/estimate-report/report-model.js';
+import { SCHEMA_LABELS, STRUCTURE_CLASS_LABELS, WORK_CENTRE_LABELS } from '@/api/projects/estimator';
+import { fmt, isPlanBottomUp } from '../estimate-report/reportModel';
 import {
   formatDateTime,
   JOINT_TYPE_LABELS,
   MATERIAL_LABELS,
-  planPartsHtml,
-  planTableHtml,
   PROCESS_LABELS,
   processLabel,
-} from '@legacy/components/estimate-report/report-view.js';
+} from '../estimate-report/reportParts';
 import { Button, Loader, Modal, NativeSelect, Text, Textarea, TextInput } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -24,9 +21,9 @@ import {
   type WeldScheduleVersion,
 } from '@/api/projects/references';
 import { confirm, DataTable, errorMessage, FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify, StatusBadge, type DataTableColumn } from '@/ui';
-import { EstimateHtml } from '../estimate-report/EstimateHtml';
-import shim from '../estimate-report/EstimateReport.module.css';
+import estCss from '../estimate-report/EstimateReport.module.css';
 import { ConfidenceBadge, LegacyBadge } from '../estimate-report/LegacyBadge';
+import { PlanParts, PlanTable } from '../estimate-report/PlanTables';
 import { SourceBadge } from '../estimate-report/WeldTable';
 import { ProfileFacts } from './ProfileFacts';
 import css from './ReferencesPage.module.css';
@@ -98,10 +95,9 @@ function jointDetail(j: ViewJoint): string {
     .join(' · ');
 }
 
-/** HTML from the shared report-view.js builders (plan parts / plan table), styled like the Tahmin card. */
-function PlanHtml({ html }: { html: string }) {
-  if (!html) return null;
-  return <EstimateHtml className={`${shim.shim} est-vars`} html={html} />;
+/** The Tahmin card's plan tables (and source badges), styled like the card. */
+function EstScope({ children }: { children: ReactNode }) {
+  return <div className={estCss.scope}>{children}</div>;
 }
 
 export interface WeldListModalProps {
@@ -407,7 +403,11 @@ function WeldView({ ws, onVersion }: { ws: WeldScheduleVersion; onVersion: (v: n
       <NoteList title="Kütle notu" items={massNotes} />
       <NoteList title="Çizimin söylemediği" items={(w.open_questions as string[]) ?? []} />
       <NoteList title="Tasarım özellikleri" items={(w.design_features as string[]) ?? []} />
-      {schema >= 2 ? <PlanHtml html={planPartsHtml(ws)} /> : null}
+      {schema >= 2 ? (
+        <EstScope>
+          <PlanParts schedule={ws} />
+        </EstScope>
+      ) : null}
       <div className={css.h}>Birleşimler ({joints.length})</div>
       <DataTable
         data={joints}
@@ -480,7 +480,7 @@ function NonWelding({ bu }: { bu: BottomUp }) {
   );
 }
 
-/** Plan hours (v5): the work-centre subtotals, then the plan table of report-view.js. */
+/** Plan hours (v5): the work-centre subtotals, then the Tahmin card's plan table (PlanTables.tsx). */
 function PlanHours({ bu }: { bu: BottomUp }) {
   const b = bu as BottomUp & {
     work_centres?: { key: string; label?: string; hours?: number; share?: number }[];
@@ -575,7 +575,9 @@ function PlanHours({ bu }: { bu: BottomUp }) {
         </tfoot>
       </table>
       <div className={css.h}>İmalat planı ve saat hesabı</div>
-      <PlanHtml html={planTableHtml(bu)} />
+      <EstScope>
+        <PlanTable bottomUp={bu} />
+      </EstScope>
     </>
   );
 }

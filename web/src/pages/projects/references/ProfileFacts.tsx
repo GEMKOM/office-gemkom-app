@@ -4,9 +4,9 @@ import {
   REFERENCE_ROUTE,
   SCHEMA_LABELS,
   STRUCTURE_CLASS_LABELS,
-} from '@legacy/apis/estimator.js';
-import { exclusionLabel, fmt } from '@legacy/components/estimate-report/report-model.js';
-import { MATERIAL_LABELS } from '@legacy/components/estimate-report/report-view.js';
+} from '@/api/projects/estimator';
+import { exclusionLabel, fmt } from '../estimate-report/reportModel';
+import { MATERIAL_LABELS } from '../estimate-report/reportParts';
 import { Text } from '@mantine/core';
 import type { ReactNode } from 'react';
 import type { ReferenceProfile } from '@/api/projects/references';

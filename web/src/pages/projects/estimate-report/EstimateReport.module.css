@@ -1,11 +1,27 @@
 /*
- * The legacy report markup (report-view.js) uses a few Bootstrap utility
- * classes and the badges.css status pills, which the React app does not load.
- * These rules give them their Bootstrap look, but only inside the report
- * container (.shim), so nothing leaks into the rest of the page. The report's
- * own look is components/estimate-report/estimate-report.css (all .est-*).
+ * Tahmin — the drawing-based cost and risk report card (EstimateReport.tsx,
+ * ReportSections.tsx, LaborSection.tsx) and the plan tables / method text the
+ * Referanslar modals share with it (PlanTables.tsx, Markdown.tsx).
+ *
+ * Everything is scoped under `.scope`: the card's root carries it (with
+ * `est-report`), the modals wrap their part in it. Inside, the markup keeps
+ * the legacy class names (est-*, status-badge), so the rules below are the
+ * legacy components/estimate-report/estimate-report.css as it was, only
+ * prefixed.
+ *
+ * Purple marks model-written content (as on the Neo Özeti card), the action
+ * button keeps the house red. Status pills are badges.css status-badge
+ * classes, never yellow. The card must never be wider than its modal: every
+ * wide table scrolls inside its own wrapper. No overflow on .est-report
+ * itself, or the sticky section nav stops sticking.
  */
-.shim :global(.btn) {
+
+/* ---------------------------------------------------------------- Bootstrap look of the card's own controls
+ * The card's head, state blocks and section tools use a few Bootstrap
+ * classes and the badges.css status pills, which the React app does not
+ * load; first, so the est-* rules below win as they did over Bootstrap. */
+
+.scope :global(.btn) {
   display: inline-block;
   padding: 0.375rem 0.75rem;
   border: 1px solid transparent;
@@ -19,59 +35,59 @@
   cursor: pointer;
 }
 
-.shim :global(.btn-sm) {
+.scope :global(.btn-sm) {
   padding: 0.25rem 0.5rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
 }
 
-.shim :global(.btn-link) {
+.scope :global(.btn-link) {
   border-color: transparent;
   color: #0d6efd;
   text-decoration: underline;
 }
 
-.shim :global(.btn-link:hover) {
+.scope :global(.btn-link:hover) {
   color: #0a58ca;
 }
 
-.shim :global(.btn:disabled) {
+.scope :global(.btn:disabled) {
   opacity: 0.65;
   pointer-events: none;
 }
 
-.shim :global(.btn-outline-secondary) {
+.scope :global(.btn-outline-secondary) {
   border-color: #6c757d;
   color: #6c757d;
 }
 
-.shim :global(.btn-outline-secondary:hover) {
+.scope :global(.btn-outline-secondary:hover) {
   background: #6c757d;
   color: #fff;
 }
 
-.shim :global(.btn-outline-success) {
+.scope :global(.btn-outline-success) {
   border-color: #198754;
   color: #198754;
 }
 
-.shim :global(.btn-outline-success:hover) {
+.scope :global(.btn-outline-success:hover) {
   background: #198754;
   color: #fff;
 }
 
-.shim :global(.btn-outline-danger) {
+.scope :global(.btn-outline-danger) {
   border-color: #dc3545;
   color: #dc3545;
 }
 
-.shim :global(.btn-outline-danger:hover) {
+.scope :global(.btn-outline-danger:hover) {
   background: #dc3545;
   color: #fff;
 }
 
-.shim :global(.form-select),
-.shim :global(.form-control) {
+.scope :global(.form-select),
+.scope :global(.form-control) {
   display: block;
   width: 100%;
   padding: 0.375rem 0.75rem;
@@ -84,127 +100,54 @@
   line-height: 1.5;
 }
 
-.shim :global(.form-select-sm) {
+.scope :global(.form-select-sm) {
   width: auto;
   padding: 0.25rem 2rem 0.25rem 0.5rem;
   border-radius: 0.25rem;
   font-size: 0.875rem;
 }
 
-.shim :global(.form-control:focus),
-.shim :global(.form-select:focus) {
+.scope :global(.form-control:focus),
+.scope :global(.form-select:focus) {
   outline: none;
   border-color: #86b7fe;
   box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
 }
 
-.shim :global(.btn-close) {
-  width: 1em;
-  height: 1em;
-  padding: 0.25em;
-  border: 0;
-  border-radius: 0.375rem;
-  background: transparent
-    url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3e%3c/svg%3e")
-    center / 1em auto no-repeat;
-  opacity: 0.5;
-  cursor: pointer;
-}
-
-.shim :global(.btn-close-sm) {
-  width: 0.75em;
-  height: 0.75em;
-  background-size: 0.75em auto;
-}
-
-.shim :global(.small) {
+.scope :global(.small) {
   font-size: 0.875em;
 }
 
-.shim :global(.text-muted) {
-  color: #6c757d;
-}
-
-.shim :global(.text-danger) {
-  color: #dc3545;
-}
-
-.shim :global(.text-end) {
-  text-align: right;
-}
-
-.shim :global(.text-center) {
-  text-align: center;
-}
-
-.shim :global(.text-start) {
-  text-align: left;
-}
-
-.shim :global(.fw-normal) {
+.scope :global(.fw-normal) {
   font-weight: 400;
 }
 
-.shim :global(.p-0) {
+.scope :global(.p-0) {
   padding: 0;
 }
 
-.shim :global(.align-baseline) {
+.scope :global(.align-baseline) {
   vertical-align: baseline;
 }
 
-.shim :global(.me-1) {
+.scope :global(.me-1) {
   margin-right: 0.25rem;
 }
 
-.shim :global(.ms-1) {
-  margin-left: 0.25rem;
-}
-
-.shim :global(.mt-1) {
+.scope :global(.mt-1) {
   margin-top: 0.25rem;
 }
 
-.shim :global(.mt-2) {
+.scope :global(.mt-2) {
   margin-top: 0.5rem;
 }
 
-.shim :global(.mb-0) {
-  margin-bottom: 0;
-}
-
-.shim :global(.mb-1) {
-  margin-bottom: 0.25rem;
-}
-
-.shim :global(.mb-2) {
+.scope :global(.mb-2) {
   margin-bottom: 0.5rem;
 }
 
-/* markdownLite tables: <div class="table-responsive md-table"><table class="table table-sm"> */
-.shim :global(.table-responsive) {
-  overflow-x: auto;
-}
-
-.shim :global(.table) {
-  width: 100%;
-  margin-bottom: 1rem;
-  border-collapse: collapse;
-}
-
-.shim :global(.table) th,
-.shim :global(.table) td {
-  padding: 0.5rem;
-  border-bottom: 1px solid #dee2e6;
-}
-
-.shim :global(.table-sm) th,
-.shim :global(.table-sm) td {
-  padding: 0.25rem;
-}
-
 /* components/badges/badges.css status pills */
-.shim :global(.status-badge) {
+.scope :global(.status-badge) {
   display: inline-block;
   min-width: 80px;
   padding: 0.25rem 0.5rem;
@@ -217,43 +160,1060 @@
   white-space: nowrap;
 }
 
-.shim :global(.status-grey) {
+.scope :global(.status-grey) {
   background-color: #e5e7eb;
   color: #374151;
   border: 1px solid #d1d5db;
 }
 
-.shim :global(.status-orange) {
+.scope :global(.status-orange) {
   background-color: #ffedd5;
   color: #9a3412;
   border: 1px solid #f97316;
 }
 
-.shim :global(.status-purple) {
+.scope :global(.status-purple) {
   background-color: #ede9fe;
   color: #5b21b6;
   border: 1px solid #8b5cf6;
 }
 
-.shim :global(.status-green) {
+.scope :global(.status-green) {
   background-color: #d1fae5;
   color: #065f46;
   border: 1px solid #10b981;
 }
 
-.shim :global(.status-blue) {
+.scope :global(.status-blue) {
   background-color: #dbeafe;
   color: #1e40af;
   border: 1px solid #3b82f6;
 }
 
-.shim :global(.status-red) {
+.scope :global(.status-red) {
   background-color: #fee2e2;
   color: #991b1b;
   border: 1px solid #ef4444;
 }
 
-/* ---- the React-rendered parts of the card ---- */
+/* ---------------------------------------------------------------- the card (legacy estimate-report.css) */
+
+.scope {
+    --est-purple: #6d28d9;
+    --est-purple-dark: #3b1a8a;
+    --est-purple-soft: #f1eafe;
+    --est-purple-line: #e4dcfb;
+    --est-tint: #fbfaff;
+    --est-ink: #1f2937;
+    --est-muted: #6b7280;
+    --est-line: #eceff3;
+    --est-up: #b42318;
+    --est-down: #047857;
+}
+
+.scope:global(.est-report) {
+    border: 1px solid var(--est-purple-line);
+    border-radius: 12px;
+    background: #fff;
+    color: var(--est-ink);
+    min-width: 0;
+}
+
+.scope:global(.est-report) :global .est-muted { color: var(--est-muted); }
+.scope:global(.est-report) :global .est-dot { margin: 0 0.35rem; color: #c0c6cf; }
+.scope:global(.est-report) :global .status-badge {
+    min-width: 0;
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.68rem;
+    padding: 0.15rem 0.45rem;
+    vertical-align: middle;
+}
+.scope:global(.est-report) :global .status-badge:hover { transform: none; box-shadow: none; }
+
+/* ---------------------------------------------------------------- head */
+
+.scope :global .est-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 1rem;
+    background: var(--est-tint);
+    border-bottom: 1px solid var(--est-purple-line);
+    border-radius: 12px 12px 0 0;
+}
+
+.scope :global .est-head-main { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
+
+.scope :global .est-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--est-purple-soft);
+    color: var(--est-purple);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.scope :global .est-head-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    font-weight: 700;
+    font-size: 0.95rem;
+}
+
+.scope :global .est-version,
+.scope :global .est-report-version {    /* the version chip, also in the Projeler › Tahminler list */
+    font-weight: 700;
+    font-size: 0.72rem;
+    color: #5b21b6;
+    background: var(--est-purple-soft);
+    border-radius: 6px;
+    padding: 0.1rem 0.45rem;
+}
+
+.scope :global .est-version-select.form-select-sm {
+    width: auto;
+    font-size: 0.76rem;
+    font-weight: 600;
+    padding-top: 0.12rem;
+    padding-bottom: 0.12rem;
+    color: #5b21b6;
+    border-color: var(--est-purple-line);
+    background-color: #fff;
+}
+
+.scope :global .est-head-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-top: 0.15rem;
+    font-size: 0.75rem;
+    color: var(--est-muted);
+}
+.scope :global .est-head-meta i { margin-right: 0.25rem; opacity: 0.75; }
+
+.scope :global .est-head-actions { display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.scope :global .est-head-actions .btn-sm { font-size: 0.78rem; }
+.scope :global .est-help-link { color: var(--est-purple); text-decoration: none; font-weight: 600; }
+.scope :global .est-help-link:hover { color: var(--est-purple-dark); text-decoration: underline; }
+
+.scope :global .est-generate {
+    background: #8B0000;
+    border: 1px solid #8B0000;
+    color: #fff;
+    font-weight: 600;
+}
+.scope :global .est-generate:hover,
+.scope :global .est-generate:focus { background: #6d0000; border-color: #6d0000; color: #fff; }
+
+.scope :global .est-alert,
+.scope :global .est-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin: 0.75rem 1rem 0;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+}
+.scope :global .est-alert { background: #fdf2f2; border: 1px solid #f0d9d9; color: #8B0000; white-space: pre-wrap; }
+.scope :global .est-notice { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; align-items: center; flex-wrap: wrap; }
+.scope :global .est-alert i, .scope :global .est-notice i { margin-top: 0.15rem; }
+
+.scope :global .est-body { padding: 0 1rem 0.5rem; min-width: 0; }
+
+.scope :global .est-foot {
+    padding: 0.55rem 1rem;
+    border-top: 1px solid var(--est-line);
+    font-size: 0.72rem;
+    color: var(--est-muted);
+}
+
+/* ---------------------------------------------------------------- hero (Özet) */
+
+.scope :global .est-hero { padding: 1rem 0 0.75rem; border-bottom: 1px solid var(--est-line); }
+
+.scope :global .est-hero-part { font-size: 0.8rem; color: var(--est-muted); margin-bottom: 0.4rem; font-weight: 600; }
+
+.scope :global .est-hero-grid {
+    display: grid;
+    grid-template-columns: minmax(260px, 1.15fr) minmax(0, 2fr);
+    gap: 0.75rem;
+    align-items: stretch;
+}
+.scope :global .est-hero-grid.is-single { grid-template-columns: 1fr; }
+
+.scope :global .est-kicker {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--est-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.scope :global .est-price {
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    background: linear-gradient(135deg, #f6f1ff 0%, #fbfaff 100%);
+    border: 1px solid #ddd0fb;
+    min-width: 0;
+}
+
+.scope :global .est-price .est-kicker { color: #5b21b6; }
+
+.scope :global .est-price-value {
+    font-size: 2rem;
+    line-height: 1.15;
+    font-weight: 800;
+    color: var(--est-purple-dark);
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.2rem;
+    letter-spacing: -0.01em;
+}
+
+.scope :global .est-price-sub { font-size: 0.85rem; color: #4b5563; margin-top: 0.1rem; }
+.scope :global .est-price-sub strong { color: var(--est-ink); font-variant-numeric: tabular-nums; }
+.scope :global .est-calc { font-size: 0.68rem; color: var(--est-muted); border: 1px dashed #cbd5e1; border-radius: 4px; padding: 0 0.25rem; }
+
+.scope :global .est-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.55rem; }
+.scope :global .est-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.74rem;
+    font-weight: 600;
+    padding: 0.15rem 0.5rem;
+    border-radius: 999px;
+    background: #fff;
+    border: 1px solid #ddd0fb;
+    color: #4c1d95;
+}
+.scope :global .est-chip-route { background: #4c1d95; border-color: #4c1d95; color: #fff; }
+.scope :global .est-chip-soft { color: #4b5563; border-color: #e5e7eb; }
+
+.scope :global .est-floor {
+    margin-top: 0.6rem;
+    padding-top: 0.5rem;
+    border-top: 1px dashed #ddd0fb;
+    font-size: 0.84rem;
+    color: #4b5563;
+}
+.scope :global .est-floor strong { color: var(--est-ink); font-variant-numeric: tabular-nums; }
+
+.scope :global .est-routes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 0.75rem;
+    min-width: 0;
+}
+
+.scope :global .est-route-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    background: #fff;
+    min-width: 0;
+}
+.scope :global .est-route-card.is-basis { border-color: #a78bfa; box-shadow: inset 0 0 0 1px #a78bfa; }
+
+.scope :global .est-basis-tag {
+    font-size: 0.62rem;
+    letter-spacing: 0.03em;
+    background: var(--est-purple-soft);
+    color: #5b21b6;
+    border-radius: 4px;
+    padding: 0.05rem 0.35rem;
+}
+
+.scope :global .est-route-value {
+    font-size: 1.45rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    margin-top: 0.2rem;
+    line-height: 1.2;
+}
+.scope :global .est-route-sub { font-size: 0.8rem; color: #4b5563; margin-top: 0.15rem; }
+.scope :global .est-route-sub strong { color: var(--est-ink); }
+.scope :global .est-range { margin-top: 0.55rem; max-width: 320px; }
+.scope :global .est-range-track {
+    position: relative;
+    height: 6px;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #e9e3fb, #c4b5fd 50%, #e9e3fb);
+}
+.scope :global .est-range-mark {
+    position: absolute;
+    top: 50%;
+    width: 12px;
+    height: 12px;
+    margin: -6px 0 0 -6px;
+    border-radius: 50%;
+    background: var(--est-purple);
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1px #a78bfa;
+}
+.scope :global .est-range-labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--est-muted); margin-top: 0.2rem; font-variant-numeric: tabular-nums; }
+.scope :global .est-route-delta { font-size: 0.76rem; margin-top: 0.35rem; font-weight: 600; color: var(--est-muted); }
+.scope :global .est-route-delta.is-up { color: var(--est-up); }
+.scope :global .est-route-delta.is-down { color: var(--est-down); }
+
+.scope :global .est-facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0;
+    margin-top: 0.75rem;
+    border: 1px solid var(--est-line);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+}
+.scope :global .est-facts.is-compact { margin-top: 0; }
+
+.scope :global .est-fact {
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+    padding: 0.5rem 0.75rem;
+    border-right: 1px solid var(--est-line);
+    border-bottom: 1px solid var(--est-line);
+    margin: 0 -1px -1px 0;
+    min-width: 0;
+}
+.scope :global .est-fact.is-wide { grid-column: span 2; }
+.scope :global .est-fact-label { font-size: 0.68rem; color: var(--est-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+.scope :global .est-fact-value { font-size: 0.95rem; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 0.35rem; }
+.scope :global .est-fact.is-wide .est-fact-value { font-size: 0.82rem; font-weight: 600; }
+.scope :global .est-fact-sub { font-size: 0.72rem; color: var(--est-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.scope :global .est-help {
+    border: none;
+    background: none;
+    padding: 0;
+    color: var(--est-purple);
+    font-size: 0.9rem;
+    line-height: 1;
+}
+.scope :global .est-help:hover { color: var(--est-purple-dark); }
+
+.scope :global .est-explainer {
+    margin-top: 0.6rem;
+    border: 1px solid #ddd0fb;
+    background: var(--est-tint);
+    border-radius: 10px;
+    padding: 0.7rem 0.9rem;
+    font-size: 0.82rem;
+    color: #374151;
+}
+.scope :global .est-explainer p { margin: 0 0 0.45rem; }
+.scope :global .est-explainer-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.35rem; color: var(--est-purple-dark); }
+.scope :global .est-explainer-scale { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin-bottom: 0.45rem; font-size: 0.78rem; }
+.scope :global .est-explainer-scale > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+
+.scope :global .est-risks {
+    margin-top: 0.75rem;
+    border-left: 3px solid #f97316;
+    background: #fff7ed;
+    border-radius: 0 10px 10px 0;
+    padding: 0.55rem 0.85rem 0.35rem;
+}
+.scope :global .est-risks-title { font-weight: 700; font-size: 0.8rem; color: #9a3412; margin-bottom: 0.25rem; display: flex; gap: 0.4rem; align-items: center; }
+.scope :global .est-risks .est-md ol, .scope :global .est-risks .est-md ul { margin-bottom: 0.25rem; }
+.scope :global .est-risks .est-md li { margin-bottom: 0.25rem; }
+
+/* ---------------------------------------------------------------- sticky section nav */
+
+.scope :global .est-nav {
+    position: sticky;
+    top: 0;
+    z-index: 6;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 -1rem;
+    padding: 0.4rem 1rem;
+    background: rgba(255, 255, 255, 0.97);
+    border-bottom: 1px solid var(--est-line);
+    backdrop-filter: blur(4px);
+}
+.scope :global .est-nav.is-stuck { box-shadow: 0 6px 12px -10px rgba(17, 24, 39, 0.45); border-bottom-color: var(--est-purple-line); }
+
+.scope :global .est-nav-items {
+    display: flex;
+    gap: 0.25rem;
+    overflow-x: auto;
+    scrollbar-width: thin;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0.1rem 0;
+}
+
+.scope :global .est-nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    background: none;
+    border-radius: 999px;
+    padding: 0.25rem 0.55rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #4b5563;
+    cursor: pointer;
+}
+.scope :global .est-nav-item i { font-size: 0.72rem; opacity: 0.7; }
+.scope :global .est-nav-item:hover { background: #f5f3ff; color: var(--est-purple-dark); }
+.scope :global .est-nav-item.is-active { background: var(--est-purple-soft); border-color: #ddd0fb; color: var(--est-purple-dark); }
+.scope :global .est-nav-item.is-active i { opacity: 1; color: var(--est-purple); }
+
+.scope :global .est-nav-count {
+    font-size: 0.66rem;
+    font-weight: 700;
+    background: #eef0f3;
+    color: #4b5563;
+    border-radius: 999px;
+    padding: 0 0.4rem;
+    line-height: 1.5;
+}
+.scope :global .est-nav-item.is-active .est-nav-count { background: #fff; color: var(--est-purple-dark); }
+
+.scope :global .est-nav-tools { display: flex; gap: 0.15rem; flex-shrink: 0; }
+.scope :global .est-nav-tool {
+    border: 1px solid transparent;
+    background: none;
+    color: var(--est-muted);
+    border-radius: 6px;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.76rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.scope :global .est-nav-tool:hover { background: #f3f4f6; color: var(--est-ink); }
+.scope :global .est-nav-top span { font-weight: 600; }
+.scope :global .est-nav:not(.is-stuck) .est-nav-top { visibility: hidden; }
+
+/* ---------------------------------------------------------------- sections */
+
+.scope :global .est-sec { padding: 0.35rem 0 0.6rem; border-bottom: 1px solid var(--est-line); min-width: 0; scroll-margin-top: 56px; }
+.scope :global .est-sec:last-child { border-bottom: none; }
+
+.scope :global .est-sec-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    padding: 0.35rem 0;
+}
+
+.scope :global .est-sec-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    border: none;
+    background: none;
+    padding: 0.15rem 0;
+    text-align: left;
+    color: var(--est-ink);
+    min-width: 0;
+    flex-wrap: wrap;
+}
+.scope :global .est-sec-toggle:hover .est-sec-title { color: var(--est-purple-dark); }
+.scope :global .est-chevron { font-size: 0.7rem; color: var(--est-muted); transition: transform 0.15s ease; width: 0.8rem; }
+.scope :global .est-sec.is-collapsed .est-chevron { transform: rotate(-90deg); }
+.scope :global .est-sec-icon { color: var(--est-purple); font-size: 0.85rem; width: 1rem; text-align: center; }
+.scope :global .est-sec-title { font-size: 0.98rem; font-weight: 700; }
+.scope :global .est-sec-count {
+    font-size: 0.68rem;
+    font-weight: 700;
+    background: var(--est-purple-soft);
+    color: #5b21b6;
+    border-radius: 999px;
+    padding: 0.02rem 0.45rem;
+}
+.scope :global .est-sec-sub { font-size: 0.75rem; color: var(--est-muted); font-weight: 400; }
+.scope :global .est-sec-tools { display: flex; align-items: center; gap: 0.5rem; }
+.scope :global .est-sec-tools .btn-link { font-size: 0.78rem; font-weight: 600; padding: 0; text-decoration: none; }
+.scope :global .est-sec-body { padding: 0.25rem 0 0.25rem 1.25rem; min-width: 0; }
+.scope :global .est-sec.is-collapsed .est-sec-body { display: none; }
+
+.scope :global .est-sub-title { font-size: 0.78rem; font-weight: 700; color: #374151; margin: 0.6rem 0 0.35rem; }
+.scope :global .est-callout {
+    display: flex;
+    gap: 0.55rem;
+    align-items: flex-start;
+    margin: 0 0 0.6rem;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #fed7aa;
+    border-left: 3px solid #f97316;
+    background: #fff7ed;
+    border-radius: 0 10px 10px 0;
+    font-size: 0.82rem;
+    color: #431407;
+}
+.scope :global .est-callout i { color: #c2410c; margin-top: 0.2rem; }
+.scope :global .est-table .est-cell-sub { display: block; font-size: 0.68rem; color: var(--est-muted); white-space: nowrap; }
+.scope :global .est-scope { width: auto; display: inline-block; max-width: 15rem; }
+.scope :global .est-programme td small.est-cell-sub { display: block; }
+.scope :global .est-note-line { display: flex; gap: 0.45rem; align-items: flex-start; font-size: 0.8rem; color: #4b5563; margin-top: 0.45rem; }
+.scope :global .est-note-line i { color: var(--est-purple); margin-top: 0.2rem; }
+.scope :global .est-empty-line { font-size: 0.84rem; color: var(--est-muted); padding: 0.3rem 0; }
+
+/* Route switch: İç imalat | Taşeron | Karşılaştır */
+.scope :global .est-seg {
+    display: inline-flex;
+    border: 1px solid #d6d9de;
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+}
+.scope :global .est-seg button {
+    border: none;
+    background: none;
+    padding: 0.28rem 0.7rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #4b5563;
+    border-right: 1px solid #e5e7eb;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+.scope :global .est-seg button:last-child { border-right: none; }
+.scope :global .est-seg button:hover { background: #f5f3ff; }
+.scope :global .est-seg button.is-active { background: var(--est-purple); color: #fff; }
+.scope :global .est-seg-star { font-size: 0.6rem; color: #a78bfa; }
+.scope :global .est-seg button.is-active .est-seg-star { color: #ede9fe; }
+
+/* ---------------------------------------------------------------- tables */
+
+.scope :global .est-table-wrap {
+    overflow-x: auto;
+    max-width: 100%;
+    border: 1px solid var(--est-line);
+    border-radius: 10px;
+    background: #fff;
+}
+
+.scope :global .est-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-size: 0.82rem;
+    margin: 0;
+}
+.scope :global .est-table th {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--est-muted);
+    background: #f9fafb;
+    padding: 0.45rem 0.6rem;
+    border-bottom: 1px solid var(--est-line);
+    white-space: nowrap;
+    text-align: left;
+    vertical-align: bottom;
+}
+.scope :global .est-table th small { display: block; font-size: 0.62rem; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.scope :global .est-table td { padding: 0.42rem 0.6rem; border-bottom: 1px solid #f2f4f6; vertical-align: top; }
+.scope :global .est-table tbody tr:last-child td { border-bottom: none; }
+.scope :global .est-table tbody tr:hover td { background: #fcfbff; }
+.scope :global .est-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scope :global .est-table .est-nowrap { white-space: nowrap; }
+.scope :global .est-table .est-item { font-weight: 600; white-space: nowrap; }
+.scope :global .est-table .est-basis { color: #4b5563; font-size: 0.78rem; min-width: 220px; line-height: 1.4; }
+.scope :global .est-table tr.is-zero td { color: #9ca3af; }
+.scope :global .est-table tr.is-zero td.est-item { font-weight: 500; }
+.scope :global .est-table tr.is-missing td { background: #fffaf5; }
+
+.scope :global .est-table th.is-exp { color: var(--est-purple-dark); }
+.scope :global .est-table td.is-exp { font-weight: 700; color: var(--est-ink); background: #faf7ff; }
+.scope :global .est-table tbody tr:hover td.is-exp { background: #f3edff; }
+.scope :global .est-table td.est-lohi { color: #6b7280; }
+
+.scope :global .est-table tfoot td { border-top: 2px solid #ddd0fb; border-bottom: none; background: #f8f6ff; font-weight: 700; }
+.scope :global .est-table tfoot tr.est-total td { font-size: 0.9rem; color: var(--est-purple-dark); }
+.scope :global .est-table tfoot tr.est-perkg td { border-top: 1px solid #ece6fd; color: #4b5563; font-weight: 600; }
+.scope :global .est-table tfoot td.is-exp { background: #efe7ff; }
+
+.scope :global .est-delta.is-up { color: var(--est-up); font-weight: 700; }
+.scope :global .est-delta.is-down { color: var(--est-down); font-weight: 700; }
+.scope :global .est-delta.is-zero { color: #9ca3af; }
+.scope :global .est-neg { color: var(--est-up); font-weight: 600; }
+.scope :global .est-pos { color: var(--est-down); font-weight: 600; }
+
+.scope :global .est-share-cell { width: 92px; white-space: nowrap; }
+.scope :global .est-share {
+    display: inline-block;
+    width: 52px;
+    height: 6px;
+    border-radius: 3px;
+    background: #eef0f3;
+    vertical-align: middle;
+    overflow: hidden;
+}
+.scope :global .est-share > span { display: block; height: 100%; background: #a78bfa; border-radius: 3px; }
+.scope :global .est-share.is-empty { background: transparent; }
+.scope :global .est-share-num { font-size: 0.7rem; color: var(--est-muted); margin-left: 0.3rem; font-variant-numeric: tabular-nums; }
+
+.scope :global .est-sim { display: inline-flex; align-items: center; gap: 0.35rem; font-variant-numeric: tabular-nums; }
+.scope :global .est-sim-bar { width: 38px; height: 5px; background: #eef0f3; border-radius: 3px; overflow: hidden; display: inline-block; }
+.scope :global .est-sim-bar > span { display: block; height: 100%; background: #60a5fa; }
+
+.scope :global .est-job { font-weight: 700; color: #1e3a8a; text-decoration: none; white-space: nowrap; }
+.scope :global .est-job:hover { text-decoration: underline; }
+.scope :global .est-job-title { font-size: 0.75rem; color: #4b5563; }
+.scope :global .est-job-cell { min-width: 200px; max-width: 300px; }
+.scope :global .est-job-line { white-space: nowrap; }
+.scope :global .est-job-cell .est-job-title { display: block; margin-top: 0.1rem; line-height: 1.3; }
+.scope :global .est-table th.est-th-group { text-align: center; border-bottom: 1px solid var(--est-line); padding-bottom: 0.2rem; }
+.scope :global .est-similar th, .scope :global .est-similar td { padding-left: 0.45rem; padding-right: 0.45rem; }
+.scope :global .est-tag {
+    font-size: 0.62rem;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 0.02rem 0.32rem;
+    margin-left: 0.25rem;
+    background: #eef0f3;
+    color: #4b5563;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.scope :global .est-tag-cal { background: var(--est-purple-soft); color: #5b21b6; }
+.scope :global .est-more-btn { font-size: 0.78rem; font-weight: 600; text-decoration: none; padding-left: 0; }
+
+/* The weld list (WeldTable). */
+.scope :global .est-weld-table { margin-top: 0.6rem; }
+
+/* ---------------------------------------------------------------- KPIs, cards, lists */
+
+.scope :global .est-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.5rem;
+    margin-bottom: 0.6rem;
+}
+.scope :global .est-kpi {
+    border: 1px solid var(--est-line);
+    border-radius: 10px;
+    padding: 0.5rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    background: #fff;
+    min-width: 0;
+}
+.scope :global .est-kpi-label { font-size: 0.66rem; font-weight: 700; color: var(--est-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.scope :global .est-kpi-value { font-size: 1.02rem; font-weight: 800; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.scope :global .est-kpi-sub { font-size: 0.72rem; color: var(--est-muted); }
+
+/* Calibration references + hours breakdown: stacked (an xl modal is too narrow for both side by side). */
+.scope :global .est-two { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; align-items: start; }
+.scope :global .est-two-main, .scope :global .est-two-side { min-width: 0; }
+.scope :global .est-two-side .est-table-wrap { max-width: 760px; }
+
+.scope :global .est-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0.6rem; }
+.scope :global .est-cards.is-wide { grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); }
+.scope :global .est-card {
+    border: 1px solid var(--est-line);
+    border-radius: 10px;
+    padding: 0.6rem 0.8rem 0.4rem;
+    background: #fff;
+    min-width: 0;
+}
+.scope :global .est-card-head {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-weight: 700;
+    font-size: 0.84rem;
+    margin-bottom: 0.35rem;
+    color: #111827;
+}
+.scope :global .est-card-head > i { color: var(--est-purple); width: 1rem; text-align: center; }
+.scope :global .est-card-head .est-sec-count { margin-left: auto; }
+
+.scope :global .est-checklist { list-style: none; margin: 0; padding: 0; font-size: 0.82rem; }
+.scope :global .est-checklist li { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.22rem 0; border-bottom: 1px dashed #f0f1f4; }
+.scope :global .est-checklist li:last-child { border-bottom: none; }
+.scope :global .est-checklist i { color: #9ca3af; margin-top: 0.2rem; }
+
+.scope :global .est-plain-list { margin: 0; padding-left: 1.1rem; font-size: 0.8rem; }
+.scope :global .est-plain-list li { margin-bottom: 0.15rem; }
+.scope :global .est-cols { columns: 2 260px; column-gap: 1.5rem; }
+
+.scope :global .est-excluded { margin-top: 0.4rem; }
+
+.scope :global .est-kvs { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 0 1.5rem; font-size: 0.8rem; }
+.scope :global .est-kv { display: flex; gap: 0.75rem; padding: 0.3rem 0; border-bottom: 1px solid #f2f4f6; min-width: 0; }
+.scope :global .est-kv > span:first-child { flex: 0 0 150px; color: var(--est-muted); font-weight: 600; }
+.scope :global .est-kv > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.scope :global .est-params { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.scope :global .est-param { border: 1px solid var(--est-line); border-radius: 8px; padding: 0.25rem 0.55rem; font-size: 0.78rem; display: inline-flex; gap: 0.4rem; }
+.scope :global .est-param > span { color: var(--est-muted); }
+
+.scope :global .est-offer-tiles { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.5rem; }
+.scope :global .est-offer-tile {
+    border: 1px solid var(--est-line);
+    border-radius: 10px;
+    padding: 0.45rem 0.8rem;
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+}
+.scope :global .est-offer-tile.is-main { border-color: #ddd0fb; background: var(--est-tint); }
+.scope :global .est-offer-tile > span { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; color: var(--est-muted); }
+.scope :global .est-offer-tile > strong { font-size: 1.1rem; font-variant-numeric: tabular-nums; }
+.scope :global .est-offer-tile > small { color: #4b5563; font-size: 0.74rem; }
+.scope :global .est-offer-calc { font-size: 0.78rem; color: #4b5563; margin-bottom: 0.5rem; }
+.scope :global .est-offer-calc i { color: var(--est-purple); margin-right: 0.4rem; }
+.scope :global .est-offer-md ol > li { margin-bottom: 0.35rem; }
+
+.scope :global .est-text-tools { display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem; margin-bottom: 0.3rem; }
+
+/* <details> blocks inside sections */
+.scope :global .est-more { margin-top: 0.6rem; border: 1px solid var(--est-line); border-radius: 10px; background: #fff; }
+.scope :global .est-more > summary {
+    cursor: pointer;
+    list-style: none;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #374151;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+.scope :global .est-more > summary::-webkit-details-marker { display: none; }
+.scope :global .est-more > summary::before {
+    content: '\f054';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    font-size: 0.62rem;
+    color: var(--est-muted);
+    transition: transform 0.15s ease;
+}
+.scope :global .est-more[open] > summary::before { transform: rotate(90deg); }
+.scope :global .est-more[open] > summary { border-bottom: 1px solid var(--est-line); }
+.scope :global .est-more > .est-md, .scope :global .est-more > ul, .scope :global .est-more > pre { padding: 0.55rem 0.8rem 0.3rem; }
+.scope :global .est-text-part { margin-top: 0.4rem; }
+
+.scope :global .est-review {
+    margin: 0.85rem 0 0;
+    border: 1px solid #fed7aa;
+    background: #fff7ed;
+    border-radius: 10px;
+    padding: 0.6rem 0.85rem;
+    font-size: 0.84rem;
+}
+.scope :global .est-review.is-form { background: #fff; border-color: #ddd0fb; }
+.scope :global .est-review-title { font-weight: 700; color: #9a3412; display: flex; gap: 0.4rem; align-items: center; margin-bottom: 0.3rem; }
+.scope :global .est-review.is-form .est-review-title { color: var(--est-purple-dark); }
+.scope :global .est-review-text { white-space: pre-wrap; color: #431407; }
+.scope :global .est-review textarea { font-size: 0.84rem; }
+
+/* ---------------------------------------------------------------- markdown */
+
+.scope :global :is(.est-md, .est-markdown) { font-size: 0.84rem; line-height: 1.55; color: #1f2937; min-width: 0; }
+.scope :global :is(.est-md, .est-markdown) > :last-child { margin-bottom: 0.25rem; }
+.scope :global :is(.est-md, .est-markdown) h1, .scope :global :is(.est-md, .est-markdown) h2, .scope :global :is(.est-md, .est-markdown) h3 { font-size: 0.95rem; font-weight: 700; margin: 0.8rem 0 0.4rem; color: var(--est-purple-dark); }
+.scope :global :is(.est-md, .est-markdown) h4, .scope :global :is(.est-md, .est-markdown) h5, .scope :global :is(.est-md, .est-markdown) h6 { font-size: 0.84rem; font-weight: 700; margin: 0.7rem 0 0.3rem; color: #111827; }
+.scope :global :is(.est-md, .est-markdown) p { margin: 0 0 0.5rem; }
+.scope :global :is(.est-md, .est-markdown) p > strong:only-child { display: block; margin-top: 0.4rem; color: #111827; }
+.scope :global :is(.est-md, .est-markdown) ul, .scope :global :is(.est-md, .est-markdown) ol { margin: 0 0 0.5rem; padding-left: 1.25rem; }
+.scope :global :is(.est-md, .est-markdown) li { margin-bottom: 0.2rem; }
+.scope :global :is(.est-md, .est-markdown) li::marker { color: #a78bfa; }
+.scope :global :is(.est-md, .est-markdown) blockquote {
+    margin: 0 0 0.6rem;
+    padding: 0.4rem 0.7rem;
+    border-left: 3px solid #c4b5fd;
+    background: var(--est-tint);
+    color: #4b5563;
+    font-size: 0.8rem;
+}
+.scope :global :is(.est-md, .est-markdown) code { font-size: 0.78rem; background: #f3f4f6; padding: 0 0.25rem; border-radius: 3px; }
+.scope :global :is(.est-md, .est-markdown) hr { margin: 0.8rem 0; }
+.scope :global :is(.est-md, .est-markdown) .md-table {
+    margin: 0.35rem 0 0.7rem;
+    border: 1px solid var(--est-line);
+    border-radius: 8px;
+    max-width: 100%;
+}
+.scope :global :is(.est-md, .est-markdown) .md-table table { font-size: 0.78rem; margin: 0; }
+.scope :global :is(.est-md, .est-markdown) .md-table th {
+    background: #f9fafb;
+    color: #4b5563;
+    font-size: 0.72rem;
+    font-weight: 700;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--est-line);
+}
+.scope :global :is(.est-md, .est-markdown) .md-table td, .scope :global :is(.est-md, .est-markdown) .md-table th { padding: 0.35rem 0.55rem; }
+.scope :global :is(.est-md, .est-markdown) .md-table td.text-end, .scope :global :is(.est-md, .est-markdown) .md-table th.text-end { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scope :global :is(.est-md, .est-markdown) .md-table tbody tr:nth-child(even) td { background: #fcfcfd; }
+.scope :global :is(.est-md, .est-markdown) .md-table tr:has(> td:first-child > strong) td { background: #f8f6ff; font-weight: 700; }
+.scope :global :is(.est-md, .est-markdown) .md-table tbody tr:last-child td { border-bottom: none; }
+
+/* "[Çizim … sh.2]" citations and "§2.2" jumps */
+.scope :global .est-cite {
+    display: inline;
+    font-size: 0.72rem;
+    color: #6b7280;
+    background: #f3f4f6;
+    border-radius: 4px;
+    padding: 0.02rem 0.3rem;
+    white-space: normal;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+}
+.scope :global .est-sref {
+    border: none;
+    background: var(--est-purple-soft);
+    color: #5b21b6;
+    font-size: 0.72rem;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 0 0.3rem;
+    line-height: 1.4;
+    vertical-align: baseline;
+}
+.scope :global .est-sref:hover { background: #e4d8fd; }
+
+.scope :global .est-notes { margin-top: 0.6rem; }
+.scope :global .est-pre { white-space: pre-wrap; font-size: 0.74rem; margin: 0; max-height: 240px; overflow: auto; }
+
+/* ---------------------------------------------------------------- states */
+
+.scope :global .est-state {
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-start;
+    padding: 1.1rem 0;
+    font-size: 0.86rem;
+    color: #374151;
+}
+.scope :global .est-state-main { min-width: 0; flex: 1; }
+.scope :global .est-state-title { font-weight: 700; font-size: 1rem; margin-bottom: 0.2rem; color: #111827; }
+.scope :global .est-state-icon { font-size: 1.4rem; margin-top: 0.1rem; color: var(--est-purple); }
+.scope :global .est-state-spinner { width: 1.6rem; height: 1.6rem; color: var(--est-purple); border-width: 0.18em; flex-shrink: 0; }
+.scope :global .est-state-failed .est-state-icon { color: #b42318; }
+.scope :global .est-state-failed { border-bottom: 1px solid var(--est-line); }
+.scope :global .est-state-running { border-bottom: 1px solid var(--est-line); }
+
+.scope :global .est-progress {
+    position: relative;
+    height: 6px;
+    background: #eee8fd;
+    border-radius: 3px;
+    overflow: hidden;
+    margin: 0.6rem 0 0.4rem;
+    max-width: 460px;
+}
+.scope :global .est-progress > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 35%;
+    background: linear-gradient(90deg, transparent, #8b5cf6, transparent);
+    animation: est-progress 1.6s ease-in-out infinite;
+}
+@keyframes :global(est-progress) { from { left: -35%; } to { left: 100%; } }
+
+.scope :global .est-empty { text-align: center; padding: 1.6rem 1rem 1.2rem; border-bottom: 1px solid var(--est-line); }
+.scope :global .est-empty-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    margin: 0 auto 0.5rem;
+    background: var(--est-purple-soft);
+    color: var(--est-purple);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+.scope :global .est-empty-title { font-weight: 800; font-size: 1.05rem; margin-bottom: 0.4rem; }
+.scope :global .est-empty-steps { display: inline-block; text-align: left; font-size: 0.84rem; color: #374151; margin: 0 0 0.6rem; padding-left: 1.2rem; }
+.scope :global .est-empty-steps li { margin-bottom: 0.2rem; }
+
+/* ---------------------------------------------------------------- narrow windows */
+
+@media (max-width: 991.98px) {
+    .scope :global .est-hero-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 575.98px) {
+    .scope :global .est-head { padding: 0.6rem 0.75rem; }
+    .scope :global .est-icon { display: none; }
+    .scope :global .est-body { padding: 0 0.75rem 0.5rem; }
+    .scope :global .est-nav { margin: 0 -0.75rem; padding: 0.35rem 0.75rem; }
+    .scope :global .est-nav-top span { display: none; }
+    .scope :global .est-sec-body { padding-left: 0; }
+    .scope :global .est-price-value { font-size: 1.6rem; }
+    .scope :global .est-route-value { font-size: 1.25rem; }
+    .scope :global .est-fact.is-wide { grid-column: auto; }
+    .scope :global .est-kv > span:first-child { flex-basis: 110px; }
+    .scope :global .est-cards, .scope :global .est-cards.is-wide { grid-template-columns: minmax(0, 1fr); }
+    .scope :global .est-kvs { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media print {
+    .scope :global .est-nav, .scope :global .est-head-actions { display: none; }
+}
+
+/* Running report: determinate bar + step list (report.progress) */
+.scope :global .est-progress.is-determinate { height: 8px; }
+.scope :global .est-progress.is-determinate > span {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 0;
+    background: var(--est-purple);
+    border-radius: 3px;
+    animation: none;
+    transition: width 1s linear;
+}
+.scope :global .est-prog-meta { display: flex; justify-content: space-between; gap: 0.75rem; max-width: 460px; font-size: 0.76rem; color: var(--est-muted); font-variant-numeric: tabular-nums; margin-bottom: 0.5rem; }
+.scope :global .est-prog-pct { font-weight: 700; color: var(--est-purple-dark); }
+.scope :global .est-steps { list-style: none; margin: 0.15rem 0 0.6rem; padding: 0; max-width: 460px; }
+.scope :global .est-step { display: flex; align-items: baseline; gap: 0.5rem; padding: 0.15rem 0; color: var(--est-muted); }
+.scope :global .est-step i { width: 1rem; text-align: center; font-size: 0.78rem; flex-shrink: 0; }
+.scope :global .est-step.is-done { color: var(--est-ink); }
+.scope :global .est-step.is-done i { color: var(--est-down); }
+.scope :global .est-step.is-current { color: var(--est-purple-dark); font-weight: 700; }
+.scope :global .est-step.is-current i { color: var(--est-purple); }
+.scope :global .est-step-detail { font-weight: 500; color: var(--est-muted); margin-left: 0.2rem; }
+
+/* ---------------------------------------------------------------- İşçilik · imalat planı (v5) */
+
+/* Small badges inside tables (çizim / çıkarım / kural, plan v2, varsayılan). */
+.scope :global .est-badge-sm, .scope :global .est-table .status-badge, .scope :global .status-badge.est-badge-sm { min-width: 0; font-size: 0.62rem; padding: 0.1rem 0.4rem; letter-spacing: 0.02em; margin: 0; }
+.scope :global .est-fact-value .status-badge { min-width: 0; font-size: 0.68rem; }
+.scope :global .est-out { color: #9ca3af; font-weight: 500; }
+.scope :global .est-factor { font-weight: 700; }
+.scope :global .est-dot-c { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 50%; margin-right: 0.4rem; vertical-align: -0.05rem; }
+
+/* The stacked work-centre bar on top of the distribution table. */
+.scope :global .est-dist-bar { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: #eef0f3; margin: 0.15rem 0 0.35rem; }
+.scope :global .est-dist-bar > span { display: block; height: 100%; min-width: 2px; }
+.scope :global .est-dist-legend { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; font-size: 0.76rem; color: #4b5563; margin-bottom: 0.5rem; }
+.scope :global .est-dist-legend i { display: inline-block; width: 0.6rem; height: 0.6rem; border-radius: 2px; margin-right: 0.3rem; vertical-align: -0.05rem; }
+.scope :global .est-dist-legend strong { font-variant-numeric: tabular-nums; }
+.scope :global .est-dist td.est-item { white-space: normal; }
+/* The report's corrected hours (cost_table.labour): "rapor düzeltti" badge, the plan hours as a muted sub-line. */
+.scope :global .est-dist td.est-item .status-badge { margin-left: 0.35rem; vertical-align: 0.05rem; white-space: nowrap; }
+.scope :global .est-dist .est-plan-h { font-style: italic; }
+.scope :global .est-fact-sub .status-badge { margin-left: 0.25rem; vertical-align: 0.05rem; }
+
+/* Cost table: machining / CNC labour carry the same amount in both routes. */
+.scope :global .est-cost .est-same-badge { margin-right: 0.35rem; vertical-align: 0.05rem; white-space: nowrap; }
+
+/* Tonne-rate gauges (one per centre) against the class band. */
+.scope :global .est-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0.6rem; margin-bottom: 0.4rem; max-width: 760px; }
+.scope :global .est-gauge { border: 1px solid var(--est-line); border-radius: 10px; padding: 0.5rem 0.75rem; background: #fff; min-width: 0; }
+.scope :global .est-gauge.is-below, .scope :global .est-gauge.is-above { border-color: #fed7aa; background: #fffaf5; }
+.scope :global .est-gauge.is-inside { border-color: #a7f3d0; background: #f6fffb; }
+.scope :global .est-gauge-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; font-size: 0.74rem; font-weight: 700; color: var(--est-muted); text-transform: uppercase; letter-spacing: 0.03em; }
+.scope :global .est-gauge-head .status-badge { min-width: 0; font-size: 0.64rem; margin: 0; }
+.scope :global .est-gauge-value { font-size: 1.1rem; font-weight: 800; font-variant-numeric: tabular-nums; margin: 0.1rem 0 0.25rem; }
+.scope :global .est-gauge-value small { font-size: 0.72rem; font-weight: 600; color: var(--est-muted); }
+.scope :global .est-gauge-track { position: relative; height: 8px; border-radius: 4px; background: #eef0f3; overflow: visible; margin: 0.2rem 0 0.35rem; }
+.scope :global .est-gauge-band { position: absolute; top: 0; bottom: 0; background: #c4b5fd; border-radius: 4px; }
+.scope :global .est-gauge.is-inside .est-gauge-band { background: #6ee7b7; }
+.scope :global .est-gauge-mark { position: absolute; top: -3px; width: 3px; height: 14px; margin-left: -1.5px; background: var(--est-purple-dark); border-radius: 2px; }
+.scope :global .est-gauge.is-below .est-gauge-mark, .scope :global .est-gauge.is-above .est-gauge-mark { background: #c2410c; }
+.scope :global .est-gauge-sub { font-size: 0.72rem; color: #4b5563; line-height: 1.35; }
+.scope :global .est-gauge-sub strong { font-variant-numeric: tabular-nums; }
+
+/* The plan table grouped by work centre (one <details> per centre). */
+/* minmax(0, 1fr) + min-width: 0: a wide plan table scrolls inside its group instead of widening the card on a phone. */
+.scope :global .est-plan { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.4rem; margin-top: 0.2rem; min-width: 0; }
+.scope :global .est-plan-group { margin-top: 0; min-width: 0; max-width: 100%; }
+.scope :global .est-plan-group > .est-table-wrap, .scope :global .est-plan-parts > .est-table-wrap { max-width: 100%; overflow-x: auto; }
+.scope :global .est-plan-group > summary { font-size: 0.82rem; }
+.scope :global .est-plan-group > .est-table-wrap { border: none; border-radius: 0 0 10px 10px; margin: 0; }
+.scope :global .est-plan-sum { margin-left: auto; font-weight: 500; color: var(--est-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.scope :global .est-plan-sum strong { color: var(--est-purple-dark); }
+.scope :global .est-plan-table td.est-plan-op { min-width: 160px; }
+.scope :global .est-plan-table td.est-plan-driver { color: #4b5563; font-size: 0.78rem; min-width: 150px; line-height: 1.4; }
+.scope :global .est-plan-table td.est-plan-src { white-space: nowrap; }
+.scope :global .est-plan-table tr.est-plan-head td { background: #f8f6ff; }
+.scope :global .est-plan-table tr.est-plan-part td { background: #fcfbff; }
+.scope :global .est-plan-table tr.est-plan-part td.est-plan-op { padding-left: 1.3rem; font-weight: 600; }
+.scope :global .est-plan-table tr.est-plan-feat td { font-size: 0.78rem; color: #374151; }
+.scope :global .est-plan-table tr.est-plan-feat td.est-plan-op { padding-left: 2.2rem; }
+.scope :global .est-plan-indent { display: inline-block; }
+.scope :global .est-plan-note { font-size: 0.66rem; font-weight: 700; color: #5b21b6; background: var(--est-purple-soft); border-radius: 4px; padding: 0.02rem 0.32rem; margin-left: 0.25rem; white-space: nowrap; text-transform: uppercase; letter-spacing: 0.03em; }
+.scope :global .est-plan-table .est-share-cell { width: 80px; }
+
+/* Parçalar ve alt montajlar */
+.scope :global .est-plan-parts { margin-top: 0.6rem; }
+.scope :global .est-plan-parts > .est-table-wrap { border: none; border-radius: 0 0 10px 10px; margin: 0; }
+.scope :global .est-parts tr.est-plan-sub td { background: #f8f6ff; }
+.scope :global .est-parts tr.est-plan-part td.est-plan-indent, .scope :global .est-parts td.est-plan-indent { padding-left: 1.3rem; }
+.scope :global .est-parts .est-cell-sub { white-space: normal; max-width: 260px; }
+.scope :global .est-plan-feats { font-size: 0.78rem; }
+.scope :global .est-plan-feats > summary { cursor: pointer; color: #5b21b6; font-weight: 600; list-style: none; }
+.scope :global .est-plan-feats > summary::-webkit-details-marker { display: none; }
+.scope :global .est-plan-feats > summary::before { content: '\f054'; font-family: 'Font Awesome 6 Free'; font-weight: 900; font-size: 0.55rem; margin-right: 0.3rem; color: var(--est-muted); display: inline-block; transition: transform 0.15s ease; }
+.scope :global .est-plan-feats[open] > summary::before { transform: rotate(90deg); }
+.scope :global .est-plan-feats .est-plain-list { margin-top: 0.25rem; min-width: 240px; }
+.scope :global .est-plan-feats .est-plain-list li { margin-bottom: 0.25rem; line-height: 1.4; }
+
+.scope :global .est-cal td.est-nowrap .status-badge { margin-left: 0.2rem; }
+
+@media (max-width: 575.98px) {
+    .scope :global .est-gauges { grid-template-columns: minmax(0, 1fr); }
+    .scope :global .est-dist-legend { font-size: 0.72rem; }
+    .scope :global .est-plan-table td.est-plan-op, .scope :global .est-plan-table td.est-plan-driver { min-width: 120px; }
+}
+
+/* ---------------------------------------------------------------- React port additions */
+
+/* Report markdown tables (Markdown.tsx: <div class="md-table"><table>), formerly Bootstrap .table-sm. */
+.scope :global .md-table { overflow-x: auto; }
+.scope :global .md-table table { width: 100%; margin-bottom: 1rem; border-collapse: collapse; }
+.scope :global .md-table th,
+.scope :global .md-table td { padding: 0.25rem; border-bottom: 1px solid #dee2e6; }
+.scope :global .md-table .text-end { text-align: right; }
+.scope :global .md-table .text-center { text-align: center; }
+
+/* "Güven nedir?" close button (formerly Bootstrap .btn-close.btn-close-sm). */
+.scope :global .est-explainer-close {
+    width: 0.75em;
+    height: 0.75em;
+    padding: 0.25em;
+    border: 0;
+    border-radius: 0.375rem;
+    background: transparent
+        url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23000'%3e%3cpath d='M.293.293a1 1 0 0 1 1.414 0L8 6.586 14.293.293a1 1 0 1 1 1.414 1.414L9.414 8l6.293 6.293a1 1 0 0 1-1.414 1.414L8 9.414l-6.293 6.293a1 1 0 0 1-1.414-1.414L6.586 8 .293 1.707a1 1 0 0 1 0-1.414z'/%3e%3c/svg%3e")
+        center / 0.75em auto no-repeat;
+    box-sizing: content-box;
+    opacity: 0.5;
+    cursor: pointer;
+}
+.scope :global .est-explainer-close:hover { opacity: 0.75; }
+.scope :global .est-explainer p.est-explainer-level { margin-bottom: 0.25rem; }
+.scope :global .est-explainer p.est-explainer-last { margin-bottom: 0; }
+.scope :global .est-error { color: #dc3545; }
+
+/* ---------------------------------------------------------------- React layout of the head and the review form */
 .headActions {
   display: flex;
   flex-wrap: wrap;

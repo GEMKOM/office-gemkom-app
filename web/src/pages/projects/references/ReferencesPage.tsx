@@ -6,9 +6,9 @@ import {
   REFERENCE_ROUTE,
   SCHEMA_LABELS,
   STRUCTURE_CLASS_LABELS,
-} from '@legacy/apis/estimator.js';
-import { exclusionLabel, fmt } from '@legacy/components/estimate-report/report-model.js';
-import { formatDateTime } from '@legacy/components/estimate-report/report-view.js';
+} from '@/api/projects/estimator';
+import { exclusionLabel, fmt } from '../estimate-report/reportModel';
+import { formatDateTime } from '../estimate-report/reportParts';
 import { Button, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
