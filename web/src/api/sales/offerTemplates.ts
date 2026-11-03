@@ -3,7 +3,8 @@ import { apiFetch } from '../client';
 import { extractResults } from '../types';
 
 // Port of the apis/sales/offerTemplates.js calls the Ürün Kataloğu page
-// (sales/catalog) makes. Offers and the cost table still use the legacy module.
+// (sales/catalog) and the offers page's catalog panel make. The cost table
+// still uses the legacy module.
 
 /** A row of GET /sales/offer-templates/. */
 export interface OfferTemplate {
@@ -60,7 +61,8 @@ export const offerTemplateKeys = {
 export function offerTemplatesQueryOptions() {
   return queryOptions({
     queryKey: offerTemplateKeys.list(),
-    queryFn: async ({ signal }) => extractResults<OfferTemplate>(await apiFetch<unknown>(`${BASE}/`, { signal })),
+    queryFn: async ({ signal }) =>
+      extractResults<OfferTemplate>(await apiFetch<unknown>(`${BASE}/`, { signal })),
   });
 }
 
@@ -86,13 +88,42 @@ export function nodeChildrenQueryOptions(templateId: number, nodeId: number) {
   });
 }
 
+/** A template's root nodes (GET <id>/nodes/), the offers page's catalog panel. */
+export function templateRootNodesQueryOptions(templateId: number) {
+  return queryOptions({
+    queryKey: [...offerTemplateKeys.detail(templateId), 'roots'] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<TemplateNode>(
+        await apiFetch<unknown>(`${BASE}/${templateId}/nodes/`, { signal }),
+      ),
+  });
+}
+
+/** A node found by GET nodes/search/?q=: where it sits, and its template. */
+export interface TemplateNodeHit extends TemplateNode {
+  breadcrumb?: string[];
+  template?: number;
+  code?: string;
+}
+
+export function searchTemplateNodesQueryOptions(q: string) {
+  return queryOptions({
+    queryKey: [...offerTemplateKeys.all, 'search', q] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<TemplateNodeHit>(
+        await apiFetch<unknown>(`${BASE}/nodes/search/`, { params: { q }, signal }),
+      ),
+  });
+}
+
 /** Template and node writes; each reloads the list and the open template (with its loaded children). */
 export function useOfferTemplateMutations() {
   const queryClient = useQueryClient();
   const invalidate = () => queryClient.invalidateQueries({ queryKey: offerTemplateKeys.all });
   return {
     createTemplate: useMutation({
-      mutationFn: (data: TemplateInput) => apiFetch<OfferTemplate>(`${BASE}/`, { method: 'POST', body: data }),
+      mutationFn: (data: TemplateInput) =>
+        apiFetch<OfferTemplate>(`${BASE}/`, { method: 'POST', body: data }),
       onSuccess: invalidate,
     }),
     patchTemplate: useMutation({
@@ -106,8 +137,19 @@ export function useOfferTemplateMutations() {
       onSuccess: invalidate,
     }),
     patchNode: useMutation({
-      mutationFn: ({ templateId, nodeId, data }: { templateId: number; nodeId: number; data: NodeInput }) =>
-        apiFetch<TemplateNode>(`${BASE}/${templateId}/nodes/${nodeId}/`, { method: 'PATCH', body: data }),
+      mutationFn: ({
+        templateId,
+        nodeId,
+        data,
+      }: {
+        templateId: number;
+        nodeId: number;
+        data: NodeInput;
+      }) =>
+        apiFetch<TemplateNode>(`${BASE}/${templateId}/nodes/${nodeId}/`, {
+          method: 'PATCH',
+          body: data,
+        }),
       onSuccess: invalidate,
     }),
     deleteNode: useMutation({

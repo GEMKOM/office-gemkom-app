@@ -121,6 +121,27 @@ export function useCreatePaymentTerm() {
   return useMutation({ mutationFn: createPaymentTerm, onSuccess: () => void invalidate() });
 }
 
+/**
+ * The active terms as offer form options (sales/offers loadPaymentTermsOptions:
+ * `?status=active&page_size=1000`), label the name or `#id`.
+ */
+export function activePaymentTermOptionsQueryOptions() {
+  return queryOptions({
+    queryKey: [...paymentTermKeys.all, 'list', 'active-options'] as const,
+    queryFn: async ({ signal }) => {
+      const data = await apiFetch<unknown>(BASE, {
+        params: { status: 'active', page_size: 1000 },
+        signal,
+      });
+      return extractResults<PaymentTerm>(data).map((pt) => ({
+        value: String(pt.id),
+        label: pt.name || `#${pt.id}`,
+      }));
+    },
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useDeletePaymentTerm() {
   const invalidate = useInvalidatePaymentTermLists();
   return useMutation({
