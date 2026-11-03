@@ -94,20 +94,20 @@ test.describe('navigation', () => {
     const session = await seedSession(page, { admin: true });
     await mockBackend(page, {}, { session });
 
-    await page.goto('/sales/');
+    await page.goto('/projects/');
     await expectSpa(page);
 
-    // A hub card to a page that is still legacy (Teklifler): a full load.
+    // A hub card to a page that is still legacy (Proje Takibi): a full load.
     await page.evaluate(() => {
       window.__spaMarker = 'spa';
     });
     await page
       .getByRole('main')
-      .getByRole('link', { name: /Teklifler/ })
+      .getByRole('link', { name: /Proje Takibi/ })
       .first()
       .click();
 
-    await expect(page).toHaveURL(/\/sales\/offers\/?$/);
+    await expect(page).toHaveURL(/\/projects\/project-tracking\/?$/);
     await expect(page.locator('#navbar-container')).toHaveCount(1);
     await expect(page.locator('#root')).toHaveCount(0);
     expect(await page.evaluate(() => window.__spaMarker)).toBeUndefined();
@@ -241,47 +241,6 @@ test.describe('every migrated route loads as admin', () => {
       consoleErrors.expectNone();
     });
   }
-});
-
-test.describe('legacy pages', () => {
-  // A legacy page whose module graph imports a deleted file dies on load (see
-  // scripts/check-legacy-imports.mjs). The offers page also uses the customer
-  // edit modal that moved to sales/shared/ when /sales/customers/ went React.
-  test('offers page loads and opens the customer edit modal', async ({ page, consoleErrors }) => {
-    const session = await seedSession(page, { admin: true });
-    const customer = MOCK_CUSTOMERS[0]!;
-    const offer = {
-      id: 9201,
-      offer_no: 'E2E-TKL-001',
-      title: 'Test Teklif',
-      status: 'draft',
-      customer: customer.id,
-      customer_name: customer.name,
-      customer_detail: customer,
-    };
-    const backend = await mockBackend(
-      page,
-      {
-        'GET /sales/offers/': { json: paginated([offer]) },
-        [`GET /sales/offers/${offer.id}/`]: { json: offer },
-        [`GET /projects/customers/${customer.id}/`]: { json: customer },
-      },
-      { session },
-    );
-
-    await page.goto('/sales/offers/');
-    const row = page.locator('tr').filter({ hasText: offer.offer_no });
-    await expect(row).toBeVisible();
-
-    await row.getByTitle('Görüntüle').click();
-    await page.locator('#edit-customer-from-offer-btn').click();
-
-    const editModal = page.locator('#edit-customer-modal-container .modal.show');
-    await expect(editModal.locator('.modal-title-text')).toHaveText('Müşteri Düzenle');
-    await expect(editModal.locator('input[name="code"]')).toHaveValue(customer.code);
-    expect(backend.callsTo(`/projects/customers/${customer.id}/`, 'GET')).toHaveLength(1);
-    consoleErrors.expectNone();
-  });
 });
 
 test.describe('rail', () => {

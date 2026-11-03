@@ -82,6 +82,18 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/sales/catalog/CatalogPage')).CatalogPage,
     }),
   },
+  {
+    path: '/sales/cost-table',
+    lazy: async () => ({
+      Component: (await import('@/pages/sales/cost-table/CostTablePage')).CostTablePage,
+    }),
+  },
+  {
+    path: '/sales/offers',
+    lazy: async () => ({
+      Component: (await import('@/pages/sales/offers/OffersPage')).OffersPage,
+    }),
+  },
   { path: '/manufacturing', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/cnc-cutting', handle: hub, lazy: manufacturingHub },
   { path: '/manufacturing/cnc-cutting/capacity', handle: hub, lazy: manufacturingHub },
@@ -407,6 +419,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/finance/purchase-orders',
+    lazy: async () => ({
+      Component: (await import('@/pages/finance/purchase-orders/FinanceOperationsPage'))
+        .FinanceOperationsPage,
+    }),
+  },
+  {
     path: '/finance/reports/projects',
     lazy: async () => ({
       Component: (await import('@/pages/finance/reports/projects/ProjectsReportPage'))
@@ -525,6 +544,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/manufacturing/linear-cutting/cuts',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/linear-cutting/cuts/LinearCuttingCutsPage'))
+        .LinearCuttingCutsPage,
+    }),
+  },
+  {
     path: '/manufacturing/linear-cutting/tasks',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/linear-cutting/tasks/LinearCuttingTasksPage'))
@@ -568,6 +594,12 @@ export const appRoutes: RouteObject[] = [
       Component: (
         await import('@/pages/manufacturing/machining/reports/user-report/MachiningUserReportPage')
       ).MachiningUserReportPage,
+    }),
+  },
+  {
+    path: '/manufacturing/cnc-cutting/cuts',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/cnc-cutting/cuts/CncCutsPage')).CncCutsPage,
     }),
   },
   {
@@ -712,6 +744,13 @@ export const appRoutes: RouteObject[] = [
     path: '/planning/items',
     lazy: async () => ({
       Component: (await import('@/pages/planning/items/PlanningItemsPage')).PlanningItemsPage,
+    }),
+  },
+  {
+    path: '/planning/department-requests',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/department-requests/DepartmentRequestsPage'))
+        .DepartmentRequestsPage,
     }),
   },
   {

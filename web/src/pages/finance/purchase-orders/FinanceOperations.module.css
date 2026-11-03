@@ -1,0 +1,142 @@
+/* Finans İşlemleri (was finance/purchase-orders/purchase-orders.css) */
+
+.switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+/* Seven buttons wrap on narrow screens instead of scrolling the page. */
+.tabs {
+  flex-wrap: wrap;
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sub {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gk-muted);
+  line-height: 1.2;
+}
+
+.taxDue {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gk-danger);
+}
+
+.overdue {
+  color: var(--gk-danger);
+  font-weight: 600;
+}
+
+.dueSoon {
+  color: var(--mantine-color-yellow-8);
+  font-weight: 600;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* Ödeme Planı cell: one block per instalment */
+.schedules {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.schedule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--gk-surface-subtle);
+}
+
+.scheduleLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.paid {
+  color: var(--mantine-color-green-8);
+}
+
+.waiting {
+  color: var(--mantine-color-yellow-8);
+}
+
+.late {
+  color: var(--gk-danger);
+}
+
+/* Beklenen Tahsilatlar */
+.source {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.sourceOffer {
+  background: rgba(13, 110, 253, 0.12);
+  color: #0d6efd;
+  border: 1px solid rgba(13, 110, 253, 0.25);
+}
+
+.sourceReceipt {
+  background: rgba(111, 66, 193, 0.12);
+  color: #6f42c1;
+  border: 1px solid rgba(111, 66, 193, 0.25);
+}
+
+/* A received row is struck through; its badges and buttons are not. */
+.received {
+  text-decoration: line-through;
+  text-decoration-color: rgba(25, 135, 84, 0.45);
+}
+
+.groupHeader {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.groupMeta {
+  font-size: 0.8rem;
+  color: var(--gk-muted);
+}
+
+/* Draft instalment rows of the new-receipt form */
+.instRow {
+  display: grid;
+  grid-template-columns:
+    70px minmax(120px, 2fr) minmax(100px, 1fr) minmax(130px, 1fr) minmax(120px, 2fr)
+    auto;
+  gap: 8px;
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 767.98px) {
+  .instRow {
+    grid-template-columns: 1fr 1fr;
+  }
+}

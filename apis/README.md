@@ -9,7 +9,6 @@ This folder contains reusable service modules that provide API functionality and
 - **`machines.js`** - Machine management and status
 - **`maintenance.js`** - Maintenance request handling
 - **`procurement.js`** - Procurement and purchase management
-- **`purchaseOrders.js`** - Purchase order operations
 - **`formatters.js`** - Data formatting utilities
 - **`paginationHelper.js`** - Pagination utilities for API responses
 

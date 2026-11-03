@@ -1,4 +1,12 @@
-import { Loader, MultiSelect, Select, type ComboboxItem, type OptionsFilter } from '@mantine/core';
+import {
+  Loader,
+  MultiSelect,
+  Select,
+  type ComboboxItem,
+  type ComboboxProps,
+  type MantineSize,
+  type OptionsFilter,
+} from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useId, useMemo, useState, type ReactNode } from 'react';
@@ -26,6 +34,10 @@ interface SelectRemoteBase {
   required?: boolean;
   disabled?: boolean;
   clearable?: boolean;
+  /** Input size; default Mantine's. */
+  size?: MantineSize;
+  /** Passed to the dropdown, e.g. `{ width: 320 }` for a narrow table cell. */
+  comboboxProps?: ComboboxProps;
 }
 
 export type SelectRemoteProps = SelectRemoteBase &
@@ -66,6 +78,8 @@ export function SelectRemote(props: SelectRemoteProps) {
     required,
     disabled,
     clearable = true,
+    size,
+    comboboxProps,
   } = props;
 
   const instanceId = useId();
@@ -134,6 +148,8 @@ export function SelectRemote(props: SelectRemoteProps) {
     required,
     disabled,
     clearable,
+    size,
+    comboboxProps,
     searchable: true,
     data,
     filter: passThrough,

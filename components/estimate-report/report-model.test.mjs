@@ -1,6 +1,6 @@
 /**
  * Tests for the Tahmin report model (pure: no DOM). Shared by the legacy card
- * (offers, project tracking) and the React estimate report.
+ * (project tracking) and the React estimate report (offers, estimates).
  *
  *     node components/estimate-report/report-model.test.mjs
  */

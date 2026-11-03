@@ -120,9 +120,9 @@ serializer and the renderer, so nothing pasted survives as markup.
 The Tahmin report card (`src/pages/projects/estimate-report/`) is React for
 its state, requests and actions, but a finished report's sections come from
 the legacy `components/estimate-report/report-view.js` builders through one
-`<EstimateHtml html>` component. The legacy offers and project-tracking
-modals mount the same card, and the report changes often; one source keeps
-both sides in step. The builders escape every payload value and send markdown
+`<EstimateHtml html>` component. The legacy project-tracking modal mounts
+the same card (the offers page, now React, mounts the React one), and the
+report changes often; one source keeps both sides in step. The builders escape every payload value and send markdown
 through `utils/markdownLite.js` (escape first), the same contract as
 `renderRichText`. Rules:
 
@@ -134,8 +134,8 @@ through `utils/markdownLite.js` (escape first), the same contract as
   `data-est-goto`, as the legacy card did.
 - The few Bootstrap classes the markup uses are restyled in
   `EstimateReport.module.css` under the card's root class only.
-- When offers and project tracking move to React, port the builders to JSX
-  and delete `EstimateHtml`.
+- When project tracking moves to React, port the builders to JSX and delete
+  `EstimateHtml`.
 
 ## Rules
 
@@ -192,6 +192,9 @@ const columns = useMemo<DataTableColumn<Item>[]>(() => [
   emptied; `1,5` and `1.234,5` are read the Turkish way), dates a
   `'YYYY-MM-DD'` string or `null`, text and select a string. Legacy `onEdit`
   got the raw input string; drop the `parseFloat` when porting.
+  `editable: { type: 'number', parse }` replaces the reading when the legacy
+  input read numbers its own way (the sales cost table's price takes every
+  dot as a thousands separator, so `90.000` is 90000).
 - **Click** a cell (or focus it and press **Enter**/**F2**) to edit. **Enter**
   saves, **Escape** cancels, **Tab**/**Shift+Tab** save and open the next or
   previous editable cell, leaving the cell (blur) saves, like legacy. Arrow
