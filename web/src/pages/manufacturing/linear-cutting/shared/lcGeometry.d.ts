@@ -1,8 +1,13 @@
-// The shared bar renderer of the linear cutting module, still used by the
-// legacy cuts page; the parts this page uses.
+// The shared geometry and bar renderer of the linear cutting module (still a
+// legacy file, so the bar drawing stays in one place); the parts the tasks and
+// cuts pages use.
 
 declare module '@legacy/manufacturing/linear-cutting/lc-geometry.js' {
+  export const ANGLE_TOL_DEG: number;
+  export const MAX_ANGLE_DEG: number;
   export const FLIPPED_TITLE: string;
+  export function angleFromSetback(setbackMm: unknown, heightMm: unknown): number | null;
+  export function setbackFromAngle(angleDeg: unknown, heightMm: unknown): number;
   export function formatAngleTr(angleDeg: unknown): string;
   export function formatPassAngle(pass: unknown): string;
   export function passKindLabel(kind: unknown): string;

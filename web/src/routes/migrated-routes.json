@@ -85,6 +85,7 @@
   "/manufacturing/machining/reports",
   "/manufacturing/cnc-cutting/dashboard",
   "/manufacturing/linear-cutting/dashboard",
+  "/manufacturing/linear-cutting/cuts",
   "/manufacturing/linear-cutting/tasks",
   "/manufacturing/machining/dashboard",
   "/manufacturing/cnc-cutting/reports/finished-timers",

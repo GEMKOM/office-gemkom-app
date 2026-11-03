@@ -531,6 +531,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/manufacturing/linear-cutting/cuts',
+    lazy: async () => ({
+      Component: (await import('@/pages/manufacturing/linear-cutting/cuts/LinearCuttingCutsPage'))
+        .LinearCuttingCutsPage,
+    }),
+  },
+  {
     path: '/manufacturing/linear-cutting/tasks',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/linear-cutting/tasks/LinearCuttingTasksPage'))
