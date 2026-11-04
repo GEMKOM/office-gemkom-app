@@ -1,0 +1,23 @@
+/* Planlama hub: the per-machine load bar in the CNC lane's table. */
+
+.load {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.bar {
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--gk-line);
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--fam-fg);
+}

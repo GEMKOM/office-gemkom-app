@@ -37,12 +37,12 @@ function Flyout({ tree, onOpen, currentPath }: { tree: NavTree; onOpen: OpenPath
     <ScrollArea.Autosize mah="75vh" type="auto">
       {flattenMenu(tree).map((row) =>
         row.kind === 'label' ? (
-          <Menu.Label key={row.path} pl={12 + row.depth * 12}>
+          <Menu.Label key={`label:${row.path}`} pl={12 + row.depth * 12}>
             {row.label}
           </Menu.Label>
         ) : (
           <Menu.Item
-            key={row.path}
+            key={`link:${row.path}`}
             pl={12 + row.depth * 12}
             leftSection={<FaIcon icon={row.icon} />}
             rightSection={<RowCount count={countFor(row.path, { label: row.label, icon: row.icon, children: {} })} />}

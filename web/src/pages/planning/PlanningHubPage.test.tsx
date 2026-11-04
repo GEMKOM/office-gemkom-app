@@ -25,21 +25,79 @@ const page = (count: number, results: unknown[] = []) => ({
 const json = (body: unknown) =>
   Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 const calls = () => fetchMock.mock.calls.map(([u]) => new URL(String(u)));
+const lane = (name: string) => screen.getByRole('region', { name });
+
+const PLAN_END = Date.UTC(2026, 10, 14, 12);
 
 beforeEach(() => {
   granted.routes = null;
   fetchMock.mockReset();
   fetchMock.mockImplementation((url) => {
     const { pathname, searchParams } = new URL(String(url));
-    if (pathname === '/planning/department-requests/approved_requests/') return json(page(5));
+    if (pathname === '/planning/department-requests/approved_requests/') {
+      const rows =
+        searchParams.get('page_size') === '1'
+          ? []
+          : [
+              {
+                id: 187,
+                request_number: 'DT-0187',
+                title: 'Rulman seti',
+                department_label: 'Bakım',
+                needed_date: '2026-01-02',
+              },
+            ];
+      return json(page(5, rows));
+    }
     if (pathname === '/planning/requests/')
       return json(page(searchParams.get('status') === 'pending_erp_entry' ? 3 : 1));
     if (pathname === '/projects/job-orders/procurement_pending/') return json(page(8));
+    if (pathname === '/planning/items/') return json(page(18));
     if (pathname === '/projects/department-tasks/') {
       if (searchParams.has('assigned_to')) return json(page(2));
       if (searchParams.has('target_completion_date__lte')) return json(page(4));
       if (searchParams.get('status') === 'blocked') return json(page(1));
       return json(page(19));
+    }
+    if (pathname === '/cnc_cutting/tasks/')
+      return json(page(searchParams.get('in_plan') === 'false' ? 6 : 14));
+    if (pathname === '/machines/')
+      return json(
+        page(2, [
+          { id: 3, name: 'Fiber Lazer', is_active: true },
+          { id: 4, name: 'Plazma', is_active: true },
+        ]),
+      );
+    if (pathname === '/cnc_cutting/planning/list/')
+      return json(
+        searchParams.get('machine_fk') === '3'
+          ? [
+              { key: 'C-1', estimated_hours: '10', planned_end_ms: PLAN_END },
+              { key: 'C-2', estimated_hours: '9', remaining_hours: '4.5' },
+            ]
+          : [],
+      );
+    if (pathname === '/linear_cutting/tasks/')
+      return json(
+        page(2, [
+          {
+            key: 'LC-1',
+            session: 'S-1',
+            session_title: 'Şase',
+            item_name: 'HEA 200',
+            stock_length_mm: 12000,
+            estimated_hours: '1.5',
+            in_plan: false,
+          },
+          { key: 'LC-2', session: 'S-1', estimated_hours: '0.5', in_plan: true },
+        ]),
+      );
+    if (pathname === '/cnc_cutting/remnants/')
+      return json(page(searchParams.get('unassigned') === 'true' ? 17 : 42));
+    if (pathname === '/projects/job-orders/') {
+      if (searchParams.has('target_completion_date__gte')) return json(page(6));
+      if (searchParams.has('target_completion_date__lte')) return json(page(4));
+      return json(page(38));
     }
     if (pathname === '/procurement/items/') return json(page(1240));
     if (pathname === '/equipment/items/') return json(page(87));
@@ -47,35 +105,52 @@ beforeEach(() => {
   });
 });
 
-it('shows the queues planning works through, the active tasks among them', async () => {
+it('leads with what waits on planning: its tasks, the request flow and the requests to pass on', async () => {
   renderWithProviders(<PlanningHubPage />, { route: '/planning/' });
 
   await waitFor(() => expect(document.getElementById('to-transfer')).toHaveTextContent('5'));
-  expect(document.getElementById('erp-entry')).toHaveTextContent('3');
-  await waitFor(() => expect(document.getElementById('planning-mine')).toHaveTextContent('2'));
-  expect(document.getElementById('planning-overdue')).toHaveTextContent('4');
-  expect(within(document.getElementById('planning-mine')!).getByRole('link')).toHaveAttribute(
-    'href',
-    '/planning/projects?assigned_to=42',
-  );
+  await waitFor(() => expect(document.getElementById('planning-active')).toHaveTextContent('19'));
 
-  const queues = screen
-    .getByRole('heading', { name: 'Planlamayı Bekleyenler' })
-    .closest('section')!;
-  await waitFor(() =>
-    expect(within(queues).getByRole('link', { name: /Malzeme maliyeti/ })).toHaveTextContent('8'),
-  );
-  expect(within(queues).getByRole('link', { name: /Stok kontrolü/ })).toHaveAttribute(
+  const waiting = lane('Planlamayı Bekleyenler');
+  // Requests, materials, cost lines and stock: one group of pages.
+  expect(
+    within(within(waiting).getByRole('navigation'))
+      .getAllByRole('link')
+      .map((link) => link.textContent),
+  ).toEqual(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları', 'Stok']);
+
+  // The active tasks first, then the steps in the order a request passes them.
+  const figure = (name: RegExp) => within(waiting).getByRole('link', { name });
+  await waitFor(() => expect(figure(/Aktif planlama görevi/)).toHaveTextContent('19'));
+  const figures = within(waiting)
+    .getAllByRole('link')
+    .filter((link) => link.closest('nav') === null && !link.closest('ul[aria-label]'))
+    .map((link) => link.textContent);
+  expect(figures.slice(0, 6)).toEqual([
+    expect.stringMatching(/^Aktif planlama görevi/),
+    expect.stringMatching(/^Aktarılacak talep/),
+    expect.stringMatching(/^Stok kontrolünde/),
+    expect.stringMatching(/^ERP girişi bekleyen/),
+    expect.stringMatching(/^Maliyet bekleyen iş emri/),
+    expect.stringMatching(/^Talebe dönüşmemiş malzeme/),
+  ]);
+  expect(figure(/Stok kontrolünde/)).toHaveAttribute(
     'href',
     '/planning/department-requests?pr_status=pending_inventory',
   );
-
-  // The active tasks are counted among the queues; the list of tasks by
-  // target date is gone from this hub.
-  const active = within(queues).getByRole('link', { name: /Aktif görevler/ });
-  expect(active).toHaveTextContent('19');
-  expect(active).toHaveAttribute('href', '/planning/projects');
-  expect(screen.queryByRole('heading', { name: 'Teslim Sırası' })).not.toBeInTheDocument();
+  expect(figure(/ERP girişi bekleyen/)).toHaveAttribute(
+    'href',
+    '/planning/department-requests?pr_status=pending_erp_entry',
+  );
+  await waitFor(() => expect(figure(/Maliyet bekleyen iş emri/)).toHaveTextContent('8'));
+  expect(figure(/Talebe dönüşmemiş malzeme/)).toHaveAttribute(
+    'href',
+    '/procurement/purchase-requests/create',
+  );
+  await waitFor(() =>
+    expect(figure(/DT-0187/)).toHaveAttribute('href', '/planning/department-requests?request=187'),
+  );
+  expect(waiting).toHaveTextContent('+1 daha');
 
   // Counts match the Projeler page: the department's main tasks only.
   const tasks = calls().filter((url) => url.pathname === '/projects/department-tasks/');
@@ -84,20 +159,83 @@ it('shows the queues planning works through, the active tasks among them', async
   expect(tasks.every((url) => url.searchParams.get('page_size') === '1')).toBe(true);
 });
 
+it('shows a lane per area with its live figures', async () => {
+  renderWithProviders(<PlanningHubPage />, { route: '/planning/' });
+
+  expect(screen.getAllByRole('region').map((region) => region.getAttribute('aria-label'))).toEqual([
+    'Planlamayı Bekleyenler',
+    'CNC Kesim',
+    'Lineer Kesim',
+    'Projeler',
+  ]);
+
+  // CNC: open and unplanned cuts, each machine's planned load, the remnants.
+  const cnc = lane('CNC Kesim');
+  await waitFor(() => expect(cnc).toHaveTextContent('Açık kesim14'));
+  expect(cnc).toHaveTextContent('Plana alınmamış kesim6');
+  await waitFor(() => expect(cnc).toHaveTextContent('Planlı iş yükü'));
+  await waitFor(() => expect(cnc).toHaveTextContent('14,5 sa'));
+  expect(within(cnc).getByRole('link', { name: /Fiber Lazer/ })).toHaveAttribute(
+    'href',
+    '/planning/cnc-cutting/capacity?machine=3',
+  );
+  // A machine with nothing in its plan is left out.
+  expect(within(cnc).queryByText('Plazma')).not.toBeInTheDocument();
+  await waitFor(() => expect(cnc).toHaveTextContent('17 kullanılmamış42'));
+  const plans = calls().filter((url) => url.pathname === '/cnc_cutting/planning/list/');
+  expect(plans.map((url) => url.searchParams.get('machine_fk')).sort()).toEqual(['3', '4']);
+  expect(plans.every((url) => url.searchParams.get('only_in_plan') === 'true')).toBe(true);
+
+  const linear = lane('Lineer Kesim');
+  await waitFor(() => expect(linear).toHaveTextContent('Açık bar görevi1 kesim planında2'));
+  expect(linear).toHaveTextContent('Plana alınmamış bar1');
+  expect(within(linear).getByRole('link', { name: /LC-1/ })).toHaveAttribute(
+    'href',
+    '/planning/linear-cutting/tasks?session=S-1',
+  );
+
+  // Projeler holds project planning and the task templates.
+  const projects = lane('Projeler');
+  expect(
+    within(within(projects).getByRole('navigation'))
+      .getAllByRole('link')
+      .map((link) => link.textContent),
+  ).toEqual(['Görevler', 'Proje Planlama', 'Görev Şablonları']);
+  await waitFor(() => expect(projects).toHaveTextContent('Bana atanan görev2'));
+  await waitFor(() => expect(projects).toHaveTextContent('Termini geçen iş emri4'));
+  expect(projects).toHaveTextContent('14 gün içinde teslim6');
+});
+
 it('fetches only what the user can open', async () => {
   granted.routes = new Set(['/planning/procurement-lines']);
   renderWithProviders(<PlanningHubPage />, { route: '/planning/' });
 
-  expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
-    'Malzeme Maliyeti Satırları',
-  ]);
+  const waiting = lane('Planlamayı Bekleyenler');
   await waitFor(() =>
-    expect(screen.getByRole('link', { name: /Malzeme maliyeti/ })).toHaveTextContent('8'),
+    expect(within(waiting).getByRole('link', { name: /Maliyet bekleyen/ })).toHaveTextContent('8'),
   );
+  expect(
+    within(waiting)
+      .getAllByRole('link')
+      .map((link) => link.textContent),
+  ).toEqual(['Malzeme Maliyeti Satırları', expect.stringMatching(/^Maliyet bekleyen iş emri/)]);
+  expect(screen.getAllByRole('region')).toHaveLength(1);
   expect(new Set(calls().map((url) => url.pathname))).toEqual(
     new Set(['/projects/job-orders/procurement_pending/']),
   );
-  expect(screen.queryByRole('heading', { name: 'Teslim Sırası' })).not.toBeInTheDocument();
+});
+
+it('a cutting planner sees the CNC lane and its load, nothing else', async () => {
+  granted.routes = new Set(['/planning/cnc-cutting/capacity']);
+  renderWithProviders(<PlanningHubPage />, { route: '/planning/' });
+
+  const cnc = lane('CNC Kesim');
+  await waitFor(() => expect(cnc).toHaveTextContent('14,5 sa'));
+  expect(cnc).not.toHaveTextContent('Açık kesim');
+  expect(screen.getAllByRole('region')).toHaveLength(1);
+  expect(new Set(calls().map((url) => url.pathname))).toEqual(
+    new Set(['/cnc_cutting/tasks/', '/machines/', '/cnc_cutting/planning/list/']),
+  );
 });
 
 it('Stok: counts stock cards and active equipment', async () => {

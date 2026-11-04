@@ -30,7 +30,12 @@ test('old CNC grants open the moved pages and their hubs, nothing more', async (
 
   await main.getByRole('link', { name: 'Planlama sayfasına dön' }).click();
   await expect(page).toHaveURL(/\/planning\/?$/);
-  expect(await cardTitles(page)).toEqual(['CNC Kesim']);
+  // The Planlama hub: only the CNC lane, with the one page the grants open.
+  const regions = main.getByRole('region');
+  await expect(regions).toHaveCount(1);
+  const cnc = main.getByRole('region', { name: 'CNC Kesim' });
+  await expect(cnc.getByRole('navigation').getByRole('link')).toHaveText(['Fire Plakalar']);
+  await expect(cnc).toContainText('Kullanılabilir fire plaka');
   // A section's own hub is the top: no arrow.
   await expect(main.getByRole('link', { name: /sayfasına dön$/ })).toHaveCount(0);
 
