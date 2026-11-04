@@ -1,7 +1,7 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../client';
 import { toPaginated } from '../types';
-import { planningItemKeys } from './planningItems';
+import { planningItemKeys } from '../planning/planningItems';
 
 // Port of apis/warehouse/pullRequests.js (warehouse material pull requests).
 // mark_transferred is left out: only the saha warehouse screen calls it.

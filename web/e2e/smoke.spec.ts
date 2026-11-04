@@ -13,8 +13,8 @@ import {
 } from './fixtures';
 import { MERGED_REPORT_ROUTES } from '../src/routes/mergedReports';
 
-// Smoke tests for the React/legacy split: one origin, one session in
-// localStorage, migrated routes served by the SPA, everything else legacy.
+// Smoke tests for the SPA: one origin, one session in localStorage, every
+// route in src/routes/migrated-routes.json served by the React app.
 // Contracts used here:
 //   /sales/            hub, title "Satış Modülü", four cards (MenuCards)
 //   /sales/customers/  title "Müşteri Yönetimi", table of code + name from
@@ -39,7 +39,7 @@ async function expectCustomersTable(page: import('@playwright/test').Page) {
   }
 }
 
-/** The page is the React SPA, not a legacy page. */
+/** The page is the React SPA (no legacy navbar). */
 async function expectSpa(page: import('@playwright/test').Page) {
   await expect(page.locator('#root')).toHaveCount(1);
   await expect(page.locator('#navbar-container')).toHaveCount(0);

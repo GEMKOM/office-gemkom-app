@@ -3,7 +3,7 @@ import { useForm } from '@mantine/form';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { materialTrackingErrorMessage } from '@/api/materialTracking/errors';
-import type { PlanningItem } from '@/api/materialTracking/planningItems';
+import type { PlanningItem } from '@/api/planning/planningItems';
 import {
   useCreateMaterialPullRequest,
   type MaterialPullRequest,
@@ -48,10 +48,10 @@ interface PullLine {
 function toLine(row: PlanningItem): PullLine {
   return {
     id: row.id,
-    item_code: row.item_code,
-    item_name: row.item_name,
-    job_no: row.job_no,
-    item_unit: row.item_unit,
+    item_code: row.item_code ?? undefined,
+    item_name: row.item_name ?? undefined,
+    job_no: row.job_no ?? undefined,
+    item_unit: row.item_unit ?? undefined,
     received: qty(row.delivered_quantity),
     pulled: qty(row.pulled_quantity),
     // What can still leave the warehouse: received minus what earlier pulls

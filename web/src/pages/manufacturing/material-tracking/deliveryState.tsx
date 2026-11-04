@@ -13,7 +13,7 @@ export interface DeliveryFields {
   is_delivered?: boolean | null;
   delivered_quantity?: Qty;
   quantity?: Qty;
-  item_unit?: string;
+  item_unit?: string | null;
 }
 
 const QTY_FORMAT: Intl.NumberFormatOptions = { minimumFractionDigits: 0, maximumFractionDigits: 2 };

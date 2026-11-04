@@ -9,7 +9,7 @@ import {
   useSetPlanningItemCritical,
   type PlanningItem,
   type PlanningItemsParams,
-} from '@/api/materialTracking/planningItems';
+} from '@/api/planning/planningItems';
 import { useAuth } from '@/auth/AuthProvider';
 import { AppLink } from '@/shell/AppLink';
 import {

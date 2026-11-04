@@ -7,7 +7,7 @@
 // Path traversal (encoded or not) is refused, and every resolved file is checked
 // to really live under the root after symlinks are followed.
 //
-// Shared by the Vite dev plugin (vite/legacyStatic.ts) and scripts/serve-site.mjs.
+// Used by scripts/serve-site.mjs (the e2e server).
 
 import { createReadStream } from 'node:fs';
 import { realpath, stat } from 'node:fs/promises';

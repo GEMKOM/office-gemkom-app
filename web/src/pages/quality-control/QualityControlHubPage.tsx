@@ -9,7 +9,7 @@ import {
   ncrCountQueryOptions,
   OPEN_NCR_STATUSES,
   qcReviewCountQueryOptions,
-} from '@/api/qualityControl';
+} from '@/api/quality-control/hubs';
 import { formatDate } from '@/lib/format';
 import { MenuCards, type MenuCard, type PageFigure } from '@/ui';
 import {

@@ -1,5 +1,5 @@
-// The migrated-routes list (web/src/routes/migrated-routes.json), read the same
-// way by the dev server plugin and the assemble script. The SPA has its own copy
+// The migrated-routes list (web/src/routes/migrated-routes.json), read by the
+// assemble script to write the SPA entry into every route. The SPA has its own copy
 // of normalizeRoute in src/routes/migrated.ts; keep them in step.
 
 import { readFileSync } from 'node:fs';

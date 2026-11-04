@@ -26,7 +26,7 @@ Port 4173 by default (`E2E_PORT` changes it). Locally an already running
   `sessionStorage.postLoginReturnUrl`.
 - Hub → page navigation inside the SPA is client-side (`window.__spaMarker`
   survives).
-- SPA → legacy is a full page load, and back again, with the session intact.
+- Moving between pages keeps the session.
 - A 401 triggers one `POST /token/refresh/` and a retry with the new token.
 - Route permissions: no grant shows "Erişim yetkiniz yok"; a `Page:` grant opens the page.
 - Every route in `src/routes/migrated-routes.json` loads as admin, shows
