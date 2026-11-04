@@ -63,21 +63,23 @@ beforeEach(() => {
       return json(page(searchParams.get('in_plan') === 'false' ? 6 : 14));
     if (pathname === '/machines/')
       return json(
-        page(3, [
+        page(4, [
           { id: 3, name: 'Fiber Lazer', is_active: true },
           { id: 4, name: 'Plazma', is_active: true },
           { id: 5, name: 'Oksijen', is_active: true },
+          { id: 6, name: 'Su Jeti', is_active: true },
         ]),
       );
-    if (pathname === '/cnc_cutting/planning/list/')
-      return json(
-        searchParams.get('machine_fk') === '3'
-          ? [
-              { key: 'C-1', estimated_hours: '10', planned_end_ms: PLAN_END },
-              { key: 'C-2', estimated_hours: '9', remaining_hours: '4.5' },
-            ]
-          : [],
-      );
+    if (pathname === '/cnc_cutting/planning/list/') {
+      const machine = searchParams.get('machine_fk');
+      if (machine === '3')
+        return json([
+          { key: 'C-1', estimated_hours: '10', planned_end_ms: PLAN_END },
+          { key: 'C-2', estimated_hours: '9', remaining_hours: '4.5' },
+        ]);
+      if (machine === '4') return json([{ key: 'C-3', estimated_hours: '2' }]);
+      return json([]);
+    }
     if (pathname === '/linear_cutting/tasks/')
       return json(
         page(2, [
@@ -207,24 +209,35 @@ it('shows a lane per area with its live figures', async () => {
   expect(cnc).toHaveTextContent('Plana alınmamış kesim6');
   await waitFor(() => expect(cnc).toHaveTextContent('Planlı iş yükü'));
   await waitFor(() => expect(cnc).toHaveTextContent('14,5 sa'));
-  // One list: each machine's load, its running timer under its name, the
-  // running machines first. No switch any more.
+  // One list: each machine's load and what it does now (its running timer, or
+  // "Boşta"), the running machines first. No switch any more.
   const load = within(cnc).getByRole('list', { name: 'Makine yükü' });
-  const rows = within(load).getAllByRole('listitem');
-  expect(rows.map((row) => row.textContent)).toEqual([
-    expect.stringMatching(/^Fiber Lazer.*CNC-88 · ayse/),
-    expect.stringMatching(/^Oksijen.*CNC-90 · mehmet/),
-  ]);
+  await waitFor(() =>
+    expect(
+      within(load)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent),
+    ).toEqual([
+      expect.stringMatching(/^Fiber Lazer.*CNC-88 · ayse/),
+      expect.stringMatching(/^Oksijen.*CNC-90 · mehmet/),
+      expect.stringMatching(/^PlazmaBoşta/),
+    ]),
+  );
   expect(within(cnc).queryByRole('button', { name: 'Makine yükü' })).not.toBeInTheDocument();
   expect(within(cnc).getByRole('link', { name: /Fiber Lazer/ })).toHaveAttribute(
     'href',
     '/planning/cnc-cutting/capacity?machine=3',
   );
   // A machine with nothing in its plan and no timer is left out.
-  expect(within(cnc).queryByText('Plazma')).not.toBeInTheDocument();
+  expect(within(cnc).queryByText('Su Jeti')).not.toBeInTheDocument();
   await waitFor(() => expect(cnc).toHaveTextContent('17 kullanılmamış42'));
   const plans = calls().filter((url) => url.pathname === '/cnc_cutting/planning/list/');
-  expect(plans.map((url) => url.searchParams.get('machine_fk')).sort()).toEqual(['3', '4', '5']);
+  expect(plans.map((url) => url.searchParams.get('machine_fk')).sort()).toEqual([
+    '3',
+    '4',
+    '5',
+    '6',
+  ]);
   expect(plans.every((url) => url.searchParams.get('only_in_plan') === 'true')).toBe(true);
 
   const linear = lane('Lineer Kesim');
