@@ -12,7 +12,7 @@ import {
   SHOP_FLOOR_STALE_TIME,
   statementsInApprovalCountQueryOptions,
 } from '@/api/manufacturing/counts';
-import { activeTimersQueryOptions, type Timer } from '@/api/manufacturing/timers';
+import { activeTimersQueryOptions } from '@/api/manufacturing/timers';
 import type { Statement } from '@/api/subcontracting/statements';
 import { weldingHubSummaryQueryOptions, type WeldingHubResource } from '@/api/welding/hubSummary';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
@@ -24,7 +24,6 @@ import {
   taskStatusFamily,
   useDepartmentTaskFigures,
 } from '../../hub/departmentTasks';
-import { LiveDuration } from '../dashboard-shared/parts';
 import {
   AreaLane,
   AreaLanes,
@@ -34,6 +33,7 @@ import {
   type LaneLink,
   type LaneList,
 } from './AreaLane';
+import { sortTimers, timersList } from './timerLane';
 
 // /manufacturing: one lane per area (Kaynaklı İmalat, Talaşlı İmalat, Bakım,
 // Taşeron, Malzeme, Projeler), each with its pages, three live figures and the
@@ -227,23 +227,6 @@ function WeldingLane() {
 
 // ---- Talaşlı İmalat ---------------------------------------------------------
 
-const TIMER_ROWS = 4;
-
-function timerRow(timer: Timer) {
-  const downtime = Boolean(timer.timer_type && timer.timer_type !== 'productive');
-  return {
-    key: timer.id,
-    lead: timer.machine_name || '-',
-    main: downtime ? (
-      <span style={{ color: 'var(--gk-danger)' }}>{timer.downtime_reason_name || 'Duruş'}</span>
-    ) : (
-      [timer.issue_key, timer.issue_name].filter(Boolean).join(' · ') || '-'
-    ),
-    sub: timer.username || undefined,
-    cells: [<LiveDuration key="duration" start={timer.start_time} />],
-  };
-}
-
 function MachiningLane() {
   const links = visibleLinks(LINKS.machining);
   const live = hasRouteAccess(MACHINING_DASHBOARD) && links.length > 0;
@@ -255,9 +238,7 @@ function MachiningLane() {
   });
   const incomplete = useQuery({ ...incompletePartCountQueryOptions(), enabled: parts });
   const late = useQuery({ ...incompletePartCountQueryOptions(yesterday()), enabled: parts });
-  const running = timers.data
-    ? [...timers.data].sort((a, b) => Number(a.start_time ?? 0) - Number(b.start_time ?? 0))
-    : undefined;
+  const running = sortTimers(timers.data);
   return (
     <AreaLane
       title="Talaşlı İmalat"
@@ -297,23 +278,7 @@ function MachiningLane() {
       ]}
       list={
         live
-          ? {
-              title: 'Şu an çalışanlar',
-              columns: [
-                { label: 'Makine', width: '128px' },
-                { label: 'İş · operatör' },
-                { label: 'Süre', width: '84px', align: 'end' },
-              ],
-              more: MACHINING_DASHBOARD,
-              moreLabel: 'Dashboard',
-              rows: running?.slice(0, TIMER_ROWS).map(timerRow),
-              isError: timers.isError,
-              empty: 'Çalışan zamanlayıcı yok.',
-              footnote:
-                running && running.length > TIMER_ROWS
-                  ? `+${formatNumber(running.length - TIMER_ROWS)} zamanlayıcı daha`
-                  : undefined,
-            }
+          ? timersList(running, { isError: timers.isError, dashboard: MACHINING_DASHBOARD })
           : undefined
       }
     />

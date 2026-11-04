@@ -1,6 +1,6 @@
 import { Skeleton } from '@mantine/core';
 import { hasRouteAccess } from '@/auth/accessControl';
-import type { CSSProperties, ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { AppLink } from '@/shell/AppLink';
 import { FaIcon, PendingValue, type StatusFamily } from '@/ui';
 import css from './AreaLane.module.css';
@@ -171,10 +171,55 @@ export interface AreaLaneProps {
   links: LaneLink[];
   figures: LaneFigure[];
   list?: LaneList;
+  /**
+   * Instead of `list`: several lists for the same space, the first shown and a
+   * switch in the footer for the others (e.g. running timers / machine load).
+   */
+  lists?: LaneList[];
 }
 
-export function AreaLane({ title, icon, family, hub, links, figures, list }: AreaLaneProps) {
+/** The footer switch between a lane's lists; the shown one is pressed. */
+function ListSwitch({
+  lists,
+  shown,
+  onShow,
+}: {
+  lists: LaneList[];
+  shown: number;
+  onShow: (index: number) => void;
+}) {
+  return (
+    <span className={css.switch} role="group" aria-label="Liste">
+      {lists.map((item, i) => (
+        <button
+          key={item.title}
+          type="button"
+          className={css.switchButton}
+          aria-pressed={i === shown}
+          onClick={() => onShow(i)}
+        >
+          {item.title}
+        </button>
+      ))}
+    </span>
+  );
+}
+
+export function AreaLane({
+  title,
+  icon,
+  family,
+  hub,
+  links,
+  figures,
+  list: single,
+  lists,
+}: AreaLaneProps) {
+  const all = lists ?? (single ? [single] : []);
+  const [picked, setPicked] = useState(0);
   if (links.length === 0) return null;
+  const shown = Math.min(picked, Math.max(all.length - 1, 0));
+  const list = all[shown];
   const titleLink = hub && hasRouteAccess(hub) ? hub : undefined;
   const tracks = list?.columns.map((column) => column.width ?? 'minmax(0, 1fr)').join(' ');
   return (
@@ -218,9 +263,12 @@ export function AreaLane({ title, icon, family, hub, links, figures, list }: Are
               </div>
               <Rows list={list} />
             </div>
-            {list.footnote || list.more ? (
+            {list.footnote || list.more || all.length > 1 ? (
               <div className={css.footer}>
-                <span>{list.footnote}</span>
+                {all.length > 1 ? (
+                  <ListSwitch lists={all} shown={shown} onShow={setPicked} />
+                ) : null}
+                <span className={css.footnote}>{list.footnote}</span>
                 {list.more ? (
                   <AppLink to={list.more} className={css.more}>
                     {list.moreLabel ?? 'Tümü'} <FaIcon icon="fas fa-arrow-right" />
