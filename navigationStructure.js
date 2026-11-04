@@ -173,29 +173,19 @@ export const NAVIGATION_STRUCTURE = {
         label: 'Planlama',
         icon: 'fas fa-calendar-alt',
         children: {
-            '/planning/projects': {
-                label: 'Projeler',
-                icon: 'fas fa-project-diagram',
-                children: {}
-            },
-            '/planning/project-planning': {
-                label: 'Proje Planlama',
-                icon: 'fas fa-calendar-alt',
-                children: {}
-            },
             '/planning/department-requests': {
                 label: 'Departman Talepleri',
                 icon: 'fas fa-boxes',
                 children: {}
             },
-            '/planning/task-templates': {
-                label: 'Görev Şablonları',
-                icon: 'fas fa-tasks',
-                children: {}
-            },
             '/planning/items': {
                 label: 'Planlama Kalemleri',
                 icon: 'fas fa-list',
+                children: {}
+            },
+            '/planning/procurement-lines': {
+                label: 'Malzeme Maliyeti Satırları',
+                icon: 'fas fa-shopping-cart',
                 children: {}
             },
             '/planning/inventory': {
@@ -214,10 +204,27 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
-            '/planning/procurement-lines': {
-                label: 'Malzeme Maliyeti Satırları',
-                icon: 'fas fa-shopping-cart',
-                children: {}
+            '/planning/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                // The Projeler page is a row of its own: a parent is only a heading.
+                children: {
+                    '/planning/projects': {
+                        label: 'Görevler',
+                        icon: 'fas fa-list-check',
+                        children: {}
+                    },
+                    '/planning/project-planning': {
+                        label: 'Proje Planlama',
+                        icon: 'fas fa-calendar-alt',
+                        children: {}
+                    },
+                    '/planning/task-templates': {
+                        label: 'Görev Şablonları',
+                        icon: 'fas fa-tasks',
+                        children: {}
+                    }
+                }
             },
             '/planning/cnc-cutting': {
                 label: 'CNC Kesim',

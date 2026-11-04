@@ -1,4 +1,3 @@
-import { Button } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import dayjs from 'dayjs';
@@ -18,15 +17,7 @@ import type { Statement } from '@/api/subcontracting/statements';
 import { weldingHubSummaryQueryOptions, type WeldingHubResource } from '@/api/welding/hubSummary';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/format';
 import { useAuth } from '@/auth/AuthProvider';
-import { AppLink } from '@/shell/AppLink';
-import {
-  FaIcon,
-  PageHeader,
-  PendingValue,
-  StatusBadge,
-  type PageFigure,
-  type StatusFamily,
-} from '@/ui';
+import { PageHeader, PendingValue, StatusBadge, type PageFigure, type StatusFamily } from '@/ui';
 import { countValue, type CountQuery } from '../../hubCount';
 import {
   taskDeadlinesQueryOptions,
@@ -37,6 +28,7 @@ import { LiveDuration } from '../dashboard-shared/parts';
 import {
   AreaLane,
   AreaLanes,
+  LaneAlert,
   visibleLinks,
   type LaneFigure,
   type LaneLink,
@@ -64,6 +56,7 @@ const PULL_REQUESTS = '/manufacturing/material-tracking/pull-requests';
 const PROJECTS = '/manufacturing/projects';
 const PLANNING_BOARD = '/planning/project-planning';
 const REPORTS = '/manufacturing/reports';
+/** The report hub link shows when the user can open any of its reports. */
 const REPORT_PAGES = [
   REPORTS,
   '/manufacturing/reports/job-costs',
@@ -124,6 +117,13 @@ function openFor(seconds: number | null | undefined) {
     : `${formatNumber(Math.floor(hours / 24))} gün`;
 }
 
+/** "+3 arıza daha" when the list shows fewer rows than there are. */
+function moreThan(total: number | undefined, shown: number, noun: string) {
+  return total !== undefined && total > shown
+    ? `+${formatNumber(total - shown)} ${noun} daha`
+    : undefined;
+}
+
 /** A figure from a count query; nothing is shown for a page the user can't open. */
 function countFigureFor(
   route: string,
@@ -142,19 +142,22 @@ function resourceRow(resource: WeldingHubResource) {
     link: team ? when('/manufacturing/welding/teams') : when(SUBCONTRACTORS),
     main: resource.short_name || resource.name,
     sub: team ? 'İç ekip' : 'Taşeron',
-    end: (
-      <>
-        {formatNumber(resource.open_tasks)} iş
-        {resource.overdue_tasks ? (
-          <StatusBadge color="red">{formatNumber(resource.overdue_tasks)} gecikmiş</StatusBadge>
-        ) : null}
-        <span>{tonnes(resource.open_kg)}</span>
-      </>
-    ),
+    cells: [
+      formatNumber(resource.open_tasks),
+      resource.overdue_tasks ? (
+        <LaneAlert key="late">{formatNumber(resource.overdue_tasks)}</LaneAlert>
+      ) : (
+        '-'
+      ),
+      tonnes(resource.open_kg),
+    ],
   };
 }
 
 const RESOURCE_ROWS = 4;
+const FAULT_ROWS = 4;
+const STATEMENT_ROWS = 4;
+const PULL_ROWS = 4;
 
 function WeldingLane() {
   const links = visibleLinks(LINKS.welding);
@@ -168,8 +171,15 @@ function WeldingLane() {
   const failed = summary.isError ? '-' : undefined;
   const resources = s?.resources ?? [];
   const list: LaneList = {
-    title: 'Ekipler ve Taşeronlar',
+    title: 'Ekipler ve taşeronlar',
+    columns: [
+      { label: 'Ekip / taşeron' },
+      { label: 'Açık iş', width: '64px', align: 'end' },
+      { label: 'Geciken', width: '72px', align: 'end' },
+      { label: 'Açık tonaj', width: '88px', align: 'end' },
+    ],
     more: when(PLANNING_BOARD),
+    moreLabel: 'Planlama panosu',
     rows: s ? resources.slice(0, RESOURCE_ROWS).map(resourceRow) : undefined,
     isError: summary.isError,
     empty: 'Açık kaynak işi olan ekip ya da taşeron yok.',
@@ -230,7 +240,7 @@ function timerRow(timer: Timer) {
       [timer.issue_key, timer.issue_name].filter(Boolean).join(' · ') || '-'
     ),
     sub: timer.username || undefined,
-    end: <LiveDuration start={timer.start_time} />,
+    cells: [<LiveDuration key="duration" start={timer.start_time} />],
   };
 }
 
@@ -289,7 +299,13 @@ function MachiningLane() {
         live
           ? {
               title: 'Şu an çalışanlar',
+              columns: [
+                { label: 'Makine', width: '128px' },
+                { label: 'İş · operatör' },
+                { label: 'Süre', width: '84px', align: 'end' },
+              ],
               more: MACHINING_DASHBOARD,
+              moreLabel: 'Dashboard',
               rows: running?.slice(0, TIMER_ROWS).map(timerRow),
               isError: timers.isError,
               empty: 'Çalışan zamanlayıcı yok.',
@@ -317,15 +333,13 @@ function faultRow(fault: MachineFault) {
     link: FAULTS,
     lead: fault.machine_name || fault.asset_name || '-',
     main: fault.description || '-',
-    sub:
-      [fault.reported_by_full_name, shortDate(fault.reported_at)].filter(Boolean).join(' · ') ||
-      undefined,
-    end: (
-      <>
-        <StatusBadge color={kind.color}>{kind.label}</StatusBadge>
-        {openFor(fault.open_duration_seconds)}
-      </>
-    ),
+    sub: fault.reported_by_full_name || undefined,
+    cells: [
+      <StatusBadge key="kind" color={kind.color}>
+        {kind.label}
+      </StatusBadge>,
+      openFor(fault.open_duration_seconds) ?? '-',
+    ],
   };
 }
 
@@ -349,7 +363,7 @@ function MaintenanceLane() {
   const latest = useQuery({
     ...listPageQueryOptions<MachineFault>(['machineFaults', 'list'], '/machines/faults/', {
       unresolved: true,
-      page_size: 4,
+      page_size: FAULT_ROWS,
     }),
     select: (page) => page.results.map(faultRow),
     enabled: faultsOpen,
@@ -383,10 +397,18 @@ function MaintenanceLane() {
         faultsOpen
           ? {
               title: 'Açık arızalar',
+              columns: [
+                { label: 'Makine', width: '128px' },
+                { label: 'Arıza · bildiren' },
+                { label: 'Durum', width: '88px' },
+                { label: 'Açık', width: '56px', align: 'end' },
+              ],
               more: FAULTS,
+              moreLabel: 'Tüm arızalar',
               rows: latest.data,
               isError: latest.isError,
               empty: 'Açık arıza yok.',
+              footnote: moreThan(open.data, FAULT_ROWS, 'arıza'),
             }
           : undefined
       }
@@ -408,8 +430,7 @@ function statementRow(statement: Statement) {
     key: statement.id,
     link: `${STATEMENTS}?status=submitted`,
     main: statement.subcontractor_name || '-',
-    sub: period,
-    end: formatCurrency(statement.grand_total, statement.currency || 'TRY', 0),
+    cells: [period ?? '-', formatCurrency(statement.grand_total, statement.currency || 'TRY', 0)],
   };
 }
 
@@ -435,7 +456,7 @@ function SubcontractingLane() {
       '/subcontracting/statements/',
       {
         status: 'submitted',
-        page_size: 4,
+        page_size: STATEMENT_ROWS,
       },
     ),
     select: (page) => page.results.map(statementRow),
@@ -469,10 +490,17 @@ function SubcontractingLane() {
         statements
           ? {
               title: 'Onay bekleyen hakedişler',
+              columns: [
+                { label: 'Onay bekleyen hakediş' },
+                { label: 'Dönem', width: '120px' },
+                { label: 'Tutar', width: '120px', align: 'end' },
+              ],
               more: `${STATEMENTS}?status=submitted`,
+              moreLabel: 'Onay bekleyenler',
               rows: waiting.data,
               isError: waiting.isError,
               empty: 'Onay bekleyen hakediş yok.',
+              footnote: moreThan(submitted.data, STATEMENT_ROWS, 'hakediş'),
             }
           : undefined
       }
@@ -488,10 +516,8 @@ function pullRequestRow(request: MaterialPullRequest) {
     link: `${PULL_REQUESTS}?status=pending`,
     lead: request.number,
     main: request.destination_name || '-',
-    sub:
-      [request.job_nos?.join(', '), request.requested_by_name].filter(Boolean).join(' · ') ||
-      undefined,
-    end: shortDate(request.requested_at),
+    sub: request.job_nos?.join(', ') || undefined,
+    cells: [request.requested_by_name || '-', shortDate(request.requested_at) ?? '-'],
   };
 }
 
@@ -512,7 +538,7 @@ function MaterialsLane() {
       '/warehouse/pull-requests/',
       {
         status: 'pending',
-        page_size: 4,
+        page_size: PULL_ROWS,
       },
     ),
     select: (page) => page.results.map(pullRequestRow),
@@ -549,10 +575,18 @@ function MaterialsLane() {
         requests
           ? {
               title: 'Bekleyen çekme talepleri',
+              columns: [
+                { label: 'Talep', width: '96px' },
+                { label: 'Hedef · iş no' },
+                { label: 'Talep eden', width: '136px' },
+                { label: 'Tarih', width: '64px', align: 'end' },
+              ],
               more: `${PULL_REQUESTS}?status=pending`,
+              moreLabel: 'Bekleyen talepler',
               rows: latest.data,
               isError: latest.isError,
               empty: 'Depoda bekleyen talep yok.',
+              footnote: moreThan(pending.data, PULL_ROWS, 'talep'),
             }
           : undefined
       }
@@ -563,7 +597,12 @@ function MaterialsLane() {
 // ---- Projeler ---------------------------------------------------------------
 
 function ProjectsLane() {
-  const links = visibleLinks(LINKS.projects);
+  const links = [
+    ...visibleLinks(LINKS.projects),
+    ...(REPORT_PAGES.some((route) => hasRouteAccess(route))
+      ? [{ label: 'Raporlar', link: REPORTS }]
+      : []),
+  ];
   const { user } = useAuth();
   const { enabled, active, mine, overdue } = useDepartmentTaskFigures('manufacturing', PROJECTS);
   const day = today();
@@ -575,25 +614,19 @@ function ProjectsLane() {
         return {
           key: task.id,
           link: `${PROJECTS}?task=${task.id}`,
-          lead: task.job_order ?? undefined,
+          lead: task.job_order || '-',
           main: task.job_order_title || task.title || '-',
           sub: task.assigned_to_name || undefined,
-          end: (
-            <>
-              <StatusBadge color={taskStatusFamily(task.status)}>
-                {task.status_display || task.status || '-'}
-              </StatusBadge>
-              <span
-                style={
-                  target && target < day
-                    ? { color: 'var(--gk-danger)', fontWeight: 600 }
-                    : undefined
-                }
-              >
-                {shortDate(target)}
-              </span>
-            </>
-          ),
+          cells: [
+            <StatusBadge key="status" color={taskStatusFamily(task.status)}>
+              {task.status_display || task.status || '-'}
+            </StatusBadge>,
+            target && target < day ? (
+              <LaneAlert key="target">{shortDate(target)}</LaneAlert>
+            ) : (
+              (shortDate(target) ?? '-')
+            ),
+          ],
         };
       }),
     enabled,
@@ -628,7 +661,14 @@ function ProjectsLane() {
         enabled
           ? {
               title: 'Teslim sırası',
+              columns: [
+                { label: 'İş', width: '56px' },
+                { label: 'Görev · sorumlu' },
+                { label: 'Durum', width: '128px' },
+                { label: 'Hedef', width: '64px', align: 'end' },
+              ],
               more: PROJECTS,
+              moreLabel: 'Tüm görevler',
               rows: tasks.data,
               isError: tasks.isError,
               empty: 'Hedef tarihi olan açık görev yok.',
@@ -724,31 +764,6 @@ function useBandFigures(): PageFigure[] {
 
 export function ManufacturingSectionHubPage() {
   const stats = useBandFigures();
-  const reports = REPORT_PAGES.some((route) => hasRouteAccess(route));
-  const actions =
-    hasRouteAccess(FAULTS) || reports ? (
-      <>
-        {hasRouteAccess(FAULTS) ? (
-          <Button
-            component={AppLink}
-            to={FAULTS}
-            leftSection={<FaIcon icon="fas fa-triangle-exclamation" />}
-          >
-            Arıza Bildir
-          </Button>
-        ) : null}
-        {reports ? (
-          <Button
-            component={AppLink}
-            to={REPORTS}
-            variant="default"
-            leftSection={<FaIcon icon="fas fa-chart-pie" />}
-          >
-            Raporlar
-          </Button>
-        ) : null}
-      </>
-    ) : undefined;
   return (
     <>
       <PageHeader
@@ -756,7 +771,6 @@ export function ManufacturingSectionHubPage() {
         subtitle="Alan alan atölyenin güncel durumu"
         stats={stats}
         figureStyle="tiles"
-        actions={actions}
       />
       <AreaLanes>
         <WeldingLane />

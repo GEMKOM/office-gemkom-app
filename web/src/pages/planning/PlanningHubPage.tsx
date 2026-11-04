@@ -1,7 +1,6 @@
 import { hasRouteAccess } from '@legacy/apis/accessControl.js';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
-import type { ReactNode } from 'react';
 import { HUB_STALE_TIME } from '@/api/counts';
 import {
   cuttingPlanQueryOptions,
@@ -9,57 +8,47 @@ import {
 } from '@/api/manufacturing/capacityPlanning';
 import { pendingCncCutCountQueryOptions } from '@/api/manufacturing/counts';
 import type { LinearCuttingTask } from '@/api/manufacturing/linearCutting';
-import type { RemnantPlate } from '@/api/manufacturing/remnants';
 import type { DepartmentRequest } from '@/api/general/departmentRequests';
 import {
   approvedDepartmentRequestsPageQueryOptions,
   departmentRequestsToTransferCountQueryOptions,
-  equipmentCountQueryOptions,
   jobOrdersByTerminQueryOptions,
   openJobOrderCountQueryOptions,
   openLinearTasksPageQueryOptions,
   planningRequestCountQueryOptions,
   procurementLinesPendingCountQueryOptions,
-  recentRemnantsQueryOptions,
   remnantCountQueryOptions,
   requestablePlanningItemCountQueryOptions,
-  stockCardCountQueryOptions,
   unplannedCncCutCountQueryOptions,
 } from '@/api/planning/hubs';
 import type { JobOrder } from '@/api/projects/jobOrders';
 import { machinesQueryOptions } from '@/api/reference/machines';
+import { useAuth } from '@/auth/AuthProvider';
 import { formatDate, formatNumber, toNumber } from '@/lib/format';
-import { AppLink } from '@/shell/AppLink';
-import {
-  FaIcon,
-  PageHeader,
-  PendingValue,
-  StatusBadge,
-  type PageFigure,
-  type StatusFamily,
-} from '@/ui';
+import { PageHeader, StatusBadge, type PageFigure } from '@/ui';
 import { useDepartmentTaskFigures } from '../hub/departmentTasks';
 import { countFigure, countValue, type CountQuery } from '../hubCount';
 import {
   AreaLane,
   AreaLanes,
-  LaneRecords,
+  LaneAlert,
   visibleLinks,
   type LaneFigure,
   type LaneLink,
-  type LaneList,
   type LaneRow,
 } from '../manufacturing/section/AreaLane';
 import css from './PlanningHubPage.module.css';
 
-// /planning: what waits on planning first (its tasks, the steps a request
-// passes and the requests to pass on), then one lane per area with its
-// pages, three live figures and the few records that matter. A block, a
-// figure and its request exist only when the user can open the page behind.
+// /planning: one lane per area in the İmalat hub's lane view. First what
+// waits on planning (the active tasks and the steps a request passes, next to
+// the requests, materials, cost lines and stock pages), then CNC and linear
+// cutting, then Projeler with project planning and the task templates. A lane,
+// a figure and its request exist only when the user can open the page behind.
 
 const REQUESTS = '/planning/department-requests';
 const ITEMS = '/planning/items';
 const PROCUREMENT_LINES = '/planning/procurement-lines';
+const INVENTORY = '/planning/inventory';
 const PROJECTS = '/planning/projects';
 const PURCHASE_CREATE = '/procurement/purchase-requests/create';
 const CNC = '/planning/cnc-cutting';
@@ -69,17 +58,16 @@ const REMNANTS = '/planning/cnc-cutting/remnants';
 const LINEAR = '/planning/linear-cutting';
 const LINEAR_TASKS = '/planning/linear-cutting/tasks';
 const LINEAR_CAPACITY = '/planning/linear-cutting/capacity';
-const INVENTORY = '/planning/inventory';
-const STOCK_CARDS = '/planning/inventory/cards';
-const EQUIPMENT = '/planning/inventory/equipment';
 const TRACKING = '/projects/project-tracking';
 const TRACKING_OPEN = `${TRACKING}?status=active&status=on_hold&ordering=target_completion_date`;
 
 const LINKS = {
-  requests: [
+  // Requests, materials, cost lines and stock: one group on the hub.
+  waiting: [
     { label: 'Departman Talepleri', link: REQUESTS },
     { label: 'Planlama Kalemleri', link: ITEMS },
     { label: 'Malzeme Maliyeti Satırları', link: PROCUREMENT_LINES },
+    { label: 'Stok', link: INVENTORY },
   ],
   cnc: [
     { label: 'Kesimler', link: CNC_CUTS },
@@ -94,13 +82,9 @@ const LINKS = {
     { label: 'Kapasite Planlayıcı', link: LINEAR_CAPACITY },
     { label: 'Dashboard', link: '/planning/linear-cutting/dashboard' },
   ],
-  stock: [
-    { label: 'Stok', link: INVENTORY },
-    { label: 'Stok Kartları', link: STOCK_CARDS },
-    { label: 'Ekipman', link: EQUIPMENT },
-  ],
+  // Projeler holds project planning and the task templates.
   projects: [
-    { label: 'Projeler', link: PROJECTS },
+    { label: 'Görevler', link: PROJECTS },
     { label: 'Proje Planlama', link: '/planning/project-planning' },
     { label: 'Görev Şablonları', link: '/planning/task-templates' },
   ],
@@ -127,52 +111,11 @@ function countLaneFigure(
   return hasRouteAccess(route) ? [{ ...figure, value: countValue(query) }] : [];
 }
 
+/** "+3 daha" under a list cut to its first rows. */
+const more = (total: number | undefined, shown: number) =>
+  total !== undefined && total > shown ? `+${formatNumber(total - shown)} daha` : undefined;
+
 // ---- Planlamayı Bekleyenler -------------------------------------------------
-
-interface FlowStep {
-  id: string;
-  label: string;
-  hint: string;
-  color: StatusFamily;
-  link: string;
-  count: CountQuery;
-}
-
-function FlowSteps({ steps }: { steps: FlowStep[] }) {
-  return (
-    <div>
-      <div className={css.colHead}>Talep akışı</div>
-      <ol className={css.flow}>
-        {steps.map((step, index) => {
-          const { data, isError } = step.count;
-          const waiting = Boolean(data);
-          return (
-            <li key={step.id}>
-              <AppLink
-                to={step.link}
-                className={css.step}
-                data-family={waiting ? step.color : 'grey'}
-                data-idle={!waiting || undefined}
-              >
-                <span className={css.stepNo} aria-hidden>
-                  {index + 1}
-                </span>
-                <span className={css.stepText}>
-                  <span className={css.stepLabel}>{step.label}</span>
-                  <span className={css.stepHint}>{step.hint}</span>
-                </span>
-                <b className={css.stepCount}>
-                  {isError ? '-' : data === undefined ? <PendingValue /> : formatNumber(data)}
-                </b>
-                <FaIcon icon="fas fa-chevron-right" className={css.chevron} />
-              </AppLink>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
 
 function requestRow(request: DepartmentRequest, today: string): LaneRow {
   const needed = request.needed_date ?? undefined;
@@ -181,20 +124,20 @@ function requestRow(request: DepartmentRequest, today: string): LaneRow {
     link: `${REQUESTS}?request=${request.id}`,
     lead: request.request_number || `#${request.id}`,
     main: request.title || '-',
-    sub:
-      [request.department_label || request.department, request.requestor_username]
-        .filter(Boolean)
-        .join(' · ') || undefined,
-    end: needed ? (
-      <span className={css.date} data-alert={needed < today || undefined}>
-        ihtiyaç {shortDate(needed)}
-      </span>
-    ) : undefined,
+    sub: request.requestor_username || undefined,
+    cells: [
+      request.department_label || request.department || '-',
+      needed && needed < today ? (
+        <LaneAlert key="needed">{shortDate(needed)}</LaneAlert>
+      ) : (
+        (shortDate(needed) ?? '-')
+      ),
+    ],
   };
 }
 
-function WaitingForPlanning() {
-  const links = visibleLinks(LINKS.requests);
+function WaitingLane() {
+  const links = visibleLinks(LINKS.waiting);
   const canRequests = hasRouteAccess(REQUESTS);
   const canLines = hasRouteAccess(PROCUREMENT_LINES);
   const canItems = hasRouteAccess(ITEMS);
@@ -223,127 +166,86 @@ function WaitingForPlanning() {
   });
   const requests = useQuery({
     ...approvedDepartmentRequestsPageQueryOptions(ROWS),
-    select: (page) => page.results.map((request) => requestRow(request, today)),
     enabled: canRequests,
   });
 
-  // In the order a request passes them.
-  const steps: FlowStep[] = [];
-  if (canRequests) {
-    steps.push(
-      {
-        id: 'flow-transfer',
-        label: 'Aktarılacak departman talebi',
-        hint: 'Onaylandı, planlama talebi açılmadı',
-        color: 'yellow',
-        link: REQUESTS,
-        count: toTransfer,
-      },
-      {
-        id: 'flow-stock',
-        label: 'Stok kontrolü',
-        hint: 'Planlama talebi stokta kontrol ediliyor',
-        color: 'blue',
-        link: `${REQUESTS}?pr_status=pending_inventory`,
-        count: stockCheck,
-      },
-      {
-        id: 'flow-erp',
-        label: 'ERP girişi',
-        hint: "Planlama talebi ERP'ye girilmedi",
-        color: 'yellow',
-        link: `${REQUESTS}?pr_status=pending_erp_entry`,
-        count: erpEntry,
-      },
-    );
-  }
-  if (canLines) {
-    steps.push({
-      id: 'flow-cost',
-      label: 'Malzeme maliyeti',
-      hint: 'İş emrinde maliyet satırı yok',
-      color: 'orange',
-      link: PROCUREMENT_LINES,
-      count: missingCost,
-    });
-  }
-  if (canItems) {
-    steps.push({
-      id: 'flow-requestable',
-      label: 'Talebe dönüşmemiş malzeme',
-      hint: 'Satın alma talebi açılmamış kalem',
-      color: 'purple',
-      link: when(PURCHASE_CREATE) ?? ITEMS,
-      count: requestable,
-    });
-  }
-
-  const columns: ReactNode[] = [];
-  if (tasks.enabled) {
-    const mini = (label: string, link: string, query: CountQuery, alert = false) => (
-      <li>
-        <AppLink
-          to={link}
-          className={css.mini}
-          data-alert={(alert && Boolean(query.data)) || undefined}
-        >
-          <span>{label}</span>
-          <b>{countValue(query) ?? <PendingValue />}</b>
-        </AppLink>
-      </li>
-    );
-    columns.push(
-      <div key="tasks">
-        <AppLink to={PROJECTS} className={css.big}>
-          <b>{countValue(tasks.active) ?? <PendingValue />}</b>
-          <span>aktif planlama görevi</span>
-        </AppLink>
-        <ul className={css.minis}>
-          {mini('Bana atanan', tasks.figures[0]!.link!, tasks.mine)}
-          {mini('Hedefi geçen', PROJECTS, tasks.overdue, true)}
-          {mini('Engellenen', `${PROJECTS}?status=blocked`, tasks.blocked, true)}
-        </ul>
-      </div>,
-    );
-  }
-  if (steps.length > 0) columns.push(<FlowSteps key="flow" steps={steps} />);
-  if (canRequests) {
-    const list: LaneList = {
-      title: 'Aktarılacak departman talepleri',
-      more: REQUESTS,
-      rows: requests.data,
-      isError: requests.isError,
-      empty: 'Aktarılmayı bekleyen departman talebi yok.',
-    };
-    columns.push(<LaneRecords key="requests" list={list} />);
-  }
-
-  if (links.length === 0 && columns.length === 0) return null;
+  // The active tasks first, then the steps in the order a request passes them.
+  const figures: LaneFigure[] = [
+    ...(tasks.enabled
+      ? [
+          {
+            id: 'waiting-tasks',
+            label: 'Aktif planlama görevi',
+            value: countValue(tasks.active),
+            link: PROJECTS,
+          },
+        ]
+      : []),
+    ...(canRequests
+      ? [
+          {
+            id: 'flow-transfer',
+            label: 'Aktarılacak talep',
+            hint: 'onaylı',
+            value: countValue(toTransfer),
+            link: REQUESTS,
+          },
+          {
+            id: 'flow-stock',
+            label: 'Stok kontrolünde',
+            value: countValue(stockCheck),
+            link: `${REQUESTS}?pr_status=pending_inventory`,
+          },
+          {
+            id: 'flow-erp',
+            label: 'ERP girişi bekleyen',
+            value: countValue(erpEntry),
+            link: `${REQUESTS}?pr_status=pending_erp_entry`,
+          },
+        ]
+      : []),
+    ...countLaneFigure(
+      PROCUREMENT_LINES,
+      { id: 'flow-cost', label: 'Maliyet bekleyen iş emri', link: PROCUREMENT_LINES },
+      missingCost,
+    ),
+    ...(canItems
+      ? [
+          {
+            id: 'flow-requestable',
+            label: 'Talebe dönüşmemiş malzeme',
+            value: countValue(requestable),
+            link: when(PURCHASE_CREATE) ?? ITEMS,
+          },
+        ]
+      : []),
+  ];
   return (
-    <section className={css.lead} aria-labelledby="planning-waiting">
-      <div className={css.leadHead}>
-        <h2 id="planning-waiting" className={css.title}>
-          <span className={css.tile} data-family="brand" aria-hidden>
-            <FaIcon icon="fas fa-inbox" />
-          </span>
-          Planlamayı Bekleyenler
-        </h2>
-        {links.length > 0 ? (
-          <nav className={css.links} aria-label="Talep sayfaları">
-            {links.map((item) => (
-              <AppLink key={item.link} to={item.link}>
-                {item.label}
-              </AppLink>
-            ))}
-          </nav>
-        ) : null}
-      </div>
-      {columns.length > 0 ? (
-        <div className={css.leadBody} data-columns={columns.length}>
-          {columns}
-        </div>
-      ) : null}
-    </section>
+    <AreaLane
+      title="Planlamayı Bekleyenler"
+      icon="fas fa-inbox"
+      family="red"
+      links={links}
+      figures={figures}
+      list={
+        canRequests
+          ? {
+              title: 'Aktarılacak departman talepleri',
+              columns: [
+                { label: 'Talep', width: '120px' },
+                { label: 'Talep · talep eden' },
+                { label: 'Departman', width: '128px' },
+                { label: 'İhtiyaç', width: '72px', align: 'end' },
+              ],
+              more: REQUESTS,
+              rows: requests.data?.results.map((request) => requestRow(request, today)),
+              isError: requests.isError,
+              empty: 'Aktarılmayı bekleyen departman talebi yok.',
+              footnote: more(requests.data?.count, ROWS),
+            }
+          : undefined
+      }
+    />
   );
 }
 
@@ -379,14 +281,15 @@ function LoadBar({ share }: { share: number }) {
 
 function CncLane() {
   const links = visibleLinks(LINKS.cnc);
+  const shown = links.length > 0;
   const canCuts = hasRouteAccess(CNC_CUTS);
   const canPlan = hasRouteAccess(CNC_CAPACITY);
+  const canRemnants = shown && hasRouteAccess(REMNANTS);
   const open = useQuery({ ...pendingCncCutCountQueryOptions(), enabled: canCuts });
   const unplanned = useQuery({ ...unplannedCncCutCountQueryOptions(), enabled: canPlan });
+  const remnants = useQuery({ ...remnantCountQueryOptions(), enabled: canRemnants });
+  const unused = useQuery({ ...remnantCountQueryOptions(true), enabled: canRemnants });
   const machines = useQuery({ ...machinesQueryOptions({ used_in: 'cutting' }), enabled: canPlan });
-  // Without the cuts or the planner, the remnants are this lane's figure.
-  const remnantsOnly = !canCuts && !canPlan && hasRouteAccess(REMNANTS);
-  const remnants = useQuery({ ...remnantCountQueryOptions(), enabled: remnantsOnly });
   const list = (machines.data?.results ?? []).filter((m) => m.is_active !== false);
   // One in-plan list per machine, as the planner reads it.
   const plans = useQueries({
@@ -396,7 +299,7 @@ function CncLane() {
       enabled: canPlan,
     })),
   });
-  if (links.length === 0) return null;
+  if (!shown) return null;
 
   const loadFailed = machines.isError || plans.some((plan) => plan.isError);
   const loads =
@@ -423,7 +326,7 @@ function CncLane() {
       CNC_CAPACITY,
       {
         id: 'cnc-unplanned',
-        label: 'Plana alınmamış',
+        label: 'Plana alınmamış kesim',
         link: CNC_CAPACITY,
         alert: Boolean(unplanned.data),
       },
@@ -434,53 +337,25 @@ function CncLane() {
           {
             id: 'cnc-load',
             label: 'Planlı iş yükü',
-            value: loadFailed ? '-' : total === undefined ? undefined : hours(total),
             hint: lastEnd ? `son bitiş ${shortDate(lastEnd)}` : undefined,
+            value: loadFailed ? '-' : total === undefined ? undefined : hours(total),
             link: CNC_CAPACITY,
           },
         ]
       : []),
-    ...(remnantsOnly
+    ...(canRemnants
       ? [
           {
-            id: 'cnc-remnants',
+            id: 'remnants',
             label: 'Kullanılabilir fire plaka',
+            hint:
+              unused.data !== undefined ? `${formatNumber(unused.data)} kullanılmamış` : undefined,
             value: countValue(remnants),
             link: REMNANTS,
           },
         ]
       : []),
   ];
-  const records: LaneList | undefined = canPlan
-    ? {
-        title: 'Makine yükü',
-        more: CNC_CAPACITY,
-        moreLabel: 'Planlayıcı',
-        rows: loads?.slice(0, ROWS).map((load) => ({
-          key: load.id,
-          link: `${CNC_CAPACITY}?machine=${load.id}`,
-          main: load.name,
-          sub: [
-            `${formatNumber(load.cuts)} kesim`,
-            load.endMs ? `bitiş ${shortDate(load.endMs)}` : null,
-          ]
-            .filter(Boolean)
-            .join(' · '),
-          end: (
-            <>
-              <LoadBar share={top ? load.hours / top : 0} />
-              {hours(load.hours)}
-            </>
-          ),
-        })),
-        isError: loadFailed,
-        empty: 'Plana alınmış kesim yok.',
-        footnote:
-          loads && loads.length > ROWS
-            ? `+${formatNumber(loads.length - ROWS)} makine daha`
-            : undefined,
-      }
-    : undefined;
   return (
     <AreaLane
       title="CNC Kesim"
@@ -489,7 +364,37 @@ function CncLane() {
       hub={CNC}
       links={links}
       figures={figures}
-      list={records}
+      list={
+        canPlan
+          ? {
+              title: 'Makine yükü',
+              columns: [
+                { label: 'Makine' },
+                { label: 'Kesim', width: '64px', align: 'end' },
+                { label: 'Bitiş', width: '72px', align: 'end' },
+                { label: 'Planlı yük', width: '144px', align: 'end' },
+              ],
+              more: CNC_CAPACITY,
+              moreLabel: 'Kapasite Planlayıcı',
+              rows: loads?.slice(0, ROWS).map((load) => ({
+                key: load.id,
+                link: `${CNC_CAPACITY}?machine=${load.id}`,
+                main: load.name,
+                cells: [
+                  formatNumber(load.cuts),
+                  shortDate(load.endMs) ?? '-',
+                  <span key="load" className={css.load}>
+                    <LoadBar share={top ? load.hours / top : 0} />
+                    {hours(load.hours)}
+                  </span>,
+                ],
+              })),
+              isError: loadFailed,
+              empty: 'Plana alınmış kesim yok.',
+              footnote: loads ? more(loads.length, ROWS) : undefined,
+            }
+          : undefined
+      }
     />
   );
 }
@@ -505,14 +410,9 @@ function linearRow(task: LinearCuttingTask): LaneRow {
       ? `${LINEAR_TASKS}?session=${encodeURIComponent(task.session)}`
       : LINEAR_TASKS,
     lead: task.key,
-    main: [
-      task.item_name || task.name || task.material || '-',
-      length ? `${formatNumber(length)} mm` : null,
-    ]
-      .filter(Boolean)
-      .join(' · '),
+    main: task.item_name || task.name || task.material || '-',
     sub: task.session_title || task.session || undefined,
-    end: est ? hours(est) : undefined,
+    cells: [length ? `${formatNumber(length)} mm` : '-', est ? hours(est) : '-'],
   };
 }
 
@@ -535,35 +435,26 @@ function LinearLane() {
         {
           id: 'linear-open',
           label: 'Açık bar görevi',
-          value: failed ?? (page ? formatNumber(page.count) : undefined),
           hint: sessions ? `${formatNumber(sessions)} kesim planında` : undefined,
+          value: failed ?? (page ? formatNumber(page.count) : undefined),
           link: `${LINEAR_TASKS}?completed=false`,
         },
         {
           id: 'linear-unplanned',
-          label: 'Plana alınmamış',
-          value: failed ?? (unplanned === undefined ? undefined : formatNumber(unplanned)),
+          label: 'Plana alınmamış bar',
           hint: scope,
+          value: failed ?? (unplanned === undefined ? undefined : formatNumber(unplanned)),
           link: when(LINEAR_CAPACITY),
           alert: Boolean(unplanned),
         },
         {
           id: 'linear-hours',
           label: 'Tahmini süre',
+          hint: scope ?? 'açık görevler',
           value: failed ?? (est === undefined ? undefined : hours(est)),
-          hint: scope ?? 'açık görevlerin toplamı',
         },
       ]
     : [];
-  const records: LaneList | undefined = canTasks
-    ? {
-        title: 'Açık bar görevleri',
-        more: `${LINEAR_TASKS}?completed=false`,
-        rows: page?.results.slice(0, ROWS - 1).map(linearRow),
-        isError: tasks.isError,
-        empty: 'Açık bar görevi yok.',
-      }
-    : undefined;
   return (
     <AreaLane
       title="Lineer Kesim"
@@ -572,104 +463,29 @@ function LinearLane() {
       hub={LINEAR}
       links={links}
       figures={figures}
-      list={records}
-    />
-  );
-}
-
-// ---- Stok ---------------------------------------------------------------------
-
-function remnantRow(plate: RemnantPlate): LaneRow {
-  const thickness = toNumber(plate.thickness_mm);
-  const filter = new URLSearchParams();
-  if (plate.thickness_mm != null) filter.set('thickness_mm', String(plate.thickness_mm));
-  if (plate.dimensions) filter.set('dimensions', plate.dimensions);
-  return {
-    key: plate.id,
-    link: `${REMNANTS}?${filter.toString()}`,
-    main:
-      [thickness !== null ? `${formatNumber(thickness)} mm` : null, plate.dimensions]
-        .filter(Boolean)
-        .join(' · ') || '-',
-    sub:
-      [plate.material, plate.heat_number ? `şarj ${plate.heat_number}` : null]
-        .filter(Boolean)
-        .join(' · ') || undefined,
-    end:
-      plate.available_quantity != null
-        ? `${formatNumber(plate.available_quantity)} adet`
-        : undefined,
-  };
-}
-
-function StockLane() {
-  const links = visibleLinks(LINKS.stock);
-  const shown = links.length > 0;
-  const canRemnants = shown && hasRouteAccess(REMNANTS);
-  const remnants = useQuery({ ...remnantCountQueryOptions(), enabled: canRemnants });
-  const unused = useQuery({ ...remnantCountQueryOptions(true), enabled: canRemnants });
-  const recent = useQuery({
-    ...recentRemnantsQueryOptions(ROWS - 1),
-    select: (page) => page.results.map(remnantRow),
-    enabled: canRemnants,
-  });
-  const cards = useQuery({ ...stockCardCountQueryOptions(), enabled: hasRouteAccess(STOCK_CARDS) });
-  const equipment = useQuery({
-    ...equipmentCountQueryOptions(),
-    enabled: hasRouteAccess(EQUIPMENT),
-  });
-  if (!shown) return null;
-
-  const figures: LaneFigure[] = [
-    ...(canRemnants
-      ? [
-          {
-            id: 'remnants',
-            label: 'Kullanılabilir fire plaka',
-            value: countValue(remnants),
-            hint:
-              unused.data !== undefined
-                ? `hiç kullanılmamış: ${formatNumber(unused.data)}`
-                : undefined,
-            link: REMNANTS,
-          },
-        ]
-      : []),
-    ...countLaneFigure(
-      STOCK_CARDS,
-      { id: 'stock-cards', label: 'Stok kartı', link: STOCK_CARDS },
-      cards,
-    ),
-    ...countLaneFigure(
-      EQUIPMENT,
-      { id: 'equipment', label: 'Aktif ekipman', link: EQUIPMENT },
-      equipment,
-    ),
-  ];
-  const records: LaneList | undefined = canRemnants
-    ? {
-        title: 'Son eklenen fire plakalar',
-        more: REMNANTS,
-        moreLabel: 'Fire Plakalar',
-        rows: recent.data,
-        isError: recent.isError,
-        empty: 'Kullanılabilir fire plaka yok.',
+      list={
+        canTasks
+          ? {
+              title: 'Açık bar görevleri',
+              columns: [
+                { label: 'Görev', width: '88px' },
+                { label: 'Malzeme · kesim planı' },
+                { label: 'Boy', width: '88px', align: 'end' },
+                { label: 'Süre', width: '64px', align: 'end' },
+              ],
+              more: `${LINEAR_TASKS}?completed=false`,
+              rows: page?.results.slice(0, ROWS).map(linearRow),
+              isError: tasks.isError,
+              empty: 'Açık bar görevi yok.',
+              footnote: more(page?.count, ROWS),
+            }
+          : undefined
       }
-    : undefined;
-  return (
-    <AreaLane
-      title="Stok"
-      icon="fas fa-warehouse"
-      family="orange"
-      hub={INVENTORY}
-      links={links}
-      figures={figures}
-      list={records}
     />
   );
 }
 
-// ---- Proje --------------------------------------------------------------------
+// ---- Projeler -----------------------------------------------------------------
 
 function jobRow(job: JobOrder, today: string, canOpen: boolean): LaneRow {
   const target = job.target_completion_date ?? undefined;
@@ -680,29 +496,32 @@ function jobRow(job: JobOrder, today: string, canOpen: boolean): LaneRow {
     lead: job.job_no,
     main: job.title,
     sub: job.customer_short_name || job.customer_name || undefined,
-    end: (
-      <>
-        {job.status === 'on_hold' ? (
-          <StatusBadge color="orange">Beklemede</StatusBadge>
-        ) : done !== null ? (
-          <StatusBadge color="blue">%{formatNumber(done, 0)}</StatusBadge>
-        ) : null}
-        {target ? (
-          <span className={css.date} data-alert={target < today || undefined}>
-            {formatDate(target, { day: 'numeric', month: 'short', year: '2-digit' })}
-          </span>
-        ) : null}
-      </>
-    ),
+    cells: [
+      job.status === 'on_hold' ? (
+        <StatusBadge key="status" color="orange">
+          Beklemede
+        </StatusBadge>
+      ) : (
+        <StatusBadge key="status" color="blue">
+          {done !== null ? `%${formatNumber(done, 0)}` : 'Aktif'}
+        </StatusBadge>
+      ),
+      target && target < today ? (
+        <LaneAlert key="target">{shortDate(target)}</LaneAlert>
+      ) : (
+        (shortDate(target) ?? '-')
+      ),
+    ],
   };
 }
 
 function ProjectsLane() {
   const links = visibleLinks(LINKS.projects);
   const shown = links.length > 0;
+  const { user } = useAuth();
+  const tasks = useDepartmentTaskFigures('planning', PROJECTS);
   const canOpen = hasRouteAccess(TRACKING);
   const today = dayOf();
-  const open = useQuery({ ...openJobOrderCountQueryOptions(), enabled: shown });
   const late = useQuery({
     ...openJobOrderCountQueryOptions({ before: dayOf(-1) }),
     enabled: shown,
@@ -711,38 +530,65 @@ function ProjectsLane() {
     ...openJobOrderCountQueryOptions({ after: today, before: dayOf(14) }),
     enabled: shown,
   });
-  const jobs = useQuery({
-    ...jobOrdersByTerminQueryOptions(ROWS - 1),
-    select: (page) => page.results.map((job) => jobRow(job, today, canOpen)),
-    enabled: shown,
-  });
+  const jobs = useQuery({ ...jobOrdersByTerminQueryOptions(ROWS), enabled: shown });
   if (!shown) return null;
 
-  const link = canOpen ? TRACKING_OPEN : undefined;
+  const jobLink = canOpen ? TRACKING_OPEN : undefined;
   const figures: LaneFigure[] = [
-    { id: 'jobs-open', label: 'Açık iş emri', value: countValue(open), link },
+    ...(tasks.enabled
+      ? [
+          {
+            id: 'tasks-mine',
+            label: 'Bana atanan görev',
+            value: countValue(tasks.mine),
+            link: `${PROJECTS}?assigned_to=${user.id}`,
+          },
+          {
+            id: 'tasks-overdue',
+            label: 'Hedefi geçen görev',
+            value: countValue(tasks.overdue),
+            link: PROJECTS,
+            alert: Boolean(tasks.overdue.data),
+          },
+          {
+            id: 'tasks-blocked',
+            label: 'Engellenen görev',
+            value: countValue(tasks.blocked),
+            link: `${PROJECTS}?status=blocked`,
+            alert: Boolean(tasks.blocked.data),
+          },
+        ]
+      : []),
     {
       id: 'jobs-late',
-      label: 'Termini geçen',
+      label: 'Termini geçen iş emri',
       value: countValue(late),
-      link,
+      link: jobLink,
       alert: Boolean(late.data),
     },
-    { id: 'jobs-soon', label: '14 gün içinde teslim', value: countValue(soon), link },
+    { id: 'jobs-soon', label: '14 gün içinde teslim', value: countValue(soon), link: jobLink },
   ];
   return (
     <AreaLane
-      title="Proje"
+      title="Projeler"
       icon="fas fa-project-diagram"
       family="purple"
+      hub={PROJECTS}
       links={links}
       figures={figures}
       list={{
         title: 'Termine göre iş emirleri',
-        more: link,
-        rows: jobs.data,
+        columns: [
+          { label: 'İş', width: '72px' },
+          { label: 'İş emri · müşteri' },
+          { label: 'Durum', width: '112px' },
+          { label: 'Termin', width: '72px', align: 'end' },
+        ],
+        more: jobLink,
+        rows: jobs.data?.results.map((job) => jobRow(job, today, canOpen)),
         isError: jobs.isError,
         empty: 'Açık iş emri yok.',
+        footnote: more(jobs.data?.count, ROWS),
       }}
     />
   );
@@ -755,7 +601,7 @@ function useBandFigures(): PageFigure[] {
   const canRequests = hasRouteAccess(REQUESTS);
   const canPlan = hasRouteAccess(CNC_CAPACITY);
   const projects = visibleLinks(LINKS.projects).length > 0;
-  // The same queries as the blocks below: one request each.
+  // The same queries as the lanes below: one request each.
   const toTransfer = useQuery({
     ...departmentRequestsToTransferCountQueryOptions(),
     enabled: canRequests,
@@ -832,10 +678,9 @@ export function PlanningHubPage() {
         figureStyle="tiles"
       />
       <AreaLanes>
-        <WaitingForPlanning />
+        <WaitingLane />
         <CncLane />
         <LinearLane />
-        <StockLane />
         <ProjectsLane />
       </AreaLanes>
     </>

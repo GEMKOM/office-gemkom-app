@@ -1,4 +1,4 @@
-import type { NavTree } from '@legacy/navigationStructure.js';
+import { NAVIGATION_STRUCTURE, type NavTree } from '@legacy/navigationStructure.js';
 import { findParent, findTrail, flattenMenu, isPathActive, isUnbuiltGeneralPage, withoutPaths } from './navModel';
 
 const leaf = (label: string) => ({ label, icon: 'fas fa-circle', children: {} });
@@ -70,5 +70,43 @@ describe('navModel', () => {
     expect(isUnbuiltGeneralPage('/general/overtime/pending')).toBe(false);
     expect(isUnbuiltGeneralPage('/general/something-new')).toBe(true);
     expect(isUnbuiltGeneralPage('/sales')).toBe(false);
+  });
+});
+
+describe('the Planlama menu', () => {
+  const planning = NAVIGATION_STRUCTURE;
+  const any = () => true;
+
+  it('groups the request and stock pages and puts project planning under Projeler', () => {
+    expect(Object.keys(planning['/planning']!.children)).toEqual([
+      '/planning/department-requests',
+      '/planning/items',
+      '/planning/procurement-lines',
+      '/planning/inventory',
+      '/planning/projects',
+      '/planning/cnc-cutting',
+      '/planning/linear-cutting',
+    ]);
+    // A parent is a heading only, so the Projeler page is a row of its own.
+    expect(
+      flattenMenu(planning['/planning']!.children)
+        .filter(
+          (row) => row.path.startsWith('/planning/proj') || row.path === '/planning/task-templates',
+        )
+        .map((row) => `${row.kind} ${row.label}`),
+    ).toEqual(['label Projeler', 'link Görevler', 'link Proje Planlama', 'link Görev Şablonları']);
+  });
+
+  it('sends the pages under Projeler back to it, and Projeler back to the hub', () => {
+    expect(findTrail(planning, '/planning/task-templates').map((step) => step.label)).toEqual([
+      'Planlama',
+      'Projeler',
+      'Görev Şablonları',
+    ]);
+    expect(findParent(planning, '/planning/task-templates/', any)?.path).toBe('/planning/projects');
+    expect(findParent(planning, '/planning/project-planning', any)?.path).toBe(
+      '/planning/projects',
+    );
+    expect(findParent(planning, '/planning/projects', any)?.path).toBe('/planning');
   });
 });

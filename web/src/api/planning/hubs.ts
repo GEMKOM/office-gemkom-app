@@ -1,7 +1,6 @@
 import type { DepartmentRequest } from '../general/departmentRequests';
 import type { LinearCuttingTask } from '../manufacturing/linearCutting';
 import { SHOP_FLOOR_STALE_TIME } from '../manufacturing/counts';
-import type { RemnantPlate } from '../manufacturing/remnants';
 import type { JobOrder } from '../projects/jobOrders';
 import { listCountQueryOptions, listPageQueryOptions } from '../counts';
 
@@ -89,14 +88,6 @@ export function openLinearTasksPageQueryOptions(pageSize: number) {
 /** Remnant plates with plates left (the remnants page's default list); `unassigned` = never used. */
 export function remnantCountQueryOptions(unassigned?: boolean) {
   return listCountQueryOptions(['remnantPlates'], '/cnc_cutting/remnants/', { unassigned });
-}
-
-/** The latest remnant plates with plates left. */
-export function recentRemnantsQueryOptions(pageSize: number) {
-  return listPageQueryOptions<RemnantPlate>(['remnantPlates'], '/cnc_cutting/remnants/', {
-    ordering: '-id',
-    page_size: pageSize,
-  });
 }
 
 /** Open (active or on hold) top-level job orders, optionally by termin. */

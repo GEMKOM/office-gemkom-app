@@ -170,13 +170,12 @@ it('shows late welding work, this month’s tonnage and every team and subcontra
   const welding = lane('Kaynaklı İmalat');
   await waitFor(() => expect(welding).toHaveTextContent('Termini geçen iş'));
   await waitFor(() => expect(welding).toHaveTextContent('42,6 t'));
-  expect(welding).toHaveTextContent('3Termini geçen iş18,4 t');
+  expect(welding).toHaveTextContent('Termini geçen iş18,4 t3');
   expect(welding).toHaveTextContent('57,6 t açık işte');
 
   const subcontractor = within(welding).getByRole('link', { name: /Demir Çelik/ });
-  expect(subcontractor).toHaveTextContent('6 iş');
-  expect(subcontractor).toHaveTextContent('2 gecikmiş');
-  expect(subcontractor).toHaveTextContent('31,2 t');
+  // Open work, late work and open tonnage, each in its own column.
+  expect(subcontractor.textContent).toMatch(/Taşeron6231,2 t$/);
   expect(subcontractor).toHaveAttribute('href', '/manufacturing/subcontracting/subcontractors');
   expect(within(welding).getByRole('link', { name: /Usta Kaynak/ })).toHaveAttribute(
     'href',
@@ -204,7 +203,14 @@ it('shows what runs on the machines and the open faults', async () => {
   const fault = await within(maintenance).findByRole('link', { name: /Okuma MA-600/ });
   expect(fault).toHaveTextContent('Duruşta');
   expect(fault).toHaveTextContent('2 gün');
-  await waitFor(() => expect(maintenance).toHaveTextContent('1.284Açık arıza'));
+  await waitFor(() => expect(maintenance).toHaveTextContent('Açık arıza1.284'));
+  // The table names its columns; the footer says how many more and links to them all.
+  expect(maintenance).toHaveTextContent('MakineArıza · bildirenDurumAçık');
+  expect(maintenance).toHaveTextContent('+1.280 arıza daha');
+  expect(within(maintenance).getByRole('link', { name: /Tüm arızalar/ })).toHaveAttribute(
+    'href',
+    '/manufacturing/maintenance/fault-requests',
+  );
   await waitFor(() => expect(document.getElementById('stopped')).toHaveTextContent('3'));
   // A count shared by the band and the lane is asked for once.
   expect(
@@ -220,7 +226,7 @@ it('says the welding figures could not load when the summary fails', async () =>
 
   const welding = lane('Kaynaklı İmalat');
   await within(welding).findByText('Yüklenemedi.');
-  expect(welding).toHaveTextContent('-Termini geçen iş');
+  expect(welding).toHaveTextContent('Termini geçen iş-');
 });
 
 it('shows only the lanes, links and figures the user can open, and fetches nothing else', async () => {

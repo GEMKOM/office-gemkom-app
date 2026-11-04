@@ -94,12 +94,16 @@ test('admin: the planning hub leads with its queue, then a lane per area; financ
   const main = page.getByRole('main');
   const lanes = await main
     .getByRole('region')
-    .evaluateAll((regions) => regions.map((r) => r.getAttribute('aria-label') ?? r.textContent));
-  expect(lanes).toHaveLength(5);
-  await expect(main.getByRole('region').first()).toContainText('Planlamayı Bekleyenler');
-  for (const name of ['CNC Kesim', 'Lineer Kesim', 'Stok', 'Proje']) {
-    await expect(main.getByRole('region', { name })).toBeVisible();
-  }
+    .evaluateAll((regions) => regions.map((r) => r.getAttribute('aria-label')));
+  expect(lanes).toEqual(['Planlamayı Bekleyenler', 'CNC Kesim', 'Lineer Kesim', 'Projeler']);
+  // Requests, materials, cost lines and stock are one group; project planning
+  // and the task templates sit under Projeler.
+  await expect(
+    main.getByRole('navigation', { name: 'Planlamayı Bekleyenler sayfaları' }).getByRole('link'),
+  ).toHaveText(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları', 'Stok']);
+  await expect(
+    main.getByRole('navigation', { name: 'Projeler sayfaları' }).getByRole('link'),
+  ).toHaveText(['Görevler', 'Proje Planlama', 'Görev Şablonları']);
   await expect(main.locator('article')).toHaveCount(0);
   await expect(page.locator('#to-transfer')).toContainText('7');
   await expect(page.locator('#cnc-unplanned-tile')).toContainText('5');
