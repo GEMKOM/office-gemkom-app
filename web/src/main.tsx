@@ -14,6 +14,13 @@ import { createRoot } from 'react-dom/client';
 import { RouterProvider } from 'react-router';
 import { Providers } from '@/app/Providers';
 import { router } from '@/routes/router';
+import { reloadForNewVersion } from '@/routes/staleChunk';
+
+// A chunk preload failing after a deploy: reload for the new version before the
+// page even tries to render (once; the route error page covers the rest).
+window.addEventListener('vite:preloadError', (event) => {
+  if (reloadForNewVersion()) event.preventDefault();
+});
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

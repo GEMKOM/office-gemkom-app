@@ -86,6 +86,12 @@ const ARCHIVE = {
       then: { total: 900000, eur_per_kg: 30 }, now: { total: 1200000, eur_per_kg: 40, restated_to: '2026-11' },
       factors: {}, basis: 'total_only', sale_eur: null, flags: ['per_kg_outlier'], review: 'unreviewed', plan: null,
     },
+    {
+      id: 9, job_no: '250-03', product: 'KAZAN', customer: 'İzmir Enerji', family: 'shell', family_label: 'Gövde', qty: 2,
+      kg_each: 9000, kg_total: 18000, cost_month: '2025-03', date_source: 'pdm',
+      then: { total: 40000, eur_per_kg: 2.2 }, now: { total: 45000, eur_per_kg: 2.5, restated_to: '2026-11' },
+      factors: {}, basis: 'components', sale_eur: null, flags: [], review: 'unreviewed', in_app: true, plan: null,
+    },
   ],
 };
 const PARAMS = {
@@ -275,4 +281,19 @@ it('Geçmiş maliyetler: the archive with family reliability; exclusion needs a 
   expect(writes()).toEqual([
     { path: '/estimator/cost-history/7/review/', search: '', method: 'POST', body: { review_status: 'excluded', note: 'kapsam farklı' } },
   ]);
+});
+
+it('a job in both tabs links to its other record', async () => {
+  renderPage();
+  const row = (await screen.findByText('250-03')).closest('tr')!;
+  const toArchive = await within(row).findByRole('button', { name: /arşivde · 2,50 €\/kg/ });
+  expect(within(screen.getByText('260-01').closest('tr')!).queryByRole('button', { name: /arşivde/ })).toBeNull();
+  fireEvent.click(toArchive);
+  // The archive tab opens filtered to the job, and links back with the factor.
+  const archiveRow = (await screen.findByText('KAZAN')).closest('tr')!;
+  expect(screen.queryByText('60T POTA')).toBeNull();
+  expect(await within(archiveRow).findByRole('button', { name: /iş referansı · faktör 1,20/ })).toBeInTheDocument();
+  fireEvent.click(archiveRow);
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText(/Aynı iş, İş referanslarında/)).toBeInTheDocument();
 });

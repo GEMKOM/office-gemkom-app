@@ -4,6 +4,7 @@ import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
 import { RootLayout } from '@/shell/RootLayout';
 import { MERGED_REPORT_ROUTES } from './mergedReports';
+import { RouteError } from './RouteError';
 import { RouteLoading } from './RouteLoading';
 
 const hub: RouteAccessHandle = { access: 'hub' };
@@ -1111,11 +1112,13 @@ export const publicRoutes: RouteObject[] = [
   },
 ];
 
-// The pathless top route only gives the first load something to show while
-// the opened page's lazy chunk loads (React Router warns without one).
+// The pathless top route gives the first load something to show while the
+// opened page's lazy chunk loads (React Router warns without one), and catches
+// errors: a chunk a deploy removed reloads once, anything else gets our page.
 export const routeTree: RouteObject[] = [
   {
     HydrateFallback: RouteLoading,
+    ErrorBoundary: RouteError,
     children: [
       ...publicRoutes,
       {
