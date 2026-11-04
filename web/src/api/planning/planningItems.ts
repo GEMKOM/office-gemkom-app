@@ -9,11 +9,22 @@ import {
 } from '../client';
 import { toPaginated, type Paginated } from '../types';
 
-// Port of the parts of apis/planning/planningRequestItems.js that the
-// Planlama Kalemleri and Kritik Malzemeler pages use: the GET /planning/items/
-// list and the mark/unmark consumed actions.
+// GET /planning/items/ and its actions, for Planlama Kalemleri, Kritik
+// Malzemeler and Malzeme Takibi: the list, consumed / critical / delivered.
 
 export type Decimal = string | number;
+
+/** One pull request a planning item line sits on (Malzeme Takibi's Depo Çekme chips). */
+export interface PlanningItemPull {
+  id: number;
+  number: string;
+  status: string;
+  status_label?: string;
+  destination_name?: string;
+  quantity?: Decimal | null;
+  item_unit?: string;
+  [key: string]: unknown;
+}
 
 /** One planning request item line as GET /planning/items/ returns it. */
 export interface PlanningItem {
@@ -40,6 +51,9 @@ export interface PlanningItem {
   is_critical?: boolean | null;
   critical_marked_by_username?: string | null;
   critical_marked_at?: string | null;
+  pulled_quantity?: Decimal | null;
+  quantity_available_to_pull?: Decimal | null;
+  pull_requests?: PlanningItemPull[];
 }
 
 /** Query params of GET /planning/items/; unset ones ('' / undefined) are left out. */
@@ -60,6 +74,7 @@ export type PlanningItemsParams = QueryParams & {
   from_inventory?: string;
   is_available?: string;
   has_price?: string;
+  pull_state?: string;
   include_price?: boolean;
   ordering?: string;
   page?: number;
@@ -68,6 +83,7 @@ export type PlanningItemsParams = QueryParams & {
 
 export const planningItemKeys = {
   all: ['planningItems'] as const,
+  lists: () => ['planningItems', 'list'] as const,
   list: (params: PlanningItemsParams = {}) =>
     ['planningItems', 'list', cleanParams(params)] as const,
 };
@@ -188,5 +204,40 @@ export function markPlanningRequestItemDelivered(
   return apiFetch<DeliveryReceiptResult>(`/planning/items/${itemId}/mark_delivered/`, {
     method: 'POST',
     body,
+  });
+}
+
+type CriticalVars = { id: number; critical: boolean };
+
+function setCachedCritical(
+  queryClient: ReturnType<typeof useQueryClient>,
+  { id, critical }: CriticalVars,
+) {
+  queryClient.setQueriesData<Paginated<PlanningItem>>(
+    { queryKey: planningItemKeys.lists() },
+    (old) =>
+      old
+        ? {
+            ...old,
+            results: old.results.map((row) =>
+              row.id === id ? { ...row, is_critical: critical } : row,
+            ),
+          }
+        : old,
+  );
+}
+
+/**
+ * Flips the critical flag (Malzeme Takibi's checkbox). The cached rows change
+ * at once and go back if the request fails; the list is not reloaded.
+ */
+export function useSetPlanningItemCritical() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, critical }: CriticalVars) =>
+      critical ? markPlanningRequestItemCritical(id) : unmarkPlanningRequestItemCritical(id),
+    onMutate: (vars) => setCachedCritical(queryClient, vars),
+    onError: (_error, vars) =>
+      setCachedCritical(queryClient, { id: vars.id, critical: !vars.critical }),
   });
 }

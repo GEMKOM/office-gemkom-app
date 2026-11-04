@@ -1,14 +1,9 @@
 import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
-import { legacyStatic } from './vite/legacyStatic.ts';
 import { scriptFetchDest } from './vite/scriptFetchDest.ts';
 
-// The repo root, served from the site root in dev (images and the remaining
-// legacy files). The SPA no longer imports anything from it.
-const legacyRoot = fileURLToPath(new URL('..', import.meta.url));
 const srcRoot = fileURLToPath(new URL('./src', import.meta.url));
-const routesFile = fileURLToPath(new URL('./src/routes/migrated-routes.json', import.meta.url));
 // Vite's pre-bundled dependencies, kept per checkout instead of in node_modules/.vite.
 // Worktrees link node_modules from the main checkout, so with the default every
 // dev server shares one deps folder. The chunk names there depend on the path
@@ -26,9 +21,14 @@ export default defineConfig(({ command }) => ({
   // Built files are published under /app-assets/; in dev the SPA is served at /.
   base: command === 'build' ? '/app-assets/' : '/',
   cacheDir,
-  // legacyStatic: in dev, every non-migrated path is a legacy file from the repo root.
+  // static/: files published at the site root as they are (CNAME, /images/...).
+  // The dev server serves them at /. The build copies them into dist (so the
+  // favicon link Vite rewrites to /app-assets/images/... exists), and
+  // scripts/assemble.mjs also puts them at the site root, where the pages
+  // and outside links (/images/gemkom.png) expect them.
+  publicDir: 'static',
   // scriptFetchDest: see the file; keeps module loads compiled in misbehaving browsers.
-  plugins: [scriptFetchDest(), react(), legacyStatic({ legacyRoot, routesFile })],
+  plugins: [scriptFetchDest(), react()],
   resolve: {
     alias: {
       '@': srcRoot,
@@ -38,7 +38,6 @@ export default defineConfig(({ command }) => ({
     // Not Vite's default 5173: that one is often taken by other local apps,
     // and passing --port through npm is unreliable in PowerShell.
     port: 5180,
-    fs: { allow: [legacyRoot] },
   },
   build: {
     outDir: 'dist',

@@ -19,7 +19,7 @@ export const FAKE = {
   refreshedRefreshToken: 'e2e-fake-refresh-token-2',
 } as const;
 
-/** Migrated routes, normalized the same way scripts/routes.mjs does it. */
+/** The SPA's routes, normalized like normalizeRoute in src/routes/migrated.ts. */
 export function migratedRoutes(): string[] {
   const file = fileURLToPath(new URL('../src/routes/migrated-routes.json', import.meta.url));
   const routes = JSON.parse(readFileSync(file, 'utf8')) as string[];
@@ -273,7 +273,7 @@ function parseBody(request: Request): unknown {
 
 /**
  * Intercepts every request to the backend. Unknown endpoints answer 200: an
- * empty DRF page for list-looking GETs, {} otherwise, so legacy pages render
+ * empty DRF page for list-looking GETs, {} otherwise, so pages render
  * without a server. Every call is recorded.
  *
  * Handlers passed here are layered over defaultHandlers(session).
@@ -360,7 +360,7 @@ export async function mockBackend(
 const BENIGN_CONSOLE_ERRORS: RegExp[] = [
   // Browsers ask for /favicon.ico on their own.
   /favicon\.ico/i,
-  // Third-party CDNs (Bootstrap, Font Awesome, fonts) offline or slow on a runner.
+  // Third-party CDNs (the PDF export's html2canvas/jsPDF) offline or slow on a runner.
   /net::ERR_(INTERNET_DISCONNECTED|NAME_NOT_RESOLVED|CONNECTION_(REFUSED|RESET|TIMED_OUT)|TIMED_OUT)/,
   // The production-API guard above aborts on purpose.
   /net::ERR_BLOCKED_BY_CLIENT/,

@@ -1,7 +1,7 @@
 import { Button } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { qcReviewCountQueryOptions } from '@/api/qualityControl';
+import { qcReviewCountQueryOptions } from '@/api/quality-control/hubs';
 import {
   QC_REVIEW_STATUS_CHOICES,
   qcReviewKeys,

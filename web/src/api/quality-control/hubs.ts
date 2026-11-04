@@ -1,9 +1,9 @@
 import { queryOptions } from '@tanstack/react-query';
-import { apiFetch, cleanParams } from './client';
-import { toPaginated } from './types';
+import { apiFetch, cleanParams } from '../client';
+import { toPaginated } from '../types';
 
-// Read side of apis/qualityControl.js, as much as the quality control hub
-// needs. The review and NCR pages themselves are still legacy.
+// Counts for the quality control hub and the QC review page's tabs.
+// (The list pages use ncrs.ts and qcReviews.ts; the keys match theirs.)
 
 export type QCReviewStatus = 'pending' | 'approved' | 'rejected';
 export type NCRStatus = 'draft' | 'submitted' | 'approved' | 'rejected' | 'closed';

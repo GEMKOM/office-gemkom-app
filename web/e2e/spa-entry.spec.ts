@@ -46,6 +46,11 @@ test.describe('one SPA entry', () => {
       expect(await res.text(), path).toBe(html);
     }
 
+    // web/static is published at the root (outside links use /images/gemkom.png).
+    for (const path of ['/images/gemkom.png', '/CNAME']) {
+      expect((await request.get(path)).status(), path).toBe(200);
+    }
+
     // The hashed bundles the entry points at are real files.
     const assets = [...html.matchAll(/(?:src|href)="(\/app-assets\/[^"]+)"/g)].map((m) => m[1]!);
     expect(assets.length).toBeGreaterThan(0);

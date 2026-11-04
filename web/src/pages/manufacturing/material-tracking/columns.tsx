@@ -1,5 +1,5 @@
 import { Checkbox, Group, Stack, Text, UnstyledButton } from '@mantine/core';
-import type { PlanningItem } from '@/api/materialTracking/planningItems';
+import type { PlanningItem } from '@/api/planning/planningItems';
 import { toNumber } from '@/lib/format';
 import { StatusBadge, type DataTableColumn } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
