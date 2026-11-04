@@ -1,5 +1,5 @@
 import { authedFetch } from '@legacy/authService.js';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { InventoryHubPage } from './InventoryHubPage';
 import { PlanningHubPage } from './PlanningHubPage';
@@ -92,6 +92,29 @@ beforeEach(() => {
           { key: 'LC-2', session: 'S-1', estimated_hours: '0.5', in_plan: true },
         ]),
       );
+    if (pathname === '/cnc_cutting/timers/')
+      return json(
+        page(2, [
+          {
+            id: 71,
+            machine_name: 'Fiber Lazer',
+            issue_key: 'CNC-88',
+            issue_name: 'Flanş 20 mm',
+            username: 'ayse',
+            timer_type: 'productive',
+            start_time: Date.now() - 50 * 60_000,
+          },
+          {
+            id: 72,
+            machine_name: 'Plazma',
+            issue_key: 'CNC-90',
+            issue_name: 'Taban plakası',
+            username: 'mehmet',
+            timer_type: 'productive',
+            start_time: Date.now() - 20 * 60_000,
+          },
+        ]),
+      );
     if (pathname === '/cnc_cutting/remnants/')
       return json(page(searchParams.get('unassigned') === 'true' ? 17 : 42));
     if (pathname === '/projects/job-orders/') {
@@ -169,12 +192,33 @@ it('shows a lane per area with its live figures', async () => {
     'Projeler',
   ]);
 
-  // CNC: open and unplanned cuts, each machine's planned load, the remnants.
+  // CNC: running timers (as İmalat shows machining's), open and unplanned
+  // cuts, each machine's planned load, the remnants.
   const cnc = lane('CNC Kesim');
+  await waitFor(() => expect(cnc).toHaveTextContent('Aktif zamanlayıcı2 makinede2'));
+  expect(within(cnc).getByRole('link', { name: /Aktif zamanlayıcı/ })).toHaveAttribute(
+    'href',
+    '/planning/cnc-cutting/dashboard',
+  );
+  // The running list comes first, longest-running on top.
+  const running = within(cnc).getByRole('list', { name: 'Şu an çalışanlar' });
+  expect(within(running).getAllByRole('listitem')[0]).toHaveTextContent('Fiber Lazer');
+  expect(running).toHaveTextContent('CNC-88 · Flanş 20 mm');
+  expect(running).toHaveTextContent('ayse');
+  expect(within(cnc).getByRole('button', { name: 'Şu an çalışanlar' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await waitFor(() => expect(cnc).toHaveTextContent('Açık kesim14'));
   expect(cnc).toHaveTextContent('Plana alınmamış kesim6');
   await waitFor(() => expect(cnc).toHaveTextContent('Planlı iş yükü'));
   await waitFor(() => expect(cnc).toHaveTextContent('14,5 sa'));
+  // The switch shows the machine load instead.
+  fireEvent.click(within(cnc).getByRole('button', { name: 'Makine yükü' }));
+  expect(within(cnc).getByRole('button', { name: 'Makine yükü' })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   expect(within(cnc).getByRole('link', { name: /Fiber Lazer/ })).toHaveAttribute(
     'href',
     '/planning/cnc-cutting/capacity?machine=3',
