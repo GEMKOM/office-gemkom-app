@@ -1,9 +1,8 @@
 import migratedRoutes from './migrated-routes.json';
 
-// Routes served by the React app; a link anywhere else is a full page load.
-// The deployed site serves the SPA for every path (/404.html is the entry, see
-// scripts/assemble.mjs), so the list is the router's table of pages, not a
-// list of files.
+// Routes served by the React app. Everything else is still a legacy page and is
+// reached with a full page load. The assemble script reads the same JSON to
+// write the SPA's index.html at each of these paths.
 const MIGRATED = new Set<string>(migratedRoutes.map(normalizeRoute));
 
 // Dev-only screens (component preview etc.); never listed in the JSON, so they

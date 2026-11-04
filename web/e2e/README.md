@@ -33,13 +33,12 @@ Port 4173 by default (`E2E_PORT` changes it). Locally an already running
   `<main>`, and logs no console errors. New routes are picked up on their own;
   give them the mocks they need (below).
 
-`spa-entry.spec.ts`: the one SPA entry. `/`, `/404.html` and every page path
-serve the same document (page paths with status 404, as GitHub Pages does);
-deep links keep their query and hash, a refresh stays put, a path without its
-trailing slash opens, an old bookmark of a moved page forwards with query and
-hash, an unknown path shows "Sayfa bulunamadı", and a signed-out deep link is
-parked whole. The console collector ignores Chrome's log line for the page
-document's own 404 (an extensionless same-site path) and nothing else.
+`spa-entry.spec.ts`: the one SPA entry. Every known route (moved and
+merged-report ones too) is a 200 with the same document as `/`; any other path
+gets it from `/404.html` with status 404. Deep links keep their query and hash,
+a refresh stays put, a path without its trailing slash opens, an old bookmark of
+a moved page forwards with query and hash, an unknown path shows "Sayfa
+bulunamadı", and a signed-out deep link is parked whole.
 
 `manufacturing.spec.ts`: the manufacturing hubs, as admin (cards, band counts,
 hub to hub inside the SPA) and as a user with a few page grants.

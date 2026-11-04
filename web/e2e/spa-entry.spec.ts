@@ -1,9 +1,10 @@
 import { expect, mockBackend, MOCK_CUSTOMERS, seedSession, test } from './fixtures';
 
-// The site has one SPA entry: /index.html, and the same file as /404.html,
-// which GitHub Pages (and scripts/serve-site.mjs) answers for every path that
-// has no file. Deep links, refreshes on nested routes and old bookmarks boot
-// the SPA with the URL untouched, and its router takes it from there.
+// The site has one SPA entry, web/dist/index.html. scripts/assemble.mjs writes
+// it at the root, into every route of migrated-routes.json (so every known URL
+// is a 200) and as /404.html, which GitHub Pages (and scripts/serve-site.mjs)
+// answers for any other path. Deep links, refreshes on nested routes and old
+// bookmarks boot the SPA with the URL untouched; its router takes it from there.
 
 async function expectCustomers(page: import('@playwright/test').Page) {
   const main = page.getByRole('main');
@@ -12,7 +13,7 @@ async function expectCustomers(page: import('@playwright/test').Page) {
 }
 
 test.describe('one SPA entry', () => {
-  test('/, /404.html and any page path serve the same SPA document; its assets are files', async ({
+  test('known pages are 200, unknown paths fall back to /404.html; all the same SPA document', async ({
     request,
   }) => {
     const root = await request.get('/');
@@ -23,8 +24,23 @@ test.describe('one SPA entry', () => {
     const notFound = await request.get('/404.html');
     expect(await notFound.text()).toBe(html);
 
-    // No per-route copy any more: a page path is a 404 that carries the SPA.
-    for (const path of ['/sales/customers/', '/sales/customers', '/no/such/page/']) {
+    // Every known URL, moved and merged-report ones included, is a 200 (link
+    // previews, monitors and caches treat a 404 document as a failure). Without
+    // the trailing slash it is a 301 to the folder first, as on GitHub Pages.
+    for (const path of [
+      '/sales/customers/',
+      '/sales/customers',
+      '/procurement/purchase-requests/pending/?talep=SAT-1',
+      '/manufacturing/cnc-cutting/cuts/',
+      '/manufacturing/machining/reports/finished-timers/',
+    ]) {
+      const res = await request.get(path);
+      expect(res.status(), path).toBe(200);
+      expect(await res.text(), path).toBe(html);
+    }
+
+    // Anything else gets the same SPA from /404.html, with status 404.
+    for (const path of ['/no/such/page/', '/sales/nope']) {
       const res = await request.get(path);
       expect(res.status(), path).toBe(404);
       expect(await res.text(), path).toBe(html);

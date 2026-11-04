@@ -2,17 +2,18 @@
 // Builds the deployable site in <repo>/_site from
 //   - the tracked legacy files (git ls-files), minus repo tooling,
 //   - web/dist (the built SPA) under /app-assets/,
-//   - the SPA entry, web/dist/index.html, as /index.html and as /404.html,
+//   - the SPA entry, web/dist/index.html, written to every route of
+//     src/routes/migrated-routes.json as <route>/index.html (so every known URL,
+//     moved and merged-report ones included, is served with status 200),
+//   - the same entry as /404.html: GitHub Pages answers any other path with it
+//     (status 404, URL, query and hash untouched), so an unknown or a new path
+//     still boots the SPA, whose router shows "Sayfa bulunamadı" or the page,
 //   - a .nojekyll marker.
-//
-// One entry serves every page: GitHub Pages answers any path without a file
-// with /404.html (status 404; the URL, query string and hash stay as typed), so
-// a deep link, a refresh on a nested route or an old bookmark boots the SPA and
-// its router picks the page, forwards a moved one or shows "Sayfa bulunamadı".
 // It also reports tracked files that GitHub Pages' Jekyll build treats specially
 // today, since a deploy without Jekyll publishes them differently.
 //
-// Usage: node scripts/assemble.mjs [--out <dir>] [--dist <dir>]
+// Usage: node scripts/assemble.mjs [--routes <file>] [--out <dir>] [--dist <dir>]
+//   --routes  routes JSON (default src/routes/migrated-routes.json, or $MIGRATED_ROUTES_FILE)
 //   --out     output directory (default <repo>/_site)
 //   --dist    built SPA (default web/dist)
 
@@ -31,22 +32,27 @@ import {
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
+import { readMigratedRoutes } from './routes.mjs';
 
 const webDir = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const repoRoot = path.resolve(webDir, '..');
 
 const { values: args } = parseArgs({
   options: {
+    routes: { type: 'string' },
     out: { type: 'string' },
     dist: { type: 'string' },
   },
 });
 
+const routesFile = path.resolve(
+  args.routes ??
+    process.env.MIGRATED_ROUTES_FILE ??
+    path.join(webDir, 'src/routes/migrated-routes.json'),
+);
 const outDir = path.resolve(args.out ?? path.join(repoRoot, '_site'));
 const distDir = path.resolve(args.dist ?? path.join(webDir, 'dist'));
 const ASSETS_DIR = 'app-assets';
-// The SPA entry, written under both names (see the header).
-const SPA_ENTRY_FILES = ['index.html', '404.html'];
 
 function fail(message) {
   console.error(`assemble: ${message}`);
@@ -228,6 +234,12 @@ function main() {
       `refusing to use ${outDir} as the output directory (use <repo>/_site or a path outside the repo)`,
     );
   }
+  let routes;
+  try {
+    routes = readMigratedRoutes(routesFile);
+  } catch (err) {
+    fail(err.message);
+  }
   const spaHtml = readFileSync(distIndex, 'utf8');
   if (!spaHtml.includes(`/${ASSETS_DIR}/`)) {
     fail(
@@ -275,13 +287,28 @@ function main() {
     assetCount += 1;
   }
 
-  // 3. The SPA entry, at the root and as the 404 page
-  for (const name of SPA_ENTRY_FILES) {
-    if (shippedFiles.has(name)) fail(`tracked file ${name} collides with the SPA entry`);
-    writeFileSync(path.join(outDir, name), spaHtml);
+  // 3. SPA entry at each migrated route
+  const replaced = [];
+  for (const route of routes) {
+    const target = route === '/' ? 'index.html' : `${route.slice(1)}/index.html`;
+    const parentFile = target
+      .split('/')
+      .slice(0, -1)
+      .find((_, i, parts) => shippedFiles.has(parts.slice(0, i + 1).join('/')));
+    if (parentFile !== undefined) {
+      fail(`route ${route} needs a directory where the legacy site has a file`);
+    }
+    if (shippedFiles.has(target)) replaced.push(`${route} (legacy ${target})`);
+    const dest = path.join(outDir, ...target.split('/'));
+    mkdirSync(path.dirname(dest), { recursive: true });
+    writeFileSync(dest, spaHtml);
   }
 
-  // 4. No Jekyll: publish the files as they are.
+  // 4. The fallback for every path without a file
+  if (shippedFiles.has('404.html')) fail('tracked file 404.html collides with the SPA fallback');
+  writeFileSync(path.join(outDir, '404.html'), spaHtml);
+
+  // 5. No Jekyll: publish the files as they are.
   writeFileSync(path.join(outDir, '.nojekyll'), '');
 
   // Summary
@@ -297,7 +324,11 @@ function main() {
     for (const f of missing) console.log(`      ${f}`);
   }
   console.log(`  SPA assets   : ${assetCount} in /${ASSETS_DIR}/ (${formatBytes(assetBytes)})`);
-  console.log(`  SPA entry    : ${SPA_ENTRY_FILES.join(', ')}`);
+  const routesRel = path.relative(webDir, routesFile);
+  console.log(`  routes file  : ${routesRel.startsWith('..') ? routesFile : routesRel}`);
+  console.log(`  SPA routes   : ${routes.length ? routes.join(', ') : 'none'}`);
+  if (replaced.length) console.log(`  replaced     : ${replaced.join(', ')}`);
+  console.log('  404 fallback : 404.html (the SPA entry)');
   console.log('  .nojekyll    : written');
 
   printJekyllReport(findings);

@@ -1,6 +1,5 @@
-// The migrated-routes list (web/src/routes/migrated-routes.json): the paths the
-// SPA serves, read here for the dev server plugin. (The deployed site needs no
-// list: /404.html is the SPA entry for every path, see scripts/assemble.mjs.) The SPA has its own copy
+// The migrated-routes list (web/src/routes/migrated-routes.json), read the same
+// way by the dev server plugin and the assemble script. The SPA has its own copy
 // of normalizeRoute in src/routes/migrated.ts; keep them in step.
 
 import { readFileSync } from 'node:fs';
