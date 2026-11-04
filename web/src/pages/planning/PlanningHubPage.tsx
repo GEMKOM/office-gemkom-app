@@ -275,12 +275,23 @@ function machineLoad(id: number, name: string, tasks: CuttingPlanTask[]): Machin
   return { id, name, cuts: tasks.length, hours: hoursSum, endMs };
 }
 
-/** In a machine's load row: its running timer's time, job and operator. */
-function RunningTimer({ timer }: { timer: Timer }) {
+/**
+ * In a machine's load row: its running timer's time, job and operator, or
+ * "Boşta" when nothing runs on it, so every row says what the machine does.
+ */
+function MachineState({ timer }: { timer: Timer | undefined }) {
+  if (!timer) {
+    return (
+      <span className={css.state} data-idle>
+        <span className={css.stateDot} aria-hidden />
+        Boşta
+      </span>
+    );
+  }
   const job = timer.issue_key || timer.issue_name;
   return (
-    <span className={css.running} title="Çalışıyor">
-      <span className={css.runningDot} data-family="green" aria-hidden />
+    <span className={css.state} title="Çalışıyor">
+      <span className={css.stateDot} data-family="green" aria-hidden />
       <LiveDuration start={timer.start_time} />
       {[job, timer.username].filter(Boolean).map((part) => ` · ${part}`)}
     </span>
@@ -425,12 +436,15 @@ function CncLane() {
               more: CNC_CAPACITY,
               moreLabel: 'Kapasite Planlayıcı',
               rows: loads?.slice(0, ROWS).map((load) => {
-                const timer = live ? runningOn.get(load.id) : undefined;
                 return {
                   key: load.id,
                   link: `${CNC_CAPACITY}?machine=${load.id}`,
                   main: load.name,
-                  sub: timer ? <RunningTimer timer={timer} /> : undefined,
+                  // Running or idle once the timers are in (for dashboard users).
+                  sub:
+                    live && timers.data ? (
+                      <MachineState timer={runningOn.get(load.id)} />
+                    ) : undefined,
                   cells: [
                     formatNumber(load.cuts),
                     shortDate(load.endMs) ?? '-',
