@@ -1,4 +1,26 @@
-import { StatusBadge } from '@/ui';
+import type { MouseEvent, ReactNode } from 'react';
+import { FaIcon, StatusBadge } from '@/ui';
+import css from './RefTabs.module.css';
+
+/**
+ * A link from a job in one tab to the same job in the other (52 jobs have both
+ * welder hours in the app and a MALİYET cost sheet). Stops the row click.
+ */
+export function CrossLink({ children, title, onClick }: { children: ReactNode; title: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className={css.crossLink}
+      title={title}
+      onClick={(e: MouseEvent) => {
+        e.stopPropagation();
+        onClick();
+      }}
+    >
+      <FaIcon icon="fas fa-link" /> {children}
+    </button>
+  );
+}
 import { RELIABILITY_LABELS, type FamilyReliability } from '@/api/projects/costHistory';
 import { fmt } from '../estimate-report/reportModel';
 

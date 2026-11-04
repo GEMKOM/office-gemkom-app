@@ -8,6 +8,7 @@ import {
   reviewCostHistoryRow,
   type CostHistoryRow,
 } from '@/api/projects/costHistory';
+import type { ReferenceProfile } from '@/api/projects/references';
 import { errorMessage, FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, StatusBadge } from '@/ui';
 import { fmt } from '../estimate-report/reportModel';
 import { ReviewBadge, monthLabel, PlanSourceBadge } from './costHistoryParts';
@@ -33,10 +34,15 @@ function Kv({ k, v }: { k: string; v: React.ReactNode }) {
 /** One archive row: the cost then and now, how it was restated, the plan read from its drawings, and its review. */
 export function CostHistoryDetail({
   row,
+  reference,
+  onOpenReference,
   onClose,
   onReviewed,
 }: {
   row: CostHistoryRow;
+  /** The same job in İş referansları (welder hours, factor), when it is there. */
+  reference?: ReferenceProfile;
+  onOpenReference?: (jobNo: string) => void;
   onClose: () => void;
   onReviewed: (id: number, status: string, note: string) => void;
 }) {
@@ -167,6 +173,37 @@ export function CostHistoryDetail({
             </Text>
           )}
         </div>
+
+        {reference ? (
+          <div className={css.detailBox} style={{ marginBottom: 14 }}>
+            <h4>Aynı iş, İş referanslarında (kaynakçı saatleri)</h4>
+            <div className={css.detailGrid} style={{ marginBottom: 0 }}>
+              <div>
+                <Kv k="Gerçek kaynakçı saati" v={`${fmt(reference.recorded_welding_h_per_unit, 1)} h/adet`} />
+                <Kv k="Plan atölye saati" v={`${fmt(reference.shop_h_per_unit, 1)} h/adet`} />
+              </div>
+              <div>
+                <Kv k="Faktör" v={<strong>{fmt(reference.factor, 2)}</strong>} />
+                <Kv k="Birim kg (uygulamada)" v={fmt(reference.unit_mass_kg, 0)} />
+              </div>
+            </div>
+            <Text size="xs" c="dimmed" mt={6}>
+              Bu tablo işin € maliyetini, İş referansları ise saatlerini gösterir; tahmin ikisini ayrı yerlerde kullanır
+              (saatler işçilik kalibrasyonunda, €/kg çapraz kontrolde).
+            </Text>
+            {onOpenReference ? (
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                mt={6}
+                leftSection={<FaIcon icon="fas fa-link" />}
+                onClick={() => onOpenReference(reference.job_no)}
+              >
+                İş referansını aç
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
 
         {flags.length || row.notes?.length ? (
           <div className={css.detailBox} style={{ marginBottom: 14 }}>

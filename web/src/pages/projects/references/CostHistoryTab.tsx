@@ -20,9 +20,11 @@ import {
   type DataTableColumn,
   type FilterConfig,
 } from '@/ui';
+import { useSearchParams } from 'react-router';
+import { referencesQueryOptions, type ReferenceProfile } from '@/api/projects/references';
 import { fmt } from '../estimate-report/reportModel';
 import { CostHistoryDetail } from './CostHistoryDetail';
-import { monthLabel, PlanSourceBadge, ReliabilityBadge, ReviewBadge } from './costHistoryParts';
+import { CrossLink, monthLabel, PlanSourceBadge, ReliabilityBadge, ReviewBadge } from './costHistoryParts';
 import css from './RefTabs.module.css';
 
 // Filter keys carry an "a" prefix: the calibration tab shares the URL.
@@ -37,17 +39,31 @@ const DEFAULTS = {
 const EMPTY: CostHistoryRow[] = [];
 const isOutlier = (r: CostHistoryRow) => (r.flags ?? []).includes('per_kg_outlier');
 
-const columns: DataTableColumn<CostHistoryRow>[] = [
+const buildColumns = (
+  refs: Map<string, ReferenceProfile>,
+  openRef: (jobNo: string) => void,
+): DataTableColumn<CostHistoryRow>[] => [
   {
     key: 'job_no',
     header: 'İş',
-    width: 100,
-    render: (r) => (
-      <>
-        <span className={css.main}>{r.job_no || '—'}</span>
-        <span className={css.sub}>{r.in_app ? 'uygulamada' : 'arşiv'}</span>
-      </>
-    ),
+    width: 120,
+    render: (r) => {
+      const ref = r.job_no ? refs.get(r.job_no) : undefined;
+      return (
+        <>
+          <span className={css.main}>{r.job_no || '—'}</span>
+          <span className={css.sub}>{r.in_app ? 'uygulamada' : 'arşiv'}</span>
+          {ref ? (
+            <CrossLink
+              title="Bu işin kaynakçı saatleri İş referansları sekmesinde: faktörü orada hesaplanır"
+              onClick={() => openRef(r.job_no!)}
+            >
+              iş referansı{ref.factor != null ? ` · faktör ${fmt(ref.factor, 2)}` : ''}
+            </CrossLink>
+          ) : null}
+        </>
+      );
+    },
   },
   {
     key: 'product',
@@ -156,6 +172,14 @@ export function CostHistoryTab() {
   const filters = useUrlFilters(DEFAULTS);
   const { values } = filters;
   const list = useQuery(costHistoryQueryOptions());
+  // The job references (welder hours, factor) of the same job numbers, for the cross-links.
+  const references = useQuery(referencesQueryOptions({}));
+  const [, setParams] = useSearchParams();
+  const refs = useMemo(
+    () => new Map((references.data?.results ?? []).map((r) => [r.job_no, r] as const)),
+    [references.data],
+  );
+  const columns = useMemo(() => buildColumns(refs, (jobNo) => setParams({ search: jobNo })), [refs, setParams]);
   const [detail, setDetail] = useState<CostHistoryRow | null>(null);
   const [familiesOpen, setFamiliesOpen] = useState(false);
 
@@ -337,7 +361,16 @@ export function CostHistoryTab() {
         }
       />
 
-      {detail ? <CostHistoryDetail key={detail.id} row={detail} onClose={() => setDetail(null)} onReviewed={onReviewed} /> : null}
+      {detail ? (
+        <CostHistoryDetail
+          key={detail.id}
+          row={detail}
+          reference={detail.job_no ? refs.get(detail.job_no) : undefined}
+          onOpenReference={(jobNo) => setParams({ search: jobNo })}
+          onClose={() => setDetail(null)}
+          onReviewed={onReviewed}
+        />
+      ) : null}
     </>
   );
 }

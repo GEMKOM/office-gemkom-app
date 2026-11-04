@@ -28,6 +28,9 @@ import {
 import { exclusionLabel, fmt } from '../estimate-report/reportModel';
 import { formatDateTime } from '../estimate-report/reportParts';
 import { LegacyBadge } from '../estimate-report/LegacyBadge';
+import { useSearchParams } from 'react-router';
+import { costHistoryQueryOptions } from '@/api/projects/costHistory';
+import { CrossLink } from './costHistoryParts';
 import { FactorBreakdown } from './FactorBreakdown';
 import { ReviewModal, type ReviewStatus } from './ReviewModal';
 import { WeldListModal } from './WeldListModal';
@@ -78,15 +81,26 @@ function UseCell({ r }: { r: ReferenceProfile }) {
   );
 }
 
-const columns: DataTableColumn<ReferenceProfile>[] = [
+const buildColumns = (
+  archive: Map<string, number | null>,
+  openArchive: (jobNo: string) => void,
+): DataTableColumn<ReferenceProfile>[] => [
   {
     key: 'job_no',
     header: 'İş',
-    width: 95,
+    width: 120,
     render: (r) => (
       <>
         <span className={css.main}>{r.job_no}</span>
         <span className={css.sub}>{JOB_STATUS[r.job_status ?? ''] || r.job_status || ''}</span>
+        {archive.has(r.job_no) ? (
+          <CrossLink
+            title="Bu işin iş sonu maliyet tablosu Geçmiş maliyetler sekmesinde (bugüne taşınmış €/kg)"
+            onClick={() => openArchive(r.job_no)}
+          >
+            arşivde{archive.get(r.job_no) != null ? ` · ${fmt(archive.get(r.job_no), 2)} €/kg` : ''}
+          </CrossLink>
+        ) : null}
       </>
     ),
   },
@@ -216,6 +230,18 @@ export function CalibrationTab({ onCount }: { onCount?: (n: number) => void }) {
     }),
     [values.search, values.family, values.route, values.review, values.status],
   );
+  // The archive rows of the same job numbers (their cost sheet, €/kg today), for the cross-links.
+  const archiveList = useQuery(costHistoryQueryOptions());
+  const [, setParams] = useSearchParams();
+  const columns = useMemo(() => {
+    const byJob = new Map<string, number | null>();
+    for (const a of archiveList.data?.results ?? []) {
+      if (!a.job_no) continue;
+      // A job costed as several rows: the first row with a €/kg stands for it.
+      if (!byJob.has(a.job_no) || byJob.get(a.job_no) == null) byJob.set(a.job_no, a.now?.eur_per_kg ?? null);
+    }
+    return buildColumns(byJob, (jobNo) => setParams({ tab: 'archive', aq: jobNo }));
+  }, [archiveList.data, setParams]);
   const listOptions = referencesQueryOptions(apiFilters);
   const list = useQuery({ ...listOptions, placeholderData: keepPreviousData });
   const summary = useQuery(referenceSummaryQueryOptions());
