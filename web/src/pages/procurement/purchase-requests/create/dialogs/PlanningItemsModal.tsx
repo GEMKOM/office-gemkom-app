@@ -41,8 +41,18 @@ const num = (v: unknown) => Number(v) || 0;
 const maxQty = (item: ProcurementPlanningItem) =>
   num(item.quantity_remaining_for_purchase) || num(item.quantity_to_purchase) || 0;
 
-type Filters = { planning_request_number: string; item_code: string; item_name: string; job_no: string };
-const NO_FILTERS: Filters = { planning_request_number: '', item_code: '', item_name: '', job_no: '' };
+type Filters = {
+  planning_request_number: string;
+  item_code: string;
+  item_name: string;
+  job_no: string;
+};
+const NO_FILTERS: Filters = {
+  planning_request_number: '',
+  item_code: '',
+  item_name: '',
+  job_no: '',
+};
 
 const FILTERS: FilterConfig<keyof Filters>[] = [
   {
@@ -56,7 +66,12 @@ const FILTERS: FilterConfig<keyof Filters>[] = [
   { key: 'job_no', type: 'text', label: 'İş No', placeholder: 'İş numarası ara...' },
 ];
 
-const PRIORITY_LABELS: Record<string, string> = { low: 'Düşük', normal: 'Normal', high: 'Yüksek', urgent: 'Acil' };
+const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Düşük',
+  normal: 'Normal',
+  high: 'Yüksek',
+  urgent: 'Acil',
+};
 
 function zipStamp(now = new Date()) {
   const p = (n: number) => String(n).padStart(2, '0');
@@ -77,7 +92,10 @@ export function PlanningItemsModal({
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
-  const [sort, setSort] = useState<{ sortBy: string | null; sortDir: SortDir }>({ sortBy: null, sortDir: 'asc' });
+  const [sort, setSort] = useState<{ sortBy: string | null; sortDir: SortDir }>({
+    sortBy: null,
+    sortDir: 'asc',
+  });
   const [selected, setSelected] = useState<ReadonlyMap<number, ProcurementPlanningItem>>(new Map());
   const [quantities, setQuantities] = useState<ReadonlyMap<number, number>>(new Map());
   const [busy, setBusy] = useState(false);
@@ -94,7 +112,9 @@ export function PlanningItemsModal({
   const list = useQuery(procurementPlanningItemsQueryOptions(params));
   useEffect(() => {
     if (list.isError) {
-      notify.error(`Planlama talebi malzemeleri yüklenirken hata oluştu: ${(list.error as Error).message}`);
+      notify.error(
+        `Planlama talebi malzemeleri yüklenirken hata oluştu: ${(list.error as Error).message}`,
+      );
     }
   }, [list.isError, list.error]);
 
@@ -163,7 +183,11 @@ export function PlanningItemsModal({
       sortable: true,
       render: (row) =>
         row.planning_request_number && row.planning_request ? (
-          <Button size="compact-xs" variant="subtle" onClick={() => setRequestOf(row.planning_request!)}>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            onClick={() => setRequestOf(row.planning_request!)}
+          >
             {row.planning_request_number}
           </Button>
         ) : (
@@ -178,7 +202,10 @@ export function PlanningItemsModal({
       render: (row) => (
         <>
           {row.is_critical ? (
-            <span title="Kritik: imalat bu kalem teslim edilmeden devam edemez" style={{ marginRight: 4 }}>
+            <span
+              title="Kritik: imalat bu kalem teslim edilmeden devam edemez"
+              style={{ marginRight: 4 }}
+            >
               <StatusBadge color="red">Kritik</StatusBadge>
             </span>
           ) : null}
@@ -198,7 +225,9 @@ export function PlanningItemsModal({
       key: 'quantity_remaining_for_purchase',
       header: 'Kalan Miktar',
       sortable: true,
-      render: (row) => <strong>{`${row.quantity_remaining_for_purchase} ${row.item_unit || 'adet'}`}</strong>,
+      render: (row) => (
+        <strong>{`${row.quantity_remaining_for_purchase} ${row.item_unit || 'adet'}`}</strong>
+      ),
     },
     {
       key: 'status',
@@ -215,25 +244,38 @@ export function PlanningItemsModal({
     {
       key: 'selected_quantity',
       header: 'Seçilecek Miktar',
+      // Room for the number, the unit and the "Max" line below it.
+      minWidth: 170,
       render: (row) => {
         const remaining = num(row.quantity_remaining_for_purchase);
-        if (remaining <= 0) return <Text c="dimmed" size="sm">Mevcut değil</Text>;
+        if (remaining <= 0)
+          return (
+            <Text c="dimmed" size="sm">
+              Mevcut değil
+            </Text>
+          );
         return (
           <div onClick={(e) => e.stopPropagation()}>
             <NumberInput
               size="xs"
-              maw={120}
+              w={150}
               min={0}
               max={remaining}
               step={0.01}
               placeholder="0"
               decimalSeparator=","
               aria-label={`${row.item_code ?? row.id} miktar`}
-              rightSection={<Text size="xs">{row.item_unit || 'adet'}</Text>}
+              rightSection={
+                <Text size="xs" c="dimmed" truncate>
+                  {row.item_unit || 'adet'}
+                </Text>
+              }
+              rightSectionWidth={56}
               value={quantities.get(row.id) ?? ''}
               onBlur={(e) => setQuantity(row, parseFloat(e.currentTarget.value.replace(',', '.')))}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') setQuantity(row, parseFloat(e.currentTarget.value.replace(',', '.')));
+                if (e.key === 'Enter')
+                  setQuantity(row, parseFloat(e.currentTarget.value.replace(',', '.')));
               }}
             />
             <Text size="xs" c="dimmed">{`Max: ${row.quantity_remaining_for_purchase}`}</Text>
@@ -288,12 +330,16 @@ export function PlanningItemsModal({
         if (qty <= 0) continue;
         const max = maxQty(planning);
         if (qty > max) {
-          notify.warning(`${planning.item_code || planning.item_name} için seçilen miktar (${qty}) kalan miktarı (${max}) aşıyor`);
+          notify.warning(
+            `${planning.item_code || planning.item_name} için seçilen miktar (${qty}) kalan miktarı (${max}) aşıyor`,
+          );
           continue;
         }
         if (isPlanningItemOnPage([...pageItems, ...added], planning.id)) continue;
         // Files come with the detail when the list row has none (legacy fetched unseen items).
-        const full = planning.files ? planning : await getProcurementPlanningItem(planning.id).catch(() => planning);
+        const full = planning.files
+          ? planning
+          : await getProcurementPlanningItem(planning.id).catch(() => planning);
         added.push(itemFromPlanning(full, qty));
       }
       if (added.length) {
@@ -337,7 +383,8 @@ export function PlanningItemsModal({
       }
       notify.info(`${files.length} dosya zip dosyasına ekleniyor...`);
       const result = await downloadFilesAsZip(files, `planlama_talebi_dosyalari_${zipStamp()}`);
-      if (result.status === 'done') notify.success(`${result.count} dosya zip dosyası olarak indirildi`);
+      if (result.status === 'done')
+        notify.success(`${result.count} dosya zip dosyası olarak indirildi`);
       else notify.info('Seçilen malzemelerde dosya bulunmuyor');
     } catch (error) {
       notify.error(`Dosyalar indirilirken hata oluştu: ${(error as Error).message}`);
@@ -353,7 +400,15 @@ export function PlanningItemsModal({
 
   return (
     <>
-      <Modal opened onClose={onClose} fullScreen withCloseButton={false} closeOnEscape={false} classNames={modalClassNames} padding={0}>
+      <Modal
+        opened
+        onClose={onClose}
+        fullScreen
+        withCloseButton={false}
+        closeOnEscape={false}
+        classNames={modalClassNames}
+        padding={0}
+      >
         <ModalHeader title="Planlama Talebi Malzemeleri" icon="fas fa-clipboard-list" />
         <ModalBody>
           <DataTable
@@ -402,8 +457,17 @@ export function PlanningItemsModal({
           />
         </ModalBody>
         <ModalFooter>
-          <Text size="sm" mr="auto" data-testid="planning-selected-count">{`${count} malzeme seçildi`}</Text>
-          <Button variant="default" leftSection={<FaIcon icon="fas fa-download" />} disabled={!count} onClick={() => void downloadFiles()}>
+          <Text
+            size="sm"
+            mr="auto"
+            data-testid="planning-selected-count"
+          >{`${count} malzeme seçildi`}</Text>
+          <Button
+            variant="default"
+            leftSection={<FaIcon icon="fas fa-download" />}
+            disabled={!count}
+            onClick={() => void downloadFiles()}
+          >
             Seçilenlerin Dosyalarını İndir
           </Button>
           <Button variant="default" onClick={onClose}>
@@ -418,7 +482,12 @@ export function PlanningItemsModal({
           >
             Mevcut PR'ye Ekle
           </Button>
-          <Button leftSection={<FaIcon icon="fas fa-plus" />} disabled={!count} loading={busy} onClick={() => void addSelected()}>
+          <Button
+            leftSection={<FaIcon icon="fas fa-plus" />}
+            disabled={!count}
+            loading={busy}
+            onClick={() => void addSelected()}
+          >
             Seçilenleri Ekle
           </Button>
         </ModalFooter>
@@ -435,7 +504,9 @@ export function PlanningItemsModal({
         />
       ) : null}
       {filesOf ? <PlanningItemFilesModal {...filesOf} onClose={() => setFilesOf(null)} /> : null}
-      {requestOf !== null ? <PlanningRequestModal id={requestOf} onClose={() => setRequestOf(null)} /> : null}
+      {requestOf !== null ? (
+        <PlanningRequestModal id={requestOf} onClose={() => setRequestOf(null)} />
+      ) : null}
     </>
   );
 }
@@ -461,7 +532,9 @@ function AttachToPrModal({
       return;
     }
     if (!PR_NUMBER.test(value)) {
-      notify.error('Geçersiz satın alma talebi numarası formatı. Format: PR-YYYY-#### (örn: PR-2025-0347)');
+      notify.error(
+        'Geçersiz satın alma talebi numarası formatı. Format: PR-YYYY-#### (örn: PR-2025-0347)',
+      );
       return;
     }
     setBusy(true);
@@ -487,7 +560,13 @@ function AttachToPrModal({
   };
 
   return (
-    <Modal opened onClose={onClose} withCloseButton={false} classNames={modalClassNames} padding={0}>
+    <Modal
+      opened
+      onClose={onClose}
+      withCloseButton={false}
+      classNames={modalClassNames}
+      padding={0}
+    >
       <ModalHeader title="Mevcut Satın Alma Talebine Ekle" icon="fas fa-link" />
       <ModalBody>
         <Stack gap="sm">
@@ -504,7 +583,12 @@ function AttachToPrModal({
             value={number}
             onChange={(e) => setNumber(e.currentTarget.value)}
           />
-          <TextInput label="Seçilen Malzemeler" readOnly value={`${itemIds.length} malzeme seçildi`} leftSection={<i className="fas fa-list" />} />
+          <TextInput
+            label="Seçilen Malzemeler"
+            readOnly
+            value={`${itemIds.length} malzeme seçildi`}
+            leftSection={<i className="fas fa-list" />}
+          />
         </Stack>
       </ModalBody>
       <ModalFooter>
@@ -519,7 +603,15 @@ function AttachToPrModal({
   );
 }
 
-function PlanningItemFilesModal({ id, name, onClose }: { id: number; name: string; onClose: () => void }) {
+function PlanningItemFilesModal({
+  id,
+  name,
+  onClose,
+}: {
+  id: number;
+  name: string;
+  onClose: () => void;
+}) {
   const files = useQuery({
     queryKey: ['planningItems', 'files', id] as const,
     queryFn: () => getPlanningItemsFiles([id]),
@@ -529,7 +621,7 @@ function PlanningItemFilesModal({ id, name, onClose }: { id: number; name: strin
     if (files.isError) {
       notify.error(`Malzeme dosyaları yüklenirken hata oluştu: ${(files.error as Error).message}`);
       onClose();
-    } else if (files.isSuccess && !(entry?.files?.length)) {
+    } else if (files.isSuccess && !entry?.files?.length) {
       notify.info('Bu malzeme için dosya bulunmuyor');
       onClose();
     }
@@ -544,7 +636,11 @@ function PlanningItemFilesModal({ id, name, onClose }: { id: number; name: strin
       icon="fas fa-paperclip"
       size="lg"
       title={`${entry.item_name || name || 'Malzeme'} - Dosyalar`}
-      sections={[{ content: <FileAttachments readOnly layout="grid" files={entry.files.map(toAttachment)} /> }]}
+      sections={[
+        {
+          content: <FileAttachments readOnly layout="grid" files={entry.files.map(toAttachment)} />,
+        },
+      ]}
     />
   );
 }
@@ -559,7 +655,9 @@ function PlanningRequestModal({ id, onClose }: { id: number; onClose: () => void
   }, []);
   useEffect(() => {
     if (request.isError) {
-      notify.error(`Planlama talebi detayları yüklenirken hata oluştu: ${(request.error as Error).message}`);
+      notify.error(
+        `Planlama talebi detayları yüklenirken hata oluştu: ${(request.error as Error).message}`,
+      );
       onClose();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -579,11 +677,17 @@ function PlanningRequestModal({ id, onClose }: { id: number; onClose: () => void
           fields: [
             { label: 'Talep No', value: r.request_number || '-' },
             { label: 'Durum', value: r.status_label || r.status || '-' },
-            { label: 'Öncelik', value: (r.priority && PRIORITY_LABELS[r.priority]) || r.priority || 'Normal' },
+            {
+              label: 'Öncelik',
+              value: (r.priority && PRIORITY_LABELS[r.priority]) || r.priority || 'Normal',
+            },
             { label: 'Başlık', value: r.title, hidden: !r.title },
             { label: 'Açıklama', value: r.description, hidden: !r.description, span: 12 },
             { label: 'İhtiyaç Tarihi', value: r.needed_date ? formatDate(r.needed_date) : '-' },
-            { label: 'Oluşturulma', value: r.created_at ? formatDateTime(r.created_at, { second: '2-digit' }) : '-' },
+            {
+              label: 'Oluşturulma',
+              value: r.created_at ? formatDateTime(r.created_at, { second: '2-digit' }) : '-',
+            },
             {
               label: 'Oluşturan',
               value: r.created_by_full_name || r.created_by_username,
@@ -598,7 +702,16 @@ function PlanningRequestModal({ id, onClose }: { id: number; onClose: () => void
             <Table fz="sm">
               <Table.Thead>
                 <Table.Tr>
-                  {['#', 'Malzeme Kodu', 'Malzeme Adı', 'Malzeme Açıklaması', 'İş No', 'Miktar', 'Birim', 'Teknik Özellikler'].map((h) => (
+                  {[
+                    '#',
+                    'Malzeme Kodu',
+                    'Malzeme Adı',
+                    'Malzeme Açıklaması',
+                    'İş No',
+                    'Miktar',
+                    'Birim',
+                    'Teknik Özellikler',
+                  ].map((h) => (
                     <Table.Th key={h}>{h}</Table.Th>
                   ))}
                 </Table.Tr>
@@ -625,10 +738,11 @@ function PlanningRequestModal({ id, onClose }: { id: number; onClose: () => void
         {
           title: 'Dosya Ekleri',
           hidden: !r.files?.length,
-          content: <FileAttachments readOnly layout="grid" files={(r.files ?? []).map(toAttachment)} />,
+          content: (
+            <FileAttachments readOnly layout="grid" files={(r.files ?? []).map(toAttachment)} />
+          ),
         },
       ]}
     />
   );
 }
-
