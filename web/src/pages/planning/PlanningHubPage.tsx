@@ -7,7 +7,7 @@ import {
   type CuttingPlanTask,
 } from '@/api/manufacturing/capacityPlanning';
 import { pendingCncCutCountQueryOptions, SHOP_FLOOR_STALE_TIME } from '@/api/manufacturing/counts';
-import { activeTimersQueryOptions } from '@/api/manufacturing/timers';
+import { activeTimersQueryOptions, type Timer } from '@/api/manufacturing/timers';
 import type { LinearCuttingTask } from '@/api/manufacturing/linearCutting';
 import type { DepartmentRequest } from '@/api/general/departmentRequests';
 import {
@@ -36,10 +36,10 @@ import {
   visibleLinks,
   type LaneFigure,
   type LaneLink,
-  type LaneList,
   type LaneRow,
 } from '../manufacturing/section/AreaLane';
-import { sortTimers, timersList } from '../manufacturing/section/timerLane';
+import { LiveDuration } from '../manufacturing/dashboard-shared/parts';
+import { sortTimers } from '../manufacturing/section/timerLane';
 import css from './PlanningHubPage.module.css';
 
 // /planning: one lane per area in the İmalat hub's lane view. First what
@@ -275,6 +275,18 @@ function machineLoad(id: number, name: string, tasks: CuttingPlanTask[]): Machin
   return { id, name, cuts: tasks.length, hours: hoursSum, endMs };
 }
 
+/** In a machine's load row: its running timer's time, job and operator. */
+function RunningTimer({ timer }: { timer: Timer }) {
+  const job = timer.issue_key || timer.issue_name;
+  return (
+    <span className={css.running} title="Çalışıyor">
+      <span className={css.runningDot} data-family="green" aria-hidden />
+      <LiveDuration start={timer.start_time} />
+      {[job, timer.username].filter(Boolean).map((part) => ` · ${part}`)}
+    </span>
+  );
+}
+
 function LoadBar({ share }: { share: number }) {
   return (
     <span className={css.bar} data-family="blue" aria-hidden>
@@ -312,21 +324,32 @@ function CncLane() {
   });
   if (!shown) return null;
 
+  const running = sortTimers(timers.data);
+  // A machine's running timer shows in its own load row (longest-running).
+  const runningOn = new Map<number, Timer>();
+  for (const timer of running ?? []) {
+    if (timer.machine_fk != null && !runningOn.has(timer.machine_fk)) {
+      runningOn.set(timer.machine_fk, timer);
+    }
+  }
   const loadFailed = machines.isError || plans.some((plan) => plan.isError);
+  // Machines with planned cuts or a running timer; the running ones first.
   const loads =
     machines.data && plans.every((plan) => plan.data)
       ? list
           .map((machine, i) => machineLoad(machine.id, machine.name, plans[i]!.data!))
-          .filter((load) => load.cuts > 0)
-          .sort((a, b) => b.hours - a.hours)
+          .filter((load) => load.cuts > 0 || runningOn.has(load.id))
+          .sort(
+            (a, b) =>
+              Number(runningOn.has(b.id)) - Number(runningOn.has(a.id)) || b.hours - a.hours,
+          )
       : undefined;
   const total = loads?.reduce((sum, load) => sum + load.hours, 0);
   const lastEnd = loads?.reduce<number | undefined>(
     (end, load) => (load.endMs && (!end || load.endMs > end) ? load.endMs : end),
     undefined,
   );
-  const top = loads?.[0]?.hours ?? 0;
-  const running = sortTimers(timers.data);
+  const top = loads?.reduce((max, load) => Math.max(max, load.hours), 0) ?? 0;
 
   const figures: LaneFigure[] = [
     ...(live
@@ -389,26 +412,25 @@ function CncLane() {
       hub={CNC}
       links={links}
       figures={figures}
-      lists={[
-        ...(live
-          ? [timersList(running, { isError: timers.isError, dashboard: CNC_DASHBOARD })]
-          : []),
-        ...(canPlan
-          ? [
-              {
-                title: 'Makine yükü',
-                columns: [
-                  { label: 'Makine' },
-                  { label: 'Kesim', width: '64px', align: 'end' },
-                  { label: 'Bitiş', width: '72px', align: 'end' },
-                  { label: 'Planlı yük', width: '144px', align: 'end' },
-                ],
-                more: CNC_CAPACITY,
-                moreLabel: 'Kapasite Planlayıcı',
-                rows: loads?.slice(0, ROWS).map((load) => ({
+      list={
+        canPlan
+          ? {
+              title: 'Makine yükü',
+              columns: [
+                { label: 'Makine' },
+                { label: 'Kesim', width: '64px', align: 'end' },
+                { label: 'Bitiş', width: '72px', align: 'end' },
+                { label: 'Planlı yük', width: '144px', align: 'end' },
+              ],
+              more: CNC_CAPACITY,
+              moreLabel: 'Kapasite Planlayıcı',
+              rows: loads?.slice(0, ROWS).map((load) => {
+                const timer = live ? runningOn.get(load.id) : undefined;
+                return {
                   key: load.id,
                   link: `${CNC_CAPACITY}?machine=${load.id}`,
                   main: load.name,
+                  sub: timer ? <RunningTimer timer={timer} /> : undefined,
                   cells: [
                     formatNumber(load.cuts),
                     shortDate(load.endMs) ?? '-',
@@ -417,14 +439,14 @@ function CncLane() {
                       {hours(load.hours)}
                     </span>,
                   ],
-                })),
-                isError: loadFailed,
-                empty: 'Plana alınmış kesim yok.',
-                footnote: loads ? more(loads.length, ROWS) : undefined,
-              } satisfies LaneList,
-            ]
-          : []),
-      ]}
+                };
+              }),
+              isError: loadFailed,
+              empty: 'Plana alınmış kesim yok.',
+              footnote: loads ? more(loads.length, ROWS) : undefined,
+            }
+          : undefined
+      }
     />
   );
 }
