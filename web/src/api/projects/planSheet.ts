@@ -1,4 +1,4 @@
-import { backendBase } from '@legacy/base.js';
+import { backendBase } from '@/lib/backend';
 import type { LinkOverrides, PlanSheet, PlanSheetLink, SharedPlanSheet } from '@/features/plan-sheet/types';
 import { apiFetch } from '../client';
 

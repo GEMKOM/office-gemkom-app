@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { PurchaseRequestDetail } from '@/api/procurement/purchaseRequests';
 import { renderWithProviders } from '@/test/render';
@@ -6,12 +6,12 @@ import { notify } from '@/ui';
 import { callsTo, json } from '../testUtils';
 import { AdjustPricesModal } from './AdjustPricesModal';
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
   hasPerm: vi.fn(() => false),
   isSuperuser: vi.fn(() => false),
 }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const REQUEST = {
   id: 7,

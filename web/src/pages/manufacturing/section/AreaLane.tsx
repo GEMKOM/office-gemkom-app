@@ -1,5 +1,5 @@
 import { Skeleton } from '@mantine/core';
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import type { CSSProperties, ReactNode } from 'react';
 import { AppLink } from '@/shell/AppLink';
 import { FaIcon, PendingValue, type StatusFamily } from '@/ui';

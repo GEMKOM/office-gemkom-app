@@ -1,5 +1,5 @@
-import { filterNavigationByAccess } from '@legacy/apis/accessControl.js';
-import { NAVIGATION_STRUCTURE } from '@legacy/navigationStructure.js';
+import { filterNavigationByAccess } from '@/auth/accessControl';
+import { NAVIGATION_STRUCTURE } from '@/shell/navigationStructure';
 import { notifications } from '@mantine/notifications';
 import { useCallback, useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';

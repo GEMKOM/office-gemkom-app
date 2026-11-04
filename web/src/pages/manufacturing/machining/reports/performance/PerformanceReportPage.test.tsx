@@ -1,12 +1,12 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { WorkBook } from 'xlsx';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { PerformanceReportPage } from './PerformanceReportPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const writeFile = vi.fn<(book: WorkBook, name: string) => void>();
 vi.mock('xlsx', async (importOriginal) => {

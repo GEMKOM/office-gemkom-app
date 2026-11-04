@@ -4,7 +4,7 @@ import {
   istanbulDate,
   seenValue,
   setSeen,
-} from '@legacy/components/daily-summary/render.js';
+} from '@/neo/dailySummaryRender';
 import { getDailySummary, getLatestDailySummary, type DailySummaryDetail } from '@/api/assistant';
 import { getNeoState, setSummaryPrompt, setUnreadSummary, type UnreadSummary } from './neoStore';
 

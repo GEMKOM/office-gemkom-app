@@ -1,7 +1,7 @@
 // Dünden Bugüne: the Günlük Özet card (render/yesterday.js). The card never
 // marks the summary read; "Özeti aç" opens it in Neo's summaries view, the
 // React app's place for summaries (the legacy page opened its own modal).
-import { formatWindowLabel, relativeDayLabel } from '@legacy/components/daily-summary/render.js';
+import { formatWindowLabel, relativeDayLabel } from '@/neo/dailySummaryRender';
 import { Button } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { dashboardKeys, getLatestDailySummary } from '@/api/management/dashboard';
@@ -12,7 +12,7 @@ import classes from './dashboard.module.css';
 
 const EMPTY_TEXT = 'Özet yok (ofis yetkisi gerekir veya özet üretilmedi)';
 
-// The stat chips (components/daily-summary/render.js STAT_META): the first
+// The stat chips (neo/dailySummaryRender.ts STAT_META): the first
 // three always, the rest only when above zero; at most six on this card.
 const STAT_META: [string, string, StatusFamily, boolean][] = [
   ['new_jobs_root', 'iş emri', 'blue', true],

@@ -1,4 +1,4 @@
-import { REPORT_HUBS } from '@legacy/reportCatalog.js';
+import { REPORT_HUBS } from '@/routes/reportCatalog';
 import { useLocation } from 'react-router';
 import { NotFound } from '@/pages/NotFound';
 import { normalizeRoute } from '@/routes/migrated';

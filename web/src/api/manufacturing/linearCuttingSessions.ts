@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { queryOptions } from '@tanstack/react-query';
 import { saveBlob } from '@/ui/files';
 import { ApiError, apiFetch, buildUrl, errorMessage } from '../client';

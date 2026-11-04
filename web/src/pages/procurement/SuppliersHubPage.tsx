@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQueries } from '@tanstack/react-query';
 import { supplierCountQueryOptions } from '@/api/procurement/hubs';
 import { MenuCards, type MenuCard, type PageFigure } from '@/ui';

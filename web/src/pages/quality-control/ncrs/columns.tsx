@@ -1,4 +1,4 @@
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import { Text, Tooltip } from '@mantine/core';
 import type { Ncr, NcrGroup } from '@/api/quality-control/ncrs';
 import { formatDate } from '@/lib/format';
@@ -28,7 +28,7 @@ const CREATED_FORMAT: Intl.DateTimeFormatOptions = {
   day: 'numeric',
 };
 
-function PendingAction({ row, user, groups }: { row: Ncr; user: LegacyUser; groups: NcrGroup[] }) {
+function PendingAction({ row, user, groups }: { row: Ncr; user: AuthUser; groups: NcrGroup[] }) {
   const next = nextAction(row, user, groups);
   return (
     <div>
@@ -57,7 +57,7 @@ function PendingAction({ row, user, groups }: { row: Ncr; user: LegacyUser; grou
 /** Port of the ncrs.js table; the pending-action and team columns need the user and the groups. */
 // Sortable = NCRViewSet.ordering_fields (created_at, severity, status); other
 // orderings are silently ignored by the backend.
-export function ncrColumns(user: LegacyUser, groups: NcrGroup[]): DataTableColumn<Ncr>[] {
+export function ncrColumns(user: AuthUser, groups: NcrGroup[]): DataTableColumn<Ncr>[] {
   return [
     {
       key: 'ncr_number',

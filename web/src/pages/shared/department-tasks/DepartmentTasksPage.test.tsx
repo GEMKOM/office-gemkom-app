@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
@@ -12,8 +12,8 @@ import {
 } from './config';
 import { DepartmentTasksPage } from './DepartmentTasksPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ user: { username: 'ali' } }) }));
 
 const fetchMock = vi.mocked(authedFetch);

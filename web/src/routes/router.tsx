@@ -1,4 +1,4 @@
-import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@legacy/movedRoutes.js';
+import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@/routes/movedRoutes';
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
@@ -43,7 +43,7 @@ function mergedInto(path: string, target: string, preset: Record<string, string>
 
 /**
  * The old URL of a page that moved, or of a hub that gave way to its only page
- * (movedRoutes.js): forwards there with the query and hash (?machine=, ?cut=).
+ * (routes/movedRoutes.ts): forwards there with the query and hash (?machine=, ?cut=).
  * Listed in migrated-routes.json like mergedInto().
  */
 function movedTo(path: string, target: string): RouteObject {

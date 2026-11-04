@@ -13,7 +13,7 @@
 //
 // Which rows, which columns, which groups are open: what is on screen.
 
-import { exportPagesToPdf } from '@legacy/utils/pdfExport.js';
+import { exportPagesToPdf } from '@/lib/pdfExport';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import {

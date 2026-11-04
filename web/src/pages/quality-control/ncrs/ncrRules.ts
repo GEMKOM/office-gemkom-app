@@ -1,4 +1,4 @@
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import type { StatusFamily } from '@/ui';
 import type { Ncr, NcrGroup } from '@/api/quality-control/ncrs';
 
@@ -16,19 +16,19 @@ function list(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-export function isSuperuser(user: LegacyUser | null | undefined): boolean {
+export function isSuperuser(user: AuthUser | null | undefined): boolean {
   return Boolean(user && (user.is_superuser === true || user.is_admin === true));
 }
 
 /** Kalite Kontrol members and superusers edit, approve and reject NCRs. */
-export function canDecideNcrs(user: LegacyUser | null | undefined): boolean {
+export function canDecideNcrs(user: AuthUser | null | undefined): boolean {
   if (!user) return false;
   if (isSuperuser(user)) return true;
   return isQcMember(user);
 }
 
 /** Real Kalite Kontrol membership; superusers don't count. */
-export function isQcMember(user: LegacyUser | null | undefined): boolean {
+export function isQcMember(user: AuthUser | null | undefined): boolean {
   if (!user) return false;
   return (
     list(user.user_groups).some((s) => String(s || '').toLowerCase() === QC_GROUP_SLUG) ||
@@ -61,7 +61,7 @@ function hasAssignedTeam(row: Ncr): boolean {
 }
 
 /** Django groups, organization group slugs and organization group PKs from /users/me/. */
-function memberships(user: LegacyUser): Membership[] {
+function memberships(user: AuthUser): Membership[] {
   return [...list(user.groups), ...list(user.user_groups), ...list(user.user_group_ids)].filter(
     (m): m is Membership => m !== null && m !== undefined && m !== '',
   );
@@ -86,14 +86,14 @@ function matches(membership: Membership, team: AssignedTeam): boolean {
 }
 
 /** Is the NCR's team one of the user's own groups? (no superuser shortcut) */
-export function isOwnTeam(user: LegacyUser | null | undefined, row: Ncr): boolean {
+export function isOwnTeam(user: AuthUser | null | undefined, row: Ncr): boolean {
   if (!user || !hasAssignedTeam(row)) return false;
   const team = assignedTeam(row);
   return memberships(user).some((m) => matches(m, team));
 }
 
 /** Members of the assigned team, or a superuser. */
-export function isInAssignedTeam(user: LegacyUser | null | undefined, row: Ncr): boolean {
+export function isInAssignedTeam(user: AuthUser | null | undefined, row: Ncr): boolean {
   if (!user) return false;
   if (isSuperuser(user)) return true;
   return isOwnTeam(user, row);
@@ -106,7 +106,7 @@ export const isSubmittable = (ncr: Ncr | null | undefined) =>
 export const isClosable = (ncr: Ncr | null | undefined) => status(ncr) === 'approved';
 
 /** Draft or rejected NCRs go to QC from the assigned team (or a superuser). */
-export function canSubmit(user: LegacyUser | null | undefined, ncr: Ncr): boolean {
+export function canSubmit(user: AuthUser | null | undefined, ncr: Ncr): boolean {
   return isSubmittable(ncr) && isInAssignedTeam(user, ncr);
 }
 
@@ -115,7 +115,7 @@ export function canSubmit(user: LegacyUser | null | undefined, ncr: Ncr): boolea
  * group's NCRs, so they start unfiltered.
  */
 export function defaultTeamSelection(
-  user: LegacyUser | null | undefined,
+  user: AuthUser | null | undefined,
   groups: NcrGroup[],
 ): string[] {
   if (!user || isSuperuser(user) || isQcMember(user)) return [ALL_VALUE];
@@ -147,7 +147,7 @@ export interface NextAction {
  */
 export function nextAction(
   row: Ncr,
-  user: LegacyUser | null | undefined,
+  user: AuthUser | null | undefined,
   groups: NcrGroup[],
 ): NextAction {
   const teamName = teamDisplayName(row, groups);

@@ -1,4 +1,4 @@
-import { authedFetch, type LegacyUser } from '@legacy/authService.js';
+import { authedFetch, type AuthUser } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
@@ -7,14 +7,14 @@ import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { NcrsPage } from './NcrsPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: vi.fn() }));
 
 const fetchMock = vi.mocked(authedFetch);
 const useAuthMock = vi.mocked(useAuth);
 
-const QC_USER: LegacyUser = {
+const QC_USER: AuthUser = {
   id: 7,
   username: 'kk',
   first_name: 'Kalite',
@@ -22,7 +22,7 @@ const QC_USER: LegacyUser = {
   user_groups: ['kalite-kontrol'],
   user_group_ids: [5],
 };
-const WELDER: LegacyUser = {
+const WELDER: AuthUser = {
   id: 8,
   username: 'kaynak',
   user_groups: ['kaynak'],

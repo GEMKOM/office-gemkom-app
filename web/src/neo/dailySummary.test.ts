@@ -1,4 +1,4 @@
-import { istanbulDate } from '@legacy/components/daily-summary/render.js';
+import { istanbulDate } from '@/neo/dailySummaryRender';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { getDailySummary, getLatestDailySummary, type DailySummaryDetail } from '@/api/assistant';
 import {
@@ -16,8 +16,8 @@ vi.mock('@/api/assistant', async (importOriginal) => ({
   getLatestDailySummary: vi.fn(),
   getDailySummary: vi.fn(),
 }));
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const latest = vi.mocked(getLatestDailySummary);
 const detail = vi.mocked(getDailySummary);

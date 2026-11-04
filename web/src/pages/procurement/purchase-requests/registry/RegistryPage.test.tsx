@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
@@ -7,12 +7,12 @@ import { notify } from '@/ui';
 import { callsTo, json, page } from '../testUtils';
 import { RegistryPage } from './RegistryPage';
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
   hasPerm: vi.fn(() => true),
   isSuperuser: vi.fn(() => false),
 }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 5, username: 'ali', first_name: 'Ali', last_name: 'Kaya' } }),
 }));

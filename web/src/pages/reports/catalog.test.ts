@@ -1,10 +1,10 @@
-import { NAVIGATION_STRUCTURE, type NavTree } from '@legacy/navigationStructure.js';
+import { NAVIGATION_STRUCTURE, type NavTree } from '@/shell/navigationStructure';
 import {
   REPORT_CATALOG,
   REPORT_DEPARTMENTS,
   REPORT_HUBS,
   REPORT_TOPICS,
-} from '@legacy/reportCatalog.js';
+} from '@/routes/reportCatalog';
 import migratedRoutes from '@/routes/migrated-routes.json';
 import { appRoutes } from '@/routes/router';
 import {
@@ -26,7 +26,7 @@ function menuLeaves(tree: NavTree): string[] {
   });
 }
 
-describe('reportCatalog.js', () => {
+describe('reportCatalog', () => {
   it('lists real pages with known topics and departments', () => {
     const pages = new Set(migratedRoutes);
     for (const report of REPORT_CATALOG) {

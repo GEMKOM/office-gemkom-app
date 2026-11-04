@@ -1,5 +1,5 @@
-import { authedFetch } from '@legacy/authService.js';
-import { backendBase } from '@legacy/base.js';
+import { authedFetch } from '@/auth/authService';
+import { backendBase } from '@/lib/backend';
 
 export type QueryParamValue = string | number | boolean | null | undefined;
 export type QueryParams = Record<string, QueryParamValue | readonly QueryParamValue[]>;
@@ -193,7 +193,7 @@ function xhrSend(
 /**
  * Send a FormData with upload progress. fetch cannot report how much of a
  * request body has gone out, so this uses XMLHttpRequest with the session's
- * access token (localStorage is the one copy of it, see authService.js).
+ * access token (localStorage is the one copy of it, see auth/authService.ts).
  * When there is no token, or the server answers 401/403, it goes once more
  * through apiFetch, which refreshes the token and handles a refused portal
  * session the way every other request does; progress then jumps to the end.

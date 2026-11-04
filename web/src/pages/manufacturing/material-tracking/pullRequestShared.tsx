@@ -7,7 +7,7 @@ import {
   useCancelMaterialPullRequest,
   type MaterialPullRequest,
 } from '@/api/materialTracking/pullRequests';
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import { formatDateTime } from '@/lib/format';
 import {
   confirm,
@@ -61,7 +61,7 @@ export function DestinationCell({
 /** Pending only, by an admin or by whoever asked for it (legacy canCancel). */
 export function canCancelPullRequest(
   request: Pick<MaterialPullRequest, 'status' | 'requested_by'> | null | undefined,
-  user: LegacyUser | null | undefined,
+  user: AuthUser | null | undefined,
   isAdmin: boolean,
 ): boolean {
   if (!request || request.status !== 'pending') return false;
@@ -197,7 +197,7 @@ export interface PullRequestDetailModalProps {
   /** null: closed. */
   requestId: number | null;
   onClose: () => void;
-  user: LegacyUser | null | undefined;
+  user: AuthUser | null | undefined;
   isAdmin: boolean;
   /**
    * The Depo Çekme Talepleri layout: the warehouse ledger columns per line,

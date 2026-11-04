@@ -1,4 +1,4 @@
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import { Button, Select } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
@@ -89,7 +89,7 @@ type FollowUp =
   | { kind: 'decide'; ncr: Ncr; approve: boolean };
 
 /** Loads the NCR and its files fresh, then opens the edit form (showEditNCRModal). */
-function EditLoader({ id, user, onClose }: { id: number; user: LegacyUser; onClose: () => void }) {
+function EditLoader({ id, user, onClose }: { id: number; user: AuthUser; onClose: () => void }) {
   const detail = useNcr(id);
   const files = useNcrFiles(id);
   useEffect(() => {
@@ -115,7 +115,7 @@ function SubmitLoader({
   onClose,
 }: {
   id: number;
-  user: LegacyUser;
+  user: AuthUser;
   onClose: () => void;
 }) {
   const detail = useNcr(id);

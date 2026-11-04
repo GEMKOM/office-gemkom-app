@@ -1,4 +1,4 @@
-import type { NavItem } from '@legacy/navigationStructure.js';
+import type { NavItem } from '@/shell/navigationStructure';
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { useLocation } from 'react-router';

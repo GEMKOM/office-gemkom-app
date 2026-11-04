@@ -1,4 +1,4 @@
-import { NAVIGATION_STRUCTURE, type NavTree } from '@legacy/navigationStructure.js';
+import { NAVIGATION_STRUCTURE, type NavTree } from '@/shell/navigationStructure';
 import { useEffect } from 'react';
 import { useLocation } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';

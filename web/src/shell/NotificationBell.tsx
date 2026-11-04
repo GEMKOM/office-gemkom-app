@@ -1,4 +1,4 @@
-import { categoryMeta } from '@legacy/components/notificationBell/notificationCategories.js';
+import { categoryMeta } from '@/shell/notificationCategories';
 import {
   Loader,
   Popover,

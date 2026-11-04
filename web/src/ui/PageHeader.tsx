@@ -1,4 +1,4 @@
-import { NAVIGATION_STRUCTURE } from '@legacy/navigationStructure.js';
+import { NAVIGATION_STRUCTURE } from '@/shell/navigationStructure';
 import { Fragment, useMemo, type ReactNode } from 'react';
 import { useLocation } from 'react-router';
 import { hasHubAccess } from '@/auth/RequireRoute';

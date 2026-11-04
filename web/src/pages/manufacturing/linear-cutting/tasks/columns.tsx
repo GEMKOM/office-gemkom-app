@@ -1,4 +1,4 @@
-import { FLIPPED_TITLE, formatAngleTr } from '@legacy/manufacturing/linear-cutting/lc-geometry.js';
+import { FLIPPED_TITLE, formatAngleTr } from '@/pages/manufacturing/linear-cutting/shared/lcGeometry';
 import { UnstyledButton } from '@mantine/core';
 import type { LinearCut, LinearCuttingTask } from '@/api/manufacturing/linearCutting';
 import { StatusBadge, type DataTableColumn } from '@/ui';

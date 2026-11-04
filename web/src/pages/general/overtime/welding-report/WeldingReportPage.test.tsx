@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import {
@@ -13,8 +13,8 @@ import {
 } from './weldingReport';
 import { weldingDefaults, weldingParams, WeldingReportPage } from './WeldingReportPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const fetchMock = vi.mocked(authedFetch);
 // Mantine modals and selects are slow in jsdom when the suite runs in parallel.

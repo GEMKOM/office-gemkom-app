@@ -1,4 +1,4 @@
-import { getUser } from '@legacy/authService.js';
+import { getUser } from '@/auth/authService';
 import { Button, Modal, Stack, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';

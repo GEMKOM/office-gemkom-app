@@ -1,6 +1,6 @@
 import { expect, mockBackend, seedSession, test } from './fixtures';
 
-// CNC and linear cutting moved from İmalat to Planlama (movedRoutes.js): the
+// CNC and linear cutting moved from İmalat to Planlama (routes/movedRoutes.ts): the
 // old URLs forward with their query, and the grants stay on the old routes.
 // Every page below a hub has a back arrow to its parent in the menu.
 

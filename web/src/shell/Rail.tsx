@@ -1,4 +1,4 @@
-import type { NavItem, NavTree } from '@legacy/navigationStructure.js';
+import type { NavItem, NavTree } from '@/shell/navigationStructure';
 import { Menu, ScrollArea, Tooltip, UnstyledButton } from '@mantine/core';
 import { useLocation } from 'react-router';
 import { NeoEntry, NeoRule } from '@/neo';

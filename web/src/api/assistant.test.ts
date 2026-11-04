@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   archiveConversation,
@@ -15,8 +15,8 @@ import {
 } from './assistant';
 import { neoLinkTarget } from '@/neo/neoLinks';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const mockedFetch = vi.mocked(authedFetch);
 

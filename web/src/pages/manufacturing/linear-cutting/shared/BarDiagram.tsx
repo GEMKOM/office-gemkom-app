@@ -2,7 +2,7 @@ import {
   drawBarCanvas,
   formatPassAngle,
   passKindLabel,
-} from '@legacy/manufacturing/linear-cutting/lc-geometry.js';
+} from '@/pages/manufacturing/linear-cutting/shared/lcGeometry';
 import { Group, Portal, Table, Text } from '@mantine/core';
 import { useEffect, useMemo, useRef } from 'react';
 import type { LinearCuttingTask, LinearPass } from '@/api/manufacturing/linearCutting';

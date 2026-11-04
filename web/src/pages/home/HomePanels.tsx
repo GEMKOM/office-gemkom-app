@@ -1,5 +1,5 @@
-import { categoryMeta } from '@legacy/components/notificationBell/notificationCategories.js';
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { categoryMeta } from '@/shell/notificationCategories';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { Popover, Skeleton, TextInput, UnstyledButton, VisuallyHidden } from '@mantine/core';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';

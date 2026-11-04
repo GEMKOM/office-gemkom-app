@@ -7,8 +7,8 @@ import {
   validateOvertimeRequest,
 } from './overtime';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 it('formats durations like legacy', () => {
   expect(formatOvertimeDuration(0)).toBe('0 saat');

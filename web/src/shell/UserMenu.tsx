@@ -1,5 +1,5 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { logout, stopImpersonation } from '@legacy/authService.js';
+import { hasRouteAccess } from '@/auth/accessControl';
+import { logout, stopImpersonation } from '@/auth/authService';
 import { Menu, UnstyledButton, type FloatingPosition } from '@mantine/core';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';

@@ -2,7 +2,7 @@ import {
   angleFromSetback,
   MAX_ANGLE_DEG,
   setbackFromAngle,
-} from '@legacy/manufacturing/linear-cutting/lc-geometry.js';
+} from '@/pages/manufacturing/linear-cutting/shared/lcGeometry';
 import type { LinearPart, LinearPartPayload } from '@/api/manufacturing/linearCuttingSessions';
 
 /**

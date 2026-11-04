@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { SegmentedControl } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';

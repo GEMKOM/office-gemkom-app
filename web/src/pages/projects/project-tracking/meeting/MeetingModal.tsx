@@ -1,4 +1,4 @@
-import { exportElementToPdf } from '@legacy/utils/pdfExport.js';
+import { exportElementToPdf } from '@/lib/pdfExport';
 import { Loader } from '@mantine/core';
 import { useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';

@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { queryOptions } from '@tanstack/react-query';
 import { ApiError, apiFetch, buildUrl, cleanParams, errorMessage } from '../client';
 import { REFERENCE_STALE_TIME } from '../reference/shared';

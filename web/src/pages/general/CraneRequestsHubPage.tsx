@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { craneStatusCountQueryOptions, myCraneRequestsQueryOptions } from '@/api/general/hubs';
 import type { CraneRequest } from '@/api/general/craneRequests';

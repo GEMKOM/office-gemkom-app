@@ -1,4 +1,4 @@
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import { ActionIcon, Button, Group, Loader, Modal, Stack, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import {
@@ -161,7 +161,7 @@ function FileList({
 
 export interface NcrDetailModalProps {
   ncrId: number;
-  currentUser: LegacyUser;
+  currentUser: AuthUser;
   groups: NcrGroup[];
   /** Hidden (not unmounted) while a follow-up modal opened from it is up. */
   hidden?: boolean;

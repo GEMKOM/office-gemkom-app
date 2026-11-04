@@ -1,4 +1,4 @@
-import { impersonateUser as legacyImpersonateUser } from '@legacy/authService.js';
+import { impersonateUser as legacyImpersonateUser } from '@/auth/authService';
 import { queryOptions } from '@tanstack/react-query';
 import { apiFetch, isApiError } from '../client';
 import { qk } from '../keys';

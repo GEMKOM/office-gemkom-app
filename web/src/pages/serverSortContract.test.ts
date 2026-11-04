@@ -1,4 +1,4 @@
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import type { DataTableColumn } from '@/ui';
 import { departmentRequestColumns } from './general/department-requests/list/columns';
 import { userColumns } from './human_resources/users/columns';
@@ -30,7 +30,7 @@ const CONTRACTS: {
   },
   {
     name: 'ncrs',
-    columns: ncrColumns({ id: 1 } as LegacyUser, []) as never,
+    columns: ncrColumns({ id: 1 } as AuthUser, []) as never,
     orderable: ['created_at', 'severity', 'status'],
   },
   { name: 'qc reviews', columns: reviewColumns as never, orderable: ['submitted_at', 'status'] },

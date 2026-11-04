@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { MenuCards, type MenuCard, type PageFigure } from '@/ui';
 import { HubPanels } from '../../hub/HubPanels';
 import { countFigure, countValue } from '../../hubCount';

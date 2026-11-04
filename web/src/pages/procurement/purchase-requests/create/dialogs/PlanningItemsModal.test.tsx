@@ -1,15 +1,15 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { json } from '../../testUtils';
 import { PlanningItemsModal } from './PlanningItemsModal';
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
   hasPerm: vi.fn(() => false),
   isSuperuser: vi.fn(() => false),
 }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const item = (id: number, code: string) => ({
   id,

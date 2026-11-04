@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { maintenanceKeys } from '@/api/maintenance/faults';
 import { renderWithProviders } from '@/test/render';
@@ -6,8 +6,8 @@ import { localDay } from '../shared';
 import { clock, startMs } from './dashboardRows';
 import { MaintenanceDashboardPage } from './MaintenanceDashboardPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const fetchMock = vi.mocked(authedFetch);
 

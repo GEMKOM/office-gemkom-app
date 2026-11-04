@@ -1,4 +1,4 @@
-import { hasPerm, isSuperuser } from '@legacy/authService.js';
+import { hasPerm, isSuperuser } from '@/auth/authService';
 import {
   ActionIcon,
   Alert,

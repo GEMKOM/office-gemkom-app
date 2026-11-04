@@ -1,4 +1,4 @@
-import { NAVIGATION_STRUCTURE, type NavTree } from '@legacy/navigationStructure.js';
+import { NAVIGATION_STRUCTURE, type NavTree } from '@/shell/navigationStructure';
 import { findParent, findTrail, flattenMenu, isPathActive, isUnbuiltGeneralPage, withoutPaths } from './navModel';
 
 const leaf = (label: string) => ({ label, icon: 'fas fa-circle', children: {} });

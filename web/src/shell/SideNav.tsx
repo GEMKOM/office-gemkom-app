@@ -1,4 +1,4 @@
-import type { NavTree } from '@legacy/navigationStructure.js';
+import type { NavTree } from '@/shell/navigationStructure';
 import { NavLink, ScrollArea } from '@mantine/core';
 import { useLocation } from 'react-router';
 import { FaIcon } from './FaIcon';
