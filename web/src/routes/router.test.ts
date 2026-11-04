@@ -91,6 +91,19 @@ describe('moved pages', () => {
     );
   });
 
+  it("keep an old bookmark's hash from the address bar (a Request has none)", async () => {
+    window.history.replaceState(null, '', '/manufacturing/cnc-cutting/cuts?cut=1#parts');
+    try {
+      expect(await landing('/manufacturing/cnc-cutting/cuts?cut=1')).toBe(
+        '/planning/cnc-cutting/cuts/?cut=1#parts',
+      );
+      // Another page's hash never rides along.
+      expect(await landing('/manufacturing/linear-cutting')).toBe('/planning/linear-cutting/');
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
   it('open the planner from the one-card capacity hubs', async () => {
     expect(await landing('/manufacturing/cnc-cutting/capacity?machine=3')).toBe(
       '/planning/cnc-cutting/capacity/?machine=3',

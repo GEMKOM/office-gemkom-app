@@ -366,6 +366,21 @@ const BENIGN_CONSOLE_ERRORS: RegExp[] = [
   /net::ERR_BLOCKED_BY_CLIENT/,
 ];
 
+// Every page path is answered with /404.html, the SPA entry (scripts/assemble.mjs),
+// so Chrome logs the page document's own 404 status. A missing file (a path with
+// an extension) or a failed API call (another origin) still counts.
+function isSpaEntry404(text: string, url: string): boolean {
+  if (!/status of 404/.test(text) || !url) return false;
+  let target: URL;
+  try {
+    target = new URL(url);
+  } catch {
+    return false;
+  }
+  const last = target.pathname.slice(target.pathname.lastIndexOf('/') + 1);
+  return target.origin !== new URL(BACKEND).origin && !last.includes('.');
+}
+
 export interface ConsoleErrors {
   /** Every error-level console message and uncaught page error, benign ones excluded. */
   readonly errors: string[];
@@ -382,7 +397,8 @@ export function collectConsoleErrors(page: Page, extraBenign: RegExp[] = []): Co
   page.on('console', (message) => {
     if (message.type() !== 'error') return;
     const location = message.location();
-    const text = `${message.text()}${location.url ? ` (${location.url}:${location.lineNumber})` : ''}`;
+    if (isSpaEntry404(message.text(), location.url)) return;
+    const text =`${message.text()}${location.url ? ` (${location.url}:${location.lineNumber})` : ''}`;
     if (keep(text)) errors.push(`[console.error] ${text}`);
   });
   page.on('pageerror', (error) => {

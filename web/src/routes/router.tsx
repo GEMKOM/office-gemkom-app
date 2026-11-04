@@ -26,6 +26,16 @@ const reportHub = async () => ({
 });
 
 /**
+ * The hash of the URL being loaded. A loader's Request carries no fragment, but
+ * when an old bookmark is opened (a full page load) its hash is still in the
+ * address bar, and the forward keeps it.
+ */
+function addressBarHash(request: Request): string {
+  if (typeof window === 'undefined') return '';
+  return window.location.pathname === new URL(request.url).pathname ? window.location.hash : '';
+}
+
+/**
  * The old URL of a report that was merged into another: forwards there with
  * the view preset, keeping the rest of the query (deep links such as ?edit=).
  * It stays in migrated-routes.json so bookmarks keep loading the SPA.
@@ -36,7 +46,7 @@ function mergedInto(path: string, target: string, preset: Record<string, string>
     loader: ({ request }) => {
       const params = new URL(request.url).searchParams;
       for (const [key, value] of Object.entries(preset)) params.set(key, value);
-      return redirect(`${target}/?${params.toString()}`);
+      return redirect(`${target}/?${params.toString()}${addressBarHash(request)}`);
     },
   };
 }
@@ -51,7 +61,7 @@ function movedTo(path: string, target: string): RouteObject {
     path,
     loader: ({ request }) => {
       const url = new URL(request.url);
-      return redirect(`${target}/${url.search}${url.hash}`);
+      return redirect(`${target}/${url.search}${url.hash || addressBarHash(request)}`);
     },
   };
 }
