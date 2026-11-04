@@ -1,75 +1,72 @@
-# Porting a legacy page to React
+# Building pages
 
-How to move one legacy page (`<route>/index.html` + its script) into `web/`.
-Every page so far was ported this way; keep to it so the pages stay alike.
-The pilot pages are the worked examples:
+How pages are built in `web/`. Every page of the app was ported from the old
+multi-page site this way; new pages follow the same pattern so they stay
+alike. The worked examples:
 
-- Hub page: [`src/pages/sales/SalesHubPage.tsx`](../src/pages/sales/SalesHubPage.tsx) (was `sales/sales.js`)
-- List/CRUD page: [`src/pages/sales/customers/`](../src/pages/sales/customers/) (was `sales/customers/`)
+- Hub page: [`src/pages/sales/SalesHubPage.tsx`](../src/pages/sales/SalesHubPage.tsx)
+- List/CRUD page: [`src/pages/sales/customers/`](../src/pages/sales/customers/)
 
-## Checklist
+See the [README](../../README.md) for the layout, the commands and the deploy.
 
-1. **Read the whole legacy page first**: its `index.html` (inline styles,
-   extra `<script>` tags), its page script and anything only it imports. List
-   every behaviour: buttons, modals, URL params, exports, polling, keyboard
-   shortcuts. The port should do all of it unless you agree otherwise.
-2. **Check nothing else imports its files**:
-   `git grep -n "<route>/" -- ':!<route>/*' ':!web/*'`. Shared helpers stay
-   where they are until their last legacy user is gone.
-3. **API**: add typed functions and hooks under `src/api/` (one module per
-   domain). Copy endpoints and params from `apis/*.js` exactly; never call
-   `authedFetch` from a page. Reference data (users, customers, machines,
-   teams, job orders) already has cached hooks in `src/api/reference/`.
-4. **Page**: `src/pages/<section>/<page>/<Name>Page.tsx`, built from `@/ui`
-   (table below). Keep labels, field names and validation identical.
-5. **Route**: add a lazy route in `src/routes/router.tsx` and the same path in
-   `src/routes/migrated-routes.json` (normalized: leading slash, no trailing
-   slash). Section landing pages get `handle: { access: 'hub' }`. The router
-   test fails if the two lists disagree.
-6. **Delete the legacy page**: its `index.html` and the scripts only it used,
-   in the same change. The deploy writes the SPA's `index.html` at that path.
-7. **Tests**: a `*.test.tsx` next to the page (list renders, filters update
+## Adding a page
+
+1. **API**: typed functions and query options under `src/api/<domain>/` (one
+   module per resource; search `src/api` first, most resources already have
+   one). Pages reach the backend through these modules, which use `apiFetch` /
+   `apiUpload` from `@/api/client`; never `fetch` or `authedFetch` in a
+   page. Reference data (users, customers, machines, teams, job orders) has
+   cached hooks in `src/api/reference/`.
+2. **Page**: `src/pages/<section>/<page>/<Name>Page.tsx`, built from `@/ui`
+   (table below).
+3. **Route**: a lazy route in `src/routes/router.tsx` and the same path in
+   `src/routes/migrated-routes.json` (leading slash, no trailing slash). Section
+   landing pages get `handle: { access: 'hub' }`. The router test fails if the
+   two lists disagree; the e2e smoke test opens every listed route.
+4. **Menu and access**: add the page to `src/shell/navigationStructure.ts`.
+   Who may open it comes from its `Page: /route/` grant (a backend migration
+   adds the permission); exceptions go in `src/auth/accessControl.ts`. A
+   report also gets an entry in `src/routes/reportCatalog.ts`.
+5. **Moving a page** to a new URL: add old → new to `src/routes/movedRoutes.ts`.
+   The old URL forwards with its query and hash, and the old grant keeps
+   opening it.
+6. **Tests**: a `*.test.tsx` next to the page (list renders, filters update
    the URL, create/edit validation and submit, delete confirm). Mock
-   `@/api/client`'s `apiFetch`.
-8. **Check**: `npm run check`, `npm run test:e2e`, and click through the page
+   `@/api/client`'s `apiFetch`, or the backend with MSW.
+7. **Check**: `npm run check`, `npm run test:e2e`, and click through the page
    with `npm run dev` (port 5180) against a local backend.
 
-## Legacy → React
+## Building blocks
 
-| Legacy | React | Notes |
+| Need | Use | Notes |
 |---|---|---|
-| `guardRoute()` + `initRouteProtection()` | nothing | Every SPA route is guarded by the shell (`RequireRoute`). |
-| `initNavbar()` | nothing | The shell renders the navbar. |
-| `new HeaderComponent({...})` | `<PageHeader>` (the red band) | `show*Button` flags become `actions`. The breadcrumb and the back arrow come from the menu tree (the arrow goes one level up); `backUrl` becomes `backTo`, used only for a page the menu does not place or a view inside the page itself. A page that moves URL goes in `movedRoutes.js` (old URL forwards, old grants still open it). |
-| `new StatisticsCards(...)` | `PageHeader` `stats` on list pages; `<StatCards>` on dashboards | Pass values; no `updateValues()`. |
-| `new FiltersComponent(...)` + `add*Filter()` | `<FilterBar inline filters={[...]}>` in `DataTable`'s `filters` slot + `useUrlFilters(defaults)` | The first text filter is the search box, the rest are pills that apply at once. Applied filters live in the URL (shareable, survive reload). |
-| `new TableComponent(...)` + `setLoading`/`updateData` | `<DataTable>` + `useQuery({ placeholderData: keepPreviousData })` | Pass `loading={isFetching}`; rows stay on screen while refetching. |
-| `onSort` + `mapSortFieldToOrdering` | `sort={{ sortBy, sortDir, onSortChange }}` + `toOrdering()` | Column `sortKey` replaces the mapping table. |
-| `new DisplayModal(...)` + `addSection`/`addField`/`show()` | `<DetailModal opened sections={[...]}>` | Controlled by state, not `show()`/`hide()`. |
-| `new EditModal(...)` + `getFormData()` | `<FormModal>` + `useForm` (zod resolver) | Validation in the schema. |
-| `new ConfirmationModal(...).show({ onConfirm })` | `if (await confirm({...})) { ... }` | |
-| `showNotification(msg, type)` | `notify.success(msg)` / `notify.error(err)` | `notify.error` takes the caught error. |
-| `new ModernDropdown(el, { remoteSearch })` | `<SelectRemote search={...}>` | Debounced, cancels stale searches. |
-| `new MenuComponent(...)` | `<MenuCards cards={[...]}>` | Cards filter themselves by access. |
-| `window.location.href = path` / `navigateTo` | `useAppNavigate()` / `<AppLink to>` | Client-side for React routes, full load for legacy ones. |
-| `window.fooHandler = ...` + `onclick="fooHandler(id)"` | a prop or a closure | No globals. |
-| module-level `let` state | `useState` / URL params / query cache | Server data belongs in TanStack Query, not in state. |
-| `Promise` chains in `DOMContentLoaded` | independent `useQuery` hooks | They run in parallel; no waterfalls. |
-| `setInterval` polling | `refetchInterval` | Pause it while the tab is hidden. |
-| `toLocaleString('tr-TR')` | `formatDate`, `formatNumber`, `formatCurrency` from `@/lib/format` | |
-| `new FileAttachments(...)` + `setFiles()` | `<FileAttachments files onUpload onDelete>` | Map API rows to `AttachmentFile`; see below. |
-| `new FileViewer().openFile(url, name, ext)` | `<FileViewer files index onIndexChange onClose>` | FileAttachments opens it itself. |
-| `renderRichText(text, opts)` into `innerHTML` | `<RichText content mentionedUsers mentionedGroups>` | Never set other HTML. |
-| `attachRichTextEditor(textarea)` | `<RichTextEditor value onChange>` | Works with `form.getInputProps(field)`. |
-| `mountTopicDiscussion(root, topicId)` | `<TopicDiscussion topicId>` from `@/pages/shared/topic-discussion/TopicDiscussion` | Topic text, files, comments, posting and editing. |
-| JSZip "Tümünü İndir (ZIP)" | `downloadFilesAsZip(files, name)` from `@/ui` | No library; stored zip. |
+| Sign-in, route guard | nothing | The shell guards every route (`RequireRoute`); a signed-out visitor goes to `/login/` and comes back after. |
+| Navbar, breadcrumb | nothing | The shell renders the rail and top bar from the menu tree. |
+| Page title, actions, back arrow | `<PageHeader>` (the red band) | The breadcrumb and back arrow come from the menu tree; `backTo` only for a page the menu does not place or a view inside the page. |
+| Figures | `PageHeader` `stats` on list pages; `<StatCards>` on dashboards | |
+| Filters | `<FilterBar inline filters={[...]}>` in `DataTable`'s `filters` slot + `useUrlFilters(defaults)` | The first text filter is the search box, the rest are pills that apply at once. Applied filters live in the URL (shareable, survive reload). |
+| A table | `<DataTable>` + `useQuery({ placeholderData: keepPreviousData })` | Pass `loading={isFetching}`; rows stay on screen while refetching. |
+| Server-side sorting | `sort={{ sortBy, sortDir, onSortChange }}` + `toOrdering()` | Column `sortKey` names the API field. |
+| A record's details | `<DetailModal opened sections={[...]}>` | Controlled by state. |
+| A form | `<FormModal>` + `useForm` (zod resolver) | Validation in the schema. |
+| "Are you sure?" | `if (await confirm({...})) { ... }` | |
+| Toasts | `notify.success(msg)` / `notify.error(err)` | `notify.error` takes the caught error. |
+| A searchable remote select | `<SelectRemote search={...}>` | Debounced, cancels stale searches. |
+| Hub cards | `<MenuCards cards={[...]}>` | Cards filter themselves by access. |
+| A link or navigation | `<AppLink to>` / `useAppNavigate()` | |
+| Server data | TanStack Query, not `useState` | Mutations invalidate the keys they change. |
+| Polling | `refetchInterval` | Pause it while the tab is hidden. |
+| Dates, numbers, money | `formatDate`, `formatNumber`, `formatCurrency` from `@/lib/format` | |
+| Files on a record | `<FileAttachments files onUpload onDelete>` | Map API rows to `AttachmentFile`; see below. |
+| A file preview | `<FileViewer files index onIndexChange onClose>` | FileAttachments opens it itself. |
+| Stored comment text | `<RichText content mentionedUsers mentionedGroups>` | Never set other HTML. |
+| A comment box | `<RichTextEditor value onChange>` | Works with `form.getInputProps(field)`. |
+| A topic with its comments | `<TopicDiscussion topicId>` from `@/pages/shared/topic-discussion/TopicDiscussion` | |
+| "Tümünü İndir (ZIP)" | `downloadFilesAsZip(files, name)` from `@/ui` | No library; stored zip. |
+| A PDF of what is on screen | `exportElementToPdf` / `exportPagesToPdf` from `@/lib/pdfExport` | html2canvas + jsPDF load from the CDN on first use. |
+| A timeline | `<Gantt>` from `@/ui` | |
 
 ## Attachments, file preview and rich text
-
-Three shared blocks replace `components/file-attachments`, `components/file-viewer`
-and `utils/richText.js` + `utils/richTextEditor.js`. The first two left with
-Proje Takibi, their last legacy page; the rich text files stay while a legacy
-page still uses them.
 
 **FileAttachments** shows a record's files and takes the page's own endpoints:
 
@@ -104,7 +101,7 @@ FileAttachments list.
 
 **RichText** renders stored comment text: `**kalın**`, `*italik*`, `~~çizili~~`,
 `` `kod` ``, `!!kritik!!`, `++olumlu++`, lists, links and `@mention` badges, the
-same HTML the legacy renderer makes (its tests are ported). Pass the API's
+same HTML the old site rendered (its tests were ported). Pass the API's
 `mentioned_users_data` and `mentioned_groups_data`; a group badge opens its
 member list. `renderRichText()` escapes everything first and only adds its own
 tags: it is the one string the app may give `dangerouslySetInnerHTML`, and
@@ -122,15 +119,13 @@ sections of a finished report are JSX (`ReportSections.tsx`,
 `LaborSection.tsx`, `PlanTables.tsx`, data from `reportModel.ts`), and the
 model-written markdown goes through `Markdown.tsx`, which builds React
 elements, not an HTML string. So `renderRichText()` stays the only string the
-app gives `dangerouslySetInnerHTML`. The markup keeps the legacy `est-*`
+app gives `dangerouslySetInnerHTML`. The markup keeps the old card's `est-*`
 class names; `EstimateReport.module.css` styles them under its `.scope`
 class only (the card's root, and a wrapper in the Referanslar modals that
 show the plan tables and the "Nasıl çalışır?" text).
 
 ## Rules
 
-- **No new features in a port.** Fix obvious bugs, say so in the PR, and leave
-  the rest for later. Reviewers compare behaviour, not code.
 - **Keep the old URLs and query params.** Notification e-mails deep-link to
   them (`?talep=SAT-123`).
 - **One render per data change.** Don't copy server data into `useState`; read
@@ -159,8 +154,7 @@ screen without scrolling, and nearly fit 1366px:
 
 ## DataTable: editing, grouping, reordering
 
-The legacy table's `editable`, `groupBy` and `draggable` options have
-DataTable equivalents, so a page using them ports line by line. Unit tests:
+DataTable edits cells in place, groups rows and reorders them by drag. Unit tests:
 `src/ui/DataTable/{editing,grouping,reorder}.test.tsx`; live demos at
 `/react-preview/ui` (dev only). Screenshots:
 [editing](img/datatable-editing.png), [saving](img/datatable-edit-saving.png),
@@ -169,16 +163,16 @@ DataTable equivalents, so a page using them ports line by line. Unit tests:
 
 ### Inline cell editing
 
-| Legacy | React |
+| Want | Column / table option |
 |---|---|
-| `editable: true` + `editableColumns: ['note']` | `editable` on each editable column |
-| column `type: 'number'`, `min`, `max`, `step` | `editable: { type: 'number', min, max, step }` |
-| column `type: 'select'`, `options` | `editable: { type: 'select', options }` (options may be `(row) => [...]`) |
-| column `type: 'date'` | `editable: { type: 'date' }` (value `'YYYY-MM-DD'`) |
-| a `<textarea>` editor (Ctrl+Enter saves) | `editable: { type: 'textarea' }` (Enter is a new line, Ctrl/Cmd+Enter saves) |
-| column `validate(value, row)` | `editable: { validate }`: return a message to refuse |
-| `isRowEditable(row)` | `isRowEditable={(row, index) => ...}`; per column `editable: { enabled: (row) => ... }` |
-| `onEdit(row, field, newValue, oldValue)` | `onCellEdit={({ row, rowId, columnKey, value, oldValue }) => promise}` |
+| an editable column | `editable` on each editable column |
+| a number | `editable: { type: 'number', min, max, step }` |
+| a choice | `editable: { type: 'select', options }` (options may be `(row) => [...]`) |
+| a date | `editable: { type: 'date' }` (value `'YYYY-MM-DD'`) |
+| multi-line text | `editable: { type: 'textarea' }` (Enter is a new line, Ctrl/Cmd+Enter saves) |
+| validation | `editable: { validate }`: return a message to refuse |
+| rows or cells that may not be edited | `isRowEditable={(row, index) => ...}`; per column `editable: { enabled: (row) => ... }` |
+| saving | `onCellEdit={({ row, rowId, columnKey, value, oldValue }) => promise}` |
 
 ```tsx
 const columns = useMemo<DataTableColumn<Item>[]>(() => [
@@ -198,20 +192,18 @@ const columns = useMemo<DataTableColumn<Item>[]>(() => [
 
 - **Values are typed**: number editors hand over a number (`null` when
   emptied; `1,5` and `1.234,5` are read the Turkish way), dates a
-  `'YYYY-MM-DD'` string or `null`, text and select a string. Legacy `onEdit`
-  got the raw input string; drop the `parseFloat` when porting.
-  `editable: { type: 'number', parse }` replaces the reading when the legacy
-  input read numbers its own way (the sales cost table's price takes every
+  `'YYYY-MM-DD'` string or `null`, text and select a string.
+  `editable: { type: 'number', parse }` replaces the reading when a field
+  reads numbers its own way (the sales cost table's price takes every
   dot as a thousands separator, so `90.000` is 90000).
 - **Click** a cell (or focus it and press **Enter**/**F2**) to edit. **Enter**
   saves, **Escape** cancels, **Tab**/**Shift+Tab** save and open the next or
-  previous editable cell, leaving the cell (blur) saves, like legacy. Arrow
+  previous editable cell, leaving the cell (blur) saves. Arrow
   keys move between editable cells; the table is one tab stop.
 - **Optimistic**: while the returned promise runs the cell shows the new value
   and a spinner (`data-cell-state="saving"`). If it rejects, the old value
   comes back, the cell turns red with the message in a tooltip
-  (`data-cell-state="error"`) and an error toast shows (legacy
-  `showNotification`). On success the new value stays until the page hands
+  (`data-cell-state="error"`) and an error toast shows. On success the new value stays until the page hands
   over a new row object, so invalidate or `setQueryData` as usual. An
   unchanged value does not call `onCellEdit`.
 - **Optimistic display**: the cell renders the row with `accessor` (or `key`)
@@ -220,20 +212,20 @@ const columns = useMemo<DataTableColumn<Item>[]>(() => [
 - **Draft editors** that save later with a button (multi-row create forms):
   keep the rows in state, update them in `onCellEdit` (no promise), and mark
   changed cells with `isCellDirty={(row, key) => ...}` (`data-cell-state="dirty"`).
-- An editable cell's click does not fire `onRowClick` (legacy stopped it too).
+- An editable cell's click does not fire `onRowClick`.
   A select column without `render` shows the option label.
 
 ### Grouped rows
 
-| Legacy | React |
+| Want | `grouping` option |
 |---|---|
-| `groupBy: 'user_id'` | `grouping={{ by: 'user_id' }}`, or a function, or several keys `by: ['month', 'user']` (nested) |
-| `groupHeaderFormatter(value, rows)` returning HTML | `header: (group) => <node />` (`group.value`, `group.rows`, `group.depth`) |
-| `groupHeaderFormatter` returning `{ field: html, _actions }` | `header: (group) => ({ cells: { field: node, _actions: node } })` |
-| `groupCollapsible` | `collapsible` (default **true**; or `(group) => boolean`: a group without a toggle stays as `defaultExpanded` set it, like legacy) |
-| `defaultGroupExpanded` | `defaultExpanded` (boolean or `(group) => boolean`) |
-| `groupSortDirection` | `sort: 'asc' \| 'desc' \| false \| (a, b) => n` (natural order, empties last) |
-| (none) | `footer: (group) => ({ cells: { hours: sum(group.rows) } })`: a totals row after each group |
+| group by a field | `grouping={{ by: 'user_id' }}`, or a function, or several keys `by: ['month', 'user']` (nested) |
+| a group header | `header: (group) => <node />` (`group.value`, `group.rows`, `group.depth`) |
+| header cells per column | `header: (group) => ({ cells: { field: node, _actions: node } })` |
+| open/close groups | `collapsible` (default **true**; or `(group) => boolean`: a group without a toggle stays as `defaultExpanded` set it) |
+| groups open at first | `defaultExpanded` (boolean or `(group) => boolean`) |
+| group order | `sort: 'asc' \| 'desc' \| false \| (a, b) => n` (natural order, empties last) |
+| group totals | `footer: (group) => ({ cells: { hours: sum(group.rows) } })`: a totals row after each group |
 
 - Sorting a column sorts rows **inside** their groups; the groups keep their
   own order.
@@ -241,15 +233,13 @@ const columns = useMemo<DataTableColumn<Item>[]>(() => [
   reports normally have `pagination` off.
 - The whole-table `footer` still works for a grand total.
 - A column the export needs but the screen doesn't (the group's user, say)
-  gets `exportOnly: true` (legacy pages patched `prepareExportData` for this).
+  gets `exportOnly: true`.
 
 ### Drag to reorder
 
-`draggable: true` + `onReorder(draggedKey, targetKey, position)` becomes
 `reorder={{ onReorder: (ids, move) => ... }}`. `ids` is every row id of
 `data` in the new order; `move` has `id`, `targetId`, `position`
-(`'before' | 'after'`), `from` and `to`, so legacy handlers port as
-`onReorder: (_, m) => handle(m.id, m.targetId, m.position)`.
+(`'before' | 'after'`), `from` and `to`.
 
 - A grip column comes first. Drag it with the mouse, or focus it and press
   **Space** to pick the row up, **↑/↓** to move it (the table previews the
