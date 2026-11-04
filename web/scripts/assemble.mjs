@@ -2,7 +2,12 @@
 // Builds the deployable site in <repo>/_site from
 //   - the tracked legacy files (git ls-files), minus repo tooling,
 //   - web/dist (the built SPA) under /app-assets/,
-//   - web/dist/index.html copied to every migrated route's index.html,
+//   - the SPA entry, web/dist/index.html, written to every route of
+//     src/routes/migrated-routes.json as <route>/index.html (so every known URL,
+//     moved and merged-report ones included, is served with status 200),
+//   - the same entry as /404.html: GitHub Pages answers any other path with it
+//     (status 404, URL, query and hash untouched), so an unknown or a new path
+//     still boots the SPA, whose router shows "Sayfa bulunamadı" or the page,
 //   - a .nojekyll marker.
 // It also reports tracked files that GitHub Pages' Jekyll build treats specially
 // today, since a deploy without Jekyll publishes them differently.
@@ -299,7 +304,11 @@ function main() {
     writeFileSync(dest, spaHtml);
   }
 
-  // 4. No Jekyll: publish the files as they are.
+  // 4. The fallback for every path without a file
+  if (shippedFiles.has('404.html')) fail('tracked file 404.html collides with the SPA fallback');
+  writeFileSync(path.join(outDir, '404.html'), spaHtml);
+
+  // 5. No Jekyll: publish the files as they are.
   writeFileSync(path.join(outDir, '.nojekyll'), '');
 
   // Summary
@@ -319,6 +328,7 @@ function main() {
   console.log(`  routes file  : ${routesRel.startsWith('..') ? routesFile : routesRel}`);
   console.log(`  SPA routes   : ${routes.length ? routes.join(', ') : 'none'}`);
   if (replaced.length) console.log(`  replaced     : ${replaced.join(', ')}`);
+  console.log('  404 fallback : 404.html (the SPA entry)');
   console.log('  .nojekyll    : written');
 
   printJekyllReport(findings);

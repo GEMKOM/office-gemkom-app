@@ -1,5 +1,7 @@
-# Deploys the assembled site (legacy pages + React SPA, see web/scripts/assemble.mjs)
-# to GitHub Pages.
+# Deploys the assembled site to GitHub Pages (see web/scripts/assemble.mjs): the
+# React SPA's one entry at /index.html, in every known route's folder (a 200 for
+# each page) and as /404.html (the fallback for any other path), its assets
+# under /app-assets/, and the static files.
 #
 # REQUIRES: repo Settings -> Pages -> Build and deployment -> Source = "GitHub Actions".
 # Until that is switched, the branch deploy (main, repo root, built by Jekyll) keeps
@@ -46,6 +48,11 @@ jobs:
       - run: npm run test:legacy
       - run: npm run build
       - run: npm run assemble
+      # The SPA entry every deep link depends on: the fallback and a deep route are the same file.
+      - run: |
+          test -s ../_site/index.html
+          cmp ../_site/index.html ../_site/404.html
+          cmp ../_site/index.html ../_site/sales/customers/index.html
 
       - uses: actions/upload-pages-artifact@v3
         with:
