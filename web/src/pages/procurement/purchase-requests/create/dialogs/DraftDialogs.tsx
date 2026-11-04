@@ -3,7 +3,15 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { getPurchaseRequestDrafts, purchaseRequestKeys } from '@/api/procurement/purchaseRequests';
 import { formatDateTime } from '@/lib/format';
-import { FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify, StatusBadge } from '@/ui';
+import {
+  FaIcon,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  modalClassNames,
+  notify,
+  StatusBadge,
+} from '@/ui';
 import type { SavedDraftRef } from '../model';
 
 // "Taslakları Görüntüle" (showDraftRequestsModal) and "Taslağı Kaydet" (save-draft modal).
@@ -29,15 +37,25 @@ export function DraftsModal({
       notify.error(`Taslak talepler yüklenirken hata oluştu: ${(drafts.error as Error).message}`);
     }
   }, [drafts.isError, drafts.error]);
-  const rows = [...(drafts.data ?? [])].sort((a, b) => Number(!!b.is_autosave) - Number(!!a.is_autosave));
+  const rows = [...(drafts.data ?? [])].sort(
+    (a, b) => Number(!!b.is_autosave) - Number(!!a.is_autosave),
+  );
 
   return (
-    <Modal opened onClose={onClose} size="xl" withCloseButton={false} classNames={modalClassNames} padding={0}>
+    <Modal
+      opened
+      onClose={onClose}
+      size="min(1100px, 95vw)"
+      withCloseButton={false}
+      classNames={modalClassNames}
+      padding={0}
+    >
       <ModalHeader title="Taslak Talepler" icon="fas fa-edit" />
       <ModalBody>
         <Alert color="blue" p="xs" mb="sm">
-          <strong>Bilgi:</strong> Düzenlemek istediğiniz taslak talebi seçin. Seçilen talep mevcut sayfaya yüklenecektir.{' '}
-          <strong>Oto</strong> etiketli satır, sayfadaki her değişiklikte otomatik olarak güncellenen tek kayıttır.
+          <strong>Bilgi:</strong> Düzenlemek istediğiniz taslak talebi seçin. Seçilen talep mevcut
+          sayfaya yüklenecektir. <strong>Oto</strong> etiketli satır, sayfadaki her değişiklikte
+          otomatik olarak güncellenen tek kayıttır.
         </Alert>
         {drafts.isSuccess && rows.length === 0 ? (
           <Stack align="center" c="dimmed" p="lg">
@@ -46,60 +64,72 @@ export function DraftsModal({
             <Text size="sm">Henüz kaydedilmiş taslak talebiniz bulunmamaktadır.</Text>
           </Stack>
         ) : (
-          <Table fz="sm" data-testid="drafts-table">
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Talep No</Table.Th>
-                <Table.Th>Başlık</Table.Th>
-                <Table.Th>Son Kayıt</Table.Th>
-                <Table.Th>Malzeme Sayısı</Table.Th>
-                <Table.Th>Tedarikçi Sayısı</Table.Th>
-                <Table.Th>İşlemler</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {rows.map((d) => (
-                <Table.Tr key={d.id} data-draft-id={d.id}>
-                  <Table.Td>
-                    <Text fw={700} c="blue" size="sm">{d.id}</Text>
-                  </Table.Td>
-                  <Table.Td>
-                    <Group gap={6}>
-                      <span>{d.title || 'Başlıksız'}</span>
-                      {d.is_autosave ? (
-                        <span title="Her değişiklikte otomatik olarak güncellenir">
-                          <StatusBadge color="purple">Oto</StatusBadge>
-                        </span>
-                      ) : null}
-                      {d.id === openDraftId ? (
-                        <span title="Taslak Kaydet bu taslağın üzerine yazar">
-                          <StatusBadge color="blue">Açık</StatusBadge>
-                        </span>
-                      ) : null}
-                    </Group>
-                  </Table.Td>
-                  <Table.Td>{formatDateTime(d.updated_at || d.created_at, { second: '2-digit' })}</Table.Td>
-                  <Table.Td>{d.item_count ?? 0}</Table.Td>
-                  <Table.Td>{d.supplier_count ?? 0}</Table.Td>
-                  <Table.Td>
-                    <Group gap={4}>
-                      <Button size="compact-xs" leftSection={<FaIcon icon="fas fa-edit" />} onClick={() => onLoad(d.id)}>
-                        Düzenle
-                      </Button>
-                      <Button
-                        size="compact-xs"
-                        color="red"
-                        leftSection={<FaIcon icon="fas fa-trash" />}
-                        onClick={() => onDelete(d.id)}
-                      >
-                        Sil
-                      </Button>
-                    </Group>
-                  </Table.Td>
+          // The table scrolls inside the modal on narrow screens instead of
+          // pushing the modal past the window.
+          <Table.ScrollContainer minWidth={760}>
+            <Table fz="sm" data-testid="drafts-table">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Talep No</Table.Th>
+                  <Table.Th>Başlık</Table.Th>
+                  <Table.Th>Son Kayıt</Table.Th>
+                  <Table.Th>Malzeme Sayısı</Table.Th>
+                  <Table.Th>Tedarikçi Sayısı</Table.Th>
+                  <Table.Th>İşlemler</Table.Th>
                 </Table.Tr>
-              ))}
-            </Table.Tbody>
-          </Table>
+              </Table.Thead>
+              <Table.Tbody>
+                {rows.map((d) => (
+                  <Table.Tr key={d.id} data-draft-id={d.id}>
+                    <Table.Td>
+                      <Text fw={700} c="blue" size="sm">
+                        {d.id}
+                      </Text>
+                    </Table.Td>
+                    <Table.Td>
+                      <Group gap={6}>
+                        <span>{d.title || 'Başlıksız'}</span>
+                        {d.is_autosave ? (
+                          <span title="Her değişiklikte otomatik olarak güncellenir">
+                            <StatusBadge color="purple">Oto</StatusBadge>
+                          </span>
+                        ) : null}
+                        {d.id === openDraftId ? (
+                          <span title="Taslak Kaydet bu taslağın üzerine yazar">
+                            <StatusBadge color="blue">Açık</StatusBadge>
+                          </span>
+                        ) : null}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td style={{ whiteSpace: 'nowrap' }}>
+                      {formatDateTime(d.updated_at || d.created_at, { second: '2-digit' })}
+                    </Table.Td>
+                    <Table.Td>{d.item_count ?? 0}</Table.Td>
+                    <Table.Td>{d.supplier_count ?? 0}</Table.Td>
+                    <Table.Td>
+                      <Group gap={4} wrap="nowrap">
+                        <Button
+                          size="compact-xs"
+                          leftSection={<FaIcon icon="fas fa-edit" />}
+                          onClick={() => onLoad(d.id)}
+                        >
+                          Düzenle
+                        </Button>
+                        <Button
+                          size="compact-xs"
+                          color="red"
+                          leftSection={<FaIcon icon="fas fa-trash" />}
+                          onClick={() => onDelete(d.id)}
+                        >
+                          Sil
+                        </Button>
+                      </Group>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
         )}
       </ModalBody>
       <ModalFooter>
@@ -142,13 +172,19 @@ export function SaveDraftModal({
   };
 
   return (
-    <Modal opened onClose={onClose} withCloseButton={false} classNames={modalClassNames} padding={0}>
+    <Modal
+      opened
+      onClose={onClose}
+      withCloseButton={false}
+      classNames={modalClassNames}
+      padding={0}
+    >
       <ModalHeader title="Taslağı Kaydet" icon="fas fa-save" />
       <ModalBody>
         <Stack gap="sm">
           <Alert color="yellow" p="xs">
-            Bu talep daha önce <strong>{existing.title || 'Başlıksız'}</strong> (#{existing.id}) adıyla taslak olarak
-            kaydedildi. Kaydederseniz bu taslağın üzerine yazılacak.
+            Bu talep daha önce <strong>{existing.title || 'Başlıksız'}</strong> (#{existing.id})
+            adıyla taslak olarak kaydedildi. Kaydederseniz bu taslağın üzerine yazılacak.
           </Alert>
           <TextInput
             label="Taslak Adı"
