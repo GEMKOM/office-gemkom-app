@@ -67,6 +67,27 @@ const WELD = {
     { version: 2, created_at: '2026-10-19T10:00:00Z', edited: true, edited_by_name: 'Onat', edit_note: 'kep' },
   ],
 };
+const ARCHIVE = {
+  count: 2,
+  families: [{ family: 'ladle', label: 'Pota', n: 2, median_eur_per_kg_now: 3.2, reliability: { n: 2, median_error: 0.12, level: 'good' } }],
+  results: [
+    {
+      id: 7, job_no: '026-42', product: '60T POTA', customer: 'HOD ASSAF', family: 'ladle', family_label: 'Pota', qty: 1,
+      kg_each: 20936, kg_total: 20936, cost_month: '2024-06', date_source: 'pdm',
+      then: { labour: 6000, material: 40000, overhead: 6000, total: 52000, eur_per_kg: 2.48 },
+      now: { labour: 7000, material: 41000, overhead: 14000, total: 62000, eur_per_kg: 2.96, restated_to: '2026-11' },
+      factors: { labour: 1.18, steel: 1.02 }, basis: 'components', sale_eur: null, flags: [], review: 'unreviewed',
+      in_app: true, plan: { unit_mass_kg: 20936, joints: 40, weld_m: 300, total_h: 2500, shop_h: 2000, h_per_t: { shop: 95.5 } },
+      plan_source: 'claude_code',
+    },
+    {
+      id: 8, job_no: '026-35', product: '80T POTA', customer: 'HOD ASSAF', family: 'ladle', family_label: 'Pota', qty: 1,
+      kg_each: 30000, kg_total: 30000, cost_month: '2021-02', date_source: 'pdm',
+      then: { total: 900000, eur_per_kg: 30 }, now: { total: 1200000, eur_per_kg: 40, restated_to: '2026-11' },
+      factors: {}, basis: 'total_only', sale_eur: null, flags: ['per_kg_outlier'], review: 'unreviewed', plan: null,
+    },
+  ],
+};
 const PARAMS = {
   parameters: [
     { key: 'mag_h_per_m', label: 'MAG', unit: 'h/m', group: 'weld', value: 1.2, default: 1.2, is_default: true },
@@ -115,6 +136,11 @@ beforeEach(() => {
     if (path === '/estimator/weld-schedules/250-03/versions/') {
       return json({ weld_schedule: { ...WELD, version: 3 }, profile: { ...ROWS[0], factor: 1.05 } });
     }
+    if (path === '/estimator/cost-history/') return json(ARCHIVE);
+    if (path === '/estimator/cost-history/7/review/') {
+      const body = JSON.parse(String(init!.body)) as { review_status: string; note: string };
+      return json({ id: 7, review_status: body.review_status, review_note: body.note });
+    }
     if (path === '/estimator/parameters/' && method === 'GET') return json(PARAMS);
     if (path === '/estimator/parameters/' && method === 'PUT') return json({ ...PARAMS, changed: ['mag_h_per_m'] });
     return json({ detail: 'not mocked' }, 404);
@@ -132,16 +158,22 @@ it('lists the references with the summary and the library count', async () => {
   expect(await screen.findByText('250-03')).toBeInTheDocument();
   expect(screen.getByText('260-01')).toBeInTheDocument();
   await waitFor(() => expect(screen.getByTestId('reference-count')).toHaveTextContent('66 referans'));
+  // The per-family table replaces the card wall; it opens on demand.
+  fireEvent.click(screen.getByRole('button', { name: /Göster/ }));
   const summary = screen.getByTestId('reference-summary');
-  expect(within(summary).getByText('Tüm aileler · atölye')).toBeInTheDocument();
-  expect(within(summary).getByText('Gövde')).toBeInTheDocument();
+  expect(within(summary).getByText(/Tüm aileler/)).toBeInTheDocument();
+  expect(within(summary).getByText(/Gövde/)).toBeInTheDocument();
+  // Usage is spelled out: the excluded job says why.
+  const out = screen.getByText('260-01').closest('tr')!;
+  expect(within(out).getByText('Kullanılmıyor')).toBeInTheDocument();
+  expect(within(out).getByText(/Hariç tutuldu: taşeron/)).toBeInTheDocument();
   // An excluded factor is greyed with its reason in the tooltip.
   const excluded = screen.getByText('0,40').closest('span')!;
   expect(excluded.getAttribute('title')).toContain('Taşeronda yapılmış');
 });
 
-it('API filters are joined with commas; class and schema filter on the page', async () => {
-  renderPage('/projects/references/?route=in_house&route=subcontract&schema=2');
+it('API filters are joined with commas; class filters on the page', async () => {
+  renderPage('/projects/references/?route=in_house&route=subcontract&class=sac_yapi');
   expect(await screen.findByText('250-03')).toBeInTheDocument();
   expect(screen.queryByText('260-01')).toBeNull();
   const list = calls().find((c) => c.path === '/estimator/reference-profiles/')!;
@@ -207,7 +239,7 @@ it('Düzenle: a count edit updates the totals and the preview; the note is requi
 it('Birim süreler: a changed value is counted and saved with the note', async () => {
   renderPage();
   await screen.findByText('250-03');
-  fireEvent.click(screen.getByRole('button', { name: 'Birim süreler' }));
+  fireEvent.click(screen.getByRole('tab', { name: 'Birim süreler' }));
   const panel = await screen.findByTestId('units-panel');
   fireEvent.change(within(panel).getByLabelText('MAG'), { target: { value: '1,4' } });
   expect(within(panel).getByTestId('units-dirty')).toHaveTextContent('1 değişiklik kaydedilmedi');
@@ -216,5 +248,31 @@ it('Birim süreler: a changed value is counted and saved with the note', async (
   await waitFor(() => expect(notify.success).toHaveBeenCalledWith('1 parametre kaydedildi; faktörler yeniden hesaplandı.'));
   expect(writes()).toEqual([
     { path: '/estimator/parameters/', search: '', method: 'PUT', body: { values: { mag_h_per_m: 1.4 }, note: 'kalibrasyon' } },
+  ]);
+});
+
+it('Geçmiş maliyetler: the archive with family reliability; exclusion needs a note; review posts', async () => {
+  renderPage('/projects/references/?tab=archive');
+  expect(await screen.findByText('026-42')).toBeInTheDocument();
+  expect(screen.getByText('026-35')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Göster/ }));
+  const families = screen.getByTestId('archive-families');
+  expect(within(families).getByText('Pota')).toBeInTheDocument();
+  expect(within(families).getByText(/İyi · %12/)).toBeInTheDocument();
+  // An outlier row says so; a row with a plan shows its shop h/t.
+  expect(within(screen.getByText('026-35').closest('tr')!).getByText(/Aykırı/)).toBeInTheDocument();
+  expect(within(screen.getByText('026-42').closest('tr')!).getByText(/96 h.t/)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByText('60T POTA'));
+  const dialog = await screen.findByRole('dialog');
+  expect(within(dialog).getByText('çizimden okundu')).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Hariç tut' }));
+  expect(await within(dialog).findByText('Hariç tutmak için not gerekli.')).toBeInTheDocument();
+  expect(writes()).toHaveLength(0);
+  fireEvent.change(within(dialog).getByLabelText('İnceleme notu'), { target: { value: 'kapsam farklı' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Hariç tut' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('026-42: Hariç tutuldu'));
+  expect(writes()).toEqual([
+    { path: '/estimator/cost-history/7/review/', search: '', method: 'POST', body: { review_status: 'excluded', note: 'kapsam farklı' } },
   ]);
 });

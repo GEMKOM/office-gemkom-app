@@ -1,5 +1,5 @@
 import { authedFetch } from '@/auth/authService';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { InventoryHubPage } from './InventoryHubPage';
 import { PlanningHubPage } from './PlanningHubPage';
@@ -63,9 +63,10 @@ beforeEach(() => {
       return json(page(searchParams.get('in_plan') === 'false' ? 6 : 14));
     if (pathname === '/machines/')
       return json(
-        page(2, [
+        page(3, [
           { id: 3, name: 'Fiber Lazer', is_active: true },
           { id: 4, name: 'Plazma', is_active: true },
+          { id: 5, name: 'Oksijen', is_active: true },
         ]),
       );
     if (pathname === '/cnc_cutting/planning/list/')
@@ -97,6 +98,7 @@ beforeEach(() => {
         page(2, [
           {
             id: 71,
+            machine_fk: 3,
             machine_name: 'Fiber Lazer',
             issue_key: 'CNC-88',
             issue_name: 'Flanş 20 mm',
@@ -106,7 +108,8 @@ beforeEach(() => {
           },
           {
             id: 72,
-            machine_name: 'Plazma',
+            machine_fk: 5,
+            machine_name: 'Oksijen',
             issue_key: 'CNC-90',
             issue_name: 'Taban plakası',
             username: 'mehmet',
@@ -200,34 +203,28 @@ it('shows a lane per area with its live figures', async () => {
     'href',
     '/planning/cnc-cutting/dashboard',
   );
-  // The running list comes first, longest-running on top.
-  const running = within(cnc).getByRole('list', { name: 'Şu an çalışanlar' });
-  expect(within(running).getAllByRole('listitem')[0]).toHaveTextContent('Fiber Lazer');
-  expect(running).toHaveTextContent('CNC-88 · Flanş 20 mm');
-  expect(running).toHaveTextContent('ayse');
-  expect(within(cnc).getByRole('button', { name: 'Şu an çalışanlar' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
   await waitFor(() => expect(cnc).toHaveTextContent('Açık kesim14'));
   expect(cnc).toHaveTextContent('Plana alınmamış kesim6');
   await waitFor(() => expect(cnc).toHaveTextContent('Planlı iş yükü'));
   await waitFor(() => expect(cnc).toHaveTextContent('14,5 sa'));
-  // The switch shows the machine load instead.
-  fireEvent.click(within(cnc).getByRole('button', { name: 'Makine yükü' }));
-  expect(within(cnc).getByRole('button', { name: 'Makine yükü' })).toHaveAttribute(
-    'aria-pressed',
-    'true',
-  );
+  // One list: each machine's load, its running timer under its name, the
+  // running machines first. No switch any more.
+  const load = within(cnc).getByRole('list', { name: 'Makine yükü' });
+  const rows = within(load).getAllByRole('listitem');
+  expect(rows.map((row) => row.textContent)).toEqual([
+    expect.stringMatching(/^Fiber Lazer.*CNC-88 · ayse/),
+    expect.stringMatching(/^Oksijen.*CNC-90 · mehmet/),
+  ]);
+  expect(within(cnc).queryByRole('button', { name: 'Makine yükü' })).not.toBeInTheDocument();
   expect(within(cnc).getByRole('link', { name: /Fiber Lazer/ })).toHaveAttribute(
     'href',
     '/planning/cnc-cutting/capacity?machine=3',
   );
-  // A machine with nothing in its plan is left out.
+  // A machine with nothing in its plan and no timer is left out.
   expect(within(cnc).queryByText('Plazma')).not.toBeInTheDocument();
   await waitFor(() => expect(cnc).toHaveTextContent('17 kullanılmamış42'));
   const plans = calls().filter((url) => url.pathname === '/cnc_cutting/planning/list/');
-  expect(plans.map((url) => url.searchParams.get('machine_fk')).sort()).toEqual(['3', '4']);
+  expect(plans.map((url) => url.searchParams.get('machine_fk')).sort()).toEqual(['3', '4', '5']);
   expect(plans.every((url) => url.searchParams.get('only_in_plan') === 'true')).toBe(true);
 
   const linear = lane('Lineer Kesim');
