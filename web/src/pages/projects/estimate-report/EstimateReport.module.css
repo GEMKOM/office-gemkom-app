@@ -795,6 +795,13 @@
     letter-spacing: 0.03em;
 }
 .scope :global .est-tag-cal { background: var(--est-purple-soft); color: #5b21b6; }
+/* Hariç tutma (ExclusionsSection): an excluded row is dimmed, its job struck; the reason stays readable. */
+.scope :global .est-excl td { vertical-align: top; }
+.scope :global .est-excl tr.is-excluded td { background: #fafafa; color: #6b7280; }
+.scope :global .est-excl tr.is-excluded .est-job, .scope :global .est-excl tr.is-excluded .est-job-cell > strong:first-child { text-decoration: line-through; }
+.scope :global .est-excl-reason { font-size: 0.78rem; color: #991b1b; margin-bottom: 0.15rem; }
+.scope :global .est-excl-box { cursor: pointer; margin-top: 0.2rem; }
+.scope :global .est-adjusted { background: #fef2f2; border-color: #fecaca; color: #991b1b; align-items: flex-start; }
 .scope :global .est-more-btn { font-size: 0.78rem; font-weight: 600; text-decoration: none; padding-left: 0; }
 
 /* The weld list (WeldTable). */

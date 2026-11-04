@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { apiFetch } from '../client';
-import type { WeldJoint, WeldSchedule } from './estimator';
+import type { ExclusionEffect, ExclusionNote, WeldJoint, WeldSchedule } from './estimator';
 
 // Port of the reference-library part of apis/estimator.js for
 // /projects/references (Referanslar): reference profiles, their review, the
@@ -44,6 +44,10 @@ export interface ReferenceProfile {
   review_note?: string | null;
   reviewed_by_name?: string | null;
   reviewed_at?: string | null;
+  /** Exclusions made on reports (history, newest last) and what they do to the next ones. */
+  exclusion_notes?: ExclusionNote[];
+  exclusions_active?: number;
+  exclusion_effect?: ExclusionEffect;
   [key: string]: unknown;
 }
 

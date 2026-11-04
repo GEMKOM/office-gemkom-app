@@ -256,3 +256,39 @@
   font-size: 13px;
   color: var(--gk-danger, #dc2626);
 }
+
+/* Exclusions made on estimate reports (costHistoryParts: ExclusionNotesBadge, ExclusionHistory). */
+.exclNotes {
+  display: inline-block;
+  margin-left: 0.3rem;
+}
+
+.exclHistory {
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  border-radius: 6px;
+  padding: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  font-size: 0.82rem;
+}
+
+.exclHistory ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.exclHistoryTitle {
+  font-weight: 600;
+  color: #991b1b;
+}
+
+.exclHint,
+.exclMeta {
+  color: #6b7280;
+  font-weight: 400;
+}
+
+.exclReverted {
+  text-decoration: line-through;
+  color: #9ca3af;
+}

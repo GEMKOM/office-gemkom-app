@@ -1,5 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { apiFetch } from '../client';
+import type { ExclusionEffect, ExclusionNote } from './estimator';
 
 // The MALİYET archive (estimator.HistoricalCostReference): post-job cost sheets
 // of past work, restated to today, with the manufacturing plan read from the
@@ -58,6 +59,10 @@ export interface CostHistoryRow {
   in_app?: boolean;
   plan: ArchivePlan | null;
   plan_source?: 'claude_code' | 'api' | null;
+  /** Exclusions made on reports (history, newest last) and what they do to the next ones. */
+  exclusion_notes?: ExclusionNote[];
+  exclusions_active?: number;
+  exclusion_effect?: ExclusionEffect;
   plan_read_at?: string | null;
   plan_detail?: {
     sub_assemblies?: number | null;

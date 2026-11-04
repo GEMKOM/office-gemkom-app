@@ -24,7 +24,7 @@ import { useSearchParams } from 'react-router';
 import { referencesQueryOptions, type ReferenceProfile } from '@/api/projects/references';
 import { fmt } from '../estimate-report/reportModel';
 import { CostHistoryDetail } from './CostHistoryDetail';
-import { CrossLink, monthLabel, PlanSourceBadge, ReliabilityBadge, ReviewBadge } from './costHistoryParts';
+import { CrossLink, ExclusionNotesBadge, monthLabel, PlanSourceBadge, ReliabilityBadge, ReviewBadge } from './costHistoryParts';
 import css from './RefTabs.module.css';
 
 // Filter keys carry an "a" prefix: the calibration tab shares the URL.
@@ -144,6 +144,7 @@ const buildColumns = (
       return (
         <>
           <ReviewBadge status={r.review} />
+          <ExclusionNotesBadge notes={r.exclusion_notes} effect={r.exclusion_effect} />
           {r.review === 'excluded' && r.review_note ? (
             <span className={css.reason} title={r.review_note}>
               {r.review_note}

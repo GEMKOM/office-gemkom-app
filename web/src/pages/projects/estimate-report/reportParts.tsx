@@ -81,6 +81,7 @@ export const SECTION_DEFS: SectionDef[] = [
   { key: 'malzeme', label: 'Malzeme', icon: 'fa-cubes' },
   { key: 'iscilik', label: 'İşçilik', icon: 'fa-user-gear' },
   { key: 'benzer', label: 'Benzer işler', icon: 'fa-clone' },
+  { key: 'haric', label: 'Hariç tutma', icon: 'fa-ban' },
   { key: 'teklif', label: 'Teklif', icon: 'fa-handshake' },
   { key: 'dikkat', label: 'Dikkat', icon: 'fa-circle-exclamation' },
   { key: 'sorular', label: 'Sorular', icon: 'fa-list-check' },
@@ -268,6 +269,8 @@ export interface ReportActions {
   similarAll: () => void;
   weldToggle: () => void;
   route: (route: string) => void;
+  /** A request returned the updated report (an exclusion recomputed it): show it. */
+  reportUpdated?: (report: Payload) => void;
 }
 
 const noop = () => {};

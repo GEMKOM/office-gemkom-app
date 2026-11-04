@@ -30,7 +30,7 @@ import { formatDateTime } from '../estimate-report/reportParts';
 import { LegacyBadge } from '../estimate-report/LegacyBadge';
 import { useSearchParams } from 'react-router';
 import { costHistoryQueryOptions } from '@/api/projects/costHistory';
-import { CrossLink } from './costHistoryParts';
+import { CrossLink, ExclusionNotesBadge } from './costHistoryParts';
 import { FactorBreakdown } from './FactorBreakdown';
 import { ReviewModal, type ReviewStatus } from './ReviewModal';
 import { WeldListModal } from './WeldListModal';
@@ -189,12 +189,15 @@ const buildColumns = (
     key: 'review_status',
     header: 'İnceleme',
     render: (r) => (
-      <LegacyBadge
-        entry={REFERENCE_REVIEW[r.review_status ?? ''] ?? REFERENCE_REVIEW.unreviewed}
-        title={[r.review_note, r.reviewed_by_name && `${r.reviewed_by_name} · ${formatDateTime(r.reviewed_at)}`]
-          .filter(Boolean)
-          .join('\n')}
-      />
+      <>
+        <LegacyBadge
+          entry={REFERENCE_REVIEW[r.review_status ?? ''] ?? REFERENCE_REVIEW.unreviewed}
+          title={[r.review_note, r.reviewed_by_name && `${r.reviewed_by_name} · ${formatDateTime(r.reviewed_at)}`]
+            .filter(Boolean)
+            .join('\n')}
+        />
+        <ExclusionNotesBadge notes={r.exclusion_notes} effect={r.exclusion_effect} />
+      </>
     ),
     exportValue: (r) => (REFERENCE_REVIEW[r.review_status ?? ''] ?? REFERENCE_REVIEW.unreviewed)!.label,
   },

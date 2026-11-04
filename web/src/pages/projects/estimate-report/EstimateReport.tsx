@@ -443,6 +443,12 @@ export function EstimateReport({ subject, onChange }: EstimateReportProps) {
         writeFlag(WELD_OPEN_KEY, !v);
         return !v;
       }),
+    reportUpdated: (updated) => {
+      const next = updated as Report;
+      queryClient.setQueryData(queryKeyOf(reportId, owner), next);
+      queryClient.setQueryData(estimatorKeys.report(next.id), next);
+      onChange?.(next);
+    },
     route: (r) => {
       if (report) setCostRoute({ id: report.id, route: r });
     },

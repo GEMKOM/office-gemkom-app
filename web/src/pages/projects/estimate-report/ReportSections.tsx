@@ -32,6 +32,7 @@ import {
 } from './reportParts';
 import { fmt, hoursInfo, planInfo, similarRow, withoutFirstTable, type Payload, type ReportModel } from './reportModel';
 import { WeldTable } from './WeldTable';
+import { AdjustmentBanner, archiveRows, ExclusionsSection, referenceRows } from './ExclusionsSection';
 
 // A finished Tahmin report as React: the summary header, the sticky section
 // nav and one collapsible section per topic (port of the legacy
@@ -105,6 +106,10 @@ export function DoneReport({ r, m, weld }: { r: Payload; m: ReportModel; weld: R
   if (r.hours?.calibration?.in_house || r.hours?.bottom_up || r.weld_schedule?.bottom_up || m.sections.iscilik)
     add('iscilik', <LaborSection r={r} m={m} />);
   add('benzer', similarSection(r, m), { count: (r.similar_jobs || []).length || null });
+  if (referenceRows(r).length || archiveRows(r).length || r.hours?.historical_costs) {
+    const nEx = Object.keys(r.adjustments?.excluded?.reference || {}).length + Object.keys(r.adjustments?.excluded?.archive || {}).length;
+    add('haric', <ExclusionsSection r={r} />, { count: nEx || null });
+  }
   add('teklif', offerSection(m));
   add('dikkat', attentionSection(m), { count: bulletCount(sectionMarkdown(m.sections.dikkat)) || null });
   add('sorular', questionsSection(r, m), { count: questionCount(r) || null });
@@ -127,6 +132,7 @@ export function DoneReport({ r, m, weld }: { r: Payload; m: ReportModel; weld: R
   return (
     <>
       <Hero r={r} m={m} />
+      <AdjustmentBanner r={r} />
       <Nav present={nav} />
       {sections}
     </>

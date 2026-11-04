@@ -5,6 +5,7 @@ import { isApiError } from '@/api/client';
 import { reviewReferenceProfile, type ReferenceProfile } from '@/api/projects/references';
 import { errorMessage, FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames } from '@/ui';
 import { LegacyBadge } from '../estimate-report/LegacyBadge';
+import { ExclusionHistory } from './costHistoryParts';
 import { ProfileFacts } from './ProfileFacts';
 import css from './ReferencesPage.module.css';
 
@@ -72,6 +73,7 @@ export function ReviewModal({ row, status, onClose, onSaved }: ReviewModalProps)
       <ModalHeader icon={t.icon} title={`${t.title}: ${row.job_no} — ${row.title || ''}`} />
       <ModalBody>
         <ProfileFacts row={row} />
+        <ExclusionHistory notes={row.exclusion_notes} effect={row.exclusion_effect} />
         <div className={css.hint}>{t.hint}</div>
         <Text size="sm" mb="xs">
           Şu anki durum: <LegacyBadge entry={REFERENCE_REVIEW[row.review_status || ''] ?? REFERENCE_REVIEW.unreviewed} />

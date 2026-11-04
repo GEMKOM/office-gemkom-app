@@ -11,7 +11,7 @@ import {
 import type { ReferenceProfile } from '@/api/projects/references';
 import { errorMessage, FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, StatusBadge } from '@/ui';
 import { fmt } from '../estimate-report/reportModel';
-import { ReviewBadge, monthLabel, PlanSourceBadge } from './costHistoryParts';
+import { ExclusionHistory, ReviewBadge, monthLabel, PlanSourceBadge } from './costHistoryParts';
 import css from './RefTabs.module.css';
 
 type Status = 'verified' | 'excluded' | 'unreviewed';
@@ -228,6 +228,8 @@ export function CostHistoryDetail({
         <Text size="xs" c="dimmed">
           Kaynak dosya: <span className={css.path}>{row.source_file || '—'}</span>
         </Text>
+
+        <ExclusionHistory notes={row.exclusion_notes} effect={row.exclusion_effect} />
 
         <div className={css.noteBox}>
           {row.review_note ? (

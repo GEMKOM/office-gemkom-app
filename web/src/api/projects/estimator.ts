@@ -178,6 +178,85 @@ export function reviewEstimate(id: number, decision: 'accept' | 'correct', note 
   return apiFetch<EstimateReport>(`${BASE}/estimates/${id}/review/`, { method: 'POST', body: { decision, note } });
 }
 
+// ---------------------------------------------------------------- exclusions after the report exists
+
+export type ExclusionKind = 'reference' | 'archive';
+export type ExclusionCategory = 'scope' | 'data_error' | 'design' | 'outlier' | 'other';
+/** What the active exclusions do to a reference on the next reports. */
+export type ExclusionEffect = 'down_weighted' | 'skipped' | null;
+
+/** One exclusion of a reference from a report, as saved on the reference (its history). */
+export interface ExclusionNote {
+  id: number;
+  category: ExclusionCategory | string;
+  category_label?: string;
+  reason: string;
+  report_id?: number | null;
+  report?: string;
+  subject_key?: string;
+  subject_family?: string;
+  subject_structure_class?: string;
+  by?: string | null;
+  at?: string | null;
+  reverted: boolean;
+  reverted_at?: string | null;
+  reverted_by?: string | null;
+}
+
+/** One row of `adjustments.excluded[kind]`. */
+export interface ExcludedEntry {
+  exclusion_id: number;
+  category: string;
+  category_label?: string;
+  reason: string;
+  by?: string | null;
+  at?: string | null;
+  label?: string | null;
+}
+
+/** `adjustments` of a report: the exclusions made on it and what they recomputed. */
+export interface ReportAdjustments {
+  excluded?: { reference?: Record<string, ExcludedEntry>; archive?: Record<string, ExcludedEntry> };
+  effects?: {
+    labour_recomputable?: boolean;
+    notes?: string[];
+    shop_factor?: { before?: { factor?: number | null }; after?: { factor?: number | null } };
+    expected_total?: { before?: Record<string, number | null> | null; after?: Record<string, number | null> | null };
+    eur_per_kg?: { before?: Record<string, number | null> | null; after?: Record<string, number | null> | null };
+    stale_sections?: { key: string; label: string }[];
+  };
+  recomputed_at?: string;
+}
+
+/** Fallback when an older backend sends no categories. */
+export const EXCLUSION_CATEGORIES: { value: ExclusionCategory; label: string }[] = [
+  { value: 'scope', label: 'Kapsam farklı (taşeron / talaşlı / montaj dahil ya da hariç)' },
+  { value: 'data_error', label: 'Veri hatası (TL/€, eksik saat, yanlış kg)' },
+  { value: 'design', label: 'Tasarım / yapı farklı' },
+  { value: 'outlier', label: 'Aykırı / tek seferlik durum' },
+  { value: 'other', label: 'Diğer' },
+];
+
+export const EXCLUSION_EFFECT: Record<string, BadgeLabel> = {
+  down_weighted: {
+    label: 'geri itilir',
+    badge: 'status-orange',
+    title: 'Sonraki raporlarda (gerekçenin geçerli olduğu işlerde) sıralamada geri itilir; bir gerekçe daha atlanmasına yol açar.',
+  },
+  skipped: { label: 'atlanır', badge: 'status-red', title: 'Sonraki raporlarda (gerekçenin geçerli olduğu işlerde) kullanılmaz.' },
+};
+
+/**
+ * Exclude (with a category and a reason) or re-include a reference of a finished report: the
+ * server recomputes the shop factor, labour, totals, €/kg and ranges and returns the report.
+ */
+export function setEstimateExclusion(
+  id: number,
+  body: { kind: ExclusionKind; key: string; excluded: boolean; category?: string; reason?: string },
+): Promise<EstimateReport> {
+  return apiFetch<EstimateReport>(`${BASE}/estimates/${id}/exclusions/`, { method: 'POST', body });
+}
+
 /** Durdur; a 409 means the run had already finished. */
 export function cancelEstimate(id: number): Promise<EstimateReport> {
   return apiFetch<EstimateReport>(`${BASE}/estimates/${id}/cancel/`, { method: 'POST' });
