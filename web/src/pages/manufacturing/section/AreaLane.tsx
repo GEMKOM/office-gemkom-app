@@ -40,6 +40,8 @@ export interface LaneList {
   title: ReactNode;
   /** Where "Tümü" goes. */
   more?: string;
+  /** The link's text instead of "Tümü". */
+  moreLabel?: ReactNode;
   rows: LaneRow[] | undefined;
   isError?: boolean;
   /** Shown when there are no rows. */
@@ -151,20 +153,25 @@ export function AreaLane({ title, icon, family, hub, links, figures, list }: Are
           <Figure key={figure.id} figure={figure} />
         ))}
       </div>
-      {list ? (
-        <div className={css.list}>
-          <div className={css.listHead}>
-            <span>{list.title}</span>
-            {list.more ? (
-              <AppLink to={list.more} className={css.more}>
-                Tümü <FaIcon icon="fas fa-arrow-right" />
-              </AppLink>
-            ) : null}
-          </div>
-          <Rows list={list} />
-        </div>
-      ) : null}
+      {list ? <LaneRecords list={list} /> : null}
     </section>
+  );
+}
+
+/** A lane's records column on its own: its heading, "Tümü" and the rows. */
+export function LaneRecords({ list }: { list: LaneList }) {
+  return (
+    <div className={css.list}>
+      <div className={css.listHead}>
+        <span>{list.title}</span>
+        {list.more ? (
+          <AppLink to={list.more} className={css.more}>
+            {list.moreLabel ?? 'Tümü'} <FaIcon icon="fas fa-arrow-right" />
+          </AppLink>
+        ) : null}
+      </div>
+      <Rows list={list} />
+    </div>
   );
 }
 

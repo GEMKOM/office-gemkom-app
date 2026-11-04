@@ -1,0 +1,277 @@
+/* Planlama hub: the lead block (Planlamayı Bekleyenler) on the İmalat lanes' grid. */
+
+.lead {
+  background: var(--gk-surface);
+  border: 1px solid var(--gk-line);
+  border-radius: var(--gk-radius-lg);
+  box-shadow: var(--gk-shadow-card);
+}
+
+.leadHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 14px 18px;
+}
+
+.leadBody {
+  display: grid;
+  border-top: 1px solid var(--gk-line);
+}
+
+/* The same columns as a lane below it, so figures and lists line up. */
+.leadBody[data-columns='3'] {
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.2fr) minmax(0, 1.4fr);
+}
+
+.leadBody[data-columns='2'] {
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 2.6fr);
+}
+
+.leadBody > * {
+  min-width: 0;
+  padding: 14px 18px;
+}
+
+.leadBody > * + * {
+  border-left: 1px solid var(--gk-line);
+}
+
+@media (max-width: 64em) {
+  .leadBody[data-columns] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .leadBody > * + * {
+    border-left: 0;
+    border-top: 1px solid var(--gk-line);
+  }
+}
+
+.title {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 16px;
+  line-height: 1.35;
+  font-weight: 600;
+  color: var(--gk-ink);
+}
+
+.tile {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  border-radius: 9px;
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 13px;
+}
+
+.links a {
+  color: var(--gk-red-700);
+  text-decoration: none;
+}
+
+.links a:hover {
+  text-decoration: underline;
+}
+
+.colHead {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+}
+
+/* ---- active tasks ---- */
+.big {
+  display: flex;
+  flex-direction: column;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--gk-radius-sm);
+}
+
+.big b {
+  font-size: 40px;
+  line-height: 1.05;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--gk-ink);
+}
+
+.big span {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--gk-muted);
+}
+
+.big:hover span {
+  color: var(--gk-ink);
+  text-decoration: underline;
+}
+
+.minis {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+}
+
+.minis li + li {
+  border-top: 1px solid var(--gk-line);
+}
+
+.mini {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--gk-ink-2);
+  text-decoration: none;
+}
+
+.mini b {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--gk-ink);
+}
+
+.mini[data-alert] b {
+  color: var(--gk-danger);
+}
+
+.mini:hover span {
+  color: var(--gk-ink);
+  text-decoration: underline;
+}
+
+/* ---- the steps a request passes ---- */
+.flow {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.step {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto 10px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 -8px;
+  padding: 5px 8px;
+  border-radius: var(--gk-radius-md);
+  color: inherit;
+  text-decoration: none;
+  transition: background-color 120ms ease;
+}
+
+.step:hover {
+  background: var(--gk-red-050);
+}
+
+.step:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.stepNo {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  font-family: var(--gk-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--fam-bg);
+  color: var(--fam-fg);
+}
+
+.stepText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.stepLabel,
+.stepHint {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.stepLabel {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--gk-ink);
+}
+
+.stepHint {
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.stepCount {
+  font-size: 17px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--fam-fg);
+}
+
+.step[data-idle] .stepLabel,
+.step[data-idle] .stepCount {
+  color: var(--gk-muted);
+}
+
+.chevron {
+  font-size: 10px;
+  color: var(--gk-line-strong);
+}
+
+.step:hover .chevron {
+  color: var(--gk-red-700);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step {
+    transition: none;
+  }
+}
+
+/* ---- records ---- */
+.date[data-alert] {
+  color: var(--gk-danger);
+  font-weight: 600;
+}
+
+.bar {
+  display: inline-block;
+  width: 56px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--gk-line);
+  overflow: hidden;
+}
+
+.bar span {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--fam-fg);
+}

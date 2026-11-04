@@ -74,26 +74,41 @@ test('admin: the procurement hub shows its cards, live queues and band buttons',
   consoleErrors.expectNone();
 });
 
-test('admin: planning and finance hubs list their cards in the legacy order', async ({
+test('admin: the planning hub leads with its queue, then a lane per area; finance lists its cards', async ({
   page,
   consoleErrors,
 }) => {
   const session = await seedSession(page, { admin: true });
-  await mockBackend(page, {}, { session });
+  await mockBackend(
+    page,
+    {
+      'GET /planning/department-requests/approved_requests/': { json: paginated([], { count: 7 }) },
+      'GET /cnc_cutting/tasks/': ({ query }) => ({
+        json: paginated([], { count: query.get('in_plan') === 'false' ? 5 : 14 }),
+      }),
+    },
+    { session },
+  );
 
   await page.goto('/planning/');
-  await expect(cardTitles(page)).toHaveText([
-    'Departman Talepleri',
-    'Görev Şablonları',
-    'Stok',
-    'Projeler',
-    'Proje Planlama',
-    'Malzeme Maliyeti Satırları',
-    'Planlama Kalemleri',
-    // Moved here from İmalat.
-    'CNC Kesim',
-    'Lineer Kesim',
-  ]);
+  const main = page.getByRole('main');
+  const lanes = await main
+    .getByRole('region')
+    .evaluateAll((regions) => regions.map((r) => r.getAttribute('aria-label') ?? r.textContent));
+  expect(lanes).toHaveLength(5);
+  await expect(main.getByRole('region').first()).toContainText('Planlamayı Bekleyenler');
+  for (const name of ['CNC Kesim', 'Lineer Kesim', 'Stok', 'Proje']) {
+    await expect(main.getByRole('region', { name })).toBeVisible();
+  }
+  await expect(main.locator('article')).toHaveCount(0);
+  await expect(page.locator('#to-transfer')).toContainText('7');
+  await expect(page.locator('#cnc-unplanned-tile')).toContainText('5');
+  // A figure opens its list inside the SPA.
+  await main
+    .getByRole('region', { name: 'CNC Kesim' })
+    .getByRole('link', { name: /Açık kesim/ })
+    .click();
+  await expect(page).toHaveURL(/\/planning\/cnc-cutting\/cuts\/?\?status=pending$/);
 
   await page.goto('/finance/');
   await expect(cardTitles(page)).toHaveText(['Finans İşlemleri', 'Raporlar']);
