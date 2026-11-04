@@ -3,7 +3,7 @@ import {
   REPORT_DEPARTMENTS,
   REPORT_TOPICS,
   type ReportEntry,
-} from '@legacy/reportCatalog.js';
+} from '@/routes/reportCatalog';
 
 // The Rapor Merkezi's rules, kept apart from the page so they test plainly.
 

@@ -17,7 +17,7 @@ const legacy = vi.hoisted(() => ({
   logout: vi.fn(),
 }));
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   ROUTES: { LOGIN: '/login/', RESET_PASSWORD: '/login/reset-password/', HOME: '/' },
   login: legacy.login,
   isLoggedIn: () => legacy.loggedIn,
@@ -35,7 +35,7 @@ vi.mock('@legacy/authService.js', () => ({
   logout: legacy.logout,
 }));
 
-vi.mock('@legacy/apis/users.js', () => ({
+vi.mock('@/api/users', () => ({
   resetPassword: legacy.resetPassword,
   forgotPassword: legacy.forgotPassword,
 }));

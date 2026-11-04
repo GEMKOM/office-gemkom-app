@@ -1,5 +1,5 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { hasPerm, isSuperuser } from '@legacy/authService.js';
+import { hasRouteAccess } from '@/auth/accessControl';
+import { hasPerm, isSuperuser } from '@/auth/authService';
 import { useQuery } from '@tanstack/react-query';
 import dayjs, { type Dayjs } from 'dayjs';
 import { useMemo } from 'react';

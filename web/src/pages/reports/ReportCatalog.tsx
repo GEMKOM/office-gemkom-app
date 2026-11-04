@@ -1,5 +1,5 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { REPORT_DEPARTMENTS } from '@legacy/reportCatalog.js';
+import { hasRouteAccess } from '@/auth/accessControl';
+import { REPORT_DEPARTMENTS } from '@/routes/reportCatalog';
 import { ActionIcon, Button, Select, TextInput } from '@mantine/core';
 import { useMemo, useState, type MouseEvent } from 'react';
 import { useAuth } from '@/auth/AuthProvider';

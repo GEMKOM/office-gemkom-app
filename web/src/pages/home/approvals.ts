@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { listPageQueryOptions } from '@/api/counts';
 import { approvalsInboxQueryOptions, type InboxItem } from '@/api/general/approvalsInbox';

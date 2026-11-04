@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQuery } from '@tanstack/react-query';
 import { myVacationRequestsQueryOptions } from '@/api/general/hubs';
 import type { VacationRequest } from '@/api/general/vacation';

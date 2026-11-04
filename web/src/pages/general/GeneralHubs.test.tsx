@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { CraneRequestsHubPage } from './CraneRequestsHubPage';
@@ -7,15 +7,15 @@ import { GeneralHubPage } from './GeneralHubPage';
 import { OvertimeHubPage } from './OvertimeHubPage';
 import { VacationHubPage } from './VacationHubPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 42, username: 'genel' } }),
 }));
 
 // null: every route opens (admin); a set: only those routes (and the always-open ones).
 const access = vi.hoisted(() => ({ granted: null as Set<string> | null }));
-vi.mock('@legacy/apis/accessControl.js', () => ({
+vi.mock('@/auth/accessControl', () => ({
   hasRouteAccess: (route: string) => {
     const path = route.replace(/[?#].*$/, '').replace(/(.)\/$/, '$1');
     const open = ['/general', '/general/discussions', '/isg', '/isg/issues'];

@@ -1,4 +1,4 @@
-import { categoryMeta } from '@legacy/components/notificationBell/notificationCategories.js';
+import { categoryMeta } from '@/shell/notificationCategories';
 import { ActionIcon, Button, Group, Loader, Tooltip, UnstyledButton } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Fragment, useMemo, type ReactNode } from 'react';

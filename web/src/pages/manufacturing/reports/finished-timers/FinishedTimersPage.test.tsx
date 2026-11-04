@@ -1,14 +1,14 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { authedFetch } from '@legacy/authService.js';
+import { hasRouteAccess } from '@/auth/accessControl';
+import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { FinishedTimersPage } from './FinishedTimersPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
-vi.mock('@legacy/apis/accessControl.js', () => ({ hasRouteAccess: vi.fn() }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/accessControl', () => ({ hasRouteAccess: vi.fn() }));
 
 const fetchMock = vi.mocked(authedFetch);
 const accessMock = vi.mocked(hasRouteAccess);

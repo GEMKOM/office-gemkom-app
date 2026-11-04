@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { pendingApprovalCountQueryOptions } from '@/api/procurement/purchaseRequests';
 import { formatNumber } from '@/lib/format';
 import { PendingValue, type PageFigure } from '@/ui';

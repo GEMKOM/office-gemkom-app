@@ -1,18 +1,18 @@
-import { authedFetch, hasPerm } from '@legacy/authService.js';
+import { authedFetch, hasPerm } from '@/auth/authService';
 import dayjs from 'dayjs';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { AttendanceHubPage } from './attendance/AttendanceHubPage';
 import { HumanResourcesHubPage } from './HumanResourcesHubPage';
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
   hasPerm: vi.fn(() => true),
   isSuperuser: () => false,
 }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 const granted = vi.hoisted(() => ({ routes: null as Set<string> | null }));
-vi.mock('@legacy/apis/accessControl.js', () => ({
+vi.mock('@/auth/accessControl', () => ({
   hasRouteAccess: (route: string) =>
     granted.routes === null || granted.routes.has(route.replace(/[?#].*$/, '').replace(/\/$/, '')),
 }));

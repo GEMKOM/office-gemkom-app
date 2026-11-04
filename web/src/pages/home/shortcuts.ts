@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { findNavPage, topVisitedRoutes, type NavPage } from '@/shell/pageVisits';
 
 // "Kısayollar": the pages the user pinned, then those they open most on this

@@ -10,13 +10,13 @@ import {
   refreshPermissions,
   rememberReturnUrl,
   ROUTES,
-  type LegacyUser,
-} from '@legacy/authService.js';
+  type AuthUser,
+} from '@/auth/authService';
 import { Center, Loader } from '@mantine/core';
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 
 export interface AuthState {
-  user: LegacyUser;
+  user: AuthUser;
   isAdmin: boolean;
   isImpersonating: boolean;
   /** Bumped whenever the permission payload changes, so access checks re-run. */
@@ -47,7 +47,7 @@ function passesSessionGuard() {
  * and impersonation work the same on both sides.
  */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<LegacyUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [permissionsVersion, setPermissionsVersion] = useState(0);
 
   useEffect(() => {
@@ -105,7 +105,7 @@ export function useAuth(): AuthState {
   return value;
 }
 
-export function displayName(user: LegacyUser): string {
+export function displayName(user: AuthUser): string {
   if (user.first_name && user.last_name) return `${user.first_name} ${user.last_name}`;
   return user.username || user.email || 'Kullanıcı';
 }

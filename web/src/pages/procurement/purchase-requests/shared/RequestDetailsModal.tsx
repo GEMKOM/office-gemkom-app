@@ -1,6 +1,6 @@
 import { Badge, Button, Card, Group, SimpleGrid, Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { hasPerm } from '@legacy/authService.js';
+import { hasPerm } from '@/auth/authService';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   currencyRatesQueryOptions,

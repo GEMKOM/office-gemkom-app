@@ -1,4 +1,4 @@
-import { forgotPassword } from '@legacy/apis/users.js';
+import { forgotPassword } from '@/api/users';
 import {
   login,
   mustResetPassword,
@@ -6,7 +6,7 @@ import {
   shouldBeOnLoginPage,
   takeReturnUrl,
   teamLandingRoute,
-} from '@legacy/authService.js';
+} from '@/auth/authService';
 import { Anchor, Button, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useAppNavigate } from '@/shell/AppLink';

@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQueries } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import { statementCountQueryOptions } from '@/api/finance/hubs';

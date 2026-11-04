@@ -1,4 +1,4 @@
-import { hasPerm, isSuperuser } from '@legacy/authService.js';
+import { hasPerm, isSuperuser } from '@/auth/authService';
 import { ActionIcon, Anchor, Button, Text, Tooltip } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';

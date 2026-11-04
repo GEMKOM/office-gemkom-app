@@ -3,7 +3,7 @@ import {
   formatAngleTr,
   MAX_ANGLE_DEG,
   setbackFromAngle,
-} from '@legacy/manufacturing/linear-cutting/lc-geometry.js';
+} from '@/pages/manufacturing/linear-cutting/shared/lcGeometry';
 import {
   ActionIcon,
   Checkbox,

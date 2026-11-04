@@ -1,15 +1,15 @@
-import { filterNavigationByAccess, hasRouteAccess } from '@legacy/apis/accessControl.js';
-import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@legacy/movedRoutes.js';
-import { NAVIGATION_STRUCTURE } from '@legacy/navigationStructure.js';
+import { filterNavigationByAccess, hasRouteAccess } from '@/auth/accessControl';
+import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@/routes/movedRoutes';
+import { NAVIGATION_STRUCTURE } from '@/shell/navigationStructure';
 import migratedRoutes from '@/routes/migrated-routes.json';
 import { findTrail } from '@/shell/navModel';
 
-// The real access rules (apis/accessControl.js) for pages that moved: the
+// The real access rules (auth/accessControl.ts) for pages that moved: the
 // grants stay on the old routes, so the new URL opens for exactly the same users.
 
 const legacy = vi.hoisted(() => ({ grantedPages: new Set<string>() }));
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   isAdmin: () => false,
   hasPerm: () => false,
   getPermissions: () => ({}),

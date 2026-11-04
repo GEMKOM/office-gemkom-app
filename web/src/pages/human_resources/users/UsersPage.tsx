@@ -1,4 +1,4 @@
-import { isSuperuser } from '@legacy/authService.js';
+import { isSuperuser } from '@/auth/authService';
 import { Alert, Button, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';

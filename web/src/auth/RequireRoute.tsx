@@ -1,12 +1,12 @@
-import { hasRouteAccess, inheritedAccessRoutes } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess, inheritedAccessRoutes } from '@/auth/accessControl';
 import {
   getGrantedPageRoutes,
   getPermissions,
   hasPerm,
   isAdmin,
   ROUTES,
-} from '@legacy/authService.js';
-import { MOVED_ROUTES } from '@legacy/movedRoutes.js';
+} from '@/auth/authService';
+import { MOVED_ROUTES } from '@/routes/movedRoutes';
 import { Button, Center, Stack, Text, Title } from '@mantine/core';
 import type { ReactNode } from 'react';
 import { useLocation, useMatches } from 'react-router';

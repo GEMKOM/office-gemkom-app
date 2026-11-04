@@ -4,9 +4,8 @@ import { defineConfig } from 'vitest/config';
 import { legacyStatic } from './vite/legacyStatic.ts';
 import { scriptFetchDest } from './vite/scriptFetchDest.ts';
 
-// The legacy app lives one level up and is served from the site root. The React
-// app imports a few of its modules as-is (auth, access control, navigation) so
-// both sides share one session and one route tree while they coexist.
+// The repo root, served from the site root in dev (images and the remaining
+// legacy files). The SPA no longer imports anything from it.
 const legacyRoot = fileURLToPath(new URL('..', import.meta.url));
 const srcRoot = fileURLToPath(new URL('./src', import.meta.url));
 const routesFile = fileURLToPath(new URL('./src/routes/migrated-routes.json', import.meta.url));
@@ -32,7 +31,6 @@ export default defineConfig(({ command }) => ({
   plugins: [scriptFetchDest(), react(), legacyStatic({ legacyRoot, routesFile })],
   resolve: {
     alias: {
-      '@legacy': legacyRoot,
       '@': srcRoot,
     },
   },

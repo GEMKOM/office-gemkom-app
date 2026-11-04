@@ -1,5 +1,5 @@
-import { authedFetch } from '@legacy/authService.js';
-import { exportPagesToPdf } from '@legacy/utils/pdfExport.js';
+import { authedFetch } from '@/auth/authService';
+import { exportPagesToPdf } from '@/lib/pdfExport';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
@@ -9,9 +9,9 @@ import { testBoard } from './testBoard';
 
 vi.setConfig({ testTimeout: 30_000 });
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
-vi.mock('@legacy/utils/pdfExport.js', () => ({ exportPagesToPdf: vi.fn() }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/lib/pdfExport', () => ({ exportPagesToPdf: vi.fn() }));
 
 const fetchMock = vi.mocked(authedFetch);
 
@@ -153,7 +153,7 @@ describe('ProjectPlanningPage', () => {
     const printed = pages.flatMap((page) => [...page.querySelectorAll('.pg-row')]);
     expect(printed.length).toBe(document.querySelectorAll('.pg-scroll .pg-row').length);
     expect(pages[0]!.querySelector('.pg-action-btn, .pg-grip')).toBeNull();
-    expect(options.fileName).toMatch(/^İmalat Planlama - Ekip 1 - \d{4}-\d{2}-\d{2}$/);
+    expect(options?.fileName).toMatch(/^İmalat Planlama - Ekip 1 - \d{4}-\d{2}-\d{2}$/);
     await waitFor(() => expect(success).toHaveBeenCalled());
   });
 });

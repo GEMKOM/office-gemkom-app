@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { MenuCards, PendingValue, type MenuCard, type PageFigure } from '@/ui';
 import { AttentionPanel, HubPanels } from '../hub/HubPanels';
 import { countValue, useIsgSummary, usePendingApprovalCount, waitingBadge } from '../hubFigures';

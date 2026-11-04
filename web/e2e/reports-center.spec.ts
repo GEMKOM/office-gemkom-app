@@ -1,7 +1,7 @@
 import { expect, mockBackend, seedSession, test } from './fixtures';
 
 // Rapor Merkezi. Contracts:
-//   /reports/            every report the user can open (reportCatalog.js),
+//   /reports/            every report the user can open (routes/reportCatalog.ts),
 //                        grouped by topic; search (?q=) and department (?dept=)
 //                        in the URL; favourites per user in localStorage
 //   rail "Raporlar"      opens it; shown to anyone who can open one report

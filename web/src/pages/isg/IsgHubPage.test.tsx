@@ -1,11 +1,11 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { IsgHubPage } from './IsgHubPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
-vi.mock('@legacy/apis/accessControl.js', () => ({ hasRouteAccess: () => true }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/accessControl', () => ({ hasRouteAccess: () => true }));
 
 const fetchMock = vi.mocked(authedFetch);
 

@@ -1,4 +1,4 @@
-import { hasPerm, isAdmin } from '@legacy/authService.js';
+import { hasPerm, isAdmin } from '@/auth/authService';
 import { Button } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';

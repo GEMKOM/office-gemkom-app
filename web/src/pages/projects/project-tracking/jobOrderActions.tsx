@@ -1,4 +1,4 @@
-import { hasPerm } from '@legacy/authService.js';
+import { hasPerm } from '@/auth/authService';
 import { createContext, useContext, type ReactNode } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 

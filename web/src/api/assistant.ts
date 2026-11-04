@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { ApiError, apiFetch, buildUrl, errorMessage } from './client';
 
 // Neo, the in-app assistant: chat (streamed over SSE), conversations, quota,

@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { pendingApprovalCountQueryOptions, type PendingApprovalKind } from '@/api/general/approvals';
 import { isgSummaryQueryOptions } from '@/api/isg/issues';

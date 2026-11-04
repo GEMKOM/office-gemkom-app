@@ -4,7 +4,7 @@ import { FaIcon } from '@/ui';
 import classes from './NeoUsagePage.module.css';
 
 /*
- * The summary body of components/daily-summary/render.js renderDailySummary(),
+ * The summary body of neo/dailySummaryRender.ts renderDailySummary(),
  * as the Neo page called it: the `full` layer with its defaults (headline,
  * stat chips, highlights, job orders, discussions, areas; lists fold after 8).
  * The payload is data the model helped write, so every string is plain text.

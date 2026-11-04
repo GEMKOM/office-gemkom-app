@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQuery } from '@tanstack/react-query';
 import {
   departmentTaskCountQueryOptions,

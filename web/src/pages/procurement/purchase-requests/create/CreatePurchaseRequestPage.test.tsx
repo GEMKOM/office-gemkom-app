@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
@@ -7,12 +7,12 @@ import { callsTo, json } from '../testUtils';
 import { CreatePurchaseRequestPage } from './CreatePurchaseRequestPage';
 import { emptyState, STORAGE_KEY, toStorage, type PrState } from './model';
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
   hasPerm: vi.fn(() => false),
   isSuperuser: vi.fn(() => false),
 }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const offer = (unitPrice: number, qty: number) => ({ unitPrice, totalPrice: unitPrice * qty, deliveryDays: 5, notes: '' });
 

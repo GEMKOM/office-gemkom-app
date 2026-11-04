@@ -14,8 +14,8 @@ import {
 } from '../../../capacity-shared/testSupport';
 import { formatDueDate, MachiningPlanningPage } from './MachiningPlanningPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const HOUR = 3_600_000;
 const T0 = new Date(2026, 10, 3, 8).getTime();

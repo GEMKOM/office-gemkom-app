@@ -1,17 +1,17 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { AccountingHubPage } from '../accounting/AccountingHubPage';
 import { LogisticsHubPage } from '../logistics/LogisticsHubPage';
 import { FinanceHubPage } from './FinanceHubPage';
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 42, username: 'finans' } }),
 }));
 const granted = vi.hoisted(() => ({ routes: null as Set<string> | null }));
-vi.mock('@legacy/apis/accessControl.js', () => ({
+vi.mock('@/auth/accessControl', () => ({
   hasRouteAccess: (route: string) =>
     granted.routes === null || granted.routes.has(route.replace(/[?#].*$/, '').replace(/\/$/, '')),
 }));

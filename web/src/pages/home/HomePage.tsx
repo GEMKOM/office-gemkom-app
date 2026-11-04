@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { AttentionPanel, HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';

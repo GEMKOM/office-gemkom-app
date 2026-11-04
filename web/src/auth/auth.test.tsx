@@ -15,7 +15,7 @@ const legacy = vi.hoisted(() => ({
   rememberReturnUrl: vi.fn(),
 }));
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   ROUTES: { LOGIN: '/login/', RESET_PASSWORD: '/login/reset-password/', HOME: '/' },
   PERMISSIONS_REFRESHED_EVENT: 'permissions:refreshed',
   isLoggedIn: () => legacy.loggedIn,
@@ -32,7 +32,7 @@ vi.mock('@legacy/authService.js', () => ({
   rememberReturnUrl: legacy.rememberReturnUrl,
 }));
 
-vi.mock('@legacy/apis/accessControl.js', () => ({
+vi.mock('@/auth/accessControl', () => ({
   hasRouteAccess: (route: string) => legacy.allowedRoutes.has(route),
   inheritedAccessRoutes: () => ['/manufacturing/reports/finished-timers'],
 }));

@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useEffect, useMemo, useState, type MouseEvent, type ReactNode } from 'react';
 import { AppLink, useAppNavigate } from '@/shell/AppLink';
 import { FaIcon } from './FaIcon';

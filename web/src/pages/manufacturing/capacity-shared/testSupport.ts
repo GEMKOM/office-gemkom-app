@@ -1,9 +1,9 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { createEvent, fireEvent, within } from '@testing-library/react';
 import { vi } from 'vitest';
 
 // Helpers for the planner and report page tests. The tests mock
-// '@legacy/authService.js' (authedFetch) and '@legacy/base.js' themselves.
+// '@/auth/authService' (authedFetch) and '@/lib/backend' themselves.
 
 /** jsdom has no layout; give elements a size so the Gantt's virtualizer renders rows. */
 export function stubLayout() {

@@ -1,4 +1,4 @@
-import { NAVIGATION_STRUCTURE, type NavTree } from '@legacy/navigationStructure.js';
+import { NAVIGATION_STRUCTURE, type NavTree } from '@/shell/navigationStructure';
 import { findNavPage, readVisits, recordVisit, topVisitedRoutes } from './pageVisits';
 
 beforeEach(() => localStorage.clear());

@@ -1,14 +1,14 @@
-import { isImpersonating } from '@legacy/authService.js';
+import { isImpersonating } from '@/auth/authService';
 import {
   areaOrderFor,
   bindDailySummaryInteractions,
   currentDepartmentCode,
-  ensureDailySummaryStyles,
   formatSummaryDate,
   formatWindowLabel,
   relativeDayLabel,
   renderDailySummary,
-} from '@legacy/components/daily-summary/render.js';
+} from '@/neo/dailySummaryRender';
+import './dailySummary.css';
 import { Button, Group, Loader, Modal, UnstyledButton } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -89,9 +89,6 @@ export function SummaryModal({
     expanded.current = true;
   }, []);
 
-  useEffect(() => {
-    ensureDailySummaryStyles();
-  }, []);
   useEffect(() => {
     if (offer) rememberShown(summary.id);
   }, [offer, summary.id]);

@@ -1,4 +1,4 @@
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import type {
   PurchaseRequestListParams,
   PurchaseRequestRow,
@@ -50,7 +50,7 @@ function userName(u: {
 /** The procurement team, with the current user first when not a member. */
 export function requestorOptions(
   users: readonly UserOption[],
-  current: LegacyUser | null | undefined,
+  current: AuthUser | null | undefined,
 ): FilterOption[] {
   const options = users.map((u) => ({ value: String(u.id), label: userName(u) }));
   if (current && !options.some((o) => o.value === String(current.id))) {

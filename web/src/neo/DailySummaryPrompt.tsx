@@ -1,4 +1,4 @@
-import { daysSince, relativeDayLabel } from '@legacy/components/daily-summary/render.js';
+import { daysSince, relativeDayLabel } from '@/neo/dailySummaryRender';
 import { Button, CloseButton } from '@mantine/core';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';

@@ -22,8 +22,8 @@ vi.mock('@/api/assistant', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/api/assistant')>()),
   streamChat: vi.fn(),
 }));
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const mockedStream = vi.mocked(streamChat);
 

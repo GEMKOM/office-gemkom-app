@@ -1,9 +1,9 @@
 import { screen } from '@testing-library/react';
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { renderWithProviders } from '@/test/render';
 import { MenuCards, type MenuCard } from './MenuCards';
 
-vi.mock('@legacy/apis/accessControl.js', () => ({
+vi.mock('@/auth/accessControl', () => ({
   hasRouteAccess: vi.fn(),
 }));
 

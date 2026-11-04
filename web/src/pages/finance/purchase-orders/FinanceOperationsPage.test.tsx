@@ -1,4 +1,4 @@
-import { authedFetch, hasPerm } from '@legacy/authService.js';
+import { authedFetch, hasPerm } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
@@ -7,12 +7,12 @@ import { notify } from '@/ui';
 import { exportToExcel } from '@/ui/DataTable/exportExcel';
 import { FinanceOperationsPage } from './FinanceOperationsPage';
 
-vi.mock('@legacy/authService.js', () => ({
+vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
   hasPerm: vi.fn(() => false),
   isSuperuser: vi.fn(() => false),
 }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 const auth = vi.hoisted(() => ({ isAdmin: false }));
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ isAdmin: auth.isAdmin }) }));
 vi.mock('@/ui/DataTable/exportExcel', () => ({ exportToExcel: vi.fn() }));

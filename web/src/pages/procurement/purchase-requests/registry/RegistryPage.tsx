@@ -1,6 +1,6 @@
 import { Button, Group } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { hasPerm, isSuperuser } from '@legacy/authService.js';
+import { hasPerm, isSuperuser } from '@/auth/authService';
 import { useCallback, useMemo, useState } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import {

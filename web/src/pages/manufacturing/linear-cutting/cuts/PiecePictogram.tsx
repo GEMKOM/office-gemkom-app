@@ -2,7 +2,7 @@ import {
   ANGLE_TOL_DEG,
   formatAngleTr,
   setbackFromAngle,
-} from '@legacy/manufacturing/linear-cutting/lc-geometry.js';
+} from '@/pages/manufacturing/linear-cutting/shared/lcGeometry';
 import type { ReactNode } from 'react';
 import { round2 } from './partRows';
 

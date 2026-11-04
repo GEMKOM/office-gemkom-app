@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   ApiError,

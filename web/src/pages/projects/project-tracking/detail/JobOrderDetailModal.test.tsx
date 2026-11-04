@@ -19,7 +19,7 @@ vi.mock('@/api/client', async (importOriginal) => ({
   apiFetch: vi.fn(),
   apiUpload: vi.fn(),
 }));
-vi.mock('@legacy/authService.js', async (importOriginal) => ({
+vi.mock('@/auth/authService', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   hasPerm: (perm: string) => auth.perms.has(perm),
 }));

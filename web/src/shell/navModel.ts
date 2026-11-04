@@ -1,4 +1,4 @@
-import type { NavItem, NavTree } from '@legacy/navigationStructure.js';
+import type { NavItem, NavTree } from '@/shell/navigationStructure';
 
 // Pure helpers behind the rail and the drawer, mirroring components/navbar.js
 // so both sides show the same menu while legacy and React pages coexist.

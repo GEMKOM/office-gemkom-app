@@ -1,11 +1,11 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { ReportCenterPage } from './ReportCenterPage';
 import { ReportHubPage } from './ReportHubPage';
 
-vi.mock('@legacy/apis/accessControl.js', () => ({ hasRouteAccess: vi.fn() }));
+vi.mock('@/auth/accessControl', () => ({ hasRouteAccess: vi.fn() }));
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ user: { id: 7 } }) }));
 
 const accessMock = vi.mocked(hasRouteAccess);

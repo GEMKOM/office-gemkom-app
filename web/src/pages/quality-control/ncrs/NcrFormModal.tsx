@@ -1,4 +1,4 @@
-import type { LegacyUser } from '@legacy/authService.js';
+import type { AuthUser } from '@/auth/authService';
 import {
   Alert,
   Grid,
@@ -151,7 +151,7 @@ export function RadioChoices({
 }
 
 export interface NcrFormModalProps {
-  currentUser: LegacyUser;
+  currentUser: AuthUser;
   /** The full NCR when editing; without it the modal creates one. */
   ncr?: Ncr | null;
   existingFiles?: { name: string; typeLabel: string }[];

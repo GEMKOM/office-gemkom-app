@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import dayjs from 'dayjs';
 import { listCountQueryOptions, listPageQueryOptions } from '@/api/counts';
 import type { MachineFault } from '@/api/maintenance/faults';

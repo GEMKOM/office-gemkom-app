@@ -1,4 +1,4 @@
-import { hasRouteAccess } from '@legacy/apis/accessControl.js';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import { listCountQueryOptions, listPageQueryOptions } from '@/api/counts';
 import { qcPendingJobOrdersQueryOptions } from '@/api/quality-control/costLines';

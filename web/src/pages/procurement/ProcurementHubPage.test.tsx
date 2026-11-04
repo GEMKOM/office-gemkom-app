@@ -1,4 +1,4 @@
-import { authedFetch } from '@legacy/authService.js';
+import { authedFetch } from '@/auth/authService';
 import { screen, waitFor, within } from '@testing-library/react';
 import dayjs from 'dayjs';
 import { renderWithProviders } from '@/test/render';
@@ -8,13 +8,13 @@ import { SuppliersHubPage } from './SuppliersHubPage';
 
 const access = vi.hoisted(() => ({ granted: null as string[] | null }));
 
-vi.mock('@legacy/authService.js', () => ({ authedFetch: vi.fn() }));
-vi.mock('@legacy/base.js', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 42, username: 'satinalma' } }),
 }));
 // null grants everything (admin); a list grants exactly those routes.
-vi.mock('@legacy/apis/accessControl.js', () => ({
+vi.mock('@/auth/accessControl', () => ({
   hasRouteAccess: (route: string) => access.granted === null || access.granted.includes(route),
 }));
 
