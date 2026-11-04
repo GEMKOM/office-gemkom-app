@@ -14,15 +14,13 @@ import { FaIcon, FormModal, ModalSection, notify } from '@/ui';
 
 const REQUIRED = 'Bu alan gereklidir';
 const WEIGHT_HELP = 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)';
-const TYPE_HELP =
-  'Özel görev tipi (Kaynaklı İmalat → Kaynak, Boya vb.). Şablon uygulanınca göreve aktarılır.';
+const TYPE_HELP = 'Özel görev tipi (Kaynaklı İmalat → Kaynak, Boya vb.). Şablon uygulanınca göreve aktarılır.';
 
 /** Legacy EditModal number check: a filled field must parse and respect min/max. */
 function numberError(value: string, min: number, max?: number): string | null {
   if (value.trim() === '') return null;
   const n = Number.parseFloat(value);
-  if (Number.isNaN(n) || n < min || (max !== undefined && n > max))
-    return 'Geçerli bir değer girin';
+  if (Number.isNaN(n) || n < min || (max !== undefined && n > max)) return 'Geçerli bir değer girin';
   return null;
 }
 
@@ -49,14 +47,7 @@ function SequenceWeightType({ form, taskTypes, typeHelp = TYPE_HELP }: ItemField
   return (
     <>
       <Grid.Col span={6}>
-        <TextInput
-          label="Sıra"
-          type="number"
-          min={1}
-          placeholder="Sıra numarası"
-          leftSection={icon('fas fa-sort-numeric-up')}
-          {...form.getInputProps('sequence')}
-        />
+        <TextInput label="Sıra" type="number" min={1} placeholder="Sıra numarası" leftSection={icon('fas fa-sort-numeric-up')} {...form.getInputProps('sequence')} />
       </Grid.Col>
       <Grid.Col span={6}>
         <TextInput
@@ -99,14 +90,7 @@ interface AddItemModalProps {
   onClose: () => void;
 }
 
-export function AddItemModal({
-  templateId,
-  items,
-  departments,
-  taskTypes,
-  onSaved,
-  onClose,
-}: AddItemModalProps) {
+export function AddItemModal({ templateId, items, departments, taskTypes, onSaved, onClose }: AddItemModalProps) {
   const mainItems = items.filter((item) => item.parent === null || item.parent === undefined);
   const form = useForm({
     initialValues: {
@@ -200,16 +184,7 @@ interface EditItemModalProps {
   onClose: () => void;
 }
 
-export function EditItemModal({
-  templateId,
-  item,
-  isChildItem,
-  items,
-  departments,
-  taskTypes,
-  onSaved,
-  onClose,
-}: EditItemModalProps) {
+export function EditItemModal({ templateId, item, isChildItem, items, departments, taskTypes, onSaved, onClose }: EditItemModalProps) {
   const form = useForm({
     initialValues: {
       sequence: String(item.sequence || 1),
@@ -223,11 +198,7 @@ export function EditItemModal({
     },
   });
   const [submitting, setSubmitting] = useState(false);
-  const departmentLabel =
-    departments.find((d) => d.value === item.department)?.label ||
-    item.department_display ||
-    item.department ||
-    '';
+  const departmentLabel = departments.find((d) => d.value === item.department)?.label || item.department_display || item.department || '';
   const dependencyOptions = items
     .filter((i) => (i.parent === null || i.parent === undefined) && i.id !== item.id)
     .map((i) => ({ value: String(i.id), label: i.title }));
@@ -264,34 +235,15 @@ export function EditItemModal({
       submitting={submitting}
       onSubmit={form.onSubmit(save)}
     >
-      <ModalSection
-        title={isChildItem ? 'Alt Görev Bilgileri' : 'Görev Bilgileri'}
-        icon="fas fa-info-circle"
-      >
+      <ModalSection title={isChildItem ? 'Alt Görev Bilgileri' : 'Görev Bilgileri'} icon="fas fa-info-circle">
         <Grid gap="sm">
           <Grid.Col span={12}>
-            <TextInput
-              label="Departman"
-              value={departmentLabel}
-              readOnly
-              description="Departman değiştirilemez"
-              leftSection={icon('fas fa-building')}
-            />
+            <TextInput label="Departman" value={departmentLabel} readOnly description="Departman değiştirilemez" leftSection={icon('fas fa-building')} />
           </Grid.Col>
           <Grid.Col span={12}>
-            <TextInput
-              label="Başlık"
-              value={item.title}
-              readOnly
-              description="Başlık değiştirilemez"
-              leftSection={icon('fas fa-heading')}
-            />
+            <TextInput label="Başlık" value={item.title} readOnly description="Başlık değiştirilemez" leftSection={icon('fas fa-heading')} />
           </Grid.Col>
-          <SequenceWeightType
-            form={form}
-            taskTypes={taskTypes}
-            typeHelp="Özel görev tipi. Şablon uygulanınca göreve aktarılır."
-          />
+          <SequenceWeightType form={form} taskTypes={taskTypes} typeHelp="Özel görev tipi. Şablon uygulanınca göreve aktarılır." />
           {!isChildItem ? (
             <Grid.Col span={12}>
               <MultiSelect
@@ -320,16 +272,9 @@ interface AddChildItemModalProps {
   onClose: () => void;
 }
 
-export function AddChildItemModal({
-  templateId,
-  parent,
-  taskTypes,
-  onSaved,
-  onClose,
-}: AddChildItemModalProps) {
+export function AddChildItemModal({ templateId, parent, taskTypes, onSaved, onClose }: AddChildItemModalProps) {
   const children = parent.children ?? [];
-  const nextSequence =
-    children.length > 0 ? Math.max(...children.map((c) => c.sequence || 0)) + 1 : 1;
+  const nextSequence = children.length > 0 ? Math.max(...children.map((c) => c.sequence || 0)) + 1 : 1;
   const form = useForm({
     initialValues: { title: '', sequence: String(nextSequence), weight: '10', task_type: '' },
     validate: {

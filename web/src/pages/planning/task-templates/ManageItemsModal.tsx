@@ -18,16 +18,7 @@ import {
   type TemplateItem,
 } from '@/api/planning/taskTemplates';
 import { formatDateTime } from '@/lib/format';
-import {
-  confirm,
-  DataTable,
-  DetailModal,
-  FaIcon,
-  notify,
-  StatusBadge,
-  type DataTableColumn,
-  type RowAction,
-} from '@/ui';
+import { confirm, DataTable, DetailModal, FaIcon, notify, StatusBadge, type DataTableColumn, type RowAction } from '@/ui';
 import { AddChildItemModal, AddItemModal, EditItemModal } from './ItemModals';
 
 /** One row of the flattened hierarchy: a main item followed by its children. */
@@ -53,10 +44,7 @@ export function flattenItems(items: TemplateItem[], departments: ChoiceOption[])
   const mainItems = items.filter(isMain).sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
   mainItems.forEach((item) => {
     const deptLabel =
-      departments.find((d) => d.value === item.department)?.label ||
-      item.department_display ||
-      item.department ||
-      '';
+      departments.find((d) => d.value === item.department)?.label || item.department_display || item.department || '';
     const dependsOn = item.depends_on?.length
       ? item.depends_on.map((id) => items.find((i) => i.id === id)?.title ?? id).join(', ')
       : '-';
@@ -92,11 +80,7 @@ export function flattenItems(items: TemplateItem[], departments: ChoiceOption[])
   return rows;
 }
 
-const Muted = ({ children = '-' }: { children?: string }) => (
-  <Text span c="dimmed" size="sm">
-    {children}
-  </Text>
-);
+const Muted = ({ children = '-' }: { children?: string }) => <Text span c="dimmed" size="sm">{children}</Text>;
 
 function itemColumns(taskTypes: ChoiceOption[]): DataTableColumn<ItemRow>[] {
   const typeLabel = (value: string) => taskTypes.find((t) => t.value === value)?.label || value;
@@ -106,14 +90,7 @@ function itemColumns(taskTypes: ChoiceOption[]): DataTableColumn<ItemRow>[] {
       header: 'Sıra',
       width: 80,
       sortable: true,
-      render: (row) =>
-        row.isChildItem ? (
-          <Muted>↳</Muted>
-        ) : (
-          <Badge color="gray" variant="filled">
-            {row.sequence}
-          </Badge>
-        ),
+      render: (row) => (row.isChildItem ? <Muted>↳</Muted> : <Badge color="gray" variant="filled">{row.sequence}</Badge>),
     },
     {
       key: 'department_display',
@@ -126,21 +103,14 @@ function itemColumns(taskTypes: ChoiceOption[]): DataTableColumn<ItemRow>[] {
       key: 'title',
       header: 'Başlık',
       sortable: true,
-      render: (row) => (
-        <strong style={row.isChildItem ? { marginLeft: 16 } : undefined}>{row.title}</strong>
-      ),
+      render: (row) => <strong style={row.isChildItem ? { marginLeft: 16 } : undefined}>{row.title}</strong>,
     },
     {
       key: 'task_type',
       header: 'Görev Tipi',
       width: 130,
       sortable: true,
-      render: (row) =>
-        row.task_type ? (
-          <StatusBadge color="yellow">{typeLabel(row.task_type)}</StatusBadge>
-        ) : (
-          <Muted />
-        ),
+      render: (row) => (row.task_type ? <StatusBadge color="yellow">{typeLabel(row.task_type)}</StatusBadge> : <Muted />),
       exportValue: (row) => (row.task_type ? typeLabel(row.task_type) : ''),
     },
     {
@@ -154,18 +124,11 @@ function itemColumns(taskTypes: ChoiceOption[]): DataTableColumn<ItemRow>[] {
         max: 100,
         step: 1,
         validate: (value) =>
-          value === null ||
-          typeof value !== 'number' ||
-          Math.trunc(value) < 1 ||
-          Math.trunc(value) > 100
+          value === null || typeof value !== 'number' || Math.trunc(value) < 1 || Math.trunc(value) > 100
             ? 'Ağırlık 1-100 arasında olmalıdır'
             : true,
       },
-      render: (row) => (
-        <Badge color="gray" variant="filled">
-          {row.weight || 10}
-        </Badge>
-      ),
+      render: (row) => <Badge color="gray" variant="filled">{row.weight || 10}</Badge>,
     },
     {
       key: 'children_count',
@@ -196,11 +159,7 @@ function itemColumns(taskTypes: ChoiceOption[]): DataTableColumn<ItemRow>[] {
 
 type ItemDialog =
   | { kind: 'add' }
-  | {
-      kind: 'edit';
-      item: TemplateChildItem & { depends_on?: number[] | null };
-      isChildItem: boolean;
-    }
+  | { kind: 'edit'; item: TemplateChildItem & { depends_on?: number[] | null }; isChildItem: boolean }
   | { kind: 'addChild'; parent: TemplateItem };
 
 function TemplateInfo({ template, items }: { template: TaskTemplate; items: TemplateItem[] }) {
@@ -211,44 +170,27 @@ function TemplateInfo({ template, items }: { template: TaskTemplate; items: Temp
     [
       'Durum',
       template.is_active ? (
-        <StatusBadge key="s" color="green">
-          Aktif
-        </StatusBadge>
+        <StatusBadge key="s" color="green">Aktif</StatusBadge>
       ) : (
-        <StatusBadge key="s" color="yellow">
-          Pasif
-        </StatusBadge>
+        <StatusBadge key="s" color="yellow">Pasif</StatusBadge>
       ),
     ],
     [
       'Varsayılan',
       template.is_default ? (
-        <Badge key="v" color="blue">
-          Varsayılan
-        </Badge>
+        <Badge key="v" color="blue">Varsayılan</Badge>
       ) : (
-        <Badge key="v" color="gray">
-          Varsayılan Değil
-        </Badge>
+        <Badge key="v" color="gray">Varsayılan Değil</Badge>
       ),
     ],
-    [
-      'Ana Görev Sayısı',
-      <Badge key="m" color="gray">
-        {mainCount}
-      </Badge>,
-    ],
+    ['Ana Görev Sayısı', <Badge key="m" color="gray">{mainCount}</Badge>],
     [
       'Toplam Görev Sayısı',
       <span key="t">
-        <Badge color="cyan">{items.length}</Badge> ({mainCount} ana + {items.length - mainCount} alt
-        görev)
+        <Badge color="cyan">{items.length}</Badge> ({mainCount} ana + {items.length - mainCount} alt görev)
       </span>,
     ],
-    [
-      'Oluşturulma Tarihi',
-      template.created_at ? formatDateTime(template.created_at) : <Muted key="c" />,
-    ],
+    ['Oluşturulma Tarihi', template.created_at ? formatDateTime(template.created_at) : <Muted key="c" />],
     ['Oluşturan', template.created_by_name || <Muted key="b" />],
   ];
   return (
@@ -353,13 +295,7 @@ export function ManageItemsModal({ templateId, onClose }: ManageItemsModalProps)
         setDialog({ kind: 'addChild', parent });
       },
     },
-    {
-      key: 'delete',
-      label: 'Sil',
-      icon: 'fas fa-trash',
-      color: 'danger',
-      onClick: (r) => void removeItem(r),
-    },
+    { key: 'delete', label: 'Sil', icon: 'fas fa-trash', color: 'danger', onClick: (r) => void removeItem(r) },
   ];
 
   const saveWeight = async (row: ItemRow, value: number) => {
@@ -368,18 +304,13 @@ export function ManageItemsModal({ templateId, onClose }: ManageItemsModalProps)
       await updateTemplateItem(templateId, row.id, { weight });
     } catch (error) {
       console.error('Error updating weight:', error);
-      throw new Error(taskTemplateErrorMessage(error, 'Ağırlık güncellenirken bir hata oluştu'), {
-        cause: error,
-      });
+      throw new Error(taskTemplateErrorMessage(error, 'Ağırlık güncellenirken bir hata oluştu'), { cause: error });
     }
     queryClient.setQueryData<TemplateItem[]>(taskTemplateKeys.items(templateId), (prev) =>
       prev?.map((item) =>
         item.id === row.id
           ? { ...item, weight }
-          : {
-              ...item,
-              children: item.children?.map((c) => (c.id === row.id ? { ...c, weight } : c)),
-            },
+          : { ...item, children: item.children?.map((c) => (c.id === row.id ? { ...c, weight } : c)) },
       ),
     );
     notify.success('Ağırlık başarıyla güncellendi');
@@ -409,11 +340,7 @@ export function ManageItemsModal({ templateId, onClose }: ManageItemsModalProps)
             content: (
               <>
                 <Group justify="flex-end" mb="sm">
-                  <Button
-                    size="xs"
-                    leftSection={<FaIcon icon="fas fa-plus" />}
-                    onClick={() => setDialog({ kind: 'add' })}
-                  >
+                  <Button size="xs" leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setDialog({ kind: 'add' })}>
                     Ana Görev Ekle
                   </Button>
                 </Group>
@@ -428,13 +355,9 @@ export function ManageItemsModal({ templateId, onClose }: ManageItemsModalProps)
                   striped
                   withColumnBorders
                   verticalSpacing="xs"
-                  rowStyle={(row) =>
-                    row.isChildItem ? { backgroundColor: 'var(--gk-surface-subtle)' } : undefined
-                  }
+                  rowStyle={(row) => (row.isChildItem ? { backgroundColor: 'var(--gk-surface-subtle)' } : undefined)}
                   onCellEdit={({ row, columnKey, value }) =>
-                    columnKey === 'weight' && typeof value === 'number'
-                      ? saveWeight(row, value)
-                      : undefined
+                    columnKey === 'weight' && typeof value === 'number' ? saveWeight(row, value) : undefined
                   }
                   emptyMessage="Henüz ana görev eklenmemiş."
                 />

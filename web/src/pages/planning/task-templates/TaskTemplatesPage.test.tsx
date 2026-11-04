@@ -23,27 +23,9 @@ const ITEMS = [
     task_type: null,
     depends_on: [12],
     children_count: 1,
-    children: [
-      {
-        id: 21,
-        parent: 11,
-        title: 'Malzeme Listesi',
-        sequence: 1,
-        weight: 5,
-        task_type: 'welding',
-      },
-    ],
+    children: [{ id: 21, parent: 11, title: 'Malzeme Listesi', sequence: 1, weight: 5, task_type: 'welding' }],
   },
-  {
-    id: 12,
-    parent: null,
-    title: 'Planlama',
-    department: 'planning',
-    sequence: 1,
-    weight: null,
-    depends_on: [],
-    children: [],
-  },
+  { id: 12, parent: null, title: 'Planlama', department: 'planning', sequence: 1, weight: null, depends_on: [], children: [] },
 ];
 
 const TEMPLATES = [
@@ -61,9 +43,7 @@ const TEMPLATES = [
 ];
 
 function json(body: unknown, status = 200) {
-  return Promise.resolve(
-    new Response(body === undefined ? null : JSON.stringify(body), { status }),
-  );
+  return Promise.resolve(new Response(body === undefined ? null : JSON.stringify(body), { status }));
 }
 
 type Call = { url: URL; method: string; body: unknown };
@@ -74,8 +54,7 @@ function calls(): Call[] {
     body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
   }));
 }
-const callsTo = (method: string, path: string) =>
-  calls().filter((c) => c.method === method && c.url.pathname === path);
+const callsTo = (method: string, path: string) => calls().filter((c) => c.method === method && c.url.pathname === path);
 const listCalls = () => callsTo('GET', '/projects/task-templates/');
 
 let patchStatus = 200;
@@ -106,10 +85,7 @@ beforeEach(() => {
       return json({ count: 2, next: null, previous: null, results: TEMPLATES });
     }
     if (method === 'GET' && path === '/projects/task-templates/department_choices/') {
-      return json([
-        { value: 'design', label: 'Tasarım' },
-        { value: 'planning', label: 'Planlama' },
-      ]);
+      return json([{ value: 'design', label: 'Tasarım' }, { value: 'planning', label: 'Planlama' }]);
     }
     if (method === 'GET' && path === '/projects/task-templates/task_type_choices/') {
       return json([{ value: 'welding', label: 'Kaynaklı İmalat' }]);
@@ -138,10 +114,7 @@ it('lists the templates newest first with the item count', async () => {
   expect(within(first).getByText('Varsayılan')).toBeInTheDocument();
   expect(within(first).getByText('Aktif')).toBeInTheDocument();
   expect(within(first).getByText('2')).toBeInTheDocument();
-  expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({
-    page: '1',
-    ordering: '-created_at',
-  });
+  expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({ page: '1', ordering: '-created_at' });
 });
 
 it('filters go to the URL and reach the request as booleans', async () => {
@@ -205,9 +178,7 @@ it('deletes a template after the confirm', async () => {
   const row = document.querySelector<HTMLElement>('tr[data-row-id="1"]')!;
   fireEvent.click(within(row).getByRole('button', { name: 'Sil' }));
   const dialog = await screen.findByRole('dialog', { name: 'Şablon Silme Onayı' });
-  expect(dialog).toHaveTextContent(
-    '"Standart Üretim Akışı" şablonunu silmek istediğinizden emin misiniz?',
-  );
+  expect(dialog).toHaveTextContent('"Standart Üretim Akışı" şablonunu silmek istediğinizden emin misiniz?');
   fireEvent.click(within(dialog).getByRole('button', { name: 'Sil' }));
   await waitFor(() => expect(callsTo('DELETE', '/projects/task-templates/1/')).toHaveLength(1));
   expect(notify.success).toHaveBeenCalledWith('Şablon başarıyla silindi');
@@ -219,9 +190,7 @@ describe('Görevleri Yönet', () => {
     await screen.findByText('Standart Üretim Akışı');
     const row = document.querySelector<HTMLElement>('tr[data-row-id="1"]')!;
     fireEvent.click(within(row).getByRole('button', { name: 'Görevleri Yönet' }));
-    const dialog = await screen.findByRole('dialog', {
-      name: 'Standart Üretim Akışı - Görev Yönetimi',
-    });
+    const dialog = await screen.findByRole('dialog', { name: 'Standart Üretim Akışı - Görev Yönetimi' });
     await within(dialog).findByText('Malzeme Listesi');
     return dialog;
   }
@@ -231,17 +200,8 @@ describe('Görevleri Yönet', () => {
   it('flattens main items by sequence with their children after them', () => {
     const rows = flattenItems(ITEMS, [{ value: 'design', label: 'Tasarım' }]);
     expect(rows.map((r) => r.id)).toEqual([12, 11, 21]);
-    expect(rows[1]).toMatchObject({
-      depends_on: 'Planlama',
-      children_count: 1,
-      isChildItem: false,
-    });
-    expect(rows[2]).toMatchObject({
-      isChildItem: true,
-      parentId: 11,
-      department_display: 'Tasarım',
-      weight: 5,
-    });
+    expect(rows[1]).toMatchObject({ depends_on: 'Planlama', children_count: 1, isChildItem: false });
+    expect(rows[2]).toMatchObject({ isChildItem: true, parentId: 11, department_display: 'Tasarım', weight: 5 });
     // A missing weight shows as the legacy default 10.
     expect(rows[0]!.weight).toBe(10);
   });
@@ -261,15 +221,9 @@ describe('Görevleri Yönet', () => {
     expect(input).toHaveValue('5');
     fireEvent.change(input, { target: { value: '40' } });
     fireEvent.keyDown(input, { key: 'Enter' });
-    await waitFor(() =>
-      expect(callsTo('PATCH', '/projects/task-templates/1/items/21/')).toHaveLength(1),
-    );
-    expect(callsTo('PATCH', '/projects/task-templates/1/items/21/')[0]!.body).toEqual({
-      weight: 40,
-    });
-    await waitFor(() =>
-      expect(notify.success).toHaveBeenCalledWith('Ağırlık başarıyla güncellendi'),
-    );
+    await waitFor(() => expect(callsTo('PATCH', '/projects/task-templates/1/items/21/')).toHaveLength(1));
+    expect(callsTo('PATCH', '/projects/task-templates/1/items/21/')[0]!.body).toEqual({ weight: 40 });
+    await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Ağırlık başarıyla güncellendi'));
     expect(cell('21', 'weight')).toHaveTextContent('40');
   });
 
@@ -293,10 +247,7 @@ describe('Görevleri Yönet', () => {
     fireEvent.keyDown(input, { key: 'Enter' });
     await waitFor(() => expect(cell('11', 'weight')).toHaveAttribute('data-cell-state', 'error'));
     expect(cell('11', 'weight')).toHaveTextContent('20');
-    expect(notify.error).toHaveBeenCalledWith(
-      expect.objectContaining({ message: 'Geçersiz ağırlık.' }),
-      expect.anything(),
-    );
+    expect(notify.error).toHaveBeenCalledWith(expect.objectContaining({ message: 'Geçersiz ağırlık.' }), expect.anything());
   });
 
   it('adds a main item with the legacy payload', async () => {
@@ -314,13 +265,9 @@ describe('Görevleri Yönet', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Alt Görev Ekle' }));
     const add = await screen.findByRole('dialog', { name: 'Alt Görev Ekle' });
     expect(within(add).getByLabelText('Sıra')).toHaveValue(2);
-    fireEvent.change(within(add).getByLabelText(/Alt Görev Başlığı/), {
-      target: { value: 'İş Programı' },
-    });
+    fireEvent.change(within(add).getByLabelText(/Alt Görev Başlığı/), { target: { value: 'İş Programı' } });
     fireEvent.click(within(add).getByRole('button', { name: 'Alt Görev Ekle' }));
-    await waitFor(() =>
-      expect(callsTo('POST', '/projects/task-templates/1/items/11/children/')).toHaveLength(1),
-    );
+    await waitFor(() => expect(callsTo('POST', '/projects/task-templates/1/items/11/children/')).toHaveLength(1));
     expect(callsTo('POST', '/projects/task-templates/1/items/11/children/')[0]!.body).toEqual({
       title: 'İş Programı',
       sequence: 2,
@@ -339,9 +286,7 @@ describe('Görevleri Yönet', () => {
     fireEvent.click(within(row).getByRole('button', { name: 'Sil' }));
     const confirmDialog = await screen.findByRole('dialog', { name: 'Görev Silme Onayı' });
     fireEvent.click(within(confirmDialog).getByRole('button', { name: 'Sil' }));
-    await waitFor(() =>
-      expect(callsTo('DELETE', '/projects/task-templates/1/items/12/')).toHaveLength(1),
-    );
+    await waitFor(() => expect(callsTo('DELETE', '/projects/task-templates/1/items/12/')).toHaveLength(1));
     expect(notify.success).toHaveBeenCalledWith('Görev başarıyla silindi');
   });
 });
