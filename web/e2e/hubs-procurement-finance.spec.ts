@@ -67,8 +67,12 @@ test('admin: the procurement hub shows its cards, live queues and band buttons',
     '?page_size=5',
   );
 
-  // The band's Raporlar opens the report hub client-side.
-  await main.getByRole('link', { name: 'Raporlar', exact: true }).click();
+  // The band's Raporlar is a ghost (white text and border on the red band, not
+  // the theme's ink) and opens the report hub client-side.
+  const reports = main.getByRole('link', { name: 'Raporlar', exact: true });
+  await expect(reports).toHaveCSS('color', 'rgb(255, 255, 255)');
+  await expect(reports).toHaveCSS('border-top-color', 'rgba(255, 255, 255, 0.5)');
+  await reports.click();
   await expect(page).toHaveURL(/\/procurement\/reports\/?$/);
   await expect(cardTitles(page)).toHaveText(['Ürün Raporu', 'Tedarikçi Raporu', 'Personel Raporu']);
   consoleErrors.expectNone();
