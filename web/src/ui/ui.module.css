@@ -215,7 +215,10 @@ a.figureTile:focus-visible {
 }
 
 /* On the band a filled button turns white; a default button becomes a ghost.
-   Mantine leaves data-variant off a button with the default (filled) variant. */
+   Mantine leaves data-variant off a button with the default (filled) variant.
+   The theme's own button rules (styles/components.module.css: ink text, grey
+   border, a dark-red focus ring) match with the same weight and load later, so
+   the button rules here name .mantine-Button-root to outrank them. */
 .bandActions :global(.mantine-Button-root):not([data-variant]),
 .bandActions [data-variant='filled'] {
   background: #fff;
@@ -228,18 +231,21 @@ a.figureTile:focus-visible {
   background: var(--gk-red-050);
 }
 
-.bandActions [data-variant='default'] {
+.bandActions [data-variant='default'],
+.bandActions :global(.mantine-Button-root)[data-variant='default'] {
   background: transparent;
   color: #fff;
   border-color: rgba(255, 255, 255, 0.5);
 }
 
-.bandActions [data-variant='default']:hover {
+.bandActions [data-variant='default']:hover,
+.bandActions :global(.mantine-Button-root)[data-variant='default']:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: #fff;
 }
 
 .bandActions :focus-visible,
+.bandActions :global(.mantine-Button-root):focus-visible,
 .band a:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px #fff;
