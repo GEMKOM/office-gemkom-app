@@ -90,7 +90,10 @@ test('admin: the section hub shows a lane per area with its live figures', async
 
   const welding = main.getByRole('region', { name: 'Kaynaklı İmalat' });
   await expect(welding).toContainText('12,8 t');
-  await expect(welding.getByRole('link', { name: /Demir Çelik/ })).toContainText('2 gecikmiş');
+  // Open, late and open tonnage, each in its own column.
+  await expect(welding.getByRole('link', { name: /Demir Çelik/ })).toHaveText(
+    /Taşeron\s*5\s*2\s*30,0 t$/,
+  );
   await expect(main.locator('#lateWelding')).toContainText('2');
   await expect(main.locator('#timers')).toContainText('1');
   await expect(main.getByRole('region', { name: 'Talaşlı İmalat' })).toContainText('Torna 1');
