@@ -49,7 +49,9 @@ export function TemplateFormModal({ template, onClose }: TemplateFormModalProps)
       void queryClient.invalidateQueries({ queryKey: taskTemplateKeys.all });
     } catch (error) {
       console.error(editing ? 'Error updating template:' : 'Error creating template:', error);
-      notify.error(editing ? 'Şablon güncellenirken bir hata oluştu' : 'Şablon oluşturulurken bir hata oluştu');
+      notify.error(
+        editing ? 'Şablon güncellenirken bir hata oluştu' : 'Şablon oluşturulurken bir hata oluştu',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -78,13 +80,21 @@ export function TemplateFormModal({ template, onClose }: TemplateFormModalProps)
             />
           </Grid.Col>
           <Grid.Col span={12}>
-            <Textarea label="Açıklama" placeholder="Şablon açıklaması..." rows={3} {...form.getInputProps('description')} />
+            <Textarea
+              label="Açıklama"
+              placeholder="Şablon açıklaması..."
+              rows={3}
+              {...form.getInputProps('description')}
+            />
           </Grid.Col>
           <Grid.Col span={6}>
             <Checkbox label="Aktif" {...form.getInputProps('is_active', { type: 'checkbox' })} />
           </Grid.Col>
           <Grid.Col span={6}>
-            <Checkbox label="Varsayılan Şablon" {...form.getInputProps('is_default', { type: 'checkbox' })} />
+            <Checkbox
+              label="Varsayılan Şablon"
+              {...form.getInputProps('is_default', { type: 'checkbox' })}
+            />
           </Grid.Col>
         </Grid>
       </ModalSection>

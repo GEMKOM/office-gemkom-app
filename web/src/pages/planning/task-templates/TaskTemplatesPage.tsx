@@ -104,10 +104,19 @@ const columns: DataTableColumn<TaskTemplate>[] = [
     header: 'Durum',
     sortable: true,
     render: (row) =>
-      row.is_active ? <StatusBadge color="green">Aktif</StatusBadge> : <StatusBadge color="yellow">Pasif</StatusBadge>,
+      row.is_active ? (
+        <StatusBadge color="green">Aktif</StatusBadge>
+      ) : (
+        <StatusBadge color="yellow">Pasif</StatusBadge>
+      ),
     exportValue: (row) => (row.is_active ? 'Aktif' : 'Pasif'),
   },
-  { key: 'created_at', header: 'Oluşturulma', sortable: true, render: (row) => formatDateTime(row.created_at) },
+  {
+    key: 'created_at',
+    header: 'Oluşturulma',
+    sortable: true,
+    render: (row) => formatDateTime(row.created_at),
+  },
   { key: 'created_by_name', header: 'Oluşturan', render: (row) => row.created_by_name || '-' },
 ];
 
@@ -173,9 +182,27 @@ export function TaskTemplatesPage() {
   };
 
   const rowActions = (): RowAction<TaskTemplate>[] => [
-    { key: 'items', label: 'Görevleri Yönet', icon: 'fas fa-tasks', color: 'primary', onClick: (r) => setManagingId(r.id) },
-    { key: 'edit', label: 'Düzenle', icon: 'fas fa-edit', color: 'warning', onClick: (r) => void openEdit(r) },
-    { key: 'delete', label: 'Sil', icon: 'fas fa-trash', color: 'danger', onClick: (r) => void remove(r) },
+    {
+      key: 'items',
+      label: 'Görevleri Yönet',
+      icon: 'fas fa-tasks',
+      color: 'primary',
+      onClick: (r) => setManagingId(r.id),
+    },
+    {
+      key: 'edit',
+      label: 'Düzenle',
+      icon: 'fas fa-edit',
+      color: 'warning',
+      onClick: (r) => void openEdit(r),
+    },
+    {
+      key: 'delete',
+      label: 'Sil',
+      icon: 'fas fa-trash',
+      color: 'danger',
+      onClick: (r) => void remove(r),
+    },
   ];
 
   return (
@@ -206,13 +233,22 @@ export function TaskTemplatesPage() {
         columns={columns}
         getRowId={(row) => String(row.id)}
         loading={list.isFetching}
-        pagination={{ page, pageSize: PAGE_SIZE, total, onPageChange: (next) => apply({ page: String(next) }) }}
+        pagination={{
+          page,
+          pageSize: PAGE_SIZE,
+          total,
+          onPageChange: (next) => apply({ page: String(next) }),
+        }}
         rowActions={rowActions}
         onRefresh={() => void list.refetch()}
       />
       {creating ? <TemplateFormModal onClose={() => setCreating(false)} /> : null}
-      {editing ? <TemplateFormModal key={editing.id} template={editing} onClose={() => setEditing(null)} /> : null}
-      {managingId !== null ? <ManageItemsModal templateId={managingId} onClose={closeManage} /> : null}
+      {editing ? (
+        <TemplateFormModal key={editing.id} template={editing} onClose={() => setEditing(null)} />
+      ) : null}
+      {managingId !== null ? (
+        <ManageItemsModal templateId={managingId} onClose={closeManage} />
+      ) : null}
     </>
   );
 }

@@ -1,4 +1,21 @@
-/* Planlama hub: the per-machine load bar in the CNC lane's table. */
+/* Planlama hub: the per-machine load bar in the CNC lane's table, and the
+   running timer under a machine's name. */
+
+.running {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--gk-ink-2);
+}
+
+.runningDot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  margin-right: 2px;
+  border-radius: 50%;
+  background: var(--fam-fg);
+}
 
 .load {
   display: inline-flex;
