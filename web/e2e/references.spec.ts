@@ -99,7 +99,12 @@ test('Referanslar: weld list, Düzenle with live hours, unit times', async ({ pa
   const main = page.getByRole('main');
   await expect(main.getByRole('heading', { name: 'Referanslar' })).toBeVisible();
   await expect(main.getByTestId('reference-count')).toContainText('66 referans');
-  await expect(main.getByTestId('reference-summary')).toContainText('Tüm aileler · atölye');
+  // The factor table (one row per group) opens on demand and leads with the
+  // all-families row: n, median and the middle half of SUMMARY.all.
+  await main.getByRole('button', { name: /^Göster/ }).click();
+  const allFamilies = main.getByTestId('reference-summary').getByRole('row', { name: /Tüm aileler/ });
+  await expect(allFamilies).toContainText('1,05');
+  await expect(allFamilies).toContainText('0,90–1,30');
 
   await main.locator('tr').filter({ hasText: 'E2E-250-03' }).getByText('Basınçlı kazan').click();
   const dialog = page.getByRole('dialog');
@@ -120,7 +125,9 @@ test('Referanslar: weld list, Düzenle with live hours, unit times', async ({ pa
   await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
 
-  await main.getByRole('button', { name: 'Birim süreler' }).click();
+  // Birim süreler is the third tab now (İş referansları, Geçmiş maliyetler, Birim süreler).
+  await main.getByRole('tab', { name: 'Birim süreler' }).click();
+  await expect(page).toHaveURL(/[?&]tab=units/);
   const units = main.getByTestId('units-panel');
   await units.getByLabel('MAG kaynak').fill('1,4');
   await expect(units.getByTestId('units-dirty')).toHaveText('1 değişiklik kaydedilmedi');
