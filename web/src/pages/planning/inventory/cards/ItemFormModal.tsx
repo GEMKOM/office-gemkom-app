@@ -34,8 +34,6 @@ export const itemSchema = z.object({
   category: z.string(),
   is_active: z.boolean(),
   min_stock: optionalNumber,
-  // Number field: optional, but when filled it has to parse (legacy isFieldValid).
-  stock_quantity: optionalNumber,
 });
 
 export type ItemFormValues = z.infer<typeof itemSchema>;
@@ -53,12 +51,11 @@ export function itemFormValues(item?: Partial<Item>): ItemFormValues {
     is_active: item?.is_active ?? true,
     min_stock:
       item?.min_stock === null || item?.min_stock === undefined ? '' : String(item.min_stock),
-    stock_quantity: String(item?.stock_quantity || 0),
   };
 }
 
-export function itemInput(values: ItemFormValues, editing: boolean): ItemInput {
-  const data: ItemInput = {
+export function itemInput(values: ItemFormValues): ItemInput {
+  return {
     code: values.code.trim(),
     name: values.name.trim(),
     unit: values.unit,
@@ -67,9 +64,6 @@ export function itemInput(values: ItemFormValues, editing: boolean): ItemInput {
     is_active: values.is_active,
     min_stock: values.min_stock.trim() === '' ? null : values.min_stock.trim(),
   };
-  // Stock is not typed on a new card; the stock system will own it.
-  if (editing) data.stock_quantity = values.stock_quantity;
-  return data;
 }
 
 /** The backend's field errors, e.g. a code that already exists. */
@@ -125,7 +119,7 @@ export function ItemFormModal({ item, initial, onClose, onSaved }: ItemFormModal
   };
 
   const save = async (values: ItemFormValues) => {
-    const data = itemInput(values, editing);
+    const data = itemInput(values);
     try {
       const saved = item
         ? await update.mutateAsync({ id: item.id, data })
@@ -223,15 +217,14 @@ export function ItemFormModal({ item, initial, onClose, onSaved }: ItemFormModal
               {...form.getInputProps('min_stock')}
             />
           </Grid.Col>
-          {editing ? (
+          {item ? (
             <Grid.Col span={{ base: 12, sm: 6 }}>
               <TextInput
-                label="Stok Miktarı"
-                placeholder="Stok miktarını girin"
-                type="number"
-                step="0.01"
+                label="Hammadde Stoğu"
+                description="Stok hareketlerinden gelir; elle girilmez"
+                readOnly
+                value={String(item.stock_quantity ?? 0)}
                 leftSection={<FaIcon icon="fas fa-cubes" />}
-                {...form.getInputProps('stock_quantity')}
               />
             </Grid.Col>
           ) : null}

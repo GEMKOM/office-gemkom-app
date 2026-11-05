@@ -98,6 +98,64 @@ beforeEach(() => {
         },
       ]);
     }
+    if (method === 'GET' && path === '/warehouse/stock-balances/') {
+      return json({
+        count: 3,
+        results: [
+          {
+            id: 1,
+            item: 1,
+            warehouse_code: 'HAMMADDE',
+            warehouse_name: 'Hammadde',
+            job_no: '',
+            quantity: '12.500',
+            updated_at: '',
+          },
+          {
+            id: 2,
+            item: 1,
+            warehouse_code: 'IS_EMRI',
+            warehouse_name: 'İş Emri',
+            job_no: '',
+            quantity: '40.000',
+            updated_at: '',
+          },
+          {
+            id: 3,
+            item: 1,
+            warehouse_code: 'IS_EMRI',
+            warehouse_name: 'İş Emri',
+            job_no: '254-01',
+            quantity: '-2.000',
+            updated_at: '',
+          },
+        ],
+      });
+    }
+    if (method === 'GET' && path === '/warehouse/stock-movements/') {
+      return json({
+        count: 1,
+        results: [
+          {
+            id: 9,
+            movement_type: 'issue_to_production',
+            movement_type_label: 'İmalata çıkış',
+            item: 1,
+            quantity: '6.000',
+            from_warehouse_code: 'IS_EMRI',
+            from_job_no: '254-01',
+            to_warehouse_code: null,
+            to_job_no: '',
+            occurred_at: '2026-11-05T10:00:00Z',
+            created_by_name: 'Depo',
+            note: 'MPR-2026-0099 → Kaynak 1',
+            planning_request_number: 'GR-2026-0010',
+            pull_request_number: 'MPR-2026-0099',
+            reverses: null,
+          },
+        ],
+      });
+    }
     if (method === 'GET' && path === '/procurement/item-categories/') {
       return json([
         {
@@ -220,7 +278,8 @@ it('the edit form validates and then PUTs every field', async () => {
   const name = within(dialog).getByLabelText(/Ürün Adı/);
   expect(name).toHaveValue('Cıvata M8');
   expect(within(dialog).getByLabelText(/Ürün Kodu/)).toHaveValue('M-001');
-  expect(within(dialog).getByLabelText('Stok Miktarı')).toHaveValue(12.5);
+  // Stock comes from the ledger: shown, never typed in.
+  expect(within(dialog).getByLabelText(/Hammadde Stoğu/)).toHaveAttribute('readonly');
 
   fireEvent.change(name, { target: { value: '' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
@@ -244,7 +303,6 @@ it('the edit form validates and then PUTs every field', async () => {
     category: null,
     is_active: true,
     min_stock: null,
-    stock_quantity: '12.50',
   });
   await waitFor(() => expect(listCalls().length).toBeGreaterThan(1));
   await waitFor(() =>
@@ -310,7 +368,8 @@ it('cancelling the confirm deletes nothing', async () => {
 it("lists an item's purchase requests in a modal", async () => {
   renderPage();
   await screen.findByText('M-001');
-  fireEvent.click(screen.getAllByRole('button', { name: 'Satın Alma Talepleri' })[0]!);
+  // Düzenle and Stok Hareketleri stay on the row; the rest is in the menu.
+  await clickRowMenuAction('Satın Alma Talepleri');
   const dialog = await screen.findByRole('dialog', { name: 'Satın Alma Talepleri - Cıvata M8' });
   expect(await within(dialog).findByText('SAT-123')).toBeInTheDocument();
   expect(within(dialog).getByText('Onaylandı')).toBeInTheDocument();
@@ -340,7 +399,7 @@ it('opens a new stock card: the family sets the unit, a taken code is refused', 
   fireEvent.click(screen.getByRole('button', { name: 'Yeni Stok Kartı' }));
   const dialog = await screen.findByRole('dialog', { name: 'Yeni Stok Kartı' });
   // Stock is never typed on a new card.
-  expect(within(dialog).queryByLabelText('Stok Miktarı')).toBeNull();
+  expect(within(dialog).queryByLabelText(/Hammadde Stoğu/)).toBeNull();
 
   fireEvent.change(within(dialog).getByLabelText(/Ürün Kodu/), { target: { value: 'M-001' } });
   fireEvent.change(within(dialog).getByLabelText(/Ürün Adı/), { target: { value: 'HALAT Ø10' } });
@@ -369,4 +428,20 @@ it('opens a new stock card: the family sets the unit, a taken code is refused', 
     is_active: true,
     min_stock: null,
   });
+});
+
+it("shows a card's balances per warehouse and job and its movements", async () => {
+  renderPage();
+  await screen.findByText('M-001');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Stok Hareketleri' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: 'Stok Hareketleri - Cıvata M8' });
+
+  expect(await within(dialog).findByText('atanmamış')).toBeInTheDocument();
+  expect(within(dialog).getByText('254-01')).toBeInTheDocument();
+  expect(within(dialog).getByText('-2,00')).toBeInTheDocument();
+  expect(await within(dialog).findByText('İmalata çıkış')).toBeInTheDocument();
+  expect(within(dialog).getByText('İş Emri · 254-01')).toBeInTheDocument();
+  expect(within(dialog).getByText('GR-2026-0010 · MPR-2026-0099')).toBeInTheDocument();
+  const movements = calls().find((c) => c.url.pathname === '/warehouse/stock-movements/')!;
+  expect(movements.url.searchParams.get('item')).toBe('1');
 });

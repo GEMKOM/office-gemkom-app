@@ -54,6 +54,17 @@ function PriceSource({ value }: { value: Item['latest_unit_price_source'] }) {
   return <Badge label={def.label} color={def.color} title={def.title} />;
 }
 
+/** A stock-ledger quantity: red below zero, dimmed at zero, '-' when unknown. */
+function StockQuantity({ value }: { value: number | string | null | undefined }) {
+  const n = toNumber(value);
+  if (n === null) return <>-</>;
+  return (
+    <Text size="sm" fw={500} c={n < 0 ? 'red.8' : n > 0 ? 'green.8' : 'dimmed'}>
+      {formatNumber(value, 2)}
+    </Text>
+  );
+}
+
 const unitLabel = (row: Item) => row.unit_label || row.unit || '-';
 const typeLabel = (row: Item) => row.item_type_label || row.item_type || '-';
 
@@ -125,18 +136,24 @@ export const itemColumns: DataTableColumn<Item>[] = [
   },
   {
     key: 'stock_quantity',
-    header: 'Stok Miktarı',
+    header: 'Hammadde',
     sortable: true,
     align: 'right',
-    render: (row) => {
-      if (row.stock_quantity === null || row.stock_quantity === undefined) return '-';
-      const n = toNumber(row.stock_quantity);
-      return (
-        <Text size="sm" fw={500} c={n !== null && n > 0 ? 'green.8' : 'red.8'}>
-          {formatNumber(row.stock_quantity, 2)}
-        </Text>
-      );
-    },
+    render: (row) => <StockQuantity value={row.stock_quantity} />,
+  },
+  {
+    key: 'job_area_quantity',
+    header: 'İş Emri',
+    sortable: false,
+    align: 'right',
+    render: (row) => <StockQuantity value={row.job_area_quantity} />,
+  },
+  {
+    key: 'finished_quantity',
+    header: 'Mamul',
+    sortable: false,
+    align: 'right',
+    render: (row) => <StockQuantity value={row.finished_quantity} />,
   },
   {
     key: 'latest_unit_price_eur',
