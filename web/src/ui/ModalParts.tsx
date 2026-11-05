@@ -1,7 +1,8 @@
 import { Modal } from '@mantine/core';
-import type { ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { FaIcon } from './FaIcon';
 import classes from './Modal.module.css';
+import { useModalFitsTables } from './useModalFitsTables';
 
 /**
  * Pass to a Modal that lays itself out with ModalHeader / ModalBody /
@@ -28,7 +29,13 @@ export interface ModalHeaderProps {
  * The header every modal shares: icon tile, title, subtitle, close button.
  * Render it first inside a Modal; the title names the dialog for screen readers.
  */
-export function ModalHeader({ title, subtitle, icon, tone = 'brand', withCloseButton = true }: ModalHeaderProps) {
+export function ModalHeader({
+  title,
+  subtitle,
+  icon,
+  tone = 'brand',
+  withCloseButton = true,
+}: ModalHeaderProps) {
   return (
     <div className={classes.header} data-tone={tone}>
       {icon ? (
@@ -45,9 +52,15 @@ export function ModalHeader({ title, subtitle, icon, tone = 'brand', withCloseBu
   );
 }
 
-/** The padded area between header and footer. */
+/** The padded area between header and footer. The modal widens to fit a wide table inside it. */
 export function ModalBody({ children }: { children: ReactNode }) {
-  return <div className={classes.main}>{children}</div>;
+  const ref = useRef<HTMLDivElement>(null);
+  useModalFitsTables(ref);
+  return (
+    <div ref={ref} className={classes.main}>
+      {children}
+    </div>
+  );
 }
 
 export interface ModalSectionProps {
