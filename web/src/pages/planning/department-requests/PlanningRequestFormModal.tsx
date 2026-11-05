@@ -29,6 +29,13 @@ import {
   type PlanningRequest,
   type PlanningRequestInput,
 } from '@/api/planning/planningRequests';
+import {
+  canManageStockCards,
+  cardFromSearch,
+  itemKeys,
+  searchStockCards,
+  type Item,
+} from '@/api/procurement/items';
 import { useJobOrderOptions } from '@/api/reference';
 import {
   confirm,
@@ -38,8 +45,10 @@ import {
   FormModal,
   ModalSection,
   notify,
+  SelectRemote,
   type AttachmentFile,
 } from '@/ui';
+import { ItemFormModal } from '../inventory/cards/ItemFormModal';
 import { UNIT_CHOICES } from '../../general/department-requests/list/constants';
 import { shiftAttachTargets } from '../../general/department-requests/list/fileItemMapping';
 import { ExcelImportModal } from './ExcelImportModal';
@@ -136,6 +145,9 @@ export function PlanningRequestFormModal({
   const [saving, setSaving] = useState(false);
   const [excelOpen, setExcelOpen] = useState(false);
   const [viewing, setViewing] = useState<AttachmentFile | null>(null);
+  // The row a new stock card is being opened for (planning's "Yeni kart").
+  const [newCardRow, setNewCardRow] = useState<number | null>(null);
+  const canOpenCards = canManageStockCards();
   const resetFileButton = useRef<() => void>(null);
 
   const jobOrders = useJobOrderOptions();
@@ -169,6 +181,16 @@ export function PlanningRequestFormModal({
   };
 
   const addRow = () => form.insertListItem('items', itemRow());
+
+  /** A stock card picked (or opened) for a row: its code, name and unit fill the row. */
+  const pickCard = (index: number, code: string | null, card?: Item) => {
+    form.setFieldValue(`items.${index}.item_code`, code ?? '');
+    const picked = card ?? (code ? cardFromSearch(code) : undefined);
+    if (picked) {
+      form.setFieldValue(`items.${index}.item_name`, picked.name);
+      if (picked.unit) form.setFieldValue(`items.${index}.item_unit`, picked.unit.toLowerCase());
+    }
+  };
   const removeRow = (index: number) => {
     form.removeListItem('items', index);
     updateAttachments((prev) =>
@@ -327,7 +349,7 @@ export function PlanningRequestFormModal({
   return (
     <>
       <FormModal
-        opened={!excelOpen}
+        opened={!excelOpen && newCardRow === null}
         onClose={onClose}
         title={title}
         subtitle={
@@ -438,8 +460,8 @@ export function PlanningRequestFormModal({
             <Grid columns={24} gap="xs" visibleFrom="md">
               {(
                 [
-                  ['Ürün Kodu/ID *', 4],
-                  ['Ürün Adı', 4],
+                  ['Stok Kodu *', 5],
+                  ['Ürün Adı', 3],
                   ['Ürün Açıklaması', 3],
                   ['İş No', 4],
                   ['Miktar', 2],
@@ -466,20 +488,47 @@ export function PlanningRequestFormModal({
                   data-testid="item-row"
                   style={locked ? { opacity: 0.8 } : undefined}
                 >
-                  <Grid.Col span={{ base: 12, md: 4 }}>
-                    <TextInput
-                      size="xs"
-                      placeholder="Ürün kodu veya ID"
-                      aria-label={`Ürün kodu ${index + 1}`}
-                      disabled={locked}
-                      {...form.getInputProps(`items.${index}.item_code`)}
-                    />
+                  <Grid.Col span={{ base: 12, md: 5 }}>
+                    <Group gap={4} wrap="nowrap">
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <SelectRemote
+                          size="xs"
+                          aria-label={`Ürün kodu ${index + 1}`}
+                          placeholder="Kod veya ad ile ara…"
+                          minSearchLength={2}
+                          queryKey={itemKeys.search}
+                          search={searchStockCards}
+                          disabled={locked}
+                          initialOptions={
+                            row.item_code ? [{ value: row.item_code, label: row.item_code }] : []
+                          }
+                          comboboxProps={{ width: 560, position: 'bottom-start' }}
+                          value={row.item_code || null}
+                          onChange={(value) => pickCard(index, value)}
+                          error={form.errors[`items.${index}.item_code`]}
+                        />
+                      </Box>
+                      {canOpenCards && !locked ? (
+                        <Tooltip label="Yeni stok kartı aç" withArrow>
+                          <ActionIcon
+                            size="sm"
+                            variant="default"
+                            aria-label={`Yeni stok kartı ${index + 1}`}
+                            onClick={() => setNewCardRow(index)}
+                          >
+                            <FaIcon icon="fas fa-plus" />
+                          </ActionIcon>
+                        </Tooltip>
+                      ) : null}
+                    </Group>
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, md: 4 }}>
+                  <Grid.Col span={{ base: 12, md: 3 }}>
                     <TextInput
                       size="xs"
-                      placeholder="Ürün adı"
+                      placeholder={row.item_code ? 'Ürün adı' : 'Kart seçilince dolar'}
                       aria-label={`Ürün adı ${index + 1}`}
+                      // The card's name; a department request's own wording until a card is picked.
+                      readOnly
                       disabled={locked}
                       {...form.getInputProps(`items.${index}.item_name`)}
                     />
@@ -688,6 +737,17 @@ export function PlanningRequestFormModal({
           </Stack>
         </ModalSection>
       </FormModal>
+
+      {newCardRow !== null ? (
+        <ItemFormModal
+          initial={{
+            name: rows[newCardRow]?.item_name ?? '',
+            unit: rows[newCardRow]?.item_unit ?? 'adet',
+          }}
+          onClose={() => setNewCardRow(null)}
+          onSaved={(card) => pickCard(newCardRow, card.code, card)}
+        />
+      ) : null}
 
       {excelOpen ? (
         <ExcelImportModal

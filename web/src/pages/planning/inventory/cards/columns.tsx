@@ -77,6 +77,37 @@ export const itemColumns: DataTableColumn<Item>[] = [
     ),
   },
   {
+    key: 'category_code',
+    header: 'Aile',
+    sortable: false,
+    render: (row) =>
+      row.category_code ? (
+        <span title={[row.category_group, row.category_name].filter(Boolean).join(' · ')}>
+          <span className={uiClasses.code}>{row.category_code}</span>{' '}
+          <Text span size="xs" c="dimmed">
+            {row.category_name}
+          </Text>
+        </span>
+      ) : (
+        '-'
+      ),
+  },
+  {
+    key: 'is_active',
+    header: 'Durum',
+    sortable: false,
+    render: (row) =>
+      row.is_active === false ? (
+        <Badge
+          label="Pasif"
+          color="grey"
+          title="Eski satırlarda kalır; yeni talep aramasında en sonda listelenir."
+        />
+      ) : (
+        <Badge label="Aktif" color="green" />
+      ),
+  },
+  {
     key: 'unit_label',
     header: 'Birim',
     sortable: true,

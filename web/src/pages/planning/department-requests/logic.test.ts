@@ -93,7 +93,7 @@ it('marks planning rows locked by inventory, purchase requests or conversion', (
   expect(lockReason(first!)).toBe('Ürünü Kaldır');
 });
 
-it('builds items with legacy checks; a numeric code goes as item_id', () => {
+it('builds items with legacy checks; a numeric code is still a code', () => {
   expect(buildItems([itemRow({ item_code: 'X' })])).toEqual({
     ok: false,
     error: 'Tüm ürünler için iş no gereklidir',
@@ -116,7 +116,14 @@ it('builds items with legacy checks; a numeric code goes as item_id', () => {
   expect(built).toEqual({
     ok: true,
     value: [
-      { job_no: 'J', quantity: 2.5, item_id: 42, item_unit: 'adet', source_item_index: 0, id: 9 },
+      {
+        job_no: 'J',
+        quantity: 2.5,
+        item_code: '42',
+        item_unit: 'adet',
+        source_item_index: 0,
+        id: 9,
+      },
       {
         job_no: 'J',
         quantity: 1,

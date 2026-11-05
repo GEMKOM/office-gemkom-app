@@ -1,8 +1,11 @@
+import { Button } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_STALE_TIME } from '@/api/queryClient';
 import {
+  canManageStockCards,
   ITEM_TYPE_CHOICES,
+  itemCategoriesQueryOptions,
   itemErrorMessage,
   itemKeys,
   itemsQueryOptions,
@@ -14,6 +17,7 @@ import {
 import {
   confirm,
   DataTable,
+  FaIcon,
   FilterBar,
   fromOrdering,
   notify,
@@ -35,16 +39,21 @@ const URL_DEFAULTS = {
   name: '',
   name_lookup: '',
   item_type: '',
+  // Inactive cards (legacy plate / boy / service cards, Mikro codes nobody
+  // holds stock of) are hidden unless asked for.
+  is_active: 'true',
+  category: '',
   page: '1',
   ordering: 'code',
 };
 
 const PAGE_SIZE = 20;
 
-type FilterKeys = 'code' | 'code_lookup' | 'name' | 'name_lookup' | 'item_type';
+type FilterKeys =
+  'code' | 'code_lookup' | 'name' | 'name_lookup' | 'item_type' | 'is_active' | 'category';
 type FilterState = Record<FilterKeys, string>;
 
-const filterConfig: FilterConfig<FilterKeys>[] = [
+const baseFilterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'text', key: 'code', label: 'Ürün Kodu', placeholder: 'Ürün kodu ara...', span: 2 },
   {
     type: 'select',
@@ -74,6 +83,17 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
     searchable: false,
     options: ITEM_TYPE_CHOICES.map(({ value, label }) => ({ value, label })),
   },
+  {
+    type: 'select',
+    key: 'is_active',
+    label: 'Durum',
+    placeholder: 'Tümü',
+    searchable: false,
+    options: [
+      { value: 'true', label: 'Aktif' },
+      { value: 'false', label: 'Pasif' },
+    ],
+  },
 ];
 
 const EMPTY_FILTERS: FilterState = {
@@ -82,6 +102,8 @@ const EMPTY_FILTERS: FilterState = {
   name: '',
   name_lookup: '',
   item_type: '',
+  is_active: '',
+  category: '',
 };
 const EMPTY_ROWS: Item[] = [];
 
@@ -98,6 +120,9 @@ function filterParams(values: FilterState): ItemsParams {
     else params.name = values.name;
   }
   if (values.item_type) params.item_type = values.item_type;
+  if (values.is_active === 'true' || values.is_active === 'false')
+    params.is_active = values.is_active;
+  if (values.category) params.category = values.category;
   return params;
 }
 
@@ -118,8 +143,38 @@ export function InventoryCardsPage() {
       name: values.name,
       name_lookup: values.name_lookup,
       item_type: values.item_type,
+      is_active: values.is_active,
+      category: values.category,
     }),
-    [values.code, values.code_lookup, values.name, values.name_lookup, values.item_type],
+    [
+      values.code,
+      values.code_lookup,
+      values.name,
+      values.name_lookup,
+      values.item_type,
+      values.is_active,
+      values.category,
+    ],
+  );
+  const canManage = canManageStockCards();
+  const categories = useQuery(itemCategoriesQueryOptions());
+  const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(
+    () => [
+      ...baseFilterConfig,
+      {
+        type: 'select',
+        key: 'category',
+        label: 'Aile',
+        placeholder: 'Tümü',
+        searchable: true,
+        span: 2,
+        options: (categories.data ?? []).map((c) => ({
+          value: String(c.id),
+          label: `${c.code} — ${c.name}`,
+        })),
+      },
+    ],
+    [categories.data],
   );
   const page = positiveInt(values.page, 1);
   const sort = fromOrdering(values.ordering || 'code');
@@ -144,6 +199,7 @@ export function InventoryCardsPage() {
 
   // ---- modals ----
   const [editing, setEditing] = useState<Item | null>(null);
+  const [creating, setCreating] = useState(false);
   const [requests, setRequests] = useState<{ item: Item; kind: ItemRequestsKind } | null>(null);
   const closeRequests = useCallback(() => setRequests(null), []);
 
@@ -172,13 +228,17 @@ export function InventoryCardsPage() {
   };
 
   const rowActions = (row: Item): RowAction<Item>[] => [
-    {
-      key: 'edit',
-      label: 'Düzenle',
-      icon: 'fas fa-edit',
-      color: 'primary',
-      onClick: () => setEditing(row),
-    },
+    ...(canManage
+      ? [
+          {
+            key: 'edit',
+            label: 'Düzenle',
+            icon: 'fas fa-edit',
+            color: 'primary',
+            onClick: () => setEditing(row),
+          } satisfies RowAction<Item>,
+        ]
+      : []),
     {
       key: 'purchase-requests',
       label: 'Satın Alma Talepleri',
@@ -193,13 +253,17 @@ export function InventoryCardsPage() {
       color: 'success',
       onClick: () => setRequests({ item: row, kind: 'planning' }),
     },
-    {
-      key: 'delete',
-      label: 'Sil',
-      icon: 'fas fa-trash',
-      color: 'danger',
-      onClick: (r) => void deleteItem(r),
-    },
+    ...(canManage
+      ? [
+          {
+            key: 'delete',
+            label: 'Sil',
+            icon: 'fas fa-trash',
+            color: 'danger',
+            onClick: (r: Item) => void deleteItem(r),
+          } satisfies RowAction<Item>,
+        ]
+      : []),
   ];
 
   const refresh = () => {
@@ -219,6 +283,13 @@ export function InventoryCardsPage() {
         subtitle="Stok kartları listesi ve yönetimi"
         icon="boxes"
         backTo="/planning/inventory"
+        actions={
+          canManage ? (
+            <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating(true)}>
+              Yeni Stok Kartı
+            </Button>
+          ) : undefined
+        }
         stats={[
           {
             id: 'total-items-count',
@@ -264,6 +335,8 @@ export function InventoryCardsPage() {
       {editing ? (
         <ItemFormModal key={editing.id} item={editing} onClose={() => setEditing(null)} />
       ) : null}
+
+      {creating ? <ItemFormModal onClose={() => setCreating(false)} /> : null}
 
       {requests ? (
         <ItemRequestsModal

@@ -15,6 +15,7 @@ import {
   Text,
 } from '@mantine/core';
 import { useState } from 'react';
+import { lookupCardsByCode, type Item } from '@/api/procurement/items';
 import { FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify } from '@/ui';
 import {
   detectColumnMapping,
@@ -45,6 +46,35 @@ type Stage =
       detected: ColumnMapping;
     };
 
+/** Whether a row's code is a stock card: found and active, found but inactive, or none. */
+type CardStatus = 'ok' | 'inactive' | 'missing' | 'unchecked';
+
+function cardStatus(code: string, cards: Map<string, Item> | null): CardStatus {
+  if (!cards) return 'unchecked';
+  const card = cards.get(code.trim());
+  if (!card) return 'missing';
+  return card.is_active === false ? 'inactive' : 'ok';
+}
+
+const STATUS_BADGE: Record<CardStatus, { color: string; label: string; title: string }> = {
+  ok: { color: 'green', label: 'Geçerli', title: 'Stok kartı var' },
+  inactive: {
+    color: 'yellow',
+    label: 'Pasif kart',
+    title: 'Kart var ama pasif (eski sac/boy/hizmet kartı ya da stoksuz Mikro kodu)',
+  },
+  missing: {
+    color: 'red',
+    label: 'Kart yok',
+    title: 'Bu kodla stok kartı yok: satır kodsuz aktarılır, kartı aramadan seçin',
+  },
+  unchecked: {
+    color: 'gray',
+    label: 'Kontrol edilemedi',
+    title: 'Stok kartları kontrol edilemedi',
+  },
+};
+
 export interface ExcelImportModalProps {
   onClose: () => void;
   onImport: (items: ImportedItem[]) => void;
@@ -60,6 +90,9 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
   const [preview, setPreview] = useState<ImportedItem[] | null>(null);
   const [errors, setErrors] = useState<string[]>([]);
   const [summary, setSummary] = useState<{ processed: number; skipped: number } | null>(null);
+  // The stock cards behind the preview's codes (null: the lookup failed).
+  const [cards, setCards] = useState<Map<string, Item> | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const clear = () => {
     setFile(null);
@@ -67,6 +100,7 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
     setPreview(null);
     setErrors([]);
     setSummary(null);
+    setCards(null);
   };
 
   const previewFile = async () => {
@@ -90,7 +124,7 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
     setStage({ step: 'map', headers, dataRows: rows.slice(1), mapping: detected, detected });
   };
 
-  const confirmMapping = () => {
+  const confirmMapping = async () => {
     if (stage.step !== 'map') return;
     if (missingRequired(stage.mapping).length > 0) {
       notify.error('Lütfen gerekli alanları eşleştirin');
@@ -112,6 +146,15 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
         : null,
     );
     setPreview(result.items);
+    setChecking(true);
+    try {
+      setCards(await lookupCardsByCode(result.items.map((item) => item.item_code)));
+    } catch {
+      setCards(null);
+      notify.warning('Stok kartları kontrol edilemedi; kodlar kaydederken denetlenecek');
+    } finally {
+      setChecking(false);
+    }
   };
 
   const deleteRow = (index: number) => {
@@ -121,8 +164,16 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
 
   const importItems = () => {
     if (!preview || preview.length === 0) return;
-    onImport(preview);
+    // A code with no stock card comes in empty: the planner picks the card.
+    const items = preview.map((item) =>
+      cardStatus(item.item_code, cards) === 'missing' ? { ...item, item_code: '' } : item,
+    );
+    const missing = preview.length - items.filter((item) => item.item_code).length;
+    onImport(items);
     notify.success(`${preview.length} ürün başarıyla içe aktarıldı`);
+    if (missing > 0) {
+      notify.warning(`${missing} satırın kodu stok kartlarında yok; bu satırlar için kartı seçin`);
+    }
     onClose();
   };
 
@@ -216,7 +267,7 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
                   <Text size="sm" fw={600}>
                     Birim Seçenekleri:
                   </Text>
-                  <Text size="sm">adet, kg, metre, litre, paket, kutu</Text>
+                  <Text size="sm">adet, kg, metre, litre, paket, kutu, set, m2, varil</Text>
                 </Stack>
               </SimpleGrid>
               <FileInput
@@ -311,7 +362,16 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
                             <Table.Td>{item.unit}</Table.Td>
                             <Table.Td>{item.specifications || '-'}</Table.Td>
                             <Table.Td>
-                              <Badge color="green">Geçerli</Badge>
+                              {checking ? (
+                                <Badge color="gray">Kontrol ediliyor…</Badge>
+                              ) : (
+                                <Badge
+                                  color={STATUS_BADGE[cardStatus(item.item_code, cards)].color}
+                                  title={STATUS_BADGE[cardStatus(item.item_code, cards)].title}
+                                >
+                                  {STATUS_BADGE[cardStatus(item.item_code, cards)].label}
+                                </Badge>
+                              )}
                             </Table.Td>
                             <Table.Td>
                               <ActionIcon
@@ -344,7 +404,10 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
             >
               İptal
             </Button>
-            <Button leftSection={<FaIcon icon="fas fa-check" />} onClick={confirmMapping}>
+            <Button
+              leftSection={<FaIcon icon="fas fa-check" />}
+              onClick={() => void confirmMapping()}
+            >
               Eşleştirmeyi Onayla
             </Button>
           </>
@@ -358,7 +421,7 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
               İptal
             </Button>
             <Button
-              disabled={count === 0}
+              disabled={count === 0 || checking}
               leftSection={<FaIcon icon="fas fa-upload" />}
               onClick={importItems}
             >

@@ -6,7 +6,12 @@ import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { InventoryCardsPage } from './InventoryCardsPage';
 
-vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/auth/authService', () => ({
+  authedFetch: vi.fn(),
+  // A stock-card manager: edit, delete and "Yeni kart" are shown.
+  isSuperuser: () => true,
+  hasPerm: () => false,
+}));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const fetchMock = vi.mocked(authedFetch);
@@ -93,6 +98,34 @@ beforeEach(() => {
         },
       ]);
     }
+    if (method === 'GET' && path === '/procurement/item-categories/') {
+      return json([
+        {
+          id: 18,
+          code: '0018',
+          name: 'Civata',
+          group: 'Bağlantı elemanı',
+          default_unit: 'adet',
+          material_class: 'normal',
+          is_active: true,
+        },
+        {
+          id: 76,
+          code: '0076',
+          name: 'Çelik halat',
+          group: 'Rulman - güç aktarımı',
+          default_unit: 'metre',
+          material_class: 'normal',
+          is_active: true,
+        },
+      ]);
+    }
+    if (method === 'POST' && path === '/procurement/items/') {
+      const body = JSON.parse(String(init?.body)) as { code: string };
+      if (body.code === 'M-001')
+        return json({ code: ['item with this code already exists.'] }, 400);
+      return json({ id: 99, ...body });
+    }
     if (method === 'PUT') return json({ ...ITEMS[0], name: 'Cıvata M10' });
     if (method === 'DELETE') return json(undefined, 204);
     return json({ detail: 'not mocked' }, 404);
@@ -116,7 +149,13 @@ it('renders the header and the item rows with the legacy request', async () => {
   expect(screen.getByText('YOK')).toBeInTheDocument();
   expect(within(document.getElementById('total-items-count')!).getByText('45')).toBeInTheDocument();
 
-  expect(lastListParams()).toEqual({ page: '1', page_size: '20', ordering: 'code' });
+  // Active cards by default.
+  expect(lastListParams()).toEqual({
+    page: '1',
+    page_size: '20',
+    is_active: 'true',
+    ordering: 'code',
+  });
 });
 
 it('applying filters writes the URL and maps the lookup types to the legacy params', async () => {
@@ -127,7 +166,13 @@ it('applying filters writes the URL and maps the lookup types to the legacy para
   fireEvent.change(screen.getByLabelText('Ürün Kodu'), { target: { value: 'M-0' } });
   fireEvent.keyDown(screen.getByLabelText('Ürün Kodu'), { key: 'Enter' });
   await waitFor(() =>
-    expect(lastListParams()).toEqual({ page: '1', page_size: '20', code: 'M-0', ordering: 'code' }),
+    expect(lastListParams()).toEqual({
+      page: '1',
+      page_size: '20',
+      code: 'M-0',
+      is_active: 'true',
+      ordering: 'code',
+    }),
   );
 
   fireEvent.click(screen.getByRole('button', { name: /Filtre Tipi \(Kod\)/ }));
@@ -143,6 +188,7 @@ it('applying filters writes the URL and maps the lookup types to the legacy para
       page_size: '20',
       code__exact: 'M-0',
       item_type: 'expenditure',
+      is_active: 'true',
       ordering: 'code',
     }),
   );
@@ -160,6 +206,7 @@ it('reads name filters and the sort from the URL', async () => {
     page: '1',
     page_size: '20',
     name__startswith: 'vida',
+    is_active: 'true',
     ordering: '-stock_quantity',
   });
 });
@@ -194,6 +241,9 @@ it('the edit form validates and then PUTs every field', async () => {
     name: 'Cıvata M10',
     unit: 'adet',
     item_type: 'stock',
+    category: null,
+    is_active: true,
+    min_stock: null,
     stock_quantity: '12.50',
   });
   await waitFor(() => expect(listCalls().length).toBeGreaterThan(1));
@@ -282,4 +332,41 @@ it('closes the requests modal with the legacy message when loading fails', async
   await waitFor(() =>
     expect(screen.queryByRole('dialog', { name: /Planlama Talepleri/ })).toBeNull(),
   );
+});
+
+it('opens a new stock card: the family sets the unit, a taken code is refused', async () => {
+  renderPage();
+  await screen.findByText('M-001');
+  fireEvent.click(screen.getByRole('button', { name: 'Yeni Stok Kartı' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Yeni Stok Kartı' });
+  // Stock is never typed on a new card.
+  expect(within(dialog).queryByLabelText('Stok Miktarı')).toBeNull();
+
+  fireEvent.change(within(dialog).getByLabelText(/Ürün Kodu/), { target: { value: 'M-001' } });
+  fireEvent.change(within(dialog).getByLabelText(/Ürün Adı/), { target: { value: 'HALAT Ø10' } });
+  fireEvent.click(within(dialog).getByLabelText(/^Aile/));
+  // Mantine keeps every Select's options mounted; the open one may still count as hidden in jsdom.
+  fireEvent.click(await screen.findByRole('option', { name: /0076/, hidden: true }));
+  await waitFor(() => expect(within(dialog).getByLabelText(/^Birim/)).toHaveValue('Metre'));
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kartı Aç' }));
+  expect(
+    await within(dialog).findByText('item with this code already exists.'),
+  ).toBeInTheDocument();
+
+  fireEvent.change(within(dialog).getByLabelText(/Ürün Kodu/), {
+    target: { value: '0076 0010 0000 000 001' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kartı Aç' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Stok kartı açıldı'));
+  const posts = calls().filter((c) => c.method === 'POST');
+  expect(posts.at(-1)!.body).toEqual({
+    code: '0076 0010 0000 000 001',
+    name: 'HALAT Ø10',
+    unit: 'metre',
+    item_type: 'stock',
+    category: 76,
+    is_active: true,
+    min_stock: null,
+  });
 });
