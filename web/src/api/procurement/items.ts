@@ -55,6 +55,9 @@ export interface Item {
   min_stock?: number | string | null;
   /** The card's code in Mikro when it was re-coded on import. */
   mikro_code?: string | null;
+  /** Stock ledger (item list only): stock_quantity is the Hammadde (free) balance. */
+  job_area_quantity?: number | string | null;
+  finished_quantity?: number | string | null;
 }
 
 export type MaterialClass =
@@ -79,7 +82,6 @@ export interface ItemInput {
   name: string;
   unit: string;
   item_type: string;
-  stock_quantity?: string;
   category?: number | null;
   is_active?: boolean;
   min_stock?: string | null;

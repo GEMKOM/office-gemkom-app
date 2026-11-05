@@ -30,6 +30,7 @@ import {
 import { itemColumns } from './columns';
 import { ItemFormModal } from './ItemFormModal';
 import { ItemRequestsModal } from './ItemRequestsModal';
+import { ItemStockModal } from './ItemStockModal';
 
 // Legacy kept its filters in memory; here they live in the URL. A lookup
 // type left at '' is the legacy default "İçerir" (icontains).
@@ -200,6 +201,7 @@ export function InventoryCardsPage() {
   // ---- modals ----
   const [editing, setEditing] = useState<Item | null>(null);
   const [creating, setCreating] = useState(false);
+  const [stockOf, setStockOf] = useState<Item | null>(null);
   const [requests, setRequests] = useState<{ item: Item; kind: ItemRequestsKind } | null>(null);
   const closeRequests = useCallback(() => setRequests(null), []);
 
@@ -239,6 +241,13 @@ export function InventoryCardsPage() {
           } satisfies RowAction<Item>,
         ]
       : []),
+    {
+      key: 'stock',
+      label: 'Stok Hareketleri',
+      icon: 'fas fa-exchange-alt',
+      color: 'secondary',
+      onClick: () => setStockOf(row),
+    },
     {
       key: 'purchase-requests',
       label: 'Satın Alma Talepleri',
@@ -337,6 +346,10 @@ export function InventoryCardsPage() {
       ) : null}
 
       {creating ? <ItemFormModal onClose={() => setCreating(false)} /> : null}
+
+      {stockOf ? (
+        <ItemStockModal key={stockOf.id} item={stockOf} onClose={() => setStockOf(null)} />
+      ) : null}
 
       {requests ? (
         <ItemRequestsModal
