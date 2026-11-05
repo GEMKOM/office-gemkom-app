@@ -197,7 +197,10 @@ function SubcontractorCreateForm({ task, onDone }: { task: DepartmentTask; onDon
         label="Alt Görev Başlığı"
         placeholder="Boş bırakılırsa taşeron adı kullanılacaktır"
         value={v.title}
-        onChange={(e) => setV((p) => ({ ...p, title: e.currentTarget.value }))}
+        onChange={(e) => {
+          const value = e.currentTarget.value;
+          setV((p) => ({ ...p, title: value }));
+        }}
       />
       <Button mt="md" type="submit" loading={busy} leftSection={<FaIcon icon="fas fa-save" />}>
         Taşeron Ata ve Alt Görev Oluştur
@@ -290,7 +293,10 @@ function PaintCreateForm({ task, onDone }: { task: DepartmentTask; onDone: () =>
         label="Alt Görev Başlığı"
         placeholder="Örn: Boya Grubu 1"
         value={v.title}
-        onChange={(e) => setV((p) => ({ ...p, title: e.currentTarget.value }))}
+        onChange={(e) => {
+          const value = e.currentTarget.value;
+          setV((p) => ({ ...p, title: value }));
+        }}
       />
       <Button mt="md" type="submit" loading={busy} leftSection={<FaIcon icon="fas fa-save" />}>
         Taşeron Ata ve Alt Görev Oluştur
@@ -403,7 +409,10 @@ function InternalTeamCreateForm({ task, onDone }: { task: DepartmentTask; onDone
           rows={2}
           placeholder="Opsiyonel not"
           value={v.notes}
-          onChange={(e) => setV((p) => ({ ...p, notes: e.currentTarget.value }))}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setV((p) => ({ ...p, notes: value }));
+          }}
         />
       </Stack>
       <SectionTitle icon="fas fa-tasks" color="cyan">
@@ -413,7 +422,10 @@ function InternalTeamCreateForm({ task, onDone }: { task: DepartmentTask; onDone
         label="Alt Görev Başlığı"
         placeholder="Boş bırakılırsa takım adı kullanılır"
         value={v.title}
-        onChange={(e) => setV((p) => ({ ...p, title: e.currentTarget.value }))}
+        onChange={(e) => {
+          const value = e.currentTarget.value;
+          setV((p) => ({ ...p, title: value }));
+        }}
       />
       <Button mt="md" type="submit" loading={busy} leftSection={<FaIcon icon="fas fa-save" />}>
         Takım Ata ve Alt Görev Oluştur

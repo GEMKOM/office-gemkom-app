@@ -28,6 +28,10 @@ const ITEMS = [
     stock_quantity: '12.50',
     latest_unit_price_eur: '3.2',
     latest_unit_price_source: 'po_line',
+    category: 18,
+    category_code: '0018',
+    category_name: 'Civata',
+    category_group: 'Bağlantı elemanı',
   },
   {
     id: 2,
@@ -258,12 +262,13 @@ it('applying filters writes the URL and maps the lookup types to the legacy para
 });
 
 it('reads name filters and the sort from the URL', async () => {
+  // An old link with name_lookup still works: names are searched by "contains".
   renderPage('/planning/inventory/cards?name=vida&name_lookup=startswith&ordering=-stock_quantity');
   await screen.findByText('M-001');
   expect(lastListParams()).toEqual({
     page: '1',
     page_size: '20',
-    name__startswith: 'vida',
+    name: 'vida',
     is_active: 'true',
     ordering: '-stock_quantity',
   });
@@ -300,7 +305,7 @@ it('the edit form validates and then PUTs every field', async () => {
     name: 'Cıvata M10',
     unit: 'adet',
     item_type: 'stock',
-    category: null,
+    category: 18,
     is_active: true,
     min_stock: null,
   });
@@ -444,4 +449,75 @@ it("shows a card's balances per warehouse and job and its movements", async () =
   expect(within(dialog).getByText('GR-2026-0010 · MPR-2026-0099')).toBeInTheDocument();
   const movements = calls().find((c) => c.url.pathname === '/warehouse/stock-movements/')!;
   expect(movements.url.searchParams.get('item')).toBe('1');
+});
+
+it('every column sorts, sending the backend field (prices, families, stock per warehouse)', async () => {
+  renderPage();
+  await screen.findByText('M-001');
+  const sortBy = async (header: RegExp) => {
+    fireEvent.click(within(screen.getByRole('columnheader', { name: header })).getByRole('button'));
+    await waitFor(() => expect(listCalls().length).toBeGreaterThan(0));
+    return lastListParams().ordering;
+  };
+  for (const header of [
+    /^Ürün Kodu/,
+    /^Ürün Adı/,
+    /^Aile/,
+    /^Durum/,
+    /^Birim/,
+    /^Tip/,
+    /^Hammadde/,
+    /^İş Emri/,
+    /^Mamul/,
+    /^Son Birim Fiyat/,
+    /^Fiyat Kaynağı/,
+  ]) {
+    expect(
+      within(screen.getByRole('columnheader', { name: header })).getByRole('button'),
+    ).toBeTruthy();
+  }
+  await waitFor(async () => expect(await sortBy(/^İş Emri/)).toBe('job_area_quantity'));
+  await waitFor(async () => expect(await sortBy(/^Mamul/)).toBe('finished_quantity'));
+  await waitFor(async () => expect(await sortBy(/^Son Birim Fiyat/)).toBe('last_price_eur'));
+  await waitFor(async () => expect(await sortBy(/^Son Birim Fiyat/)).toBe('-last_price_eur'));
+  await waitFor(async () => expect(await sortBy(/^Aile/)).toBe('category__code'));
+  await waitFor(async () => expect(await sortBy(/^Birim/)).toBe('unit'));
+  // The URL keeps the backend field and reads it back on reload.
+  const search = new URLSearchParams(screen.getByTestId('location').textContent ?? '');
+  expect(search.get('ordering')).toBe('unit');
+});
+
+it('reads a backend sort field from the URL', async () => {
+  renderPage('/planning/inventory/cards?ordering=-last_price_eur');
+  await screen.findByText('M-001');
+  expect(lastListParams().ordering).toBe('-last_price_eur');
+  expect(screen.getByRole('columnheader', { name: /^Son Birim Fiyat/ })).toHaveAttribute(
+    'aria-sort',
+    'descending',
+  );
+});
+
+it('typing into the Ürün Adı filter searches by name and does not crash', async () => {
+  renderPage();
+  await screen.findByText('M-001');
+  expect(screen.queryByRole('button', { name: /Filtre Tipi \(Ad\)/ })).toBeNull();
+  // The filter chip (the column header's sort button has the same name, later on).
+  fireEvent.click(screen.getAllByRole('button', { name: /^Ürün Adı/ })[0]!);
+  const input = await screen.findByRole('textbox', { name: 'Ürün Adı' });
+  // Regression: the change handler read event.currentTarget inside a state
+  // updater, after React had cleared it (TypeError: reading 'value').
+  fireEvent.change(input, { target: { value: 'v' } });
+  fireEvent.change(input, { target: { value: 'vida' } });
+  expect(input).toHaveValue('vida');
+  fireEvent.keyDown(input, { key: 'Enter' });
+  await waitFor(() => expect(lastListParams().name).toBe('vida'));
+  expect(lastListParams()).not.toHaveProperty('name__startswith');
+});
+
+it('the Aile column shows the family name only, the code in the tooltip', async () => {
+  renderPage();
+  await screen.findByText('M-001');
+  const cell = screen.getByText('Civata');
+  expect(cell).toHaveAttribute('title', 'Bağlantı elemanı · 0018 · Civata');
+  expect(screen.queryByText('0018')).toBeNull();
 });

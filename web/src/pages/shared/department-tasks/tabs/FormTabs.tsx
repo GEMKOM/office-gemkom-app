@@ -224,14 +224,20 @@ export function AddSubtaskTab({ task }: { task: DepartmentTask }) {
           placeholder="Boş bırakılırsa iş emri adı kullanılır"
           description="Alt görev başlığı (boş bırakılabilir)"
           value={values.title}
-          onChange={(e) => setValues((v) => ({ ...v, title: e.currentTarget.value }))}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setValues((v) => ({ ...v, title: value }));
+          }}
         />
         <Textarea
           label="Açıklama"
           rows={3}
           placeholder="Alt görev açıklaması"
           value={values.description}
-          onChange={(e) => setValues((v) => ({ ...v, description: e.currentTarget.value }))}
+          onChange={(e) => {
+            const value = e.currentTarget.value;
+            setValues((v) => ({ ...v, description: value }));
+          }}
         />
         <SimpleGrid cols={2}>
           <NumberInput
