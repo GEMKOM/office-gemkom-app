@@ -38,7 +38,6 @@ const URL_DEFAULTS = {
   code: '',
   code_lookup: '',
   name: '',
-  name_lookup: '',
   item_type: '',
   // Inactive cards (legacy plate / boy / service cards, Mikro codes nobody
   // holds stock of) are hidden unless asked for.
@@ -50,8 +49,7 @@ const URL_DEFAULTS = {
 
 const PAGE_SIZE = 20;
 
-type FilterKeys =
-  'code' | 'code_lookup' | 'name' | 'name_lookup' | 'item_type' | 'is_active' | 'category';
+type FilterKeys = 'code' | 'code_lookup' | 'name' | 'item_type' | 'is_active' | 'category';
 type FilterState = Record<FilterKeys, string>;
 
 const baseFilterConfig: FilterConfig<FilterKeys>[] = [
@@ -67,15 +65,9 @@ const baseFilterConfig: FilterConfig<FilterKeys>[] = [
       { value: 'exact', label: 'Tam Eşleşme' },
     ],
   },
+  // Names are searched by "contains" only: a "starts with" choice added little
+  // over it. Codes keep theirs: a Mikro code prefix is a family / size.
   { type: 'text', key: 'name', label: 'Ürün Adı', placeholder: 'Ürün adı ara...', span: 2 },
-  {
-    type: 'select',
-    key: 'name_lookup',
-    label: 'Filtre Tipi (Ad)',
-    placeholder: 'İçerir (varsayılan)',
-    searchable: false,
-    options: [{ value: 'startswith', label: 'İle Başlar' }],
-  },
   {
     type: 'select',
     key: 'item_type',
@@ -101,7 +93,6 @@ const EMPTY_FILTERS: FilterState = {
   code: '',
   code_lookup: '',
   name: '',
-  name_lookup: '',
   item_type: '',
   is_active: '',
   category: '',
@@ -116,10 +107,7 @@ function filterParams(values: FilterState): ItemsParams {
     else if (values.code_lookup === 'startswith') params.code__startswith = values.code;
     else params.code = values.code;
   }
-  if (values.name) {
-    if (values.name_lookup === 'startswith') params.name__startswith = values.name;
-    else params.name = values.name;
-  }
+  if (values.name) params.name = values.name;
   if (values.item_type) params.item_type = values.item_type;
   if (values.is_active === 'true' || values.is_active === 'false')
     params.is_active = values.is_active;
@@ -142,7 +130,6 @@ export function InventoryCardsPage() {
       code: values.code,
       code_lookup: values.code_lookup,
       name: values.name,
-      name_lookup: values.name_lookup,
       item_type: values.item_type,
       is_active: values.is_active,
       category: values.category,
@@ -151,7 +138,6 @@ export function InventoryCardsPage() {
       values.code,
       values.code_lookup,
       values.name,
-      values.name_lookup,
       values.item_type,
       values.is_active,
       values.category,

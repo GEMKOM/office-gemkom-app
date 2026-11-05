@@ -90,14 +90,17 @@ export const itemColumns: DataTableColumn<Item>[] = [
   {
     key: 'category_code',
     header: 'Aile',
-    sortable: false,
+    sortable: true,
+    sortKey: 'category__code',
     render: (row) =>
       row.category_code ? (
-        <span title={[row.category_group, row.category_name].filter(Boolean).join(' · ')}>
-          <span className={uiClasses.code}>{row.category_code}</span>{' '}
-          <Text span size="xs" c="dimmed">
-            {row.category_name}
-          </Text>
+        // The code is the start of the Ürün Kodu already: the name only.
+        <span
+          title={[row.category_group, row.category_code, row.category_name]
+            .filter(Boolean)
+            .join(' · ')}
+        >
+          {row.category_name || row.category_code}
         </span>
       ) : (
         '-'
@@ -106,7 +109,8 @@ export const itemColumns: DataTableColumn<Item>[] = [
   {
     key: 'is_active',
     header: 'Durum',
-    sortable: false,
+    sortable: true,
+    sortKey: 'is_active',
     render: (row) =>
       row.is_active === false ? (
         <Badge
@@ -122,6 +126,7 @@ export const itemColumns: DataTableColumn<Item>[] = [
     key: 'unit_label',
     header: 'Birim',
     sortable: true,
+    sortKey: 'unit',
     accessor: unitLabel,
     render: (row) =>
       unitLabel(row) === '-' ? '-' : <StatusBadge color="grey">{unitLabel(row)}</StatusBadge>,
@@ -130,6 +135,7 @@ export const itemColumns: DataTableColumn<Item>[] = [
     key: 'item_type_label',
     header: 'Tip',
     sortable: true,
+    sortKey: 'item_type',
     accessor: typeLabel,
     render: (row) =>
       typeLabel(row) === '-' ? '-' : <StatusBadge color="blue">{typeLabel(row)}</StatusBadge>,
@@ -144,14 +150,14 @@ export const itemColumns: DataTableColumn<Item>[] = [
   {
     key: 'job_area_quantity',
     header: 'İş Emri',
-    sortable: false,
+    sortable: true,
     align: 'right',
     render: (row) => <StockQuantity value={row.job_area_quantity} />,
   },
   {
     key: 'finished_quantity',
     header: 'Mamul',
-    sortable: false,
+    sortable: true,
     align: 'right',
     render: (row) => <StockQuantity value={row.finished_quantity} />,
   },
@@ -159,13 +165,15 @@ export const itemColumns: DataTableColumn<Item>[] = [
     key: 'latest_unit_price_eur',
     header: 'Son Birim Fiyat (€)',
     sortable: true,
+    sortKey: 'last_price_eur',
     align: 'right',
     render: (row) => renderEuro(row.latest_unit_price_eur),
   },
   {
     key: 'latest_unit_price_source',
     header: 'Fiyat Kaynağı',
-    sortable: false,
+    sortable: true,
+    sortKey: 'last_price_source',
     render: (row) => <PriceSource value={row.latest_unit_price_source} />,
   },
 ];

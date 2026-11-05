@@ -413,9 +413,12 @@ export function FilterBar<T extends FilterValues>({
             placeholder={filter.placeholder}
             type={filter.inputType ?? 'text'}
             value={asString(value)}
-            onChange={(event) =>
-              setDraft((prev) => ({ ...prev, [filter.key]: event.currentTarget.value }))
-            }
+            onChange={(event) => {
+              // Read it now: the updater runs later, when React has already
+              // cleared event.currentTarget (it crashed with "reading 'value'").
+              const text = event.currentTarget.value;
+              setDraft((prev) => ({ ...prev, [filter.key]: text }));
+            }}
             onKeyDown={onEnter}
           />
         );
