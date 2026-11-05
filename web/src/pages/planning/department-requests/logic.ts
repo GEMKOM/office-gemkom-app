@@ -381,7 +381,6 @@ export function buildItems(
   const items: PlanningRequestItemInput[] = [];
   for (const row of rows) {
     const code = row.item_code.trim();
-    const itemId = code && !Number.isNaN(Number(code)) ? Number.parseInt(code, 10) : null;
     const quantity = String(row.quantity ?? '').trim();
     if (!row.job_no) return { ok: false, error: 'Tüm ürünler için iş no gereklidir' };
     if (!quantity || !(Number.parseFloat(quantity) > 0)) {
@@ -393,8 +392,9 @@ export function buildItems(
       job_no: row.job_no,
       quantity: Number.parseFloat(quantity),
     };
-    if (itemId) item.item_id = itemId;
-    else item.item_code = code;
+    // Always the code: Mikro codes can be all digits ("1000"), which the old
+    // "a number is an item id" rule mistook for card ids.
+    item.item_code = code;
     const name = row.item_name.trim();
     const description = row.item_description.trim();
     const specifications = row.specifications.trim();

@@ -9,7 +9,12 @@ import { DepartmentRequestsPage } from './DepartmentRequestsPage';
 // Mantine modals with many fields are slow in jsdom when the whole suite runs in parallel.
 vi.setConfig({ testTimeout: 30_000 });
 
-vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/auth/authService', () => ({
+  authedFetch: vi.fn(),
+  // A stock-card manager: edit, delete and "Yeni kart" are shown.
+  isSuperuser: () => true,
+  hasPerm: () => false,
+}));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({
   useAuth: () => ({ user: { id: 7, username: 'ben', first_name: 'Ben', last_name: 'Kendim' } }),
@@ -194,6 +199,12 @@ afterEach(() => {
 
 const row = (text: string) => screen.getByText(text).closest('tr')!;
 
+/** A row's stock-code search box (Mantine's select also labels a hidden input). */
+const codeInput = (scope: Pick<typeof screen, 'getAllByLabelText'>, n: number) =>
+  scope
+    .getAllByLabelText(`Ürün kodu ${n}`)
+    .find((el) => (el as HTMLInputElement).type !== 'hidden')!;
+
 it('loads the three tables with the legacy requests', async () => {
   renderPage('/planning/department-requests?dr_department=maintenance&pr_status=draft');
   expect(screen.getAllByText('Aktarılacak Departman Talepleri').length).toBeGreaterThan(0);
@@ -249,7 +260,7 @@ it('shows a department request with its rejection comments, then transfers it th
   await waitFor(() => expect(screen.getByTestId('location')).not.toHaveTextContent('request='));
   const rows = screen.getAllByTestId('item-row');
   expect(rows).toHaveLength(2);
-  expect(within(rows[1]!).getByLabelText('Ürün kodu 2')).toHaveValue('K-2');
+  expect(codeInput(within(rows[1]!), 2)).toHaveValue('K-2');
   // One job-order request for every row.
   await waitFor(() => expect(callsTo('/projects/job-orders/dropdown/')).toHaveLength(1));
 
@@ -312,7 +323,7 @@ it('creates a standalone request only with a title, a date and items', async () 
   );
 
   fireEvent.click(screen.getByRole('button', { name: 'Ürün Ekle' }));
-  fireEvent.change(screen.getByLabelText('Ürün kodu 1'), { target: { value: 'K-5' } });
+  fireEvent.change(codeInput(screen, 1), { target: { value: 'K-5' } });
   fireEvent.click(screen.getByRole('button', { name: 'Oluştur' }));
   await waitFor(() =>
     expect(notify.error).toHaveBeenCalledWith('Tüm ürünler için iş no gereklidir'),
@@ -325,7 +336,7 @@ it('edits a planning request with a PATCH of the changed fields only', async () 
   await screen.findByText('Rulman alımı');
   fireEvent.click(within(row('Rulman alımı')).getByRole('button', { name: 'Düzenle' }));
   expect(await screen.findByText('Planlama Talebi Düzenle')).toBeInTheDocument();
-  expect(screen.getByLabelText('Ürün kodu 1')).toHaveValue('K-1');
+  expect(codeInput(screen, 1)).toHaveValue('K-1');
 
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
   await waitFor(() => expect(notify.info).toHaveBeenCalledWith('Değişiklik yapılmadı'));

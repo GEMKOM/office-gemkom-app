@@ -28,6 +28,8 @@ interface SelectRemoteBase {
   /** Labels for values that are selected before any search (e.g. when editing). */
   initialOptions?: RemoteOption[];
   label?: ReactNode;
+  /** Accessible name when there is no visible label (e.g. a table cell). */
+  'aria-label'?: string;
   description?: ReactNode;
   placeholder?: string;
   error?: ReactNode;
@@ -72,6 +74,7 @@ export function SelectRemote(props: SelectRemoteProps) {
     debounceMs = 300,
     initialOptions,
     label,
+    'aria-label': ariaLabel,
     description,
     placeholder,
     error,
@@ -142,6 +145,7 @@ export function SelectRemote(props: SelectRemoteProps) {
 
   const common = {
     label,
+    'aria-label': ariaLabel,
     description,
     placeholder: placeholder ?? 'Aramak için yazın...',
     error,
