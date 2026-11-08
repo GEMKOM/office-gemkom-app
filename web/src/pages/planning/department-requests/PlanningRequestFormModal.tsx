@@ -58,6 +58,7 @@ import {
   buildFiles,
   buildItems,
   changedFields,
+  isClearProtected,
   itemRow,
   lockReason,
   newAttachment,
@@ -198,16 +199,41 @@ export function PlanningRequestFormModal({
     );
   };
   const clearRows = () => {
-    form.setFieldValue('items', []);
-    updateAttachments(
-      (prev) =>
-        prev.map((a) => {
-          const attachTo = a.attachTo.filter((t) => t === 'request');
-          return { ...a, attachTo: attachTo.length > 0 ? attachTo : ['request'] };
-        }),
-      false,
-    );
-    notify.info('Tüm ürünler temizlendi');
+    const kept: ItemRow[] = [];
+    const removed: number[] = [];
+    rows.forEach((row, index) => {
+      if (isClearProtected(row)) kept.push(row);
+      else removed.push(index);
+    });
+    if (removed.length === 0) {
+      if (rows.length > 0) {
+        notify.warning(
+          'Envanterden verilmiş veya satın alma talebine bağlı ürünler silinemez; önce stoğa iade edin veya bağlı talebi iptal edin.',
+        );
+      }
+      return;
+    }
+    form.setFieldValue('items', kept);
+    if (kept.length === 0) {
+      updateAttachments(
+        (prev) =>
+          prev.map((a) => {
+            const attachTo = a.attachTo.filter((t) => t === 'request');
+            return { ...a, attachTo: attachTo.length > 0 ? attachTo : ['request'] };
+          }),
+        false,
+      );
+      notify.info('Tüm ürünler temizlendi');
+      return;
+    }
+    updateAttachments((prev) => {
+      let next = prev;
+      for (const index of [...removed].sort((a, b) => b - a)) {
+        next = next.map((a) => ({ ...a, attachTo: shiftAttachTargets(a.attachTo, index) }));
+      }
+      return next;
+    });
+    notify.info('Silinemeyen ürünler bırakıldı; diğerleri temizlendi');
   };
 
   const releaseInventory = async (row: ItemRow) => {

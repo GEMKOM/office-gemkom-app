@@ -214,6 +214,14 @@ export function lockReason(row: ItemRow): string {
   return 'Bu kalem silinemez';
 }
 
+/**
+ * Tümünü Temizle must keep these: inventory-allocated lines need
+ * release_inventory, and non-deletable lines are tied to a purchase request.
+ */
+export function isClearProtected(row: Pick<ItemRow, 'inventoryLocked' | 'deletable'>): boolean {
+  return Boolean(row.inventoryLocked) || row.deletable === false;
+}
+
 /** What a file-target checkbox calls an item row (legacy renderFilesList). */
 export function rowTargetLabel(row: ItemRow, index: number): string {
   return (
