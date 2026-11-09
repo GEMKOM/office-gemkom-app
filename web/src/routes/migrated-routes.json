@@ -179,5 +179,7 @@
   "/planning/linear-cutting/dashboard",
   "/planning/linear-cutting/cuts",
   "/planning/linear-cutting/tasks",
-  "/planning/linear-cutting/capacity"
+  "/planning/linear-cutting/capacity",
+  "/warehouse",
+  "/warehouse/counts"
 ]
