@@ -62,6 +62,14 @@ describe('rowLinks', () => {
 });
 
 describe('rowTooltip', () => {
+  // The fixture row ends 2026-11-06: pin "today" inside it, or the tooltip
+  // gains "Bitiş tarihi geçti" once that date has passed.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-04T10:00:00'));
+  });
+  afterEach(() => vi.useRealTimers());
+
   it('says when, how far along and how to change it', () => {
     const tip = rowTooltip(
       row('İmalat', {
