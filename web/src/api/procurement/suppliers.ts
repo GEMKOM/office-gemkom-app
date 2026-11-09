@@ -27,6 +27,12 @@ export interface Supplier {
   default_payment_terms?: number | string | PaymentTermRef | null;
   payment_terms_name?: string;
   default_tax_rate?: number | string | null;
+  /** VKN (10 digits) or TCKN (11) for Turkish suppliers; free form abroad. */
+  tax_id?: string;
+  /** Vergi dairesi. */
+  tax_office?: string;
+  /** ISO 3166-1 alpha-2; '' for suppliers created before the field. */
+  country?: string;
   is_active?: boolean;
   has_dbs?: boolean;
   dbs_bank?: string;
@@ -56,6 +62,9 @@ export interface SupplierInput {
   default_currency: string;
   default_payment_terms: number | null;
   default_tax_rate: number;
+  tax_id: string;
+  tax_office: string;
+  country: string;
   is_active: boolean;
   has_dbs: boolean;
   dbs_bank: string;
@@ -69,6 +78,7 @@ export interface SupplierInput {
 export type SuppliersParams = {
   name?: string;
   contact_person?: string;
+  tax_id?: string;
   is_active?: string;
   default_currency?: string;
   created_at__gte?: string;
