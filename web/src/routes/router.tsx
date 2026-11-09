@@ -231,6 +231,12 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/warehouse/transfers',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/transfers/TransfersPage')).TransfersPage,
+    }),
+  },
+  {
     path: '/logistics',
     handle: hub,
     lazy: async () => ({
