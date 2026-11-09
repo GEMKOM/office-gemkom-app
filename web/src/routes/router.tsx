@@ -443,6 +443,12 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/accounting/job-cost-by-period',
+    lazy: async () => ({
+      Component: (await import('@/pages/accounting/period-cost/PeriodCostPage')).PeriodCostPage,
+    }),
+  },
+  {
     path: '/manufacturing/machining/create-task',
     lazy: async () => ({
       Component: (await import('@/pages/manufacturing/machining/create-task/CreateTaskPage'))

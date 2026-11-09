@@ -687,6 +687,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-file-invoice-dollar',
         children: {},
       },
+      '/accounting/job-cost-by-period': {
+        label: 'Dönemsel İş Maliyeti',
+        icon: 'fas fa-calendar-alt',
+        children: {},
+      },
     },
   },
   '/it': {
