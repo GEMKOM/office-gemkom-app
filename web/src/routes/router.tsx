@@ -224,6 +224,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/warehouse/production-slips',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/production/ProductionSlipsPage'))
+        .ProductionSlipsPage,
+    }),
+  },
+  {
     path: '/logistics',
     handle: hub,
     lazy: async () => ({
