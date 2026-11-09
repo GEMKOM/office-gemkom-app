@@ -56,6 +56,9 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
     '/manufacturing/material-tracking',
     '/procurement/purchase-requests/create',
   ],
+  // The Depo section's pages follow the warehouse grant ("Page: /warehouse/",
+  // codename access_warehouse).
+  '/warehouse/counts': ['/warehouse'],
   // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
   '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking'],
   // Reports merged from one page per department: the grants stay on the old

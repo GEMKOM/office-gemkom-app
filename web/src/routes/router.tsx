@@ -211,6 +211,19 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/warehouse',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/WarehouseHubPage')).WarehouseHubPage,
+    }),
+  },
+  {
+    path: '/warehouse/counts',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/counts/StockCountsPage')).StockCountsPage,
+    }),
+  },
+  {
     path: '/logistics',
     handle: hub,
     lazy: async () => ({
@@ -663,7 +676,8 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/manufacturing/reports/job-costs',
     lazy: async () => ({
-      Component: (await import('@/pages/manufacturing/reports/job-costs/JobCostsPage')).JobCostsPage,
+      Component: (await import('@/pages/manufacturing/reports/job-costs/JobCostsPage'))
+        .JobCostsPage,
     }),
   },
   ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
@@ -901,8 +915,9 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/procurement/purchase-requests/create',
     lazy: async () => ({
-      Component: (await import('@/pages/procurement/purchase-requests/create/CreatePurchaseRequestPage'))
-        .CreatePurchaseRequestPage,
+      Component: (
+        await import('@/pages/procurement/purchase-requests/create/CreatePurchaseRequestPage')
+      ).CreatePurchaseRequestPage,
     }),
   },
   {

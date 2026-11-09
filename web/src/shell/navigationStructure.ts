@@ -540,6 +540,17 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       },
     },
   },
+  '/warehouse': {
+    label: 'Depo',
+    icon: 'fas fa-warehouse',
+    children: {
+      '/warehouse/counts': {
+        label: 'Sayım',
+        icon: 'fas fa-clipboard-check',
+        children: {},
+      },
+    },
+  },
   '/logistics': {
     label: 'Lojistik',
     icon: 'fas fa-truck',
