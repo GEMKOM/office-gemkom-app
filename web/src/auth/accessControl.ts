@@ -64,6 +64,7 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
   '/warehouse/counts': ['/warehouse'],
   '/warehouse/production-slips': ['/warehouse'],
   '/warehouse/transfers': ['/warehouse'],
+  '/warehouse/goods-receipts': ['/warehouse'],
   // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
   '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking'],
   // Reports merged from one page per department: the grants stay on the old

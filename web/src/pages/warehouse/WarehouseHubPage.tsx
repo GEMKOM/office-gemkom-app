@@ -3,6 +3,7 @@ import { stockCountsQueryOptions } from '@/api/warehouse/counts';
 import { hasRouteAccess } from '@/auth/accessControl';
 import { MenuCards, visibleMenuCards, type MenuCard } from '@/ui';
 
+const RECEIPTS = '/warehouse/goods-receipts';
 const COUNTS = '/warehouse/counts';
 const SLIPS = '/warehouse/production-slips';
 const TRANSFERS = '/warehouse/transfers';
@@ -18,6 +19,14 @@ export function WarehouseHubPage() {
   });
 
   const cards: MenuCard[] = [
+    {
+      title: 'Mal Kabul',
+      description:
+        'Siparişe karşı gelen malzeme, irsaliyesiyle; stoğa ve planlama kalemlerine işlenir.',
+      icon: 'fas fa-truck-loading',
+      iconColor: 'teal',
+      link: RECEIPTS,
+    },
     {
       title: 'Sayım',
       description: 'Depo sayımı; işlenen farklar stoğa düzeltme olarak yansır.',
