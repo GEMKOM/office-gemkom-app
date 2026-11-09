@@ -41,6 +41,9 @@ const ROUTE_EXTRA_CODENAMES: Record<string, string[]> = {
   '/it/neo': ['manage_assistant_analytics'],
   // Feedback management is gated by manage_feedback in the backend.
   '/it/feedback': ['manage_feedback'],
+  // Dönemsel iş maliyeti reads the cost table's data; the endpoint needs
+  // view_job_costs, so holders of it can open the page.
+  '/accounting/job-cost-by-period': ['view_job_costs'],
 };
 
 // Routes that inherit access from another page's grant: whoever can open the
@@ -61,6 +64,7 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
   '/warehouse/counts': ['/warehouse'],
   '/warehouse/production-slips': ['/warehouse'],
   '/warehouse/transfers': ['/warehouse'],
+  '/warehouse/goods-receipts': ['/warehouse'],
   // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
   '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking'],
   // Reports merged from one page per department: the grants stay on the old

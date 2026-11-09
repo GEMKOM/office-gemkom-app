@@ -544,6 +544,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
     label: 'Depo',
     icon: 'fas fa-warehouse',
     children: {
+      '/warehouse/goods-receipts': {
+        label: 'Mal Kabul',
+        icon: 'fas fa-truck-loading',
+        children: {},
+      },
       '/warehouse/counts': {
         label: 'Sayım',
         icon: 'fas fa-clipboard-check',
@@ -690,6 +695,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       '/accounting/subcontracting-statements': {
         label: 'Hakedişler',
         icon: 'fas fa-file-invoice-dollar',
+        children: {},
+      },
+      '/accounting/job-cost-by-period': {
+        label: 'Dönemsel İş Maliyeti',
+        icon: 'fas fa-calendar-alt',
         children: {},
       },
     },

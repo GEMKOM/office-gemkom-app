@@ -69,6 +69,7 @@
   "/human_resources/attendance/shift-rules",
   "/human_resources/attendance/summary",
   "/accounting/subcontracting-statements",
+  "/accounting/job-cost-by-period",
   "/design/revision-requests",
   "/logistics/cost-lines",
   "/finance/reports/projects",
@@ -183,5 +184,6 @@
   "/warehouse",
   "/warehouse/counts",
   "/warehouse/production-slips",
-  "/warehouse/transfers"
+  "/warehouse/transfers",
+  "/warehouse/goods-receipts"
 ]

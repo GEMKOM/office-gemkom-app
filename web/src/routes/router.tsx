@@ -237,6 +237,12 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/warehouse/goods-receipts',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/receipts/GoodsReceiptsPage')).GoodsReceiptsPage,
+    }),
+  },
+  {
     path: '/logistics',
     handle: hub,
     lazy: async () => ({
@@ -446,6 +452,12 @@ export const appRoutes: RouteObject[] = [
       Component: (
         await import('@/pages/accounting/subcontracting-statements/SubcontractingStatementsPage')
       ).SubcontractingStatementsPage,
+    }),
+  },
+  {
+    path: '/accounting/job-cost-by-period',
+    lazy: async () => ({
+      Component: (await import('@/pages/accounting/period-cost/PeriodCostPage')).PeriodCostPage,
     }),
   },
   {
