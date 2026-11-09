@@ -612,6 +612,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-circle-exclamation',
         children: {},
       },
+      '/procurement/planning-items': {
+        label: 'Satın Alma Kalemleri',
+        icon: 'fas fa-list-check',
+        children: {},
+      },
       '/procurement/purchase-requests': {
         label: 'Satın Alma Talepleri',
         icon: 'fas fa-shopping-cart',

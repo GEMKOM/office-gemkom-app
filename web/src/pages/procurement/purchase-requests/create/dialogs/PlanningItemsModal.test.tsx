@@ -2,7 +2,8 @@ import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { json } from '../../testUtils';
-import { daysBetween, daysWaiting, filterParams, PlanningItemsModal } from './PlanningItemsModal';
+import { daysBetween } from '../../../shared/dueDates';
+import { daysWaiting, filterParams, PlanningItemsModal } from './PlanningItemsModal';
 
 vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),

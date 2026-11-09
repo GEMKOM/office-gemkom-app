@@ -26,6 +26,28 @@ export interface PlanningItemPull {
   [key: string]: unknown;
 }
 
+/** Where a line stands in purchasing (only with include_procurement=true). */
+export interface PlanningItemProcurement {
+  /** Latest active purchase request, and how many the line is on. */
+  pr_number: string | null;
+  pr_status: string | null;
+  pr_status_label: string | null;
+  pr_count: number;
+  /** Latest non-cancelled order line: its PO, supplier and terms. */
+  po_id: number | null;
+  po_supplier_name: string | null;
+  /** YYYY-MM-DD: the order's ordered_at, else its created_at. */
+  po_ordered_at: string | null;
+  po_delivery_days: number | null;
+  /** YYYY-MM-DD: order date + delivery days. */
+  po_expected_delivery: string | null;
+  po_unit_price: Decimal | null;
+  po_currency: string | null;
+  po_count: number;
+  /** The order lines' allocations to this line's job. */
+  ordered_quantity: Decimal;
+}
+
 /** One planning request item line as GET /planning/items/ returns it. */
 export interface PlanningItem {
   id: number;
@@ -54,6 +76,13 @@ export interface PlanningItem {
   pulled_quantity?: Decimal | null;
   quantity_available_to_pull?: Decimal | null;
   pull_requests?: PlanningItemPull[];
+  /** The planning request's İhtiyaç tarihi (YYYY-MM-DD). */
+  needed_date?: string | null;
+  /** The planning request's priority: normal / urgent / critical. */
+  request_priority?: string | null;
+  request_priority_label?: string | null;
+  /** Only with include_procurement=true. */
+  procurement?: PlanningItemProcurement | null;
 }
 
 /** Query params of GET /planning/items/; unset ones ('' / undefined) are left out. */
@@ -76,6 +105,9 @@ export type PlanningItemsParams = QueryParams & {
   has_price?: string;
   pull_state?: string;
   include_price?: boolean;
+  include_procurement?: boolean;
+  has_po?: string;
+  request_priority?: string;
   ordering?: string;
   page?: number;
   page_size?: number;
