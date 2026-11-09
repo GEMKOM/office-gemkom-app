@@ -544,6 +544,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
     label: 'Depo',
     icon: 'fas fa-warehouse',
     children: {
+      '/warehouse/goods-receipts': {
+        label: 'Mal Kabul',
+        icon: 'fas fa-truck-loading',
+        children: {},
+      },
       '/warehouse/counts': {
         label: 'Sayım',
         icon: 'fas fa-clipboard-check',
