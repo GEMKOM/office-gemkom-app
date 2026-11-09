@@ -181,5 +181,6 @@
   "/planning/linear-cutting/tasks",
   "/planning/linear-cutting/capacity",
   "/warehouse",
-  "/warehouse/counts"
+  "/warehouse/counts",
+  "/warehouse/production-slips"
 ]

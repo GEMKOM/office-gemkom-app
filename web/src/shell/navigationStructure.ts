@@ -549,6 +549,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-clipboard-check',
         children: {},
       },
+      '/warehouse/production-slips': {
+        label: 'İmalata Çıkış / İade',
+        icon: 'fas fa-dolly-flatbed',
+        children: {},
+      },
     },
   },
   '/logistics': {

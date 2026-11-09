@@ -4,6 +4,7 @@ import { hasRouteAccess } from '@/auth/accessControl';
 import { MenuCards, visibleMenuCards, type MenuCard } from '@/ui';
 
 const COUNTS = '/warehouse/counts';
+const SLIPS = '/warehouse/production-slips';
 const CARDS = '/planning/inventory/cards';
 const PULLS = '/manufacturing/material-tracking/pull-requests';
 
@@ -26,6 +27,13 @@ export function WarehouseHubPage() {
         value: drafts.isSuccess ? String(drafts.data.count) : '–',
         label: 'açık sayım',
       },
+    },
+    {
+      title: 'İmalata Çıkış / İade',
+      description: 'Talep olmadan imalata verilen ve imalattan dönen malzeme, iş numarasıyla.',
+      icon: 'fas fa-dolly-flatbed',
+      iconColor: 'green',
+      link: SLIPS,
     },
     {
       title: 'Stok Kartları',
