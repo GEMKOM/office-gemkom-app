@@ -15,7 +15,8 @@ const longText = (text: string) => (text ? (text.length > 50 ? <span title={text
 export function itemColumns(): DataTableColumn<PrItem>[] {
   return [
     { key: 'index', header: '#', render: (_row, index) => index + 1, width: 48 },
-    { key: 'code', header: 'Malzeme Kodu', editable: { validate: valid('code') } },
+    // Rows come from planning lines; changing the card would break the link.
+    { key: 'code', header: 'Malzeme Kodu' },
     { key: 'name', header: 'Malzeme Adı', editable: { validate: valid('name') } },
     {
       key: 'job_no',

@@ -11,6 +11,7 @@ import {
   type AttachPlanningError,
   type ProcurementPlanningItem,
 } from '@/api/procurement/purchaseRequests';
+import { departmentLabel } from '@/api/human_resources/organization';
 import { formatDate, formatDateTime } from '@/lib/format';
 import {
   DataTable,
@@ -27,8 +28,10 @@ import {
   sanitizeZipSegment,
   StatusBadge,
   type DataTableColumn,
+  type DateRange,
   type FilterConfig,
   type SortDir,
+  type StatusFamily,
 } from '@/ui';
 import { toAttachment } from '../../shared/badges';
 import { truncate } from '../../shared/columns';
@@ -46,13 +49,81 @@ type Filters = {
   item_code: string;
   item_name: string;
   job_no: string;
+  needed: DateRange;
+  request_priority: string;
 };
 const NO_FILTERS: Filters = {
   planning_request_number: '',
   item_code: '',
   item_name: '',
   job_no: '',
+  needed: { start: '', end: '' },
+  request_priority: '',
 };
+
+// PlanningRequest.PRIORITY_CHOICES.
+const PRIORITY_LABELS: Record<string, string> = {
+  normal: 'Normal',
+  urgent: 'Acil',
+  critical: 'Kritik',
+};
+const PRIORITY_COLORS: Record<string, StatusFamily> = {
+  normal: 'grey',
+  urgent: 'orange',
+  critical: 'red',
+};
+
+/** The request params of the filters: the needed-by range becomes after / before. */
+export function filterParams(filters: Filters): Record<string, string> {
+  const { needed, ...text } = filters;
+  const params: Record<string, string> = Object.fromEntries(
+    Object.entries(text).filter(([, v]) => v),
+  );
+  const start = needed.start || needed.end;
+  const end = needed.end || needed.start;
+  if (start) params.needed_date_after = start;
+  if (end) params.needed_date_before = end;
+  return params;
+}
+
+/** A YYYY-MM-DD or ISO date-time as a local calendar day. */
+function localDay(value: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+}
+
+/** Whole calendar days from `from` to `to` (negative when `to` is earlier). */
+export function daysBetween(from: string, to: Date = new Date()): number {
+  const a = localDay(from).getTime();
+  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
+/** Days the line has waited for procurement: since release, else since the request. */
+export function daysWaiting(row: ProcurementPlanningItem, now: Date = new Date()): number | null {
+  const since = row.ready_at || row.request_created_at;
+  return since ? Math.max(daysBetween(since, now), 0) : null;
+}
+
+function NeededDate({ value }: { value: string | null | undefined }) {
+  if (!value) return <>-</>;
+  const late = daysBetween(value);
+  return (
+    <span title={late > 0 ? 'İhtiyaç tarihi geçti' : undefined}>
+      <Text span size="sm" fw={late >= 0 ? 700 : undefined} c={late > 0 ? 'red' : undefined}>
+        {formatDate(value)}
+      </Text>
+      {late > 0 ? (
+        <Text size="xs" c="red">{`${late} gün gecikti`}</Text>
+      ) : late === 0 ? (
+        <Text size="xs" c="orange">
+          Bugün
+        </Text>
+      ) : null}
+    </span>
+  );
+}
 
 const FILTERS: FilterConfig<keyof Filters>[] = [
   {
@@ -64,14 +135,15 @@ const FILTERS: FilterConfig<keyof Filters>[] = [
   { key: 'item_code', type: 'text', label: 'Malzeme Kodu', placeholder: 'Malzeme kodu ara...' },
   { key: 'item_name', type: 'text', label: 'Malzeme Adı', placeholder: 'Malzeme adı ara...' },
   { key: 'job_no', type: 'text', label: 'İş No', placeholder: 'İş numarası ara...' },
+  { key: 'needed', type: 'dateRange', label: 'İhtiyaç Tarihi' },
+  {
+    key: 'request_priority',
+    type: 'select',
+    label: 'Öncelik',
+    placeholder: 'Tümü',
+    options: Object.entries(PRIORITY_LABELS).map(([value, label]) => ({ value, label })),
+  },
 ];
-
-const PRIORITY_LABELS: Record<string, string> = {
-  low: 'Düşük',
-  normal: 'Normal',
-  high: 'Yüksek',
-  urgent: 'Acil',
-};
 
 function zipStamp(now = new Date()) {
   const p = (n: number) => String(n).padStart(2, '0');
@@ -106,7 +178,7 @@ export function PlanningItemsModal({
   const params = {
     page,
     page_size: pageSize,
-    ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v)),
+    ...filterParams(filters),
     ...(sort.sortBy ? { ordering: `${sort.sortDir === 'desc' ? '-' : ''}${sort.sortBy}` } : {}),
   };
   const list = useQuery(procurementPlanningItemsQueryOptions(params));
@@ -213,8 +285,69 @@ export function PlanningItemsModal({
         </>
       ),
     },
-    { key: 'item_description', header: 'Malzeme Açıklaması' },
+    { key: 'item_description', header: 'Malzeme Açıklaması', hideBelow: 1500 },
     { key: 'job_no', header: 'İş No', sortable: true },
+    {
+      key: 'needed_date',
+      header: 'İhtiyaç Tarihi',
+      sortable: true,
+      render: (row) => <NeededDate value={row.needed_date} />,
+    },
+    {
+      key: 'request_priority',
+      header: 'Öncelik',
+      render: (row) =>
+        row.request_priority ? (
+          <StatusBadge color={PRIORITY_COLORS[row.request_priority] ?? 'grey'}>
+            {row.request_priority_label ||
+              PRIORITY_LABELS[row.request_priority] ||
+              row.request_priority}
+          </StatusBadge>
+        ) : (
+          '-'
+        ),
+    },
+    {
+      key: 'department',
+      header: 'Talep Eden Birim',
+      render: (row) =>
+        row.department ? (
+          <span
+            title={
+              row.department_source === 'creator'
+                ? 'Departman talebi yok: talebi oluşturanın birimi'
+                : row.department_request_number || undefined
+            }
+          >
+            {departmentLabel(row.department)}
+          </span>
+        ) : (
+          '-'
+        ),
+    },
+    {
+      key: 'request_created_at',
+      header: 'Talep Tarihi',
+      sortable: true,
+      hideBelow: 1500,
+      render: (row) => (row.request_created_at ? formatDate(row.request_created_at) : '-'),
+    },
+    {
+      key: 'ready_at',
+      header: 'Satın Almaya Hazır',
+      sortable: true,
+      hideBelow: 1500,
+      render: (row) => (row.ready_at ? formatDate(row.ready_at) : '-'),
+    },
+    {
+      key: 'days_waiting',
+      header: 'Bekleme',
+      align: 'right',
+      render: (row) => {
+        const days = daysWaiting(row);
+        return days === null ? '-' : `${days} gün`;
+      },
+    },
     {
       key: 'quantity_to_purchase',
       header: 'Toplam İhtiyaç',

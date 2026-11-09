@@ -556,6 +556,19 @@ export interface ProcurementPlanningItem {
   specifications?: string | null;
   files_count?: number | null;
   files?: { asset_id?: number | null; file_url?: string; file_name?: string }[];
+  /** The planning request's İhtiyaç tarihi (YYYY-MM-DD). */
+  needed_date?: string | null;
+  /** When the planning request was created. */
+  request_created_at?: string | null;
+  /** When the planning request was released to procurement; null if never. */
+  ready_at?: string | null;
+  /** The planning request's priority: normal / urgent / critical. */
+  request_priority?: string | null;
+  request_priority_label?: string | null;
+  /** Department code: the department request's, else the request creator's. */
+  department?: string | null;
+  department_source?: 'department_request' | 'creator' | null;
+  department_request_number?: string | null;
   [key: string]: unknown;
 }
 
