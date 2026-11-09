@@ -17,6 +17,7 @@ import {
   today,
   toStorage,
   transformSuppliers,
+  unplannedItemsMessage,
   validateAll,
   validateHeader,
   type PrItem,
@@ -104,6 +105,17 @@ describe('submit validation', () => {
       'Malzeme 2: Bu malzeme için tedarikçi önerisi seçmelisiniz',
     ]);
     expect(validateAll(readyState())).toEqual([]);
+  });
+
+  it('names the rows that do not come from a planning line', () => {
+    expect(unplannedItemsMessage([item('a', { source_planning_request_item_id: 5 })])).toBeNull();
+    const msg = unplannedItemsMessage([
+      item('a', { source_planning_request_item_id: 5 }),
+      item('b', { code: 'B2' }),
+    ]);
+    expect(msg).toContain('yalnızca planlama talebi kalemlerinden');
+    expect(msg).toContain('Malzeme 2: B2');
+    expect(msg).not.toContain('Malzeme 1');
   });
 
   it('refuses identical rows', () => {
