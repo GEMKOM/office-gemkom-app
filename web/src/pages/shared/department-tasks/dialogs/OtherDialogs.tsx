@@ -6,7 +6,6 @@ import {
   Center,
   Checkbox,
   CopyButton,
-  FileInput,
   Group,
   Loader,
   Modal,
@@ -44,6 +43,7 @@ import { weldingTeamsQueryOptions } from '@/api/welding/teams';
 import {
   downloadFilesAsZip,
   FaIcon,
+  FileDropInput,
   FileAttachments,
   FormModal,
   ModalBody,
@@ -862,10 +862,10 @@ export function QcExcelDialog({
             Notlar / Not → Notlar
           </code>
         </Paper>
-        <FileInput
+        <FileDropInput
           label="Excel Dosyası Seçin:"
           description="Desteklenen formatlar: .xlsx, .xls, .csv"
-          placeholder="Excel veya CSV dosyası seçin..."
+          placeholder="Excel veya CSV dosyasını sürükleyin ya da seçin..."
           accept=".xlsx,.xls,.csv"
           value={file}
           onChange={setFile}

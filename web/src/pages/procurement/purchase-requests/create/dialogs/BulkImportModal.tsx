@@ -1,6 +1,6 @@
-import { Alert, Button, Code, FileInput, Grid, Group, Modal, NativeSelect, Stack, Table, Text } from '@mantine/core';
+import { Alert, Button, Code, Grid, Group, Modal, NativeSelect, Stack, Table, Text } from '@mantine/core';
 import { useState } from 'react';
-import { FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify, StatusBadge } from '@/ui';
+import { FaIcon, FileDropInput, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify, StatusBadge } from '@/ui';
 import {
   detectColumnMapping,
   MAPPING_FIELDS,
@@ -101,9 +101,9 @@ export function BulkImportModal({ onClose, onImport }: { onClose: () => void; on
                 <Code block>adet, kg, metre, litre, paket, kutu</Code>
               </Grid.Col>
             </Grid>
-            <FileInput
+            <FileDropInput
               label="Excel Dosyası Seçin:"
-              placeholder="Excel veya CSV dosyası seçin..."
+              placeholder="Excel veya CSV dosyasını sürükleyin ya da seçin..."
               accept=".xlsx,.xls,.csv"
               description="Desteklenen formatlar: .xlsx, .xls, .csv"
               value={file}

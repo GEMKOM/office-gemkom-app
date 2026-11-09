@@ -1,4 +1,4 @@
-import { Button, FileInput, Group, Paper, Select, Stack, Text } from '@mantine/core';
+import { Button, Group, Paper, Select, Stack, Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import {
@@ -9,6 +9,7 @@ import {
 import {
   downloadFilesAsZip,
   FaIcon,
+  FileDropInput,
   FileAttachments,
   FormModal,
   ModalSection,
@@ -88,10 +89,9 @@ export function JobOrderFileUploadModal({
       onSubmit={() => void save()}
     >
       <Stack gap="xs" mb="md">
-        <FileInput
+        <FileDropInput
           label="Dosyalar (Birden fazla seçebilirsiniz)"
           description="Birden fazla dosya seçmek için Ctrl (veya Cmd) tuşuna basılı tutarak tıklayın"
-          placeholder="Dosya seçin"
           multiple
           clearable
           value={files}

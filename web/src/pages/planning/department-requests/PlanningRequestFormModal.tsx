@@ -41,6 +41,7 @@ import {
   confirm,
   errorMessage,
   FaIcon,
+  FileDropTarget,
   FileViewer,
   FormModal,
   ModalSection,
@@ -621,120 +622,122 @@ export function PlanningRequestFormModal({
         </ModalSection>
 
         <ModalSection title="Dosya Ekleri" icon="fas fa-paperclip">
-          <Stack gap="sm">
-            <Group gap="sm">
-              <FileButton onChange={addFiles} multiple resetRef={resetFileButton}>
-                {(props) => (
-                  <Button
-                    {...props}
-                    size="xs"
-                    variant="default"
-                    leftSection={<FaIcon icon="fas fa-file" />}
+          <FileDropTarget multiple onFiles={addFiles}>
+            <Stack gap="sm">
+              <Group gap="sm">
+                <FileButton onChange={addFiles} multiple resetRef={resetFileButton}>
+                  {(props) => (
+                    <Button
+                      {...props}
+                      size="xs"
+                      variant="default"
+                      leftSection={<FaIcon icon="fas fa-file" />}
+                    >
+                      Dosya Seç
+                    </Button>
+                  )}
+                </FileButton>
+                <Text size="xs" c="dimmed">
+                  Birden fazla dosya seçebilir veya buraya sürükleyebilirsiniz
+                </Text>
+              </Group>
+              {attachments.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Henüz dosya eklenmedi
+                </Text>
+              ) : (
+                attachments.map((attachment) => (
+                  <Paper
+                    key={attachment.key}
+                    withBorder
+                    p="sm"
+                    data-testid="attachment"
+                    style={
+                      attachment.isExisting
+                        ? { borderColor: 'var(--mantine-color-cyan-4)' }
+                        : undefined
+                    }
                   >
-                    Dosya Seç
-                  </Button>
-                )}
-              </FileButton>
-              <Text size="xs" c="dimmed">
-                Birden fazla dosya seçebilirsiniz
-              </Text>
-            </Group>
-            {attachments.length === 0 ? (
-              <Text size="sm" c="dimmed">
-                Henüz dosya eklenmedi
-              </Text>
-            ) : (
-              attachments.map((attachment) => (
-                <Paper
-                  key={attachment.key}
-                  withBorder
-                  p="sm"
-                  data-testid="attachment"
-                  style={
-                    attachment.isExisting
-                      ? { borderColor: 'var(--mantine-color-cyan-4)' }
-                      : undefined
-                  }
-                >
-                  <Group justify="space-between" align="flex-start" wrap="nowrap" mb="xs">
-                    <Box style={{ minWidth: 0 }}>
-                      <Text fw={600} size="sm">
-                        <FaIcon icon="fas fa-file" /> {attachment.description || attachment.name}
-                        {attachment.isExisting && fromDepartment ? (
-                          <Badge ml="xs" color="cyan" variant="light">
-                            Departman Talebinden
-                          </Badge>
+                    <Group justify="space-between" align="flex-start" wrap="nowrap" mb="xs">
+                      <Box style={{ minWidth: 0 }}>
+                        <Text fw={600} size="sm">
+                          <FaIcon icon="fas fa-file" /> {attachment.description || attachment.name}
+                          {attachment.isExisting && fromDepartment ? (
+                            <Badge ml="xs" color="cyan" variant="light">
+                              Departman Talebinden
+                            </Badge>
+                          ) : null}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {attachment.isExisting ? (
+                            <Badge size="xs" color="cyan" variant="light">
+                              Mevcut Dosya
+                            </Badge>
+                          ) : (
+                            `${(attachment.size / 1024).toFixed(2)} KB`
+                          )}{' '}
+                          - {attachment.name}
+                        </Text>
+                      </Box>
+                      <Group gap={4} wrap="nowrap">
+                        {attachment.isExisting && attachment.url ? (
+                          <ActionIcon
+                            variant="default"
+                            aria-label={`${attachment.name} görüntüle`}
+                            onClick={() =>
+                              setViewing({ url: attachment.url!, name: attachment.name })
+                            }
+                          >
+                            <FaIcon icon="fas fa-eye" />
+                          </ActionIcon>
                         ) : null}
-                      </Text>
-                      <Text size="xs" c="dimmed">
-                        {attachment.isExisting ? (
-                          <Badge size="xs" color="cyan" variant="light">
-                            Mevcut Dosya
-                          </Badge>
-                        ) : (
-                          `${(attachment.size / 1024).toFixed(2)} KB`
-                        )}{' '}
-                        - {attachment.name}
-                      </Text>
-                    </Box>
-                    <Group gap={4} wrap="nowrap">
-                      {attachment.isExisting && attachment.url ? (
                         <ActionIcon
                           variant="default"
-                          aria-label={`${attachment.name} görüntüle`}
-                          onClick={() =>
-                            setViewing({ url: attachment.url!, name: attachment.name })
-                          }
+                          color="red"
+                          aria-label={`${attachment.name} kaldır`}
+                          onClick={() => removeAttachment(attachment.key)}
                         >
-                          <FaIcon icon="fas fa-eye" />
+                          <FaIcon icon="fas fa-trash" />
                         </ActionIcon>
-                      ) : null}
-                      <ActionIcon
-                        variant="default"
-                        color="red"
-                        aria-label={`${attachment.name} kaldır`}
-                        onClick={() => removeAttachment(attachment.key)}
-                      >
-                        <FaIcon icon="fas fa-trash" />
-                      </ActionIcon>
+                      </Group>
                     </Group>
-                  </Group>
-                  <TextInput
-                    size="xs"
-                    label="Açıklama"
-                    placeholder="Dosya açıklaması (opsiyonel)"
-                    value={attachment.description}
-                    onChange={(e) => setDescription(attachment.key, e.currentTarget.value)}
-                    mb="xs"
-                  />
-                  <Text size="xs" c="dimmed" mb={4}>
-                    <FaIcon icon="fas fa-link" /> Bu dosyayı ekle:
-                  </Text>
-                  <Group gap="md">
-                    <Checkbox
+                    <TextInput
                       size="xs"
-                      label="Talep"
-                      checked={attachment.attachTo.includes('request')}
-                      onChange={(e) =>
-                        toggleTarget(attachment.key, 'request', e.currentTarget.checked)
-                      }
+                      label="Açıklama"
+                      placeholder="Dosya açıklaması (opsiyonel)"
+                      value={attachment.description}
+                      onChange={(e) => setDescription(attachment.key, e.currentTarget.value)}
+                      mb="xs"
                     />
-                    {rows.map((row, itemIndex) => (
+                    <Text size="xs" c="dimmed" mb={4}>
+                      <FaIcon icon="fas fa-link" /> Bu dosyayı ekle:
+                    </Text>
+                    <Group gap="md">
                       <Checkbox
-                        key={row.key}
                         size="xs"
-                        label={rowTargetLabel(row, itemIndex)}
-                        checked={attachment.attachTo.includes(itemIndex)}
+                        label="Talep"
+                        checked={attachment.attachTo.includes('request')}
                         onChange={(e) =>
-                          toggleTarget(attachment.key, itemIndex, e.currentTarget.checked)
+                          toggleTarget(attachment.key, 'request', e.currentTarget.checked)
                         }
                       />
-                    ))}
-                  </Group>
-                </Paper>
-              ))
-            )}
-          </Stack>
+                      {rows.map((row, itemIndex) => (
+                        <Checkbox
+                          key={row.key}
+                          size="xs"
+                          label={rowTargetLabel(row, itemIndex)}
+                          checked={attachment.attachTo.includes(itemIndex)}
+                          onChange={(e) =>
+                            toggleTarget(attachment.key, itemIndex, e.currentTarget.checked)
+                          }
+                        />
+                      ))}
+                    </Group>
+                  </Paper>
+                ))
+              )}
+            </Stack>
+          </FileDropTarget>
         </ModalSection>
       </FormModal>
 
