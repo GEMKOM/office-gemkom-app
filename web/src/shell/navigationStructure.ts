@@ -554,6 +554,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-dolly-flatbed',
         children: {},
       },
+      '/warehouse/transfers': {
+        label: 'Depo Transferi',
+        icon: 'fas fa-exchange-alt',
+        children: {},
+      },
     },
   },
   '/logistics': {

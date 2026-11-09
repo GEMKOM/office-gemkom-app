@@ -5,6 +5,7 @@ import { MenuCards, visibleMenuCards, type MenuCard } from '@/ui';
 
 const COUNTS = '/warehouse/counts';
 const SLIPS = '/warehouse/production-slips';
+const TRANSFERS = '/warehouse/transfers';
 const CARDS = '/planning/inventory/cards';
 const PULLS = '/manufacturing/material-tracking/pull-requests';
 
@@ -34,6 +35,13 @@ export function WarehouseHubPage() {
       icon: 'fas fa-dolly-flatbed',
       iconColor: 'green',
       link: SLIPS,
+    },
+    {
+      title: 'Depo Transferi',
+      description: 'Hammadde, İş Emri ve Mamul arasında, işler arasında stok aktarımı.',
+      icon: 'fas fa-exchange-alt',
+      iconColor: 'violet',
+      link: TRANSFERS,
     },
     {
       title: 'Stok Kartları',
