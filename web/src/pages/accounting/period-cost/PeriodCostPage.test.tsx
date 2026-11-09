@@ -1,7 +1,7 @@
 import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
-import { PERIOD_COMPONENTS } from '@/api/accounting/periodCost';
+import { PERIOD_COMPONENTS, type ComponentAmounts } from '@/api/accounting/periodCost';
 import { PeriodCostPage } from './PeriodCostPage';
 import { filterRoots, flattenTree, lastClosedMonth } from './periodCostRows';
 import dayjs from 'dayjs';
@@ -11,7 +11,7 @@ vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
 const fetchMock = vi.mocked(authedFetch);
 
-const zero = Object.fromEntries(PERIOD_COMPONENTS.map((c) => [c, '0.00']));
+const zero = Object.fromEntries(PERIOD_COMPONENTS.map((c) => [c, '0.00'])) as ComponentAmounts;
 
 const child = {
   job_no: 'PC-01-01',
