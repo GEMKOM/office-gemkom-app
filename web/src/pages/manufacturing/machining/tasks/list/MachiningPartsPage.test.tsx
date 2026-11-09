@@ -219,6 +219,30 @@ it('maps URL filters (legacy names and aliases) to the request', async () => {
   expect(screen.getByTestId('location').textContent).not.toContain('has-operations');
 });
 
+it('Parça Adı filters as you type, without Enter', async () => {
+  renderPage();
+  await screen.findByText('Flanş');
+  fireEvent.click(screen.getByRole('button', { name: 'Parça Adı' }));
+  fireEvent.change(await screen.findByRole('textbox', { name: 'Parça Adı' }), {
+    target: { value: 'flanş' },
+  });
+  await waitFor(() => expect(listCalls().at(-1)!.url.searchParams.get('name')).toBe('flanş'));
+  expect(screen.getByTestId('location').textContent).toContain('name=flan');
+});
+
+it('Parça Adı applies when its popover closes before the pause ends', async () => {
+  renderPage();
+  await screen.findByText('Flanş');
+  fireEvent.click(screen.getByRole('button', { name: 'Parça Adı' }));
+  const input = await screen.findByRole('textbox', { name: 'Parça Adı' });
+  fireEvent.change(input, { target: { value: 'mil' } });
+  fireEvent.keyDown(input, { key: 'Escape' });
+  // Well inside the 400ms pause: the close applied it, not the timer.
+  await waitFor(() => expect(listCalls().at(-1)!.url.searchParams.get('name')).toBe('mil'), {
+    timeout: 250,
+  });
+});
+
 it('a figure with a count applies its filter', async () => {
   renderPage();
   const figure = await within(document.getElementById('unassigned-operations-count')!).findByRole(
