@@ -257,20 +257,32 @@ export function FilterBar<T extends FilterValues>({
 
   const applyNow = (next: T) => {
     cancelPending();
+    pending.current = null;
     setDraft(next);
     onApply(next);
   };
 
   const setAndApply = (key: string, value: FilterValue) => applyNow({ ...draft, [key]: value });
 
+  // The latest typed values, for a popover that closes before the pause ends.
+  const pending = useRef<T | null>(null);
   const typeSearch = (key: string, text: string) => {
     const next = { ...draft, [key]: text };
     setDraft(next);
     cancelPending();
+    pending.current = next;
     timer.current = setTimeout(() => {
       timer.current = null;
+      pending.current = null;
       onApply(next);
     }, SEARCH_DELAY_MS);
+  };
+  const flushPending = () => {
+    if (!timer.current || !pending.current) return;
+    const next = pending.current;
+    pending.current = null;
+    cancelPending();
+    onApply(next);
   };
 
   const onEnter = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -346,7 +358,14 @@ export function FilterBar<T extends FilterValues>({
         );
       default:
         return (
-          <Popover key={filter.key} position="bottom-start" offset={6} withinPortal trapFocus>
+          <Popover
+            key={filter.key}
+            position="bottom-start"
+            offset={6}
+            withinPortal
+            trapFocus
+            onClose={flushPending}
+          >
             <Popover.Target>
               <UnstyledButton className={classes.pill} data-set={set || undefined}>
                 <PillFace
@@ -413,12 +432,9 @@ export function FilterBar<T extends FilterValues>({
             placeholder={filter.placeholder}
             type={filter.inputType ?? 'text'}
             value={asString(value)}
-            onChange={(event) => {
-              // Read it now: the updater runs later, when React has already
-              // cleared event.currentTarget (it crashed with "reading 'value'").
-              const text = event.currentTarget.value;
-              setDraft((prev) => ({ ...prev, [filter.key]: text }));
-            }}
+            // Applies after a pause like the search box; it used to wait for
+            // Enter, so a value typed and clicked away from never filtered.
+            onChange={(event) => typeSearch(filter.key, event.currentTarget.value)}
             onKeyDown={onEnter}
           />
         );
