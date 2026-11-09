@@ -18,9 +18,7 @@ import { confirm, DataTable, FaIcon, notify, PageHeader, Panel, type CellEdit, t
 import { ComparisonTable } from '../shared/ComparisonTable';
 import { truncate } from '../shared/columns';
 import classes from './CreatePurchaseRequest.module.css';
-import { BulkImportModal } from './dialogs/BulkImportModal';
 import { DraftsModal, SaveDraftModal } from './dialogs/DraftDialogs';
-import { ItemModal } from './dialogs/ItemModal';
 import { MergeModal } from './dialogs/MergeModal';
 import { OfferModal } from './dialogs/OfferModal';
 import { PlanningItemsModal } from './dialogs/PlanningItemsModal';
@@ -35,6 +33,7 @@ import {
   clearSuppliers,
   comparisonData,
   duplicateItemsMessage,
+  unplannedItemsMessage,
   editItem,
   emptyState,
   fromStorage,
@@ -63,8 +62,6 @@ import { useAutosave } from './useAutosave';
 // Port of procurement/purchase-requests/create/ (create.js and its managers).
 
 type Dialog =
-  | { kind: 'item' }
-  | { kind: 'bulk' }
   | { kind: 'merge' }
   | { kind: 'supplier'; editing: PrSupplier | null }
   | { kind: 'offer'; supplier: PrSupplier }
@@ -328,6 +325,11 @@ export function CreatePurchaseRequestPage() {
         notifyLines.error(duplicate);
         return;
       }
+      const unplanned = unplannedItemsMessage(state.items);
+      if (unplanned) {
+        notifyLines.error(unplanned);
+        return;
+      }
       const payload = buildSubmitPayload(state, rates);
       // What the user entered (the EUR total also moves when the rates arrive).
       const snapshot = JSON.stringify({ ...payload, total_amount_eur: null });
@@ -464,12 +466,6 @@ export function CreatePurchaseRequestPage() {
               >
                 Planlama Talebi Malzemeleri
               </Button>
-              <Button size="xs" variant="outline" leftSection={<FaIcon icon="fas fa-upload" />} onClick={() => setDialog({ kind: 'bulk' })}>
-                Toplu İçe Aktar
-              </Button>
-              <Button size="xs" leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setDialog({ kind: 'item' })}>
-                Malzeme Ekle
-              </Button>
               <Button size="xs" variant="outline" color="green" leftSection={<FaIcon icon="fas fa-object-group" />} onClick={openMerge}>
                 Birleştir
               </Button>
@@ -481,7 +477,9 @@ export function CreatePurchaseRequestPage() {
           filters={
             <Text size="sm" c="dimmed">
               <i className="fas fa-info-circle" style={{ marginRight: 4 }} />
-              <strong>İpucu:</strong> Malzeme bilgilerini düzenlemek için hücrelere tıklayabilirsiniz.
+              Malzemeler yalnızca <strong>Planlama Talebi Malzemeleri</strong> listesinden eklenir; planlama
+              dışı ihtiyaçlar için departman talebi açılır. <strong>İpucu:</strong> Miktar, iş no ve açıklamaları
+              düzenlemek için hücrelere tıklayabilirsiniz.
             </Text>
           }
           data={state.items}
@@ -529,15 +527,6 @@ export function CreatePurchaseRequestPage() {
         </div>
       </Stack>
 
-      {dialog?.kind === 'item' ? (
-        <ItemModal onClose={() => setDialog(null)} onAdd={(item) => update((s) => withItems(s, [...s.items, item]))} />
-      ) : null}
-      {dialog?.kind === 'bulk' ? (
-        <BulkImportModal
-          onClose={() => setDialog(null)}
-          onImport={(items) => update((s) => withItems(s, [...s.items, ...items]))}
-        />
-      ) : null}
       {dialog?.kind === 'merge' ? (
         <MergeModal
           items={state.items}

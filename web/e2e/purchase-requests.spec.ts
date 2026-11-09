@@ -113,8 +113,10 @@ test('create: builds a request and sends it', async ({ page, consoleErrors }) =>
         priority: 'normal',
         needed_date: '2026-11-20',
         items: [
-          { id: 'i1', code: 'A1', name: 'e2e Flanş', job_no: '254-01', quantity: 4, unit: 'adet', specs: '', specifications: '', item_description: '' },
+          // Rows come only from planning lines (the PR create rule since 2026-11-09).
+          { id: 'i1', code: 'A1', name: 'e2e Flanş', job_no: '254-01', quantity: 4, unit: 'adet', specs: '', specifications: '', item_description: '', source_planning_request_item_id: 21 },
         ],
+        planning_request_item_ids: [21],
         suppliers: [supplier('s1', 'Acme'), supplier('s2', 'Beta')],
         offers: { s1: { 0: offer(10) }, s2: { 0: offer(12) } },
         itemRecommendations: {},
@@ -137,8 +139,14 @@ test('create: builds a request and sends it', async ({ page, consoleErrors }) =>
   const body = backend.callsTo('/procurement/purchase-requests/', 'POST')[0]!.body as Record<string, unknown>;
   expect(body.recommendations).toEqual({ 0: 's1' });
   expect(body.items).toEqual([
-    expect.objectContaining({ code: 'A1', quantity: '4.00', allocations: [{ job_no: '254-01', quantity: '4.00' }] }),
+    expect.objectContaining({
+      code: 'A1',
+      quantity: '4.00',
+      allocations: [{ job_no: '254-01', quantity: '4.00' }],
+      planning_request_item_id: 21,
+    }),
   ]);
+  expect(body.planning_request_item_ids).toEqual([21]);
   await expect(page.getByLabel('Talep Başlığı')).toHaveValue('');
   consoleErrors.expectNone();
 });

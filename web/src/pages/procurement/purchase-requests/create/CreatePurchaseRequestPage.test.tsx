@@ -32,8 +32,20 @@ function readyState(): PrState {
     title: 'Konveyör malzemeleri',
     needed_date: '2026-11-20',
     items: [
-      { id: 'i1', code: 'A1', name: 'Flanş', job_no: '254-01', quantity: 4, unit: 'adet', specs: '', specifications: '', item_description: '' },
+      {
+        id: 'i1',
+        code: 'A1',
+        name: 'Flanş',
+        job_no: '254-01',
+        quantity: 4,
+        unit: 'adet',
+        specs: '',
+        specifications: '',
+        item_description: '',
+        source_planning_request_item_id: 11,
+      },
     ],
+    planning_request_item_ids: [11],
     suppliers: [supplier('s1', 'Acme'), supplier('s2', 'Beta')],
     offers: { s1: { i1: offer(10, 4) }, s2: { i1: offer(12, 4) } },
     recommendations: { i1: 's1' },
@@ -109,9 +121,10 @@ describe('CreatePurchaseRequestPage', () => {
           unit: 'adet',
           quantity: '4.00',
           allocations: [{ job_no: '254-01', quantity: '4.00' }],
-          planning_request_item_id: null,
+          planning_request_item_id: 11,
         },
       ],
+      planning_request_item_ids: [11],
       offers: { s1: { 0: offer(10, 4) }, s2: { 0: offer(12, 4) } },
       recommendations: { 0: 's1' },
       total_amount_eur: 1,
@@ -149,19 +162,23 @@ describe('CreatePurchaseRequestPage', () => {
     expect(within(table).getByRole('button', { name: 'Acme öner' })).toHaveAttribute('aria-pressed', 'false');
   });
 
-  it('validates the Malzeme Ekle modal and adds the row', async () => {
+  it('adds rows only from planning: no free-line buttons, and a leftover free row is refused', async () => {
+    const state = readyState();
+    state.items = [{ ...state.items[0]!, source_planning_request_item_id: null }];
+    state.planning_request_item_ids = [];
+    localStorage.setItem(STORAGE_KEY, toStorage(state));
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Malzeme Ekle' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Malzeme Ekle' });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
-    expect(notify.error).toHaveBeenCalled();
-    fireEvent.change(within(dialog).getByLabelText(/Malzeme Kodu/), { target: { value: 'C3' } });
-    fireEvent.change(within(dialog).getByLabelText('Malzeme Adı'), { target: { value: 'Somun' } });
-    fireEvent.change(within(dialog).getByLabelText('İş No'), { target: { value: '254-09' } });
-    fireEvent.change(within(dialog).getByLabelText('Miktar'), { target: { value: '3' } });
-    fireEvent.change(within(dialog).getByLabelText('Birim'), { target: { value: 'adet' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Malzeme Ekle' })).toBeNull());
-    expect(screen.getAllByText('Somun').length).toBeGreaterThan(0);
+    expect(screen.queryByRole('button', { name: 'Malzeme Ekle' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Toplu İçe Aktar' })).toBeNull();
+    expect(screen.getByRole('button', { name: /Planlama Talebi Malzemeleri/ })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Gönder' }));
+    await waitFor(() => expect(notify.error).toHaveBeenCalled());
+    // notifyLines wraps the text in a <span>.
+    const shown = vi
+      .mocked(notify.error)
+      .mock.calls.map((c) => String((c[0] as { props?: { children?: unknown } }).props?.children ?? c[0]))
+      .join(' ');
+    expect(shown).toContain('yalnızca planlama talebi kalemlerinden');
+    expect(callsTo('/procurement/purchase-requests/', 'POST')).toHaveLength(0);
   });
 });
