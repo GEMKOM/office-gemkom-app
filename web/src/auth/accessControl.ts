@@ -59,6 +59,9 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
     '/manufacturing/material-tracking',
     '/procurement/purchase-requests/create',
   ],
+  // Satın Alma Kalemleri tracks the planning lines procurement buys: whoever
+  // creates purchase requests can follow them.
+  '/procurement/planning-items': ['/procurement/purchase-requests/create'],
   // The Depo section's pages follow the warehouse grant ("Page: /warehouse/",
   // codename access_warehouse).
   '/warehouse/counts': ['/warehouse'],

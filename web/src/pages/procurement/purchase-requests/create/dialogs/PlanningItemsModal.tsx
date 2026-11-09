@@ -33,6 +33,7 @@ import {
   type SortDir,
   type StatusFamily,
 } from '@/ui';
+import { daysBetween, DueDate } from '../../../shared/dueDates';
 import { toAttachment } from '../../shared/badges';
 import { truncate } from '../../shared/columns';
 import { isPlanningItemOnPage, itemFromPlanning, type PrItem } from '../model';
@@ -86,43 +87,10 @@ export function filterParams(filters: Filters): Record<string, string> {
   return params;
 }
 
-/** A YYYY-MM-DD or ISO date-time as a local calendar day. */
-function localDay(value: string): Date {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-/** Whole calendar days from `from` to `to` (negative when `to` is earlier). */
-export function daysBetween(from: string, to: Date = new Date()): number {
-  const a = localDay(from).getTime();
-  const b = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
-  return Math.round((b - a) / 86_400_000);
-}
-
 /** Days the line has waited for procurement: since release, else since the request. */
 export function daysWaiting(row: ProcurementPlanningItem, now: Date = new Date()): number | null {
   const since = row.ready_at || row.request_created_at;
   return since ? Math.max(daysBetween(since, now), 0) : null;
-}
-
-function NeededDate({ value }: { value: string | null | undefined }) {
-  if (!value) return <>-</>;
-  const late = daysBetween(value);
-  return (
-    <span title={late > 0 ? 'İhtiyaç tarihi geçti' : undefined}>
-      <Text span size="sm" fw={late >= 0 ? 700 : undefined} c={late > 0 ? 'red' : undefined}>
-        {formatDate(value)}
-      </Text>
-      {late > 0 ? (
-        <Text size="xs" c="red">{`${late} gün gecikti`}</Text>
-      ) : late === 0 ? (
-        <Text size="xs" c="orange">
-          Bugün
-        </Text>
-      ) : null}
-    </span>
-  );
 }
 
 const FILTERS: FilterConfig<keyof Filters>[] = [
@@ -291,7 +259,7 @@ export function PlanningItemsModal({
       key: 'needed_date',
       header: 'İhtiyaç Tarihi',
       sortable: true,
-      render: (row) => <NeededDate value={row.needed_date} />,
+      render: (row) => <DueDate value={row.needed_date} lateTitle="İhtiyaç tarihi geçti" />,
     },
     {
       key: 'request_priority',

@@ -123,6 +123,7 @@
   "/planning/items",
   "/planning/department-requests",
   "/procurement/critical-items",
+  "/procurement/planning-items",
   "/procurement/reports/items",
   "/procurement/reports/staff",
   "/procurement/reports/suppliers",
