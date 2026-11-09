@@ -98,7 +98,14 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
       { value: 'cancelled', label: 'İptal' },
     ],
   },
-  { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş no...', span: 2 },
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş No',
+    placeholder: 'İş no...',
+    span: 2,
+    suggestions: 'jobOrders',
+  },
   { type: 'text', key: 'item_code', label: 'Ürün Kodu', placeholder: 'Ürün kodu...', span: 2 },
   { type: 'text', key: 'item_name', label: 'Ürün Adı', placeholder: 'Ürün adı...', span: 2 },
   {

@@ -45,7 +45,13 @@ const URL_DEFAULTS = { job_order: '', category: '', currency: '' };
 type FilterKey = 'job_order' | 'category' | 'currency';
 
 const filterConfig: FilterConfig<FilterKey>[] = [
-  { type: 'text', key: 'job_order', label: 'İş emri', placeholder: 'Örn. JOB-001' },
+  {
+    type: 'text',
+    key: 'job_order',
+    label: 'İş emri',
+    placeholder: 'Örn. JOB-001',
+    suggestions: 'jobOrders',
+  },
   {
     type: 'select',
     key: 'category',

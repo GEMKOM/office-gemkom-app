@@ -585,7 +585,13 @@ type ItemFilters = { job_no: string; search: string; is_delivered: string };
 const EMPTY_ITEM_FILTERS: ItemFilters = { job_no: '', search: '', is_delivered: '' };
 
 const ITEM_FILTERS: FilterConfig<keyof ItemFilters>[] = [
-  { type: 'text', key: 'job_no', label: 'İş Emri No', placeholder: 'örn. 270-01' },
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş Emri No',
+    placeholder: 'örn. 270-01',
+    suggestions: 'jobOrders',
+  },
   { type: 'text', key: 'search', label: 'Kalem Kodu / Adı', placeholder: 'örn. 10 mm' },
   {
     type: 'select',

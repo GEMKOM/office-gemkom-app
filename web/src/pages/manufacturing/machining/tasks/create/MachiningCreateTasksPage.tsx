@@ -199,7 +199,13 @@ const ANY_CREATOR = 'all';
 const filterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'text', key: 'key', label: 'TI No', placeholder: 'TI-001' },
   { type: 'text', key: 'name', label: 'Görev Adı', placeholder: 'Görev adı' },
-  { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş numarası' },
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş No',
+    placeholder: 'İş numarası',
+    suggestions: 'jobOrders',
+  },
   { type: 'text', key: 'image_no', label: 'Resim No', placeholder: 'Resim numarası' },
   { type: 'text', key: 'position_no', label: 'Pozisyon No', placeholder: 'Pozisyon numarası' },
   { type: 'date', key: 'finish_time', label: 'Bitiş Tarihi' },
@@ -557,20 +563,18 @@ export function MachiningCreateTasksPage() {
     ],
   );
   const users = useUsers();
-  const creatorOptions = useMemo(
-    () => {
-      const options = (users.data ?? []).map((u) => ({ value: String(u.id), label: userLabel(u) }));
-      // Keep the picked creator visible before / without the user list.
-      if (filters.created_by && !options.some((o) => o.value === filters.created_by)) {
-        options.unshift({
-          value: filters.created_by,
-          label: filters.created_by === String(user?.id) ? (user?.username ?? 'Ben') : filters.created_by,
-        });
-      }
-      return options;
-    },
-    [users.data, filters.created_by, user?.id, user?.username],
-  );
+  const creatorOptions = useMemo(() => {
+    const options = (users.data ?? []).map((u) => ({ value: String(u.id), label: userLabel(u) }));
+    // Keep the picked creator visible before / without the user list.
+    if (filters.created_by && !options.some((o) => o.value === filters.created_by)) {
+      options.unshift({
+        value: filters.created_by,
+        label:
+          filters.created_by === String(user?.id) ? (user?.username ?? 'Ben') : filters.created_by,
+      });
+    }
+    return options;
+  }, [users.data, filters.created_by, user?.id, user?.username]);
   const listFilterConfig = useMemo<FilterConfig<FilterKeys>[]>(
     () => [
       {

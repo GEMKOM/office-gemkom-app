@@ -82,7 +82,13 @@ export function AdjustmentsPage() {
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(() => {
     const currentYear = new Date().getFullYear();
     return [
-      { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş numarası' },
+      {
+        type: 'text',
+        key: 'job_no',
+        label: 'İş No',
+        placeholder: 'İş numarası',
+        suggestions: 'jobOrders',
+      },
       {
         type: 'select',
         key: 'subcontractor',

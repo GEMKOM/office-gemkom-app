@@ -443,6 +443,35 @@ a.figureTile:focus-visible {
   color: var(--gk-red-700);
 }
 
+/* Matches under a suggestion filter (İş No): in its popover or dropping from the search box. */
+.suggestionsInline {
+  margin-top: 6px;
+  border-top: 1px solid var(--gk-line);
+  padding-top: 4px;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+}
+
+.suggestion {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--gk-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion[data-active] {
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+}
+
 /* ---- Hub cards ------------------------------------------------------------- */
 /* Up to four cards per row, as the design system says. */
 .hubGrid {
@@ -453,14 +482,30 @@ a.figureTile:focus-visible {
 
 /* Each area has its family (the icon colour): a soft line for the border, the
    deep colour for the figure, the arrow and the hover edge. */
-.hubCard[data-family='yellow'] { --hub-line: #ecd9a0; }
-.hubCard[data-family='blue'] { --hub-line: #bcd0f1; }
-.hubCard[data-family='green'] { --hub-line: #b5dfc8; }
-.hubCard[data-family='orange'] { --hub-line: #f3cba8; }
-.hubCard[data-family='red'] { --hub-line: #f2bdbd; }
-.hubCard[data-family='purple'] { --hub-line: #d3c7f5; }
-.hubCard[data-family='grey'] { --hub-line: #d3d8dd; }
-.hubCard[data-family='brand'] { --hub-line: #f5c9c9; }
+.hubCard[data-family='yellow'] {
+  --hub-line: #ecd9a0;
+}
+.hubCard[data-family='blue'] {
+  --hub-line: #bcd0f1;
+}
+.hubCard[data-family='green'] {
+  --hub-line: #b5dfc8;
+}
+.hubCard[data-family='orange'] {
+  --hub-line: #f3cba8;
+}
+.hubCard[data-family='red'] {
+  --hub-line: #f2bdbd;
+}
+.hubCard[data-family='purple'] {
+  --hub-line: #d3c7f5;
+}
+.hubCard[data-family='grey'] {
+  --hub-line: #d3d8dd;
+}
+.hubCard[data-family='brand'] {
+  --hub-line: #f5c9c9;
+}
 
 .hubCard {
   position: relative;

@@ -178,7 +178,13 @@ const createdExportColumns: DataTableColumn<MachiningTask>[] = [
 const filterConfig: FilterConfig<keyof TaskFilters>[] = [
   { key: 'key', type: 'text', label: 'TI No', placeholder: 'TI-001' },
   { key: 'name', type: 'text', label: 'Görev Adı', placeholder: 'Görev adı' },
-  { key: 'job_no', type: 'text', label: 'İş No', placeholder: 'İş numarası' },
+  {
+    key: 'job_no',
+    type: 'text',
+    label: 'İş No',
+    placeholder: 'İş numarası',
+    suggestions: 'jobOrders',
+  },
   { key: 'image_no', type: 'text', label: 'Resim No', placeholder: 'Resim numarası' },
   { key: 'position_no', type: 'text', label: 'Pozisyon No', placeholder: 'Pozisyon numarası' },
   { key: 'finish_time', type: 'date', label: 'Bitiş Tarihi' },

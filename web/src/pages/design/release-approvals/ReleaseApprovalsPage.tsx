@@ -337,7 +337,13 @@ export function ReleaseApprovalsPage() {
   const filterConfig: FilterConfig<FilterKeys>[] = [
     { type: 'text', key: 'search', label: 'Ara', placeholder: 'İş emri, başlık, değişiklik...' },
     { type: 'multiselect', key: 'status__in', label: 'Sonuç', options: COMPLETED_STATUS_CHOICES },
-    { type: 'text', key: 'job_order', label: 'İş Emri', placeholder: 'İş emri no' },
+    {
+      type: 'text',
+      key: 'job_order',
+      label: 'İş Emri',
+      placeholder: 'İş emri no',
+      suggestions: 'jobOrders',
+    },
     {
       type: 'select',
       key: 'released_by',
