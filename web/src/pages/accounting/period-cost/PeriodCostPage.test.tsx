@@ -148,3 +148,12 @@ it('opens the reconciliation of a job', async () => {
   // Labor's leftover difference is shown (sign formatting is the locale's).
   expect(screen.getByText(/2,08/)).toBeInTheDocument();
 });
+
+it('renders empty when the response leaves fields out', async () => {
+  fetchMock.mockImplementation(() => json({}));
+  renderWithProviders(<PeriodCostPage />, {
+    route: '/accounting/job-cost-by-period/?start=2026-10&end=2026-10',
+  });
+  expect(await screen.findByText('Bu dönemde maliyet oluşan iş emri yok.')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Dönemsel İş Maliyeti' })).toBeInTheDocument();
+});
