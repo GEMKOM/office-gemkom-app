@@ -11,11 +11,18 @@ import {
   type Supplier,
   type SupplierInput,
 } from '@/api/procurement/suppliers';
+import { countryOptions } from '@/lib/countries';
 import { FormModal, ModalSection, notify } from '@/ui';
 
 // The legacy EditModal shows 'Bu alan gereklidir' under any invalid field.
 const REQUIRED = 'Bu alan gereklidir';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const TAX_ID_TR = 'Türkiye için VKN 10, TCKN 11 haneli olmalıdır';
+
+/** Spaces and dashes come along when a tax id is pasted from an invoice. */
+export function normalizeTaxId(value: string): string {
+  return value.replace(/[\s-]/g, '').toUpperCase();
+}
 
 export const CURRENCY_OPTIONS = [
   { value: 'TRY', label: 'TRY — Türk Lirası' },
@@ -27,33 +34,47 @@ export const CURRENCY_OPTIONS = [
 // Field checks of the legacy EditModal: required fields, the e-mail pattern
 // and the tax rate's max of 100 (its min of 0 was dropped by `min || null`;
 // handleSupplierModalSave catches negatives with a notification instead).
-export const supplierSchema = z.object({
-  code: z.string(),
-  name: z.string().min(1, REQUIRED),
-  contact_person: z.string(),
-  phone: z.string(),
-  email: z.string().refine((v) => v === '' || EMAIL_RE.test(v), 'Geçerli bir e-posta adresi girin'),
-  is_active: z.boolean(),
-  address: z.string(),
-  bank_info: z.string(),
-  default_currency: z.string(),
-  default_payment_terms: z.string(),
-  default_tax_rate: z
-    .string()
-    .min(1, REQUIRED)
-    .refine((v) => {
-      const n = parseFloat(v);
-      return !Number.isNaN(n) && n <= 100;
-    }, REQUIRED),
-  has_dbs: z.boolean(),
-  dbs_bank: z.string(),
-  dbs_limit: z.string().refine((v) => v === '' || !Number.isNaN(parseFloat(v)), REQUIRED),
-  dbs_used: z.string(),
-  dbs_currency: z.string(),
-  dbs_agreement_no: z.string(),
-  dbs_expiry_date: z.string(),
-  dbs_details: z.string(),
-});
+export const supplierSchema = z
+  .object({
+    code: z.string(),
+    name: z.string().min(1, REQUIRED),
+    contact_person: z.string(),
+    phone: z.string(),
+    email: z
+      .string()
+      .refine((v) => v === '' || EMAIL_RE.test(v), 'Geçerli bir e-posta adresi girin'),
+    is_active: z.boolean(),
+    address: z.string(),
+    bank_info: z.string(),
+    default_currency: z.string(),
+    default_payment_terms: z.string(),
+    default_tax_rate: z
+      .string()
+      .min(1, REQUIRED)
+      .refine((v) => {
+        const n = parseFloat(v);
+        return !Number.isNaN(n) && n <= 100;
+      }, REQUIRED),
+    has_dbs: z.boolean(),
+    dbs_bank: z.string(),
+    dbs_limit: z.string().refine((v) => v === '' || !Number.isNaN(parseFloat(v)), REQUIRED),
+    dbs_used: z.string(),
+    dbs_currency: z.string(),
+    dbs_agreement_no: z.string(),
+    dbs_expiry_date: z.string(),
+    dbs_details: z.string(),
+    tax_id: z.string(),
+    tax_office: z.string(),
+    country: z.string(),
+  })
+  // Same rule as the backend: only Turkish tax ids have a fixed shape.
+  .refine(
+    (v) => {
+      const id = normalizeTaxId(v.tax_id);
+      return v.country !== 'TR' || id === '' || /^(\d{10}|\d{11})$/.test(id);
+    },
+    { message: TAX_ID_TR, path: ['tax_id'] },
+  );
 
 export type SupplierFormValues = z.infer<typeof supplierSchema>;
 
@@ -92,6 +113,9 @@ export function supplierFormValues(supplier?: Supplier | null): SupplierFormValu
       dbs_agreement_no: '',
       dbs_expiry_date: '',
       dbs_details: '',
+      tax_id: '',
+      tax_office: '',
+      country: 'TR',
     };
   }
   return {
@@ -123,6 +147,9 @@ export function supplierFormValues(supplier?: Supplier | null): SupplierFormValu
     dbs_agreement_no: supplier.dbs_agreement_no || '',
     dbs_expiry_date: toDateInputValue(supplier.dbs_expiry_date),
     dbs_details: supplier.dbs_details || '',
+    tax_id: supplier.tax_id || '',
+    tax_office: supplier.tax_office || '',
+    country: supplier.country || '',
   };
 }
 
@@ -160,6 +187,9 @@ export function supplierPayload(
         ? Number(values.default_payment_terms)
         : null,
       default_tax_rate: taxRate,
+      tax_id: normalizeTaxId(values.tax_id),
+      tax_office: values.tax_office.trim(),
+      country: values.country,
       is_active: values.is_active,
       has_dbs: hasDbs,
       dbs_bank: hasDbs ? values.dbs_bank.trim() : '',
@@ -220,6 +250,7 @@ export function SupplierFormModal({ supplier, onClose }: SupplierFormModalProps)
   };
 
   const half = { base: 12, sm: 6 };
+  const turkish = form.values.country === 'TR';
 
   return (
     <FormModal
@@ -277,6 +308,36 @@ export function SupplierFormModal({ supplier, onClose }: SupplierFormModalProps)
               rows={2}
               {...form.getInputProps('bank_info')}
             />
+          </Grid.Col>
+        </Grid>
+      </ModalSection>
+
+      <ModalSection title="Vergi Bilgileri" icon="fas fa-file-invoice">
+        <Grid gap="sm">
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            <Select
+              label="Ülke"
+              placeholder="Seçiniz..."
+              data={countryOptions()}
+              searchable
+              nothingFoundMessage="Ülke bulunamadı"
+              value={form.values.country || null}
+              onChange={(value) => form.setFieldValue('country', value ?? '')}
+              error={form.errors.country}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            <TextInput
+              label={turkish ? 'VKN / TCKN' : 'Vergi numarası'}
+              description={
+                turkish ? 'VKN 10, TCKN 11 hane; e-fatura eşleştirmesinde kullanılır' : undefined
+              }
+              inputMode={turkish ? 'numeric' : undefined}
+              {...form.getInputProps('tax_id')}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            <TextInput label="Vergi dairesi" {...form.getInputProps('tax_office')} />
           </Grid.Col>
         </Grid>
       </ModalSection>

@@ -160,6 +160,7 @@ it('the create form validates and then posts every field', async () => {
     address: '',
     tax_id: '',
     tax_office: '',
+    country: 'TR',
     is_active: true,
     notes: '',
   });

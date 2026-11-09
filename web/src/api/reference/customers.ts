@@ -17,6 +17,8 @@ export interface Customer {
   address?: string;
   tax_id?: string;
   tax_office?: string;
+  /** ISO 3166-1 alpha-2; '' for customers created before the field. */
+  country?: string;
   is_active?: boolean;
   default_currency?: CustomerCurrency | string;
   notes?: string;
@@ -36,6 +38,8 @@ export interface CustomerInput {
   address?: string;
   tax_id?: string;
   tax_office?: string;
+  /** ISO 3166-1 alpha-2; '' for customers created before the field. */
+  country?: string;
   /** Backend default "TRY". */
   default_currency?: CustomerCurrency | string;
   /** Backend default true. */

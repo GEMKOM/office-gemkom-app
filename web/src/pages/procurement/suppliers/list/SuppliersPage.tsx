@@ -33,6 +33,7 @@ import { SupplierStatusModal } from './SupplierStatusModal';
 // Filter keys are the request params legacy loadSuppliers sent.
 const URL_DEFAULTS = {
   name: '',
+  tax_id: '',
   contact_person: '',
   is_active: '',
   default_currency: '',
@@ -44,6 +45,7 @@ const URL_DEFAULTS = {
 
 type FilterKeys =
   | 'name'
+  | 'tax_id'
   | 'contact_person'
   | 'is_active'
   | 'default_currency'
@@ -53,6 +55,7 @@ type FilterState = Record<FilterKeys, string>;
 
 const EMPTY_FILTERS: FilterState = {
   name: '',
+  tax_id: '',
   contact_person: '',
   is_active: '',
   default_currency: '',
@@ -67,6 +70,12 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
     label: 'Tedarikçi Adı',
     placeholder: 'Tedarikçi adı girin...',
     span: 4,
+  },
+  {
+    type: 'text',
+    key: 'tax_id',
+    label: 'VKN / TCKN',
+    placeholder: 'Vergi numarası girin...',
   },
   {
     type: 'text',
@@ -150,6 +159,7 @@ export function SuppliersPage() {
   const filters = useMemo<FilterState>(
     () => ({
       name: values.name,
+      tax_id: values.tax_id,
       contact_person: values.contact_person,
       is_active: values.is_active,
       default_currency: values.default_currency,
@@ -158,6 +168,7 @@ export function SuppliersPage() {
     }),
     [
       values.name,
+      values.tax_id,
       values.contact_person,
       values.is_active,
       values.default_currency,
