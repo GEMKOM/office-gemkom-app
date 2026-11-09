@@ -88,15 +88,55 @@ export const periodCostKeys = {
   reconcile: (jobNo: string) => [...periodCostKeys.all, 'reconcile', jobNo] as const,
 };
 
+const zeroAmounts = (): ComponentAmounts =>
+  Object.fromEntries(PERIOD_COMPONENTS.map((c) => [c, '0.00'])) as ComponentAmounts;
+
+function normalizeRow(row: Partial<PeriodCostRow>): PeriodCostRow {
+  return {
+    job_no: row.job_no ?? '',
+    title: row.title ?? '',
+    customer_name: row.customer_name ?? null,
+    status: row.status ?? '',
+    total_weight_kg: row.total_weight_kg ?? null,
+    components: { ...zeroAmounts(), ...row.components },
+    total: row.total ?? '0.00',
+    estimated: row.estimated ?? '0.00',
+    by_month: row.by_month ?? {},
+    children: (row.children ?? []).map(normalizeRow),
+  };
+}
+
+/** Fills whatever a response leaves out, so the page never reads a missing list. */
+export function normalizePeriodReport(
+  payload: Partial<PeriodCostReport> | null | undefined,
+  start: string,
+  end: string,
+): PeriodCostReport {
+  const body = payload ?? {};
+  return {
+    start: body.start ?? start,
+    end: body.end ?? end,
+    months: body.months ?? [],
+    components: body.components ?? [...PERIOD_COMPONENTS],
+    totals: { ...zeroAmounts(), total: '0.00', ...body.totals },
+    by_month: body.by_month ?? [],
+    rows: (body.rows ?? []).map(normalizeRow),
+  };
+}
+
 /** GET /projects/job-orders/period_cost/?start=YYYY-MM&end=YYYY-MM */
 export function periodCostQueryOptions(start: string, end: string) {
   return queryOptions({
     queryKey: periodCostKeys.report(start, end),
-    queryFn: ({ signal }) =>
-      apiFetch<PeriodCostReport>('/projects/job-orders/period_cost/', {
-        params: { start, end },
-        signal,
-      }),
+    queryFn: async ({ signal }) =>
+      normalizePeriodReport(
+        await apiFetch<Partial<PeriodCostReport>>('/projects/job-orders/period_cost/', {
+          params: { start, end },
+          signal,
+        }),
+        start,
+        end,
+      ),
     staleTime: 60_000,
   });
 }
@@ -105,11 +145,22 @@ export function periodCostQueryOptions(start: string, end: string) {
 export function periodCostReconcileQueryOptions(jobNo: string) {
   return queryOptions({
     queryKey: periodCostKeys.reconcile(jobNo),
-    queryFn: ({ signal }) =>
-      apiFetch<PeriodCostReconciliation>(
+    queryFn: async ({ signal }) => {
+      const body = await apiFetch<Partial<PeriodCostReconciliation>>(
         `/projects/job-orders/${encodeURIComponent(jobNo)}/period_cost_reconcile/`,
         { signal },
-      ),
+      );
+      return {
+        job_no: body?.job_no ?? jobNo,
+        job_nos: body?.job_nos ?? [jobNo],
+        first_month: body?.first_month ?? null,
+        last_month: body?.last_month ?? null,
+        material_not_received: body?.material_not_received ?? '0.00',
+        material_undated: body?.material_undated ?? '0.00',
+        general_expenses_not_produced: body?.general_expenses_not_produced ?? '0.00',
+        components: body?.components ?? [],
+      } satisfies PeriodCostReconciliation;
+    },
     staleTime: 60_000,
   });
 }
