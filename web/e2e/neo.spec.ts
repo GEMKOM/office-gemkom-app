@@ -98,7 +98,7 @@ test('opens from the rail, answers, and keeps the conversation across pages', as
   const log = panel(page).getByRole('log', { name: 'Neo sohbeti' });
   await expect(log.getByText(QUESTION)).toBeVisible();
   await expect(log.getByText(ANSWER)).toBeVisible();
-  await expect(log.getByText('İş emri aranıyor')).toBeVisible();
+  await expect(log.getByText('İş emirleri aranıyor')).toBeVisible();
   await expect(log.getByRole('button', { name: 'Faydalı' })).toBeVisible();
   const chat = backend.callsTo('/assistant/chat/', 'POST');
   expect(chat).toHaveLength(1);
@@ -145,6 +145,114 @@ test('opens from the rail, answers, and keeps the conversation across pages', as
   await panel(page).getByRole('button', { name: 'Sohbet Geçmişi' }).click();
   await expect(panel(page).getByRole('button', { name: /^Teklif durumu/ })).toBeVisible();
   await expect(panel(page).getByRole('button', { name: 'Arşivle: Teklif durumu' })).toBeVisible();
+
+  consoleErrors.expectNone();
+});
+
+// What a list answer looks like now: a real table, linked job numbers,
+// follow-up questions, the Excel export and the wide panel.
+const TABLE_ANSWER = [
+  'Toplam **2** aktif iş emri var:',
+  '',
+  '| İş No | Başlık | Tutar |',
+  '|---|---|---:|',
+  '| 293-10 | TUNNEL PANEL | 1.200,50 |',
+  '| 114-14 | LADLE | 980 |',
+  '',
+  'Detay için [satın alma talepleri](/procurement/purchase-requests/registry/) sayfasına bakın.',
+].join('\n');
+
+const tableSse = [
+  'event: conversation\ndata: {"conversation_id":502,"title":"Aktif işler"}\n\n',
+  'event: tool\ndata: {"name":"query_data","status":"start"}\n\n',
+  'event: tool\ndata: {"name":"query_data","status":"done"}\n\n',
+  'event: tool\ndata: {"name":"get_job_costs","status":"start"}\n\n',
+  'event: tool\ndata: {"name":"get_job_costs","status":"done"}\n\n',
+  'event: tool\ndata: {"name":"get_job_costs","status":"start"}\n\n',
+  'event: tool\ndata: {"name":"get_job_costs","status":"done"}\n\n',
+  `event: delta\ndata: ${JSON.stringify({ text: TABLE_ANSWER.slice(0, 60) })}\n\n`,
+  `event: delta\ndata: ${JSON.stringify({ text: TABLE_ANSWER.slice(60) })}\n\n`,
+  `event: followups\ndata: ${JSON.stringify({ items: ['293-10 maliyeti ne?', 'Geciken işler hangileri?'] })}\n\n`,
+  'event: done\ndata: {"conversation_id":502,"message_id":9101,"outcome":"answered"}\n\n',
+].join('');
+
+test('a list answer is a table with job links, Excel export, follow-ups and wide mode', async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: true });
+  const backend = await mockBackend(
+    page,
+    {
+      ...chatHandlers,
+      'POST /assistant/chat/': { body: tableSse, headers: { 'Content-Type': 'text/event-stream' } },
+      'POST /assistant/messages/9101/feedback/': { json: { ok: true } },
+    },
+    { session },
+  );
+
+  await page.goto('/');
+  await neoEntry(page).click();
+  const input = panel(page).getByRole('textbox', { name: "Neo'ya sorunuz" });
+  await input.fill('Aktif iş emirlerini listele');
+  await input.press('Enter');
+  const log = panel(page).getByRole('log', { name: 'Neo sohbeti' });
+
+  // A table, not pipes.
+  const table = log.getByRole('table');
+  await expect(table).toBeVisible();
+  await expect(table.getByRole('columnheader')).toHaveText(['İş No', 'Başlık', 'Tutar']);
+  await expect(table.getByRole('row')).toHaveCount(3);
+  await expect(log.getByText('| İş No |')).toHaveCount(0);
+  await expect(log.getByText('2 satır')).toBeVisible();
+  // Job numbers and in-app links go to the app's pages.
+  await expect(table.getByRole('link', { name: '293-10' })).toHaveAttribute(
+    'href',
+    '/projects/project-tracking/?job_no=293-10',
+  );
+  await expect(log.getByRole('link', { name: 'satın alma talepleri' })).toHaveAttribute(
+    'href',
+    '/procurement/purchase-requests/registry/',
+  );
+  // Every tool has a Turkish label; repeated runs show a count.
+  await expect(log.getByText('Veri sorgulanıyor')).toBeVisible();
+  await expect(log.getByText('Maliyetler alınıyor ×2')).toBeVisible();
+  await shot(page, '15-table-answer');
+
+  // The table downloads as .xlsx.
+  const download = page.waitForEvent('download');
+  await log.getByRole('button', { name: 'Tabloyu Excel’e aktar' }).click();
+  expect((await download).suggestedFilename()).toMatch(/^neo-tablo-\d{4}-\d{2}-\d{2}\.xlsx$/);
+
+  // Follow-up questions under the answer; a thumbs down asks why.
+  const followup = log.getByRole('button', { name: /Geciken işler hangileri\?/ });
+  await expect(followup).toBeVisible();
+  await log.getByRole('button', { name: 'Faydasız' }).click();
+  await log.getByRole('button', { name: 'Eksik' }).click();
+  await expect
+    .poll(() => backend.callsTo('/assistant/messages/9101/feedback/', 'POST').length)
+    .toBe(2);
+  expect(backend.callsTo('/assistant/messages/9101/feedback/', 'POST')[1]!.body).toEqual({
+    value: -1,
+    reason: 'incomplete',
+  });
+
+  // A follow-up is sent as the next question.
+  await followup.click();
+  await expect.poll(() => backend.callsTo('/assistant/chat/', 'POST').length).toBe(2);
+  expect(backend.callsTo('/assistant/chat/', 'POST')[1]!.body).toMatchObject({
+    message: 'Geciken işler hangileri?',
+    conversation_id: 502,
+  });
+
+  // Wide mode: the page makes room for a wider panel, and it is remembered.
+  await panel(page).getByRole('button', { name: 'Genişlet' }).click();
+  await expect(page.getByRole('main')).toHaveCSS('padding-right', '680px');
+  await shot(page, '16-wide');
+  await page.reload();
+  await expect(page.getByRole('main')).toHaveCSS('padding-right', '680px');
+  await panel(page).getByRole('button', { name: 'Daralt' }).click();
+  await expect(page.getByRole('main')).toHaveCSS('padding-right', '380px');
 
   consoleErrors.expectNone();
 });
