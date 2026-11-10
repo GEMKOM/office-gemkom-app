@@ -18,6 +18,8 @@ export type NeoView = 'chat' | 'history' | 'report' | 'summaries';
 export interface ToolChip {
   name: string;
   status: 'start' | 'done' | 'error';
+  /** How many times the tool ran for this answer (one chip per tool). */
+  count?: number;
 }
 
 export type ChatItem =
@@ -31,6 +33,8 @@ export type ChatItem =
       error?: boolean;
       messageId?: number | null;
       feedback?: number | null;
+      /** Questions the user may want to ask next (only on fresh answers). */
+      followups?: string[];
     };
 
 export type AssistantItem = Extract<ChatItem, { role: 'assistant' }>;
@@ -70,6 +74,8 @@ export interface NeoState {
   /** The dot's "first click lands on the summaries" shortcut has been used. */
   unreadRedirected: boolean;
   summaryPrompt: SummaryPrompt | null;
+  /** The wide panel, for table-heavy answers (desktop only). */
+  wide: boolean;
 }
 
 export interface OpenNeoOptions {
@@ -86,6 +92,11 @@ export interface OpenNeoOptions {
 export const CONVERSATION_KEY = 'assistantConversationId';
 export const openKey = (userId: number) => `gk.neoOpen.${userId}`;
 export const hintKey = (userId: number) => `gk.neoHintSeen.${userId}`;
+export const wideKey = (userId: number) => `gk.neoWide.${userId}`;
+
+/** Panel widths in px: normal, and wide for tables. */
+export const NEO_WIDTH = 380;
+export const NEO_WIDE_WIDTH = 680;
 
 const initialState = (): NeoState => ({
   open: false,
@@ -101,6 +112,7 @@ const initialState = (): NeoState => ({
   unreadSummary: null,
   unreadRedirected: false,
   summaryPrompt: null,
+  wide: false,
 });
 
 let state: NeoState = initialState();
@@ -114,6 +126,9 @@ function set(patch: Partial<NeoState> | ((s: NeoState) => Partial<NeoState>)) {
   state = { ...state, ...next };
   if (state.userId !== null && state.open !== prev.open) {
     writeStorage(localStorage, openKey(state.userId), state.open ? '1' : '0');
+  }
+  if (state.userId !== null && state.wide !== prev.wide) {
+    writeStorage(localStorage, wideKey(state.userId), state.wide ? '1' : null);
   }
   if (state.conversationId !== prev.conversationId) {
     writeStorage(
@@ -170,6 +185,7 @@ export function bindNeoUser(userId: number) {
     ...initialState(),
     userId,
     open: readStorage(() => localStorage, openKey(userId)) === '1',
+    wide: readStorage(() => localStorage, wideKey(userId)) === '1',
     // A different user's conversation must not leak in.
     conversationId: state.userId === null ? storedId : null,
   };
@@ -241,6 +257,10 @@ export function toggleNeoView(view: Exclude<NeoView, 'chat'>) {
   set((s) => ({ view: s.view === view ? 'chat' : view }));
 }
 
+export function toggleNeoWide() {
+  set((s) => ({ wide: !s.wide }));
+}
+
 export function showNeoChat() {
   set({ view: 'chat' });
 }
@@ -304,6 +324,30 @@ function nextId() {
   return `neo-${itemSeq}`;
 }
 
+/** At most three short, distinct, non-empty questions. */
+function cleanFollowups(items: unknown): string[] {
+  if (!Array.isArray(items)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of items) {
+    const text = typeof raw === 'string' ? raw.trim() : '';
+    if (!text || text.length > 140 || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+    if (out.length === 3) break;
+  }
+  return out;
+}
+
+/** The question the last answer replied to: what "Tekrar dene" sends again. */
+export function lastQuestion(): string | null {
+  for (let i = state.items.length - 1; i >= 0; i -= 1) {
+    const item = state.items[i];
+    if (item?.role === 'user') return item.text;
+  }
+  return null;
+}
+
 /** One SSE frame applied to the answer being streamed. */
 export function applyChatEvent(item: AssistantItem, event: ChatEvent): AssistantItem {
   switch (event.event) {
@@ -311,18 +355,27 @@ export function applyChatEvent(item: AssistantItem, event: ChatEvent): Assistant
       return { ...item, text: item.text + event.data.text };
     case 'tool': {
       const { name, status } = event.data;
-      const others = item.tools.filter((tool) => tool.name !== name);
-      const exists = others.length !== item.tools.length;
-      const chip = { name, status };
+      const existing = item.tools.find((tool) => tool.name === name);
+      const runs = (existing?.count ?? 0) + (status === 'start' ? 1 : 0);
+      const chip: ToolChip = { name, status, count: Math.max(runs, 1) };
       return {
         ...item,
-        tools: exists
+        tools: existing
           ? item.tools.map((tool) => (tool.name === name ? chip : tool))
           : [...item.tools, chip],
       };
     }
-    case 'done':
-      return { ...item, streaming: false, messageId: event.data.message_id ?? null };
+    case 'followups':
+      return { ...item, followups: cleanFollowups(event.data.items) };
+    case 'done': {
+      const next: AssistantItem = {
+        ...item,
+        streaming: false,
+        messageId: event.data.message_id ?? null,
+      };
+      if (event.data.followups) next.followups = cleanFollowups(event.data.followups);
+      return next;
+    }
     case 'error':
       return {
         ...item,

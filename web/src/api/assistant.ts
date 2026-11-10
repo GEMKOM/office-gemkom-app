@@ -70,10 +70,17 @@ export function archiveConversation(id: number) {
   return apiFetch<void>(`/assistant/conversations/${id}/`, { method: 'DELETE' });
 }
 
-export function sendMessageFeedback(messageId: number, value: 1 | -1 | null) {
+/** Why an answer was not useful (sent with a thumbs down). */
+export type FeedbackReason = 'wrong' | 'incomplete' | 'slow' | 'unclear' | 'other';
+
+export function sendMessageFeedback(
+  messageId: number,
+  value: 1 | -1 | null,
+  reason?: FeedbackReason,
+) {
   return apiFetch<unknown>(`/assistant/messages/${messageId}/feedback/`, {
     method: 'POST',
-    body: { value },
+    body: reason ? { value, reason } : { value },
   });
 }
 
@@ -87,9 +94,16 @@ export type ChatEvent =
       event: 'tool';
       data: { name: string; status: 'start' | 'done' | 'error'; duration_ms?: number };
     }
+  /** Up to three follow-up questions, sent after the answer text. */
+  | { event: 'followups'; data: { items: string[] } }
   | {
       event: 'done';
-      data: { conversation_id?: number; message_id?: number | null; outcome?: string };
+      data: {
+        conversation_id?: number;
+        message_id?: number | null;
+        outcome?: string;
+        followups?: string[];
+      };
     }
   | {
       event: 'error';

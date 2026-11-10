@@ -131,6 +131,34 @@ describe('applyChatEvent', () => {
     });
   });
 
+  it('counts repeated runs of one tool on its single chip', () => {
+    const events: ChatEvent[] = [
+      { event: 'tool', data: { name: 'get_job_costs', status: 'start' } },
+      { event: 'tool', data: { name: 'get_job_costs', status: 'done' } },
+      { event: 'tool', data: { name: 'get_job_costs', status: 'start' } },
+      { event: 'tool', data: { name: 'get_job_costs', status: 'done' } },
+    ];
+    const result = events.reduce(applyChatEvent, answer);
+    expect(result.tools).toEqual([{ name: 'get_job_costs', status: 'done', count: 2 }]);
+  });
+
+  it('keeps up to three distinct follow-up questions, from their frame or from done', () => {
+    const fromFrame = applyChatEvent(answer, {
+      event: 'followups',
+      data: { items: ['A?', 'A?', ' ', 'B?', 'C?', 'D?'] },
+    });
+    expect(fromFrame.followups).toEqual(['A?', 'B?', 'C?']);
+    const fromDone = applyChatEvent(answer, {
+      event: 'done',
+      data: { message_id: 1, followups: ['X?'] },
+    });
+    expect(fromDone.followups).toEqual(['X?']);
+    // A done frame without them keeps the ones that came first.
+    expect(applyChatEvent(fromFrame, { event: 'done', data: { message_id: 1 } }).followups).toEqual(
+      ['A?', 'B?', 'C?'],
+    );
+  });
+
   it('keeps a partial answer on error, or shows the detail', () => {
     const partial = applyChatEvent(
       { ...answer, text: 'Yarım' },

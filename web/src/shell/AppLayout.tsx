@@ -3,7 +3,15 @@ import { useDisclosure, useReducedMotion } from '@mantine/hooks';
 import { Outlet } from 'react-router';
 import { useAuth } from '@/auth/AuthProvider';
 import { RequireRoute } from '@/auth/RequireRoute';
-import { bindNeoUser, DailySummaryPrompt, NeoAside, NeoEntry, useNeo } from '@/neo';
+import {
+  bindNeoUser,
+  DailySummaryPrompt,
+  NEO_WIDE_WIDTH,
+  NEO_WIDTH,
+  NeoAside,
+  NeoEntry,
+  useNeo,
+} from '@/neo';
 import { AppLink } from './AppLink';
 import { AttendanceButton } from './AttendanceButton';
 import { NavBadgesProvider } from './navBadges';
@@ -30,13 +38,14 @@ export function AppLayout() {
   // Feeds the home page's shortcuts (the pages this user opens most).
   useRecordVisits();
   const neoOpen = useNeo((s) => s.open);
+  const neoWide = useNeo((s) => s.wide);
   const reduceMotion = useReducedMotion();
 
   return (
     <AppShell
       header={{ height: { base: 56, sm: 0 } }}
       navbar={{ width: { base: 280, sm: rail.expanded ? 248 : 72 }, breakpoint: 'sm', collapsed: { mobile: !drawerOpened } }}
-      aside={{ width: { base: '100%', sm: 380 }, breakpoint: 'sm', collapsed: { desktop: !neoOpen, mobile: !neoOpen } }}
+      aside={{ width: { base: '100%', sm: neoWide ? NEO_WIDE_WIDTH : NEO_WIDTH }, breakpoint: 'sm', collapsed: { desktop: !neoOpen, mobile: !neoOpen } }}
       transitionDuration={reduceMotion ? 0 : 180}
       padding={0}
     >
