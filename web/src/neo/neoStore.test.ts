@@ -157,6 +157,10 @@ describe('applyChatEvent', () => {
     expect(applyChatEvent(fromFrame, { event: 'done', data: { message_id: 1 } }).followups).toEqual(
       ['A?', 'B?', 'C?'],
     );
+    // A done frame with an empty array also keeps the ones that came first.
+    expect(
+      applyChatEvent(fromFrame, { event: 'done', data: { message_id: 1, followups: [] } }).followups,
+    ).toEqual(['A?', 'B?', 'C?']);
   });
 
   it('keeps a partial answer on error, or shows the detail', () => {

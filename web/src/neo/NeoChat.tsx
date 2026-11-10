@@ -123,9 +123,11 @@ function Tool({ tool }: { tool: ToolChip }) {
 async function copyAnswer(node: HTMLElement | null, text: string) {
   try {
     if (node && typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
+      const clone = node.cloneNode(true) as HTMLElement;
+      clone.querySelectorAll('[data-copy-exclude]').forEach((el) => el.remove());
       await navigator.clipboard.write([
         new ClipboardItem({
-          'text/html': new Blob([node.innerHTML], { type: 'text/html' }),
+          'text/html': new Blob([clone.innerHTML], { type: 'text/html' }),
           'text/plain': new Blob([text], { type: 'text/plain' }),
         }),
       ]);

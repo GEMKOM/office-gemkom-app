@@ -56,7 +56,7 @@ export function jobOrderHref(jobNo: string): string {
  */
 export function safeHref(href: string): { href: string; external: boolean } | null {
   const value = href.trim();
-  if (value.startsWith('/') && !value.startsWith('//')) return { href: value, external: false };
+  if (value.startsWith('/') && !/^\/[/\\]/.test(value)) return { href: value, external: false };
   if (!/^https?:\/\//i.test(value)) return null;
   for (const origin of APP_ORIGINS) {
     if (value.toLowerCase().startsWith(origin)) {

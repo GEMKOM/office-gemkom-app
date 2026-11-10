@@ -147,7 +147,7 @@ function TableBlock({ block, done }: { block: Extract<Block, { type: 'table' }>;
         </table>
       </div>
       {done && block.rows.length > 0 && (
-        <div className={classes.mdTableFoot}>
+        <div className={classes.mdTableFoot} data-copy-exclude>
           <span>{block.rows.length.toLocaleString('tr-TR')} satır</span>
           <Tooltip label="Excel’e aktar" withArrow openDelay={300}>
             <UnstyledButton

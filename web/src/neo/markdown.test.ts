@@ -141,6 +141,7 @@ describe('helpers', () => {
   it('safeHref', () => {
     expect(safeHref('/a')).toEqual({ href: '/a', external: false });
     expect(safeHref('//evil.com')).toBeNull();
+    expect(safeHref('/\\evil.com')).toBeNull();
     expect(safeHref('data:text/html,x')).toBeNull();
   });
 
