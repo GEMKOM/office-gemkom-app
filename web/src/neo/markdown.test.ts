@@ -141,8 +141,13 @@ describe('helpers', () => {
   it('safeHref', () => {
     expect(safeHref('/a')).toEqual({ href: '/a', external: false });
     expect(safeHref('//evil.com')).toBeNull();
-    expect(safeHref('/\\evil.com')).toBeNull();
     expect(safeHref('data:text/html,x')).toBeNull();
+    // Browsers read "\" as "/": these would leave the site.
+    expect(safeHref('/\\evil.com')).toBeNull();
+    expect(safeHref('/\\/evil.com')).toBeNull();
+    expect(safeHref('/a\\b')).toBeNull();
+    expect(safeHref('https://ofis.gemcore.com.tr/\\evil.com')).toBeNull();
+    expect(safeHref('/\tjavascript:x')).toBeNull();
   });
 
   it('splitRow', () => {

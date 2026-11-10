@@ -153,13 +153,13 @@ describe('applyChatEvent', () => {
       data: { message_id: 1, followups: ['X?'] },
     });
     expect(fromDone.followups).toEqual(['X?']);
-    // A done frame without them keeps the ones that came first.
+    // A done frame without them, or with an empty list, keeps the ones that came first.
     expect(applyChatEvent(fromFrame, { event: 'done', data: { message_id: 1 } }).followups).toEqual(
       ['A?', 'B?', 'C?'],
     );
-    // A done frame with an empty array also keeps the ones that came first.
     expect(
-      applyChatEvent(fromFrame, { event: 'done', data: { message_id: 1, followups: [] } }).followups,
+      applyChatEvent(fromFrame, { event: 'done', data: { message_id: 1, followups: [] } })
+        .followups,
     ).toEqual(['A?', 'B?', 'C?']);
   });
 

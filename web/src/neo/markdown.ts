@@ -50,18 +50,33 @@ export function jobOrderHref(jobNo: string): string {
 }
 
 /**
+ * A path that stays on this site. Browsers read "\" as "/", so "/\evil.com"
+ * would be protocol-relative and leave the site: no backslash at all, and no
+ * control characters (which browsers strip before parsing).
+ */
+function isAppPath(value: string): boolean {
+  return (
+    value.startsWith('/') &&
+    !value.startsWith('//') &&
+    !value.includes('\\') &&
+    // eslint-disable-next-line no-control-regex -- control characters are what this rejects
+    !/[\u0000-\u001f\u007f]/.test(value)
+  );
+}
+
+/**
  * The href a link may have, or null to show only its text. In-app paths and
- * http(s) URLs pass; javascript:, data:, protocol-relative and anything else
- * do not.
+ * http(s) URLs pass; javascript:, data:, protocol-relative (also written with
+ * backslashes) and anything else do not.
  */
 export function safeHref(href: string): { href: string; external: boolean } | null {
   const value = href.trim();
-  if (value.startsWith('/') && !/^\/[/\\]/.test(value)) return { href: value, external: false };
+  if (value.startsWith('/')) return isAppPath(value) ? { href: value, external: false } : null;
   if (!/^https?:\/\//i.test(value)) return null;
   for (const origin of APP_ORIGINS) {
     if (value.toLowerCase().startsWith(origin)) {
       const path = value.slice(origin.length) || '/';
-      if (path.startsWith('/')) return { href: path, external: false };
+      if (path.startsWith('/')) return isAppPath(path) ? { href: path, external: false } : null;
     }
   }
   return { href: value, external: true };

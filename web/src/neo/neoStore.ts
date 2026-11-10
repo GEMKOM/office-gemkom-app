@@ -373,9 +373,10 @@ export function applyChatEvent(item: AssistantItem, event: ChatEvent): Assistant
         streaming: false,
         messageId: event.data.message_id ?? null,
       };
-      if (event.data.followups && event.data.followups.length > 0) {
-        next.followups = cleanFollowups(event.data.followups);
-      }
+      // An empty list on done means "none attached here", not "clear the
+      // ones the followups frame already brought".
+      const fromDone = cleanFollowups(event.data.followups);
+      if (fromDone.length > 0) next.followups = fromDone;
       return next;
     }
     case 'error':

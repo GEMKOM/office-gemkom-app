@@ -120,14 +120,19 @@ function Tool({ tool }: { tool: ToolChip }) {
 }
 
 /** Copies the answer as formatted text (tables paste into Excel/Outlook) and as plain text. */
+/** The answer's HTML without panel controls (table footers with "Excel"). */
+export function answerHtml(node: HTMLElement): string {
+  const copy = node.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll('[data-copy-skip]').forEach((el) => el.remove());
+  return copy.innerHTML;
+}
+
 async function copyAnswer(node: HTMLElement | null, text: string) {
   try {
     if (node && typeof ClipboardItem !== 'undefined' && navigator.clipboard?.write) {
-      const clone = node.cloneNode(true) as HTMLElement;
-      clone.querySelectorAll('[data-copy-exclude]').forEach((el) => el.remove());
       await navigator.clipboard.write([
         new ClipboardItem({
-          'text/html': new Blob([clone.innerHTML], { type: 'text/html' }),
+          'text/html': new Blob([answerHtml(node)], { type: 'text/html' }),
           'text/plain': new Blob([text], { type: 'text/plain' }),
         }),
       ]);

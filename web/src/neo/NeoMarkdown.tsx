@@ -147,7 +147,8 @@ function TableBlock({ block, done }: { block: Extract<Block, { type: 'table' }>;
         </table>
       </div>
       {done && block.rows.length > 0 && (
-        <div className={classes.mdTableFoot} data-copy-exclude>
+        // data-copy-skip: "Kopyala" leaves the row count and button out.
+        <div className={classes.mdTableFoot} data-copy-skip>
           <span>{block.rows.length.toLocaleString('tr-TR')} satır</span>
           <Tooltip label="Excel’e aktar" withArrow openDelay={300}>
             <UnstyledButton
