@@ -114,7 +114,11 @@ export function QuizPage() {
               />
             ) : (
               <p className={css.panelNote}>
-                {week.isPending ? 'Yükleniyor…' : 'Bu hafta henüz kimse oynamadı.'}
+                {week.isPending
+                  ? 'Yükleniyor…'
+                  : week.isError
+                    ? 'Sıralama yüklenemedi.'
+                    : 'Bu hafta henüz kimse oynamadı.'}
               </p>
             )}
           </Panel>

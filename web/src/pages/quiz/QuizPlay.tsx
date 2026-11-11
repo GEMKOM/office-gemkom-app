@@ -56,6 +56,12 @@ export function QuizPlay({ today }: { today: QuizToday }) {
         void queryClient.invalidateQueries({ queryKey: quizKeys.all });
         return;
       }
+      // A question means the attempt is under way: a cached 'available'
+      // would otherwise offer Başla again (home card, a remount) while the
+      // server's clock runs.
+      if (queryClient.getQueryData<QuizToday>(quizKeys.today)?.status !== 'in_progress') {
+        void queryClient.invalidateQueries({ queryKey: quizKeys.today });
+      }
       const at = performance.now();
       setNow(at);
       setLive((prev) => {

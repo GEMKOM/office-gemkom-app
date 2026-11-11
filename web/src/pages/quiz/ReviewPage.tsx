@@ -1,4 +1,4 @@
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { reportQuizQuestion, type QuizReviewQuestion } from '@/api/quiz';
@@ -13,7 +13,7 @@ import {
   notify,
   type PageFigure,
 } from '@/ui';
-import { useQuizReview, useQuizToday } from './queries';
+import { quizKeys, useQuizReview, useQuizToday } from './queries';
 import { CATEGORY_FAMILY, CHOICE_LETTERS, dayDate, toNumber } from './quizFormat';
 import css from './quiz.module.css';
 
@@ -116,11 +116,15 @@ function resultBadge(q: QuizReviewQuestion, played: boolean) {
 }
 
 function ReviewCard({ q, played }: { q: QuizReviewQuestion; played: boolean }) {
+  const queryClient = useQueryClient();
   const [reported, setReported] = useState(false);
   const report = useMutation({
     mutationFn: () => reportQuizQuestion(q.id, ''),
     onSuccess: (res) => {
       setReported(true);
+      // A void rescored everyone: this review, the band figures and the
+      // leaderboards all change.
+      if (res.voided) void queryClient.invalidateQueries({ queryKey: quizKeys.all });
       notify.success(
         res.voided
           ? 'Bildiriminiz alındı; soru iptal edildi.'

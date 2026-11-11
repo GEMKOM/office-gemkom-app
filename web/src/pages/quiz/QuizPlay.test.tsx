@@ -2,6 +2,7 @@ import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import type { QuizQuestion, QuizToday } from '@/api/quiz';
 import { renderWithProviders } from '@/test/render';
+import { quizKeys } from './queries';
 import { QuizPlay } from './QuizPlay';
 
 vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
@@ -155,4 +156,14 @@ it('says when there is no quiz at the weekend', async () => {
   renderWithProviders(<QuizPlay today={today({ status: 'none', date: '2026-11-14' })} />);
   expect(screen.getByRole('heading', { name: 'Hafta sonu quiz yok' })).toBeInTheDocument();
   await waitFor(() => expect(fetchMock).not.toHaveBeenCalled());
+});
+
+it('marks the cached day as stale once a question is served, so nothing offers Başla again', async () => {
+  queue['POST /quiz/today/start/'] = [{ question: choiceQ(), done: false, attempt: null }];
+  const { queryClient } = renderWithProviders(<QuizPlay today={today()} />);
+  queryClient.setQueryData(quizKeys.today, today());
+
+  fireEvent.click(screen.getByRole('button', { name: /Başla/ }));
+  await screen.findByRole('heading', { name: 'Fe hangi elementtir?' });
+  expect(queryClient.getQueryState(quizKeys.today)?.isInvalidated).toBe(true);
 });
