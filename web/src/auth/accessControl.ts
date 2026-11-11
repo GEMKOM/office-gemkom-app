@@ -40,6 +40,8 @@ const ALWAYS_ALLOWED_ROUTES = new Set([
 
 // Routes that are additionally unlocked by a non-page permission codename.
 const ROUTE_EXTRA_CODENAMES: Record<string, string[]> = {
+  // Quiz Onayı: the quiz API gates it by manage_quiz, not a page grant.
+  '/quiz/manage': ['manage_quiz'],
   // The Neo analytics page is gated in the backend by manage_assistant_analytics
   // (not a page grant), so holders must see the menu entry and pass the guard.
   '/it/neo': ['manage_assistant_analytics'],

@@ -631,6 +631,10 @@ export const appRoutes: RouteObject[] = [
     lazy: async () => ({ Component: (await import('@/pages/quiz/ReviewPage')).ReviewPage }),
   },
   {
+    path: '/quiz/manage',
+    lazy: async () => ({ Component: (await import('@/pages/quiz/ManagePage')).ManagePage }),
+  },
+  {
     path: '/general/notifications',
     lazy: async () => ({
       Component: (await import('@/pages/general/notifications/NotificationsPage'))
