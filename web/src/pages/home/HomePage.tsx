@@ -5,6 +5,7 @@ import { AttentionPanel, HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';
 import { NeoHomePanel } from '@/neo';
 import { allNavPages } from '@/shell/pageVisits';
 import { useUnreadCount } from '@/shell/notifications';
+import { SpecialDaysPanel, useTodayOccasions } from '@/shell/occasion';
 import { formatDate, formatNumber } from '@/lib/format';
 import { PageHeader, Panel, PendingValue, type PageFigure } from '@/ui';
 import { useApprovals, userDepartment } from './approvals';
@@ -38,6 +39,7 @@ export function HomePage() {
   const isg = useMyIsg();
   const requests = useMyRequests(user.id);
   const unread = useUnreadCount();
+  const occasions = useTodayOccasions();
   const { pinned, toggle } = usePinnedPages(user.id);
   const menuPages = useMemo(() => allNavPages().filter((page) => page.path !== '/' && hasRouteAccess(page.path)), []);
 
@@ -83,8 +85,15 @@ export function HomePage() {
   });
 
   const firstName = user.first_name || user.username;
+  // On a special day the band greets with it: the person's own day takes the
+  // title ("İyi ki doğdunuz, Ayşe"), a holiday or company day leads the subtitle.
+  const occasion = occasions.primary;
+  const ownDay = occasion && (occasion.kind === 'birthday' || occasion.kind === 'work_anniversary');
+  const title = ownDay && occasion.title ? occasion.title : `${greeting()}, ${firstName}`;
   const subtitle = [
-    formatDate(new Date(), { weekday: 'long', day: 'numeric', month: 'long' }),
+    !ownDay && occasion ? occasion.title || occasion.name : null,
+    // The day the occasions are for (an HR preview shows another day).
+    formatDate(occasions.data?.date || new Date(), { weekday: 'long', day: 'numeric', month: 'long' }),
     positionTitle,
     departmentCode ? DEPARTMENT_LABELS[departmentCode] : null,
   ]
@@ -140,7 +149,7 @@ export function HomePage() {
   return (
     <>
       <PageHeader
-        title={`${greeting()}, ${firstName}`}
+        title={title}
         subtitle={subtitle}
         stats={stats}
         figureStyle="tiles"
@@ -160,6 +169,7 @@ export function HomePage() {
         </div>
         <div key="side" className={css.column}>
           <NeoHomePanel />
+          <SpecialDaysPanel />
           {!approvals.none ? (
             <AttentionPanel title="Onay Kuyruklarım" icon="fas fa-inbox" items={approvals.items} badges />
           ) : null}

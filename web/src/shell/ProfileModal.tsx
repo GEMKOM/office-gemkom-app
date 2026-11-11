@@ -1,12 +1,15 @@
 import { getUser } from '@/auth/authService';
-import { Button, Modal, Stack, TextInput } from '@mantine/core';
+import { Button, Modal, Stack, Switch, TextInput } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { apiFetch } from '@/api/client';
 import { useAuth } from '@/auth/AuthProvider';
 
-/** "Profili Düzenle": the same PUT /users/me/ the legacy navbar modal sends. */
+/**
+ * "Profili Düzenle": the same PUT /users/me/ the legacy navbar modal sends,
+ * plus hide_birthday (Özel Günler opt-out).
+ */
 export function ProfileModal({ opened, onClose }: { opened: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
@@ -15,6 +18,7 @@ export function ProfileModal({ opened, onClose }: { opened: boolean; onClose: ()
       first_name: user.first_name ?? '',
       last_name: user.last_name ?? '',
       email: user.email ?? '',
+      hide_birthday: user.hide_birthday === true,
     },
     validate: {
       first_name: (v) => (v.trim() ? null : 'Ad gerekli'),
@@ -44,6 +48,11 @@ export function ProfileModal({ opened, onClose }: { opened: boolean; onClose: ()
           <TextInput label="Ad" required {...form.getInputProps('first_name')} />
           <TextInput label="Soyad" required {...form.getInputProps('last_name')} />
           <TextInput label="Email" type="email" required {...form.getInputProps('email')} />
+          <Switch
+            label="Doğum günümü gösterme"
+            description="Açıkken doğum gününüz Özel Günler listelerinde görünmez ve size kutlama gönderilemez."
+            {...form.getInputProps('hide_birthday', { type: 'checkbox' })}
+          />
           <Button type="submit" loading={saving} fullWidth>
             Kaydet
           </Button>

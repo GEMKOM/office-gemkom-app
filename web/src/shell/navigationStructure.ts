@@ -800,6 +800,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-calendar-check',
         children: {},
       },
+      '/human_resources/special-days': {
+        label: 'Özel Günler',
+        icon: 'fas fa-cake-candles',
+        children: {},
+      },
       '/human_resources/org': {
         label: 'Organizasyon',
         icon: 'fas fa-sitemap',

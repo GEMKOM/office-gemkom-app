@@ -82,6 +82,13 @@ export function HumanResourcesHubPage() {
       link: VACATION,
       stat: { value: countValue(leaveInbox), label: 'izin onayı bekliyor' },
     },
+    {
+      title: 'Özel Günler',
+      description: 'Uygulamanın bayramlarda ve özel günlerde nasıl görüneceğini önizleyin',
+      icon: 'fas fa-cake-candles',
+      iconColor: 'danger',
+      link: '/human_resources/special-days',
+    },
   ];
 
   // What waits on HR first, then the head counts.
