@@ -57,8 +57,8 @@ describe('moved pages', () => {
   it('shows the menu entries an old grant opens', () => {
     legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/remnants']);
     const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
-    // '/' and '/general' are open to everyone.
-    expect(Object.keys(tree)).toEqual(['/', '/general', '/planning']);
+    // '/', '/quiz' and '/general' are open to everyone.
+    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning']);
     const planning = tree['/planning']!.children;
     expect(Object.keys(planning)).toEqual(['/planning/cnc-cutting']);
     expect(Object.keys(planning['/planning/cnc-cutting']!.children)).toEqual([

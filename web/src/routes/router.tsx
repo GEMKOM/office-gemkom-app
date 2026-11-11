@@ -616,6 +616,20 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/general/machines/MachinesPage')).MachinesPage,
     }),
   },
+  // Günün Quizi: personal like notifications (ALWAYS_ALLOWED_ROUTES); the API
+  // itself admits office-portal users only.
+  {
+    path: '/quiz',
+    lazy: async () => ({ Component: (await import('@/pages/quiz/QuizPage')).QuizPage }),
+  },
+  {
+    path: '/quiz/leaderboard',
+    lazy: async () => ({ Component: (await import('@/pages/quiz/LeaderboardPage')).LeaderboardPage }),
+  },
+  {
+    path: '/quiz/review',
+    lazy: async () => ({ Component: (await import('@/pages/quiz/ReviewPage')).ReviewPage }),
+  },
   {
     path: '/general/notifications',
     lazy: async () => ({
