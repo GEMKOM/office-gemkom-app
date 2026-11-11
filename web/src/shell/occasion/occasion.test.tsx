@@ -293,6 +293,30 @@ describe('HR preview', () => {
     expect(screen.queryByTestId('occasion-preview-banner')).not.toBeInTheDocument();
   });
 
+  it('welcomes again when the same day is previewed again', async () => {
+    fetchMock.mockImplementation((url) => {
+      const u = new URL(String(url));
+      if (u.pathname === '/special-days/today/' && u.searchParams.get('date') === '2026-10-28')
+        return json(ARIFE);
+      return json({ date: '2026-11-12', occasions: [], colleagues: [], received: [] });
+    });
+    renderWithProviders(<OccasionLayer />);
+    act(() => startOccasionPreview('2026-10-28'));
+    fireEvent.click(await screen.findByRole('button', { name: 'Uygulamaya Geç' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+
+    act(() => endOccasionPreview());
+    act(() => startOccasionPreview('2026-10-28'));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+
+    // Restarting without ending first is a new preview too.
+    fireEvent.click(screen.getByRole('button', { name: 'Uygulamaya Geç' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    act(() => startOccasionPreview('2026-10-28'));
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    act(() => endOccasionPreview());
+  });
+
   it('turns Kutla off and moves the coming days to the previewed day', async () => {
     startOccasionPreview('2026-10-28');
     renderWithProviders(<SpecialDaysPanel />);

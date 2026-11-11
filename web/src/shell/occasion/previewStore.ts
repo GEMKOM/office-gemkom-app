@@ -16,6 +16,10 @@ const KEY = 'gk.occasion.preview';
 const EVENT = 'gk-occasion-preview';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+// Bumped on every start and end, so starting the same day again is a new
+// preview (its welcome shows again) even though the date did not change.
+let generation = 0;
+
 /** Whether the signed-in user may preview days (mirrors the backend's is_hr). */
 export function canPreviewOccasions(): boolean {
   return isAdmin() || hasPerm('manage_hr');
@@ -45,6 +49,7 @@ export function startOccasionPreview(date: string): void {
   }
   // Each preview opens with the day's welcome, even a day seen before.
   resetPreviewSeen(date);
+  generation += 1;
   window.dispatchEvent(new Event(EVENT));
 }
 
@@ -54,6 +59,7 @@ export function endOccasionPreview(): void {
   } catch {
     // nothing stored
   }
+  generation += 1;
   window.dispatchEvent(new Event(EVENT));
 }
 
@@ -64,4 +70,18 @@ function subscribe(onChange: () => void) {
 
 export function useOccasionPreview(): string | null {
   return useSyncExternalStore(subscribe, getOccasionPreview, () => null);
+}
+
+/**
+ * Which preview this is: null outside one, else the day plus a counter that
+ * changes on every start, so a restart of the same day is a fresh preview.
+ */
+export function useOccasionPreviewScope(): string | null {
+  const preview = useOccasionPreview();
+  const current = useSyncExternalStore(
+    subscribe,
+    () => generation,
+    () => 0,
+  );
+  return preview ? `${preview}#${current}` : null;
 }

@@ -19,7 +19,7 @@ import {
   THEME_TONE,
 } from './occasionModel';
 import classes from './occasion.module.css';
-import { useOccasionPreview } from './previewStore';
+import { useOccasionPreview, useOccasionPreviewScope } from './previewStore';
 
 /**
  * Today's occasions, for the layer and for pages (the home band, its panel);
@@ -45,19 +45,22 @@ function dialogOpen() {
 export function OccasionLayer() {
   const { user, isImpersonating } = useAuth();
   const { data, primary, preview } = useTodayOccasions();
+  // What closed and open welcomes belong to: the real day (null) or this one
+  // preview; a restarted preview of the same day is a new scope.
+  const scope = useOccasionPreviewScope();
   // Welcomes closed in this tab, per previewed day (null: the real today); a
   // preview only remembers them here, so each new preview welcomes again.
   const [closedBy, setClosedBy] = useState<{ scope: string | null; keys: ReadonlySet<string> }>(
-    () => ({ scope: preview, keys: new Set() }),
+    () => ({ scope, keys: new Set() }),
   );
   const closed = useMemo(
-    () => (closedBy.scope === preview ? closedBy.keys : new Set<string>()),
-    [closedBy, preview],
+    () => (closedBy.scope === scope ? closedBy.keys : new Set<string>()),
+    [closedBy, scope],
   );
   // The welcome on screen, for the day it was opened for: starting or ending a
   // preview drops a welcome that is up for the other day.
   const [open, setOpen] = useState<{ scope: string | null; occasion: Occasion } | null>(null);
-  const current = open && open.scope === preview ? open.occasion : null;
+  const current = open && open.scope === scope ? open.occasion : null;
   // Until today's answer arrives, the theme this browser saw earlier today,
   // so a full page load doesn't flash the plain red band first.
   const [cached] = useState(() => cachedTheme());
@@ -87,19 +90,19 @@ export function OccasionLayer() {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const tryOpen = () => {
       if (document.visibilityState === 'visible' && !dialogOpen())
-        setOpen({ scope: preview, occasion: next });
+        setOpen({ scope, occasion: next });
       else timer = setTimeout(tryOpen, 1500);
     };
     tryOpen();
     return () => clearTimeout(timer);
-  }, [next, current, preview]);
+  }, [next, current, scope]);
 
   if (!current || !data) return null;
 
   const close = () => {
     if (preview) markSeenInPreview(preview, current.key);
     else markSeen(user.id, current.key);
-    setClosedBy({ scope: preview, keys: new Set(closed).add(current.key) });
+    setClosedBy({ scope, keys: new Set(closed).add(current.key) });
     setOpen(null);
   };
   const received = data.received.filter((r) => r.kind === current.kind);
