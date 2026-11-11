@@ -56,6 +56,46 @@
   }
 }
 
+/* Özel Günler, direction C "Tema günü": on a special day OccasionLayer sets
+   data-occasion on <html>; the band takes the day's colour and a quiet motif.
+   Colours mirror THEME_TONE in shell/occasion/occasionModel.ts. Band text
+   gets a lighter secondary white so it clears 4.5:1 on every tone. */
+:root[data-occasion] {
+  --gk-on-band-muted: rgba(255, 255, 255, 0.9);
+}
+
+:root[data-occasion='birthday'],
+:root[data-occasion='anniversary'] {
+  --gk-band-motif: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 620 190'><g fill='none' stroke='white' stroke-width='3' stroke-linecap='round' opacity='.26'><path d='M60 40q10-14 20 0t20 0M300 150q10-14 20 0t20 0M520 60q10-14 20 0t20 0'/><path d='M180 30l16 16M420 120l16-16M580 150l16 16'/></g><g fill='white' opacity='.2'><circle cx='120' cy='110' r='6'/><circle cx='250' cy='70' r='4'/><circle cx='380' cy='40' r='7'/><circle cx='470' cy='160' r='5'/><circle cx='560' cy='20' r='4'/><rect x='330' y='90' width='12' height='12' transform='rotate(30 336 96)'/><rect x='210' y='140' width='10' height='10' transform='rotate(15 215 145)'/><rect x='600' y='100' width='12' height='12' transform='rotate(45 606 106)'/><path d='M150 170l10-18 10 18zM500 100l10-18 10 18z'/></g></svg>");
+}
+
+:root[data-occasion='birthday'] {
+  --gk-band-bg: #4a2366;
+}
+
+:root[data-occasion='anniversary'] {
+  --gk-band-bg: #1f3a5f;
+}
+
+:root[data-occasion='national'] {
+  --gk-band-bg: #c8102e;
+  --gk-band-motif: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 240'><defs><mask id='m'><rect width='300' height='240' fill='white'/><circle cx='150' cy='120' r='84' fill='black'/></mask></defs><g fill='white' opacity='.2'><circle cx='120' cy='120' r='105' mask='url(%23m)'/><path d='M236 120L189 135.3 218 95.3 218 144.7 189 104.7z'/></g></svg>");
+}
+
+:root[data-occasion='religious'] {
+  --gk-band-bg: #0d5e58;
+  --gk-band-motif: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 240'><defs><mask id='m'><rect width='300' height='240' fill='white'/><circle cx='175' cy='105' r='80' fill='black'/></mask></defs><g fill='white' opacity='.2'><circle cx='140' cy='120' r='95' mask='url(%23m)'/><circle cx='250' cy='60' r='5'/><circle cx='275' cy='150' r='3.5'/><circle cx='225' cy='200' r='4'/></g></svg>");
+}
+
+:root[data-occasion='company'],
+:root[data-occasion='soft'] {
+  --gk-band-motif: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 620 190'><g fill='white' opacity='.2'><path d='M140 60l6 18 18 6-18 6-6 18-6-18-18-6 18-6z'/><path d='M330 120l4 12 12 4-12 4-4 12-4-12-12-4 12-4z'/><path d='M520 40l7 21 21 7-21 7-7 21-7-21-21-7 21-7z'/><circle cx='240' cy='40' r='4'/><circle cx='430' cy='160' r='5'/><circle cx='590' cy='130' r='3'/></g></svg>");
+}
+
+:root[data-occasion='soft'] {
+  --gk-band-bg: #8a2852;
+}
+
 body {
   background: var(--gk-page);
   color: var(--gk-ink);

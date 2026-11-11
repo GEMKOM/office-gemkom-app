@@ -44,6 +44,9 @@ const ROUTE_EXTRA_CODENAMES: Record<string, string[]> = {
   // Dönemsel iş maliyeti reads the cost table's data; the endpoint needs
   // view_job_costs, so holders of it can open the page.
   '/accounting/job-cost-by-period': ['view_job_costs'],
+  // Özel gün önizlemesi: the backend honours a previewed date for manage_hr
+  // (and staff/superusers), so the page opens for the same people.
+  '/human_resources/special-days': ['manage_hr'],
 };
 
 // Routes that inherit access from another page's grant: whoever can open the

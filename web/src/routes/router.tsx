@@ -932,6 +932,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/human_resources/special-days',
+    lazy: async () => ({
+      Component: (await import('@/pages/human_resources/special-days/SpecialDaysPreviewPage'))
+        .SpecialDaysPreviewPage,
+    }),
+  },
+  {
     path: '/human_resources/vacation',
     lazy: async () => ({
       Component: (await import('@/pages/human_resources/vacation/HrVacationPage')).HrVacationPage,

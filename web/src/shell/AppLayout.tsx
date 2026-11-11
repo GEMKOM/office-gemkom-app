@@ -16,6 +16,7 @@ import { AppLink } from './AppLink';
 import { AttendanceButton } from './AttendanceButton';
 import { NavBadgesProvider } from './navBadges';
 import { NotificationBell } from './NotificationBell';
+import { OccasionLayer, OccasionPreviewBanner } from './occasion';
 import { useRecordVisits } from './pageVisits';
 import { Rail } from './Rail';
 import { useRailExpanded } from './railState';
@@ -28,7 +29,8 @@ import { ImpersonationBadge, UserMenu } from './UserMenu';
  * Chrome around every React page: the rail on the left (icons, or labels when
  * the user expands it); on small screens a top bar whose burger opens the
  * whole menu in a drawer. Neo docks on the right and narrows the page; it
- * lives here, so it keeps its conversation from page to page.
+ * lives here, so it keeps its conversation from page to page. OccasionLayer
+ * re-themes the band on special days and opens their welcome.
  */
 export function AppLayout() {
   const [drawerOpened, drawer] = useDisclosure(false);
@@ -86,7 +88,9 @@ export function AppLayout() {
 
       <AppShell.Main>
         <ImpersonationBadge />
+        <OccasionPreviewBanner />
         <DailySummaryPrompt />
+        <OccasionLayer />
         <div className={classes.content}>
           <RequireRoute>
             <Outlet />

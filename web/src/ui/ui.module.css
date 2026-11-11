@@ -4,8 +4,14 @@
 .band {
   margin: -24px calc(var(--gk-page-pad) * -1) 0;
   padding: 18px var(--gk-page-pad) calc(var(--gk-band-overlap) + 20px);
-  background: var(--gk-red-700);
+  /* Red, unless a special day re-themes it (global.css, [data-occasion]). */
+  background-color: var(--gk-band-bg, var(--gk-red-700));
+  background-image: var(--gk-band-motif, none);
+  background-repeat: no-repeat;
+  background-position: right 40px center;
+  background-size: auto 100%;
   color: var(--gk-on-dark);
+  transition: background-color 200ms ease-out;
 }
 
 /* The block after the band rises into it. */
