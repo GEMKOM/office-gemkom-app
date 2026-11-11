@@ -92,7 +92,7 @@ export function NeoAskButton({
             }
             onClick={() => {
               beforeAsk?.();
-              setNeoPage(page);
+              setNeoPage(page, { force: true });
               void askNeo(question, 'page_button');
             }}
           >
@@ -104,7 +104,7 @@ export function NeoAskButton({
           leftSection={<FaIcon icon="fas fa-pen" size={11} />}
           onClick={() => {
             beforeAsk?.();
-            setNeoPage(page);
+            setNeoPage(page, { force: true });
             openNeo({ view: 'chat' });
           }}
         >

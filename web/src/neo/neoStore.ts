@@ -83,6 +83,8 @@ export interface NeoState {
   page: NeoPageContext | null;
   /** The user took the page pill off: questions go without it until the page changes. */
   pageOff: boolean;
+  /** The page was explicitly set via setNeoPage({ force: true }); clearNeoPage skips clearing. */
+  pagePinned: boolean;
 }
 
 export interface OpenNeoOptions {
@@ -122,6 +124,7 @@ const initialState = (): NeoState => ({
   wide: false,
   page: null,
   pageOff: false,
+  pagePinned: false,
 });
 
 let state: NeoState = initialState();
@@ -417,15 +420,24 @@ const samePage = (a: NeoPageContext | null, b: NeoPageContext | null) =>
   !!a && !!b && a.type === b.type && a.id === b.id;
 
 /** A page shows this record. A new record brings the pill back. */
-export function setNeoPage(page: NeoPageContext) {
+export function setNeoPage(page: NeoPageContext, { force = false } = {}) {
   const s = state;
-  if (samePage(s.page, page) && s.page?.label === page.label) return;
-  set({ page, pageOff: samePage(s.page, page) ? s.pageOff : false });
+  if (!force && samePage(s.page, page) && s.page?.label === page.label) return;
+  set({
+    page,
+    pageOff: force ? false : samePage(s.page, page) ? s.pageOff : false,
+    pagePinned: force,
+  });
 }
 
 /** The page closed. Only its own record is cleared (the next page may have set one already). */
 export function clearNeoPage(page: NeoPageContext) {
-  if (samePage(state.page, page)) set({ page: null, pageOff: false });
+  if (!samePage(state.page, page)) return;
+  if (state.pagePinned) {
+    set({ pagePinned: false });
+  } else {
+    set({ page: null, pageOff: false, pagePinned: false });
+  }
 }
 
 /** The pill's ×. */
