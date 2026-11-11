@@ -592,6 +592,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-layer-group',
         children: {},
       },
+      '/warehouse/piece-counts': {
+        label: 'Sac ve Boy Sayımı',
+        icon: 'fas fa-ruler-combined',
+        children: {},
+      },
     },
   },
   '/logistics': {

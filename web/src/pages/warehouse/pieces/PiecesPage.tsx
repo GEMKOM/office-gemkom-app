@@ -1,5 +1,6 @@
 import {
   Alert,
+  Checkbox,
   Button,
   Group,
   NumberInput,
@@ -37,6 +38,7 @@ import {
   type PieceKind,
   type PiecePlace,
 } from '@/api/warehouse/pieces';
+import { mikroComparisonQueryOptions, type MikroComparisonRow } from '@/api/warehouse/pieceCounts';
 import { hasPerm, isAdmin } from '@/auth/authService';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import {
@@ -698,13 +700,145 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
 
 const EMPTY_PIECES: MaterialPiece[] = [];
 const EMPTY_CARDS: PieceCard[] = [];
+const EMPTY_MIKRO: MikroComparisonRow[] = [];
+
+const BASIS_UNIT: Record<string, string> = { kg: 'kg', metre: 'm', adet: 'adet' };
+
+function amount(value: string | number | null, basis: string): string {
+  return `${formatNumber(value ?? 0, basis === 'adet' ? 0 : 2)} ${BASIS_UNIT[basis] ?? ''}`.trim();
+}
+
+const mikroColumns: DataTableColumn<MikroComparisonRow>[] = [
+  {
+    key: 'card',
+    header: 'Stok Kartı',
+    render: (row) => (
+      <Stack gap={0}>
+        <Group gap={6} wrap="nowrap">
+          <Text size="sm" fw={600} style={mono}>
+            {row.code}
+          </Text>
+          {row.in_app ? null : <StatusBadge color="grey">Uygulamada kart yok</StatusBadge>}
+        </Group>
+        <Text size="xs" c="dimmed">
+          {row.name}
+        </Text>
+      </Stack>
+    ),
+  },
+  {
+    key: 'basis',
+    header: 'Karşılaştırma',
+    render: (row) =>
+      row.basis === 'kg'
+        ? 'Ağırlık'
+        : row.basis === 'metre'
+          ? 'Toplam boy'
+          : row.basis
+            ? 'Adet'
+            : '–',
+  },
+  { key: 'pieces', header: 'Parça', align: 'right', render: (row) => row.pieces },
+  {
+    key: 'stock',
+    header: 'Stokta',
+    align: 'right',
+    render: (row) =>
+      !row.in_app ? (
+        '–'
+      ) : row.stock === null ? (
+        <Weight value={null} kind={row.kind} missing={row.missing} />
+      ) : (
+        amount(row.stock, row.basis)
+      ),
+  },
+  {
+    key: 'mikro',
+    header: "Mikro'da",
+    align: 'right',
+    render: (row) => amount(row.mikro, row.basis || 'kg'),
+  },
+  {
+    key: 'difference',
+    header: 'Fark',
+    align: 'right',
+    render: (row) => {
+      if (row.difference === null) return '–';
+      const n = Number(row.difference);
+      return (
+        <Text span size="sm" fw={500} c={n < 0 ? 'red.8' : n > 0 ? 'green.8' : 'dimmed'}>
+          {n > 0 ? '+' : ''}
+          {amount(row.difference, row.basis)}
+        </Text>
+      );
+    },
+  },
+];
+
+/** Piece stock vs Mikro's balance, card by card, each in its own unit. */
+function MikroTable({
+  search,
+  kind,
+  toolbar,
+  filters,
+}: {
+  search: string;
+  kind: PieceKind | '';
+  toolbar: ReactNode;
+  filters: ReactNode;
+}) {
+  const [page, setPage] = useState(1);
+  const [onlyDiff, setOnlyDiff] = useState(false);
+  const rows = useQuery({
+    ...mikroComparisonQueryOptions({
+      page,
+      page_size: PAGE_SIZE,
+      ...(search ? { search } : {}),
+      ...(kind ? { kind } : {}),
+      ...(onlyDiff ? { only_diff: 'true' as const } : {}),
+    }),
+    placeholderData: keepPreviousData,
+  });
+  return (
+    <DataTable
+      title="Mikro ile karşılaştırma"
+      icon="fas fa-balance-scale"
+      toolbar={
+        <Group gap="xs">
+          <Checkbox
+            size="xs"
+            label="Sadece farklı"
+            checked={onlyDiff}
+            onChange={(e) => {
+              setOnlyDiff(e.currentTarget.checked);
+              setPage(1);
+            }}
+          />
+          {toolbar}
+        </Group>
+      }
+      filters={filters}
+      data={rows.data?.results ?? EMPTY_MIKRO}
+      columns={mikroColumns}
+      getRowId={(row) => row.code}
+      loading={rows.isFetching}
+      pagination={{
+        page,
+        pageSize: PAGE_SIZE,
+        total: rows.data?.count ?? 0,
+        onPageChange: setPage,
+      }}
+      emptyMessage="Karşılaştırılacak kart yok (Mikro bakiyeleri yüklenmemiş olabilir)"
+    />
+  );
+}
 
 /** Sac & boy stoğu: plate and boy material in pieces, by lot or by stock card. */
 export function PiecesPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
   const [creating, setCreating] = useState(false);
-  const view = values.view === 'cards' ? 'cards' : 'pieces';
+  const view = values.view === 'cards' || values.view === 'mikro' ? values.view : 'pieces';
   const kind = values.kind === 'plate' || values.kind === 'boy' ? values.kind : '';
 
   // Every card that holds pieces, for the band's figures and the Kartlar view.
@@ -767,6 +901,7 @@ export function PiecesPage() {
       data={[
         { value: 'pieces', label: 'Parçalar' },
         { value: 'cards', label: 'Kartlar' },
+        { value: 'mikro', label: 'Mikro ile' },
       ]}
     />
   );
@@ -854,6 +989,8 @@ export function PiecesPage() {
           }}
           emptyMessage="Bu filtrelerle parça yok"
         />
+      ) : view === 'mikro' ? (
+        <MikroTable search={values.search} kind={kind} toolbar={viewSwitch} filters={filters} />
       ) : (
         <DataTable
           title="Kartlar"
