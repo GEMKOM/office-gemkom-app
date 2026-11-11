@@ -37,6 +37,7 @@ function respond(url: string) {
 
 const calledPaths = () => fetchMock.mock.calls.map(([url]) => new URL(String(url)).pathname);
 const panel = (title: string) => screen.getByRole('heading', { level: 2, name: title }).closest('section')!;
+const queueBar = () => screen.getByRole('navigation', { name: 'Onay kuyrukları' });
 const tile = (label: string) => screen.getByText(label, { selector: 'span' }).closest('li')!;
 
 beforeEach(() => {
@@ -81,7 +82,9 @@ it('greets the user and lists what waits on their approval, each linking to its 
   // Oldest first: the request waiting longest leads.
   expect(list.getAllByRole('link')[0]).toHaveTextContent('SAT-1');
 
-  const queues = within(panel('Onay Kuyruklarım'));
+  // The queues sit under the list, in the same panel, only those with something waiting.
+  await waitFor(() => expect(within(panel('Onayınızı Bekleyenler')).getByRole('navigation', { name: 'Onay kuyrukları' })).toBeInTheDocument());
+  const queues = within(queueBar());
   expect(queues.getByRole('link', { name: /Satın alma talepleri/ })).toHaveTextContent('2');
   expect(queues.getByRole('link', { name: /Uygunsuzluk raporları/ })).toHaveAttribute('href', '/quality-control/ncrs');
   expect(queues.getByRole('link', { name: /Ödeme listeleri/ })).toBeInTheDocument();
@@ -124,8 +127,7 @@ it('shows the tasks assigned to the user, overdue ones flagged, each opening on 
     await waitFor(() => expect(within(tile('Geciken')).getByText('1')).toBeInTheDocument());
 
     // Only the releases this user may review count.
-    const queues = within(panel('Onay Kuyruklarım'));
-    await waitFor(() => expect(queues.getByRole('link', { name: /Çizim onayları/ })).toHaveTextContent('1'));
+    await waitFor(() => expect(within(queueBar()).getByRole('link', { name: /Çizim onayları/ })).toHaveTextContent('1'));
     expect(within(panel('Onayınızı Bekleyenler')).queryByText('Silo')).not.toBeInTheDocument();
   } finally {
     vi.useRealTimers();
@@ -168,7 +170,7 @@ it('shows a calm note when nothing at all waits on the user', async () => {
 it('shows an empty approval list as good news, not as a blank panel', async () => {
   renderWithProviders(<HomePage />);
   expect(await within(panel('Onayınızı Bekleyenler')).findByText(/Şu an onayınızı bekleyen bir şey yok/)).toBeInTheDocument();
-  expect(await within(panel('Onay Kuyruklarım')).findByText('Bekleyen bir iş yok')).toBeInTheDocument();
+  expect(screen.queryByRole('navigation', { name: 'Onay kuyrukları' })).not.toBeInTheDocument();
 });
 
 it('lists the latest notifications, unread marked, linking to all of them', async () => {
@@ -216,8 +218,8 @@ it('offers the department pages as shortcuts until the user has favourites of th
 it('sits right under the band, before the panels', () => {
   renderWithProviders(<HomePage />);
   const bar = panel('Kısayollar');
-  const queues = panel('Onay Kuyruklarım');
-  expect(bar.compareDocumentPosition(queues) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  const approvals = panel('Onayınızı Bekleyenler');
+  expect(bar.compareDocumentPosition(approvals) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByRole('heading', { name: 'Çalışma Alanları' })).not.toBeInTheDocument();
 });
 
@@ -257,14 +259,27 @@ it('badges what waits on the user in red, and drops the badges when nothing does
 
   const approvals = panel('Onayınızı Bekleyenler');
   await waitFor(() => expect(approvals.querySelector('[data-count-badge]')).toHaveTextContent('12'));
-  const queues = panel('Onay Kuyruklarım');
-  expect(queues.querySelector('[data-count-badge]')).toHaveTextContent('12');
-  expect(queues.querySelector('a[href="/procurement/purchase-requests/pending"] [data-count-badge]')).toHaveTextContent('12');
+  await waitFor(() =>
+    expect(queueBar().querySelector('a[href="/procurement/purchase-requests/pending"] [data-count-badge]')).toHaveTextContent('12'),
+  );
   await waitFor(() => expect(panel('Son Bildirimler').querySelector('[data-count-badge]')).toHaveTextContent('3'));
   unmount();
 
   responses = {};
   renderWithProviders(<HomePage />);
-  await within(panel('Onay Kuyruklarım')).findByText('Bekleyen bir iş yok');
+  await within(panel('Onayınızı Bekleyenler')).findByText(/Şu an onayınızı bekleyen bir şey yok/);
   expect(document.querySelector('[data-count-badge]')).toBeNull();
+});
+
+it('keeps the long lists on the left and the short cards about today on the right', async () => {
+  renderWithProviders(<HomePage />);
+  const column = (title: string) => panel(title).parentElement!.closest('div')!;
+  await screen.findByRole('heading', { level: 2, name: 'Son Bildirimler' });
+  // HubPanels renders the main column first, then the side one.
+  expect(column('Son Bildirimler')).toBe(column('Onayınızı Bekleyenler'));
+  expect(column('Bugün')).not.toBe(column('Son Bildirimler'));
+  expect(
+    panel('Son Bildirimler').compareDocumentPosition(panel('Bugün')) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'Onay Kuyruklarım' })).not.toBeInTheDocument();
 });

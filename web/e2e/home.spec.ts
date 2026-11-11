@@ -46,7 +46,8 @@ test('a waiting purchase request opens on the pending page, client-side', async 
   await page.goto('/');
   const main = page.getByRole('main');
   await expect(main.getByRole('heading', { level: 1, name: /, E2E$/ })).toBeVisible();
-  const queues = main.locator('section').filter({ has: page.getByRole('heading', { name: 'Onay Kuyruklarım' }) });
+  // The approval queues are links under "Onayınızı Bekleyenler" (no separate panel).
+  const queues = main.getByRole('navigation', { name: 'Onay kuyrukları' });
   await expect(queues.getByRole('link', { name: /Uygunsuzluk raporları/ })).toContainText('1');
 
   await page.evaluate(() => {
@@ -96,9 +97,10 @@ test('what waits on the user wears a red badge on the home sections, the menu an
   const nav = page.getByRole('navigation', { name: 'Ana menü' });
 
   const waiting = main.locator('section').filter({ has: page.getByRole('heading', { name: 'Onayınızı Bekleyenler' }) });
-  await expect(waiting.locator('[data-count-badge]')).toContainText('3');
-  const queues = main.locator('section').filter({ has: page.getByRole('heading', { name: 'Onay Kuyruklarım' }) });
-  await expect(queues.locator('[data-count-badge]')).toContainText(['3', '3']);
+  // One badge on the title, one on the queue link under the list.
+  await expect(waiting.locator('[data-count-badge]')).toContainText(['3', '3']);
+  const queues = waiting.getByRole('navigation', { name: 'Onay kuyrukları' });
+  await expect(queues.locator('[data-count-badge]')).toContainText(['3']);
   const latest = main.locator('section').filter({ has: page.getByRole('heading', { name: 'Son Bildirimler' }) });
   await expect(latest.locator('[data-count-badge]')).toContainText('5');
 

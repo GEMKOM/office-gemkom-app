@@ -88,6 +88,8 @@ export interface RecordsPanelProps {
   rows?: number;
   /** A red badge beside the title: how many wait on the user. Gone at 0. */
   badge?: number;
+  /** A bar under the list (the home page puts the approval queues there). */
+  footer?: ReactNode;
 }
 
 /** A short list of records, each row a link: recent requests, overdue tasks. */
@@ -101,6 +103,7 @@ export function RecordsPanel({
   empty,
   rows = 5,
   badge,
+  footer,
 }: RecordsPanelProps) {
   const records = query.data ?? [];
   let body;
@@ -161,6 +164,7 @@ export function RecordsPanel({
       badge={<CountBadge count={badge} label="bekliyor" />}
       actions={more ? <MoreLink to={more}>{moreLabel}</MoreLink> : undefined}
       padded={false}
+      footer={footer}
     >
       {body}
     </Panel>
