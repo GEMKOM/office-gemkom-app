@@ -243,6 +243,20 @@ it('Parça Adı applies when its popover closes before the pause ends', async ()
   });
 });
 
+it('İş No suggests job orders and filters on the one picked', async () => {
+  renderPage();
+  await screen.findByText('Flanş');
+  // The filter pill comes first; the column header is also an "İş No" button.
+  fireEvent.click(screen.getAllByRole('button', { name: 'İş No' })[0]!);
+  fireEvent.change(await screen.findByRole('textbox', { name: 'İş No', hidden: true }), {
+    target: { value: 'tank' },
+  });
+  fireEvent.click(await screen.findByRole('option', { name: '254-05 — Tank', hidden: true }));
+  await waitFor(() => expect(listCalls().at(-1)!.url.searchParams.get('job_no')).toBe('254-05'));
+  // Typing "tank" itself never reached the list request.
+  expect(listCalls().some((c) => c.url.searchParams.get('job_no') === 'tank')).toBe(false);
+});
+
 it('a figure with a count applies its filter', async () => {
   renderPage();
   const figure = await within(document.getElementById('unassigned-operations-count')!).findByRole(

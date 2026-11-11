@@ -199,7 +199,13 @@ const ANY_CREATOR = 'all';
 const filterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'text', key: 'key', label: 'TI No', placeholder: 'TI-001' },
   { type: 'text', key: 'name', label: 'Görev Adı', placeholder: 'Görev adı' },
-  { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş numarası' },
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş No',
+    placeholder: 'İş numarası',
+    suggestions: 'jobOrders',
+  },
   { type: 'text', key: 'image_no', label: 'Resim No', placeholder: 'Resim numarası' },
   { type: 'text', key: 'position_no', label: 'Pozisyon No', placeholder: 'Pozisyon numarası' },
   { type: 'date', key: 'finish_time', label: 'Bitiş Tarihi' },

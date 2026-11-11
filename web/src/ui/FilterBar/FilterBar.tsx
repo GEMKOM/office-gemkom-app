@@ -14,6 +14,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { FaIcon } from '../FaIcon';
 import { Panel } from '../Panel';
 import classes from '../ui.module.css';
+import { fold, SuggestField, type SuggestionSource } from './SuggestField';
 import { isDateRange, type DateRange, type FilterValue, type FilterValues } from './useUrlFilters';
 
 export interface FilterOption {
@@ -30,7 +31,16 @@ interface FilterBase<K extends string> {
 }
 
 export type FilterConfig<K extends string = string> =
-  | (FilterBase<K> & { type: 'text'; inputType?: 'text' | 'number' | 'email' | 'search' })
+  | (FilterBase<K> & {
+      type: 'text';
+      inputType?: 'text' | 'number' | 'email' | 'search';
+      /**
+       * Lists matching values while typing and filters on the one picked
+       * (Enter filters on the typed text). 'jobOrders' lists every job order.
+       */
+      suggestions?: SuggestionSource;
+    })
+  // `searchable` defaults to on for lists longer than SEARCHABLE_AFTER options.
   | (FilterBase<K> & { type: 'select'; options: FilterOption[]; searchable?: boolean })
   | (FilterBase<K> & { type: 'multiselect'; options: FilterOption[]; searchable?: boolean })
   | (FilterBase<K> & { type: 'date' })
@@ -55,6 +65,10 @@ export interface FilterBarProps<T extends FilterValues> {
 }
 
 const SEARCH_DELAY_MS = 400;
+/** Select and multiselect lists longer than this get a search box unless `searchable: false`. */
+const SEARCHABLE_AFTER = 10;
+const isSearchable = (filter: { options: FilterOption[]; searchable?: boolean }) =>
+  filter.searchable ?? filter.options.length > SEARCHABLE_AFTER;
 
 function emptyLike(value: FilterValue): FilterValue {
   if (isDateRange(value)) return { start: '', end: '' };
@@ -157,8 +171,6 @@ function SelectOptions({
   onClear: () => void;
 }) {
   const [query, setQuery] = useState('');
-  // Accents and case are ignored, so "sut" finds "Süt".
-  const fold = (text: string) => text.toLocaleLowerCase('tr').normalize('NFD').replace(/[̀-ͯ]/g, '');
   const needle = fold(query.trim());
   const shown = needle ? options.filter((o) => fold(o.label).includes(needle)) : options;
   // The box keeps its text while the menu is closed, so a pick empties it and
@@ -224,6 +236,57 @@ function SelectOptions({
   );
 }
 
+/** A multiselect pill's checkboxes; long lists get a box that narrows them. */
+function MultiOptions({
+  options,
+  picked,
+  searchable,
+  onChange,
+}: {
+  options: FilterOption[];
+  picked: string[];
+  searchable: boolean;
+  onChange: (next: string[]) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const needle = fold(query.trim());
+  // Picked ones stay listed so they can be unticked while searching.
+  const shown = needle
+    ? options.filter((o) => picked.includes(o.value) || fold(o.label).includes(needle))
+    : options;
+  return (
+    <>
+      {searchable ? (
+        <TextInput
+          data-autofocus
+          size="xs"
+          mb={8}
+          w={240}
+          placeholder="Ara..."
+          aria-label="Seçeneklerde ara"
+          leftSection={<i className="fas fa-search" aria-hidden style={{ fontSize: 11 }} />}
+          value={query}
+          onChange={(event) => setQuery(event.currentTarget.value)}
+        />
+      ) : null}
+      <ScrollArea.Autosize mah={280} type="auto">
+        <Checkbox.Group value={picked} onChange={onChange}>
+          <Stack gap={8} py={4} pr="sm">
+            {shown.map((option) => (
+              <Checkbox key={option.value} value={option.value} label={option.label} />
+            ))}
+          </Stack>
+        </Checkbox.Group>
+        {shown.length === 0 ? (
+          <Text size="sm" c="dimmed" py={6}>
+            Sonuç bulunamadı
+          </Text>
+        ) : null}
+      </ScrollArea.Autosize>
+    </>
+  );
+}
+
 /**
  * Replaces components/filters/filters.js: a search box and one pill per
  * filter. Pills apply at once; the search applies on Enter or after a pause.
@@ -257,32 +320,33 @@ export function FilterBar<T extends FilterValues>({
 
   const applyNow = (next: T) => {
     cancelPending();
-    pending.current = null;
     setDraft(next);
     onApply(next);
   };
 
   const setAndApply = (key: string, value: FilterValue) => applyNow({ ...draft, [key]: value });
 
-  // The latest typed values, for a popover that closes before the pause ends.
-  const pending = useRef<T | null>(null);
   const typeSearch = (key: string, text: string) => {
     const next = { ...draft, [key]: text };
     setDraft(next);
     cancelPending();
-    pending.current = next;
     timer.current = setTimeout(() => {
       timer.current = null;
-      pending.current = null;
       onApply(next);
     }, SEARCH_DELAY_MS);
   };
-  const flushPending = () => {
-    if (!timer.current || !pending.current) return;
-    const next = pending.current;
-    pending.current = null;
+
+  // A suggestion field only narrows its list while typing; it applies on a pick.
+  const typeDraft = (key: string, text: string) => {
     cancelPending();
-    onApply(next);
+    setDraft((prev) => ({ ...prev, [key]: text }));
+  };
+
+  // A text popover that closes with typed text not yet applied (before the
+  // pause ends, or a suggestion field left without a pick) applies it.
+  const commitOnClose = (filter: FilterConfig) => {
+    if (filter.type !== 'text') return;
+    if (asString(draft[filter.key]) !== asString(values[filter.key])) applyNow(draft);
   };
 
   const onEnter = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -349,7 +413,7 @@ export function FilterBar<T extends FilterValues>({
                 options={filter.options}
                 value={value}
                 allLabel={filter.placeholder ?? 'Tümü'}
-                searchable={filter.searchable}
+                searchable={isSearchable(filter)}
                 onPick={(picked) => setAndApply(filter.key, picked)}
                 onClear={clearOne}
               />
@@ -364,7 +428,7 @@ export function FilterBar<T extends FilterValues>({
             offset={6}
             withinPortal
             trapFocus
-            onClose={flushPending}
+            onClose={() => commitOnClose(filter)}
           >
             <Popover.Target>
               <UnstyledButton className={classes.pill} data-set={set || undefined}>
@@ -387,20 +451,15 @@ export function FilterBar<T extends FilterValues>({
     value: FilterValue | undefined,
   ) => {
     switch (filter.type) {
-      case 'multiselect': {
-        const picked = Array.isArray(value) ? value : [];
+      case 'multiselect':
         return (
-          <ScrollArea.Autosize mah={280} type="auto">
-            <Checkbox.Group value={picked} onChange={(next) => setAndApply(filter.key, next)}>
-              <Stack gap={8} py={4} pr="sm">
-                {filter.options.map((option) => (
-                  <Checkbox key={option.value} value={option.value} label={option.label} />
-                ))}
-              </Stack>
-            </Checkbox.Group>
-          </ScrollArea.Autosize>
+          <MultiOptions
+            options={filter.options}
+            picked={Array.isArray(value) ? value : []}
+            searchable={isSearchable(filter)}
+            onChange={(next) => setAndApply(filter.key, next)}
+          />
         );
-      }
       case 'date':
         return (
           <DatePicker
@@ -424,6 +483,22 @@ export function FilterBar<T extends FilterValues>({
         );
       }
       case 'text':
+        if (filter.suggestions) {
+          return (
+            <SuggestField
+              inline
+              autoFocus
+              w={320}
+              label={filter.label}
+              placeholder={filter.placeholder}
+              source={filter.suggestions}
+              value={asString(value)}
+              applied={asString(values[filter.key])}
+              onType={(text) => typeDraft(filter.key, text)}
+              onApply={(text) => setAndApply(filter.key, text)}
+            />
+          );
+        }
         return (
           <TextInput
             autoFocus
@@ -445,7 +520,19 @@ export function FilterBar<T extends FilterValues>({
 
   const row = (
     <div className={classes.filters}>
-      {searchFilter ? (
+      {searchFilter?.type === 'text' && searchFilter.suggestions ? (
+        <SuggestField
+          className={classes.search}
+          ariaLabel={typeof searchFilter.label === 'string' ? searchFilter.label : 'Arama'}
+          placeholder={searchFilter.placeholder ?? 'Ara…'}
+          leftSection={<FaIcon icon="fas fa-search" style={{ fontSize: 13 }} />}
+          source={searchFilter.suggestions}
+          value={asString(draft[searchFilter.key])}
+          applied={asString(values[searchFilter.key])}
+          onType={(text) => typeDraft(searchFilter.key, text)}
+          onApply={(text) => setAndApply(searchFilter.key, text)}
+        />
+      ) : searchFilter ? (
         <TextInput
           className={classes.search}
           aria-label={typeof searchFilter.label === 'string' ? searchFilter.label : 'Arama'}

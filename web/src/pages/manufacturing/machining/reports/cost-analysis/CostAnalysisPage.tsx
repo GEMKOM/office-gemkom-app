@@ -135,7 +135,13 @@ function LeaderValue({ leader }: { leader?: Leader }) {
 }
 
 const filterConfig: FilterConfig<'job_no'>[] = [
-  { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş numarası girin (isteğe bağlı)' },
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş No',
+    placeholder: 'İş numarası girin (isteğe bağlı)',
+    suggestions: 'jobOrders',
+  },
 ];
 
 const EMPTY_ROWS: JobCostTableRow[] = [];

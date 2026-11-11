@@ -102,7 +102,13 @@ const FILTERS: FilterConfig<keyof Filters>[] = [
   },
   { key: 'item_code', type: 'text', label: 'Malzeme Kodu', placeholder: 'Malzeme kodu ara...' },
   { key: 'item_name', type: 'text', label: 'Malzeme Adı', placeholder: 'Malzeme adı ara...' },
-  { key: 'job_no', type: 'text', label: 'İş No', placeholder: 'İş numarası ara...' },
+  {
+    key: 'job_no',
+    type: 'text',
+    label: 'İş No',
+    placeholder: 'İş numarası ara...',
+    suggestions: 'jobOrders',
+  },
   { key: 'needed', type: 'dateRange', label: 'İhtiyaç Tarihi' },
   {
     key: 'request_priority',

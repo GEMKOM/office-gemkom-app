@@ -451,7 +451,13 @@ export function WeldingReportPage() {
 
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(
     () => [
-      { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş emri no...' },
+      {
+        type: 'text',
+        key: 'job_no',
+        label: 'İş No',
+        placeholder: 'İş emri no...',
+        suggestions: 'jobOrders',
+      },
       { type: 'date', key: 'start_date', label: 'Başlangıç Tarihi' },
       { type: 'date', key: 'end_date', label: 'Bitiş Tarihi' },
       {

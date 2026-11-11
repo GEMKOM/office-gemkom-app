@@ -443,6 +443,35 @@ a.figureTile:focus-visible {
   color: var(--gk-red-700);
 }
 
+/* Matches under a suggestion filter (İş No): in its popover or dropping from the search box. */
+.suggestionsInline {
+  margin-top: 6px;
+  border-top: 1px solid var(--gk-line);
+  padding-top: 4px;
+}
+
+.suggestions {
+  display: flex;
+  flex-direction: column;
+}
+
+.suggestion {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  color: var(--gk-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.suggestion[data-active] {
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+}
+
 /* ---- Hub cards ------------------------------------------------------------- */
 /* Up to four cards per row, as the design system says. */
 .hubGrid {

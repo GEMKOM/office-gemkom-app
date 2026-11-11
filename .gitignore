@@ -8,3 +8,6 @@ web/dist/
 _site/
 web/test-results/
 web/playwright-report/
+
+# TypeScript build cache (tsc -b)
+*.tsbuildinfo

@@ -238,7 +238,13 @@ export function MachiningPartsPage() {
     () => [
       { type: 'text', key: 'key', label: 'Parça No', placeholder: 'PT-001' },
       { type: 'text', key: 'name', label: 'Parça Adı', placeholder: 'Parça adı' },
-      { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş numarası' },
+      {
+        type: 'text',
+        key: 'job_no',
+        label: 'İş No',
+        placeholder: 'İş numarası',
+        suggestions: 'jobOrders',
+      },
       { type: 'text', key: 'image_no', label: 'Resim No', placeholder: 'Resim numarası' },
       { type: 'text', key: 'position_no', label: 'Pozisyon No', placeholder: 'Pozisyon numarası' },
       {
