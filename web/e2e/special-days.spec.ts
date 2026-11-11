@@ -231,3 +231,153 @@ test('HR previews a day from İnsan Kaynakları > Özel Günler, like impersonat
   await expect(page.getByTestId('occasion-preview-banner')).toHaveCount(0);
   await expect(page.locator('html')).not.toHaveAttribute('data-occasion', /.+/);
 });
+
+test('HR edits a greeting and a company day, then previews the day', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  const session = await seedSession(page, { admin: true });
+  let birthdayTemplate = {
+    kind: 'birthday',
+    kind_label: 'Doğum günü',
+    title: 'İyi ki doğdunuz, {first_name}',
+    body: 'GEMKOM ailesi olarak yeni yaşınızı kutlarız.',
+    show_popup: true,
+    updated_by: null as number | null,
+    updated_at: null as string | null,
+  };
+  const otherTemplates = [
+    {
+      kind: 'work_anniversary',
+      kind_label: 'İş yıl dönümü',
+      title: '{years}. yılınız kutlu olsun, {first_name}',
+      body: '',
+      show_popup: true,
+      updated_by: null,
+      updated_at: null,
+    },
+    {
+      kind: 'public_holiday',
+      kind_label: 'Resmi tatil',
+      title: '{holiday_name} kutlu olsun',
+      body: '',
+      show_popup: true,
+      updated_by: null,
+      updated_at: null,
+    },
+  ];
+  let yilsonu = {
+    id: 4,
+    name: 'Yılsonu',
+    category: 'company',
+    month: 12,
+    day: 31,
+    date: null as string | null,
+    theme: 'company',
+    popup_title: '',
+    popup_body: '',
+    show_popup: true,
+    is_active: true,
+    created_by: 1,
+    created_by_name: 'İK',
+    created_at: '2026-11-01T08:00:00Z',
+    updated_at: '2026-11-01T08:00:00Z',
+  };
+  const backend = await mockBackend(
+    page,
+    {
+      'GET /special-days/today/': ({ query }) =>
+        query.get('date')
+          ? {
+              json: {
+                date: query.get('date'),
+                occasions: [
+                  {
+                    key: `special:4:${query.get('date')?.slice(0, 4)}`,
+                    kind: 'special_day',
+                    theme: 'company',
+                    name: yilsonu.name,
+                    category: 'company',
+                    title: yilsonu.popup_title.replace('{first_name}', 'E2E') || yilsonu.name,
+                    body: yilsonu.popup_body,
+                    show_popup: true,
+                    years: null,
+                    is_half_day: false,
+                  },
+                ],
+                colleagues: [],
+                received: [],
+              },
+            }
+          : { json: { date: '2026-11-11', occasions: [], colleagues: [], received: [] } },
+      'GET /special-days/upcoming/': { json: { start: '2026-11-11', days: 60, results: [] } },
+      'GET /special-days/templates/': () => ({ json: [birthdayTemplate, ...otherTemplates] }),
+      'PATCH /special-days/templates/birthday/': ({ body }) => {
+        birthdayTemplate = {
+          ...birthdayTemplate,
+          ...(body as object),
+          updated_at: '2026-11-11T09:30:00Z',
+        };
+        return { json: birthdayTemplate };
+      },
+      'GET /special-days/days/': () => ({ json: [yilsonu] }),
+      'PATCH /special-days/days/4/': ({ body }) => {
+        yilsonu = { ...yilsonu, ...(body as object) };
+        return { json: yilsonu };
+      },
+    },
+    { session },
+  );
+
+  await page.goto('/human_resources/special-days');
+  await expect(page.getByText('İyi ki doğdunuz, Ayşe')).toBeVisible();
+
+  // Kutlama metinleri: the preview follows the text as it is typed.
+  await page.getByRole('button', { name: 'Doğum günü metnini düzenle' }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Başlık').fill('Doğum gününüz kutlu olsun, {full_name}');
+  await expect(dialog.getByTestId('greeting-preview')).toContainText(
+    'Doğum gününüz kutlu olsun, Ayşe Kaya',
+  );
+  if (shots) await page.screenshot({ path: `${shots}/8-hr-edit-template.png` });
+  await dialog.getByRole('button', { name: 'Kaydet' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByText('Doğum gününüz kutlu olsun, Ayşe Kaya')).toBeVisible();
+  const patchedTemplate = backend.calls.find(
+    (c) => c.method === 'PATCH' && c.path === '/special-days/templates/birthday/',
+  );
+  expect(patchedTemplate?.body).toEqual({
+    title: 'Doğum gününüz kutlu olsun, {full_name}',
+    body: 'GEMKOM ailesi olarak yeni yaşınızı kutlarız.',
+    show_popup: true,
+  });
+
+  // Şirket özel günleri: a new welcome title for Yılsonu.
+  await page.getByRole('button', { name: 'Yılsonu düzenle' }).click();
+  await dialog.getByLabel('Başlık').fill('Yeni yılınız kutlu olsun, {first_name}');
+  await expect(dialog.getByTestId('greeting-preview')).toContainText(
+    'Yeni yılınız kutlu olsun, Ayşe',
+  );
+  if (shots) await page.screenshot({ path: `${shots}/9-hr-edit-day.png` });
+  await dialog.getByRole('button', { name: 'Kaydet' }).click();
+  await expect(dialog).toHaveCount(0);
+  const patchedDay = backend.calls.find(
+    (c) => c.method === 'PATCH' && c.path === '/special-days/days/4/',
+  );
+  expect(patchedDay?.body).toMatchObject({
+    name: 'Yılsonu',
+    month: 12,
+    day: 31,
+    date: null,
+    popup_title: 'Yeni yılınız kutlu olsun, {first_name}',
+  });
+
+  // Right after saving: preview that day across the app.
+  const saved = page.getByTestId('day-saved');
+  await expect(saved).toContainText('Yılsonu kaydedildi.');
+  await saved.getByRole('button', { name: 'Bu Günü Önizle' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId('occasion-preview-banner')).toContainText('31 Aralık');
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Yeni yılınız kutlu olsun, E2E' }).last(),
+  ).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/10-hr-day-preview.png` });
+});
