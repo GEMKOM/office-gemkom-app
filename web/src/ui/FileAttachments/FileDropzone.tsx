@@ -1,8 +1,9 @@
 import { Button, Progress } from '@mantine/core';
-import { useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useRef, type ReactNode } from 'react';
 import { FaIcon } from '../FaIcon';
 import { fileExtension, fileIcon, formatFileSize } from '../files';
 import classes from './FileAttachments.module.css';
+import { useFileDrop } from './useFileDrop';
 import type { UploadItem } from './useUploadQueue';
 
 export interface FileDropzoneProps {
@@ -18,7 +19,7 @@ export interface FileDropzoneProps {
   compact?: boolean;
 }
 
-/** Pick files with the button or drop them on the box. */
+/** Pick files with the button or drop them on the box (dropped files must pass `accept`). */
 export function FileDropzone({
   onFiles,
   multiple = true,
@@ -29,19 +30,12 @@ export function FileDropzone({
   compact = false,
 }: FileDropzoneProps) {
   const input = useRef<HTMLInputElement>(null);
-  const [over, setOver] = useState(false);
+  const { over, dropProps } = useFileDrop({ onFiles, accept, multiple, disabled });
 
   const take = (list: FileList | null) => {
     const files = Array.from(list ?? []);
     if (!files.length || disabled) return;
     onFiles(multiple ? files : files.slice(0, 1));
-  };
-
-  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
-    if (disabled || !Array.from(event.dataTransfer.types).includes('Files')) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'copy';
-    setOver(true);
   };
 
   return (
@@ -50,15 +44,7 @@ export function FileDropzone({
       data-over={over || undefined}
       data-disabled={disabled || undefined}
       data-compact={compact || undefined}
-      onDragOver={onDragOver}
-      onDragLeave={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOver(false);
-      }}
-      onDrop={(event) => {
-        event.preventDefault();
-        setOver(false);
-        take(event.dataTransfer.files);
-      }}
+      {...dropProps}
     >
       <FaIcon icon="fas fa-cloud-arrow-up" className={classes.dropIcon} />
       <span className={classes.dropHint}>{hint}</span>

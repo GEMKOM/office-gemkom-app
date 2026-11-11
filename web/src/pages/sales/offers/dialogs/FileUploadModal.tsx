@@ -1,17 +1,7 @@
-import {
-  FileInput,
-  Grid,
-  Group,
-  Paper,
-  Select,
-  Stack,
-  Text,
-  Textarea,
-  TextInput,
-} from '@mantine/core';
+import { Grid, Group, Paper, Select, Stack, Text, Textarea, TextInput } from '@mantine/core';
 import { useState } from 'react';
 import { OFFER_FILE_TYPE_OPTIONS, uploadOfferFile, useInvalidateOffers } from '@/api/sales/offers';
-import { FaIcon, FormModal, ModalSection, notify } from '@/ui';
+import { FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 
 /**
  * Legacy showFileUploadModal: a type (required), an optional name and note
@@ -75,10 +65,9 @@ export function FileUploadModal({ offerId, onClose }: { offerId: number; onClose
       }}
     >
       <Stack gap="xs" mb="md">
-        <FileInput
+        <FileDropInput
           label="Dosyalar (Birden fazla seçebilirsiniz)"
           description="Birden fazla dosya seçmek için Ctrl (veya Cmd) tuşuna basılı tutarak tıklayın"
-          placeholder="Dosya seçin"
           multiple
           clearable
           value={files}

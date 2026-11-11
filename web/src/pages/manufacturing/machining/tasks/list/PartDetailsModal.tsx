@@ -41,6 +41,7 @@ import {
   confirm,
   DataTable,
   FaIcon,
+  FileDropTarget,
   ModalBody,
   ModalHeader,
   ModalSection,
@@ -724,58 +725,64 @@ export function PartDetailsModal({ part, machines, onClose }: PartDetailsModalPr
           </ModalSection>
 
           <ModalSection title="Dosyalar" icon="fas fa-paperclip">
-            {!isLocked ? (
-              <FileButton multiple onChange={(picked) => void upload(picked)}>
-                {(props) => (
-                  <Button
-                    {...props}
-                    size="xs"
-                    variant="outline"
-                    mb="sm"
-                    leftSection={<FaIcon icon="fas fa-upload" />}
-                  >
-                    Dosya Yükle
-                  </Button>
-                )}
-              </FileButton>
-            ) : null}
-            {files.length === 0 ? (
-              <Text size="sm" c="dimmed">
-                Dosya yok
-              </Text>
-            ) : (
-              <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="sm">
-                {files.map((file) => (
-                  <Paper key={file.id} withBorder p="xs" radius="sm">
-                    <Group gap="xs" wrap="nowrap">
-                      <FaIcon icon="fas fa-file" />
-                      <Anchor
-                        href={file.file_url ?? undefined}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        size="sm"
-                        lineClamp={1}
-                        style={{ flex: 1, minWidth: 0 }}
-                        title={fileName(file)}
-                      >
-                        {fileName(file)}
-                      </Anchor>
-                      {!isLocked ? (
-                        <ActionIcon
-                          variant="subtle"
-                          color="red"
-                          aria-label={`${fileName(file)} sil`}
-                          title="Sil"
-                          onClick={() => void removeFile(file)}
+            <FileDropTarget
+              multiple
+              disabled={isLocked}
+              onFiles={(dropped) => void upload(dropped)}
+            >
+              {!isLocked ? (
+                <FileButton multiple onChange={(picked) => void upload(picked)}>
+                  {(props) => (
+                    <Button
+                      {...props}
+                      size="xs"
+                      variant="outline"
+                      mb="sm"
+                      leftSection={<FaIcon icon="fas fa-upload" />}
+                    >
+                      Dosya Yükle
+                    </Button>
+                  )}
+                </FileButton>
+              ) : null}
+              {files.length === 0 ? (
+                <Text size="sm" c="dimmed">
+                  Dosya yok
+                </Text>
+              ) : (
+                <SimpleGrid cols={{ base: 1, sm: 2, md: 4 }} spacing="sm">
+                  {files.map((file) => (
+                    <Paper key={file.id} withBorder p="xs" radius="sm">
+                      <Group gap="xs" wrap="nowrap">
+                        <FaIcon icon="fas fa-file" />
+                        <Anchor
+                          href={file.file_url ?? undefined}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          size="sm"
+                          lineClamp={1}
+                          style={{ flex: 1, minWidth: 0 }}
+                          title={fileName(file)}
                         >
-                          <FaIcon icon="fas fa-trash" />
-                        </ActionIcon>
-                      ) : null}
-                    </Group>
-                  </Paper>
-                ))}
-              </SimpleGrid>
-            )}
+                          {fileName(file)}
+                        </Anchor>
+                        {!isLocked ? (
+                          <ActionIcon
+                            variant="subtle"
+                            color="red"
+                            aria-label={`${fileName(file)} sil`}
+                            title="Sil"
+                            onClick={() => void removeFile(file)}
+                          >
+                            <FaIcon icon="fas fa-trash" />
+                          </ActionIcon>
+                        ) : null}
+                      </Group>
+                    </Paper>
+                  ))}
+                </SimpleGrid>
+              )}
+            </FileDropTarget>
           </ModalSection>
         </ModalBody>
       </Modal>

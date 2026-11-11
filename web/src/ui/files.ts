@@ -89,6 +89,28 @@ export function fileKind(extension: string): FileKind {
   return 'other';
 }
 
+/**
+ * Does the file pass an input's accept attribute ("image/*,.pdf,text/csv")?
+ * The picker enforces accept itself; dropped files have to be checked.
+ */
+export function matchesAccept(
+  file: Pick<File, 'name' | 'type'>,
+  accept: string | undefined,
+): boolean {
+  const rules = (accept ?? '')
+    .split(',')
+    .map((rule) => rule.trim().toLowerCase())
+    .filter(Boolean);
+  if (!rules.length) return true;
+  const name = file.name.toLowerCase();
+  const type = (file.type || '').toLowerCase();
+  return rules.some((rule) => {
+    if (rule.startsWith('.')) return name.endsWith(rule);
+    if (rule.endsWith('/*')) return type.startsWith(rule.slice(0, -1));
+    return type === rule;
+  });
+}
+
 /** Can FileViewer show it, rather than offer a download? */
 export function isPreviewable(extension: string): boolean {
   return ['image', 'pdf', 'video', 'text'].includes(fileKind(extension));

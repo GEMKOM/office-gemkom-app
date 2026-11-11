@@ -1,4 +1,4 @@
-import { FileInput, Grid, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
+import { Grid, Select, Stack, Text, TextInput, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { useState } from 'react';
@@ -11,7 +11,7 @@ import {
   useSubmitNcr,
   type Ncr,
 } from '@/api/quality-control/ncrs';
-import { FaIcon, FormModal, ModalSection, notify } from '@/ui';
+import { FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 import { RadioChoices, REQUIRED } from './NcrFormModal';
 import { NcrContext, numberedTitle } from './NcrPaperForm';
 import classes from './ncrs.module.css';
@@ -210,10 +210,9 @@ export function NcrFileUploadModal({
       onSubmit={form.onSubmit(save)}
     >
       <Stack gap="sm" mb="md">
-        <FileInput
+        <FileDropInput
           label="Dosyalar (Birden fazla seçebilirsiniz)"
           description="Birden fazla dosya seçmek için Ctrl (veya Cmd) tuşuna basılı tutarak tıklayın"
-          placeholder="Dosya seçin"
           multiple
           clearable
           value={files}

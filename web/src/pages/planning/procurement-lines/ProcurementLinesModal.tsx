@@ -1,4 +1,4 @@
-import { Button, FileInput, Group, Stack, Text } from '@mantine/core';
+import { Button, Group, Stack, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import {
@@ -9,6 +9,7 @@ import {
 import {
   DataTable,
   FaIcon,
+  FileDropInput,
   FormModal,
   notify,
   type CellEdit,
@@ -262,7 +263,7 @@ export function ProcurementLinesModal({
             ) : null}
           </Group>
           <Group gap="xs" wrap="wrap">
-            <FileInput
+            <FileDropInput
               size="xs"
               w={240}
               accept=".xls,.xlsx"

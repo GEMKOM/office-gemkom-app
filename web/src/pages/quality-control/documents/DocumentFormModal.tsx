@@ -1,4 +1,4 @@
-import { FileInput, Grid, Select, TextInput, Textarea } from '@mantine/core';
+import { Grid, Select, TextInput, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import {
   QUALITY_DOCUMENT_TYPE_CHOICES,
@@ -7,7 +7,7 @@ import {
   type QualityDocument,
   type QualityDocumentMeta,
 } from '@/api/quality-control/documents';
-import { errorMessage, FaIcon, FormModal, ModalSection, notify } from '@/ui';
+import { errorMessage, FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 
 const REQUIRED = 'Bu alan gereklidir';
 
@@ -150,11 +150,10 @@ export function DocumentFormModal({ document, onClose, onCreated }: DocumentForm
       </ModalSection>
 
       <ModalSection title="Dosya" icon="fas fa-paperclip">
-        <FileInput
+        <FileDropInput
           label={editing ? 'Yeni Dosya' : 'Dosya'}
           withAsterisk={!editing}
           clearable
-          placeholder="Dosya seçin"
           leftSection={<FaIcon icon="fas fa-file-upload" />}
           description={
             editing
