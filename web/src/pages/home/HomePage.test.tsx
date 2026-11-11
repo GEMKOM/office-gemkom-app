@@ -13,6 +13,8 @@ vi.mock('@/auth/accessControl', () => ({
     const open = ['/', '/general', '/general/discussions', '/general/notifications', '/isg', '/isg/issues'];
     return access.granted === null || open.includes(route) || access.granted.has(route);
   },
+  // The Neo card's suggestions: only the ones everybody gets.
+  hasSectionAccess: () => false,
 }));
 
 const auth = vi.hoisted(() => ({

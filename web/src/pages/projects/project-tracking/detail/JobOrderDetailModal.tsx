@@ -2,6 +2,7 @@ import { Button, Center, Loader, Modal, Tabs } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { jobOrderQueryOptions } from '@/api/projects/jobOrders';
+import { NeoAskButton } from '@/neo';
 import { EstimateReport } from '@/pages/projects/estimate-report/EstimateReport';
 import { FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify } from '@/ui';
 import { useJobOrderPermissions } from '../jobOrderActions';
@@ -133,6 +134,15 @@ function DetailContent({
         <ModalHeader
           title={`İş Emri Detayları: ${job?.job_no ?? jobNo}`}
           icon="fas fa-info-circle"
+          actions={
+            <NeoAskButton
+              page={
+                job
+                  ? { type: 'job_order', id: job.job_no, label: job.title ? String(job.title) : undefined }
+                  : null
+              }
+            />
+          }
         />
         <ModalBody>
           {!job ? (

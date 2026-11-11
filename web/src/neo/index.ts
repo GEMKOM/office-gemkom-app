@@ -10,10 +10,13 @@
 // panel also understands).
 
 export { DailySummaryPrompt } from './DailySummaryPrompt';
+export { NeoAskButton } from './NeoAskButton';
+export { NeoHomePanel } from './NeoHomePanel';
 export { NeoEntry, NeoRule } from './NeoEntry';
 export { NeoAside, NEO_PANEL_ID } from './NeoPanel';
 export { neoLinkTarget } from './neoLinks';
 export {
+  askNeo,
   bindNeoUser,
   closeNeo,
   getNeoState,
@@ -22,5 +25,6 @@ export {
   openNeo,
   toggleNeo,
   useNeo,
+  useNeoPage,
   type OpenNeoOptions,
 } from './neoStore';

@@ -10,6 +10,7 @@ import {
   Table,
   type MantineColorsTuple,
 } from '@mantine/core';
+import { neoPanelRef } from './neo/neoPanelRef';
 import classes from './styles/components.module.css';
 import modalClasses from './ui/Modal.module.css';
 
@@ -60,8 +61,15 @@ export const theme = createTheme({
         radius: 'lg',
         overlayProps: { color: '#1f2933', backgroundOpacity: 0.5, blur: 2 },
         transitionProps: { transition: 'pop', duration: 180, timingFunction: 'ease-out' },
+        // Neo opened from a modal still scrolls (neo/neoPanelRef.ts).
+        removeScrollProps: { shards: [neoPanelRef] },
       },
-      classNames: { root: modalClasses.root, content: modalClasses.content },
+      classNames: {
+        root: modalClasses.root,
+        content: modalClasses.content,
+        inner: modalClasses.inner,
+        overlay: modalClasses.overlay,
+      },
     }),
     Popover: Popover.extend({ classNames: { dropdown: classes.dropdown } }),
     Paper: Paper.extend({ defaultProps: { radius: 'lg' } }),

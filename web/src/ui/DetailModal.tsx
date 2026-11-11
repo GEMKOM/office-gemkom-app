@@ -84,6 +84,8 @@ export interface DetailModalProps {
   editLabel?: ReactNode;
   /** Extra footer buttons, left of Kapat. */
   footerActions?: ReactNode;
+  /** Small controls in the header, before the close button. */
+  headerActions?: ReactNode;
 }
 
 function isBlank(value: unknown): boolean {
@@ -173,6 +175,7 @@ export function DetailModal({
   onEdit,
   editLabel = 'Düzenle',
   footerActions,
+  headerActions,
 }: DetailModalProps) {
   return (
     <Modal
@@ -183,7 +186,7 @@ export function DetailModal({
       withCloseButton={false}
       classNames={modalClassNames}
     >
-      <ModalHeader title={title} subtitle={subtitle} icon={icon} />
+      <ModalHeader title={title} subtitle={subtitle} icon={icon} actions={headerActions} />
       <ModalBody>
         <LoadingOverlay visible={loading} />
         {sections

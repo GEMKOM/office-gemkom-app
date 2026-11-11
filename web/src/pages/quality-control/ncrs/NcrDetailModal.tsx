@@ -9,6 +9,7 @@ import {
   type NcrGroup,
 } from '@/api/quality-control/ncrs';
 import { formatDateTime } from '@/lib/format';
+import { NeoAskButton } from '@/neo';
 import {
   confirm,
   FaIcon,
@@ -284,6 +285,19 @@ export function NcrDetailModal({
           title={ncr ? ncr.ncr_number || `NCR #${ncr.id}` : 'NCR'}
           subtitle={ncr?.title}
           icon="fas fa-file-alt"
+          actions={
+            <NeoAskButton
+              page={
+                ncr && !hidden
+                  ? {
+                      type: 'ncr',
+                      id: ncr.ncr_number || String(ncr.id),
+                      label: ncr.title ? String(ncr.title) : undefined,
+                    }
+                  : null
+              }
+            />
+          }
         />
         <ModalBody>
           {ncr ? (

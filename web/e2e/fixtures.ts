@@ -113,7 +113,11 @@ export async function seedSession(
   await page.addInitScript(({ s, neoHintSeen }) => {
     if (!/^https?:$/.test(location.protocol)) return;
     if (sessionStorage.getItem('__e2eSessionSeeded')) return;
-    if (neoHintSeen) localStorage.setItem(`gk.neoHintSeen.${String(s.user.id)}`, '1');
+    if (neoHintSeen) {
+      localStorage.setItem(`gk.neoHintSeen.${String(s.user.id)}`, '1');
+      // The "Neo yenilendi" note (neo/NeoEntry.tsx newsKey; bump with NEWS_VERSION).
+      localStorage.setItem(`gk.neoNews.2026-11.${String(s.user.id)}`, '1');
+    }
     localStorage.setItem('accessToken', s.accessToken);
     localStorage.setItem('refreshToken', s.refreshToken);
     localStorage.setItem('user', JSON.stringify(s.user));

@@ -8,11 +8,14 @@ import classes from './neo.module.css';
 import { NeoChat } from './NeoChat';
 import { NeoHistory } from './NeoHistory';
 import { neoLinkTarget } from './neoLinks';
+import { NEO_OFFSET_VAR, neoPanelRef } from './neoPanelRef';
 import { NeoReports } from './NeoReports';
 import {
   closeNeo,
   getNeoState,
   markRestored,
+  NEO_WIDE_WIDTH,
+  NEO_WIDTH,
   openNeo,
   showConversation,
   startNewChat,
@@ -113,6 +116,21 @@ export function NeoAside() {
   const wasOpen = useRef(open);
 
   useNeoTriggers();
+
+  // Modals let the panel scroll and keep its width free (neoPanelRef.ts).
+  useEffect(() => {
+    neoPanelRef.current = panelRef.current;
+    return () => {
+      neoPanelRef.current = null;
+    };
+  }, []);
+  useEffect(() => {
+    const root = document.documentElement.style;
+    root.setProperty(NEO_OFFSET_VAR, open ? `${wide ? NEO_WIDE_WIDTH : NEO_WIDTH}px` : '0px');
+    return () => {
+      root.removeProperty(NEO_OFFSET_VAR);
+    };
+  }, [open, wide]);
 
   // Load the conversation the user left (here or on a legacy page) once the
   // quota says Neo is open to them.

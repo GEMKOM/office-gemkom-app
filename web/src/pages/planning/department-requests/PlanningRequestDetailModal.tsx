@@ -18,6 +18,7 @@ import {
   StatusBadge,
   type DetailSection,
 } from '@/ui';
+import { NeoAskButton } from '@/neo';
 import { PlanningStatusBadge, PriorityBadge } from './columns';
 import { toAttachmentFiles } from './DepartmentRequestDetailModal';
 import { downloadItemsCsv } from './exportCsv';
@@ -279,6 +280,19 @@ export function PlanningRequestDetailModal({
         size="xl"
         loading={loading}
         sections={sections}
+        headerActions={
+          <NeoAskButton
+            page={
+              r?.request_number
+                ? {
+                    type: 'planning_request',
+                    id: String(r.request_number),
+                    label: r.title ? String(r.title) : undefined,
+                  }
+                : null
+            }
+          />
+        }
         footerActions={
           r ? (
             <>

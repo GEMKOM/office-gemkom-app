@@ -1,9 +1,11 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import {
   NEO_UNAVAILABLE,
   streamChat,
   type ChatEvent,
+  type ChatSource,
   type ConversationDetail,
+  type NeoPageContext,
 } from '@/api/assistant';
 import { isApiError } from '@/api/client';
 
@@ -23,7 +25,8 @@ export interface ToolChip {
 }
 
 export type ChatItem =
-  | { id: string; role: 'user'; text: string }
+  /** `page`: the record it was asked about (fresh questions only). */
+  | { id: string; role: 'user'; text: string; page?: NeoPageContext }
   | {
       id: string;
       role: 'assistant';
@@ -76,6 +79,14 @@ export interface NeoState {
   summaryPrompt: SummaryPrompt | null;
   /** The wide panel, for table-heavy answers (desktop only). */
   wide: boolean;
+  /** The record the page on screen shows (useNeoPage); sent with questions. */
+  page: NeoPageContext | null;
+  /** The user took the page pill off: questions go without it until the page changes. */
+  pageOff: boolean;
+  /** setNeoPage({ keep }): the record stays when its page closes (see setNeoPage). */
+  pageKeep: boolean;
+  /** A kept record whose page has closed: dropped after the next question or when Neo closes. */
+  pageOrphan: boolean;
 }
 
 export interface OpenNeoOptions {
@@ -113,6 +124,10 @@ const initialState = (): NeoState => ({
   unreadRedirected: false,
   summaryPrompt: null,
   wide: false,
+  page: null,
+  pageOff: false,
+  pageKeep: false,
+  pageOrphan: false,
 });
 
 let state: NeoState = initialState();
@@ -244,7 +259,8 @@ export function clickNeoEntry() {
 }
 
 export function closeNeo() {
-  set({ open: false });
+  // A kept record whose page is gone has nothing left to point at.
+  set((s) => ({ open: false, ...(s.pageOrphan ? NO_PAGE : {}) }));
 }
 
 export function toggleNeo() {
@@ -399,17 +415,103 @@ function updateAnswer(id: string, update: (item: AssistantItem) => AssistantItem
   }));
 }
 
+/** The page context a question goes with: none when the user took the pill off. */
+export function activePage(s: NeoState = state): NeoPageContext | null {
+  return s.page && !s.pageOff ? s.page : null;
+}
+
+const samePage = (a: NeoPageContext | null, b: NeoPageContext | null) =>
+  !!a && !!b && a.type === b.type && a.id === b.id;
+
+const NO_PAGE = { page: null, pageOff: false, pageKeep: false, pageOrphan: false } as const;
+
+/**
+ * A page shows this record. A new record brings the pill back.
+ * - `force`: asked from the record itself ("Neo'ya sor"): the pill comes back
+ *   even after its ×.
+ * - `keep`: the record outlives its page, for a modal that has to close as
+ *   Neo opens (the daily summary). It then goes with the next question and is
+ *   dropped after it, or when Neo closes.
+ */
+export function setNeoPage(
+  page: NeoPageContext,
+  { force = false, keep = false }: { force?: boolean; keep?: boolean } = {},
+) {
+  const s = state;
+  const same = samePage(s.page, page);
+  if (!force && same && s.page?.label === page.label && !s.pageOrphan) return;
+  set({
+    page,
+    pageOff: force ? false : same ? s.pageOff : false,
+    pageKeep: keep || (same && !force && s.pageKeep),
+    pageOrphan: false,
+  });
+}
+
+/**
+ * The page closed. Only its own record goes (the next page may have set one
+ * already); a kept one stays, marked as orphaned, until it has been used.
+ */
+export function clearNeoPage(page: NeoPageContext) {
+  if (!samePage(state.page, page)) return;
+  if (state.pageKeep) set({ pageOrphan: true });
+  else set(NO_PAGE);
+}
+
+/** The pill's ×. */
+export function dismissNeoPage() {
+  if (state.page && !state.pageOff) set({ pageOff: true });
+}
+
+/**
+ * Tells Neo which record this page shows, while it is mounted. Pass null
+ * while the record is loading.
+ */
+export function useNeoPage(page: NeoPageContext | null) {
+  const type = page?.type;
+  const id = page?.id;
+  const label = page?.label;
+  useEffect(() => {
+    if (!type || !id) return;
+    const current: NeoPageContext = { type, id, ...(label ? { label } : {}) };
+    setNeoPage(current);
+    return () => clearNeoPage(current);
+  }, [type, id, label]);
+}
+
+/**
+ * One click from a page: opens Neo and asks right away. While an answer is
+ * still streaming the question lands in the box instead, unsent.
+ */
+export function askNeo(question: string, source: ChatSource = 'page_button') {
+  if (state.streaming) {
+    openNeo({ prompt: question });
+    return Promise.resolve();
+  }
+  openNeo({ view: 'chat' });
+  return sendNeoMessage(question, { source });
+}
+
 /** Sends a question and streams the answer into the list. Resolves when it ends. */
-export async function sendNeoMessage(text: string): Promise<void> {
+export async function sendNeoMessage(
+  text: string,
+  { source = 'panel' }: { source?: ChatSource } = {},
+): Promise<void> {
   const question = text.trim();
   if (!question || state.streaming) return;
+  const page = activePage();
   const answerId = nextId();
   set((s) => ({
+    // A kept record whose page has closed has now been used: it goes.
+    ...(s.pageOrphan ? NO_PAGE : {}),
     view: 'chat',
     streaming: true,
+    // A question asked before the stored conversation loaded (from a page,
+    // with the panel never opened) wins: the restore must not replace it.
+    restored: true,
     items: [
       ...s.items,
-      { id: nextId(), role: 'user', text: question },
+      { id: nextId(), role: 'user', text: question, ...(page ? { page } : {}) },
       { id: answerId, role: 'assistant', text: '', tools: [], streaming: true },
     ],
   }));
@@ -418,6 +520,10 @@ export async function sendNeoMessage(text: string): Promise<void> {
     await streamChat({
       message: question,
       conversationId: state.conversationId,
+      context: page
+        ? { ...page, path: `${window.location.pathname}${window.location.search}` }
+        : null,
+      source,
       onEvent: (event) => {
         if (event.event === 'conversation') {
           set({ conversationId: event.data.conversation_id });
