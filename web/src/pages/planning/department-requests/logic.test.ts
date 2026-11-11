@@ -8,6 +8,7 @@ import {
   changedFields,
   csvFileName,
   detectColumnMapping,
+  isClearProtected,
   itemRow,
   itemsCsv,
   lockReason,
@@ -91,6 +92,9 @@ it('marks planning rows locked by inventory, purchase requests or conversion', (
   expect(second).toMatchObject({ converted: true, deletable: false, prLocked: true });
   expect(lockReason(second!)).toBe('Satın alma talebine bağlı; silmek için önce talebi iptal edin');
   expect(lockReason(first!)).toBe('Ürünü Kaldır');
+  expect(isClearProtected(first!)).toBe(true);
+  expect(isClearProtected(second!)).toBe(true);
+  expect(isClearProtected(itemRow({ item_code: 'K-9', job_no: 'J' }))).toBe(false);
 });
 
 it('builds items with legacy checks; a numeric code is still a code', () => {
