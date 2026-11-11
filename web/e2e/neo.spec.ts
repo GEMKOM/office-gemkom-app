@@ -451,6 +451,79 @@ test("a record modal's Neo'ya sor asks about that record, and Neo stays usable b
   consoleErrors.expectNone();
 });
 
+test('a write Neo proposes waits for Onayla, then shows what it created', async ({
+  page,
+  consoleErrors,
+}) => {
+  const card = {
+    id: 77,
+    kind: 'discussion_topic',
+    label: 'Tartışma konusu aç',
+    status: 'pending',
+    expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+    fields: [
+      { key: 'job_no', label: 'İş emri', type: 'text', value: '293-10', editable: false, required: true, display: '293-10 · Tunnel panel' },
+      { key: 'title', label: 'Başlık', type: 'text', value: 'Sevk tarihi', editable: true, required: true },
+      { key: 'content', label: 'İçerik', type: 'textarea', value: 'Sevk ne zaman?', editable: true, required: true },
+    ],
+  };
+  const actionSse = [
+    'event: conversation\ndata: {"conversation_id":502,"title":"Konu"}\n\n',
+    'event: tool\ndata: {"name":"propose_discussion_topic","status":"start"}\n\n',
+    'event: tool\ndata: {"name":"propose_discussion_topic","status":"done"}\n\n',
+    `event: action\ndata: ${JSON.stringify(card)}\n\n`,
+    `event: delta\ndata: ${JSON.stringify({ text: 'Kartı kontrol edip onaylayabilirsiniz.' })}\n\n`,
+    'event: done\ndata: {"conversation_id":502,"message_id":9201,"outcome":"answered"}\n\n',
+  ].join('');
+  const session = await seedSession(page, { admin: true });
+  const backend = await mockBackend(
+    page,
+    {
+      ...chatHandlers,
+      'POST /assistant/chat/': { body: actionSse, headers: { 'Content-Type': 'text/event-stream' } },
+      'POST /assistant/actions/77/confirm/': {
+        json: {
+          ...card,
+          status: 'confirmed',
+          fields: card.fields.map((f) => (f.key === 'title' ? { ...f, value: 'Sevk tarihi kesin mi?' } : f)),
+          result: { id: 41, label: 'Tartışma #41', url: '/projects/project-tracking/?job_no=293-10&topic_id=41' },
+        },
+      },
+    },
+    { session },
+  );
+
+  await page.goto('/');
+  await neoEntry(page).click();
+  const input = panel(page).getByRole('textbox', { name: "Neo'ya sorunuz" });
+  await input.fill('293-10 için sevk tarihi konusu aç');
+  await input.press('Enter');
+
+  const action = panel(page).getByRole('region', { name: 'Tartışma konusu aç' });
+  await expect(action).toBeVisible();
+  await expect(action.getByText('Onay bekliyor')).toBeVisible();
+  await expect(action.getByText('293-10 · Tunnel panel')).toBeVisible();
+  await expect(panel(page).getByText('Tartışma konusu hazırlanıyor')).toBeVisible();
+  // Nothing is written by the answer itself.
+  expect(backend.callsTo('/assistant/actions/77/confirm/', 'POST')).toHaveLength(0);
+  await shot(page, '19-action-card');
+
+  await action.getByRole('textbox', { name: /Başlık/ }).fill('Sevk tarihi kesin mi?');
+  await action.getByRole('button', { name: 'Onayla' }).click();
+  await expect(action.getByText(/Tartışma #41 oluşturuldu/)).toBeVisible();
+  expect(backend.callsTo('/assistant/actions/77/confirm/', 'POST')[0]!.body).toEqual({
+    payload: { title: 'Sevk tarihi kesin mi?' },
+  });
+  await expect(action.getByRole('link', { name: 'Aç' })).toHaveAttribute(
+    'href',
+    '/projects/project-tracking/?job_no=293-10&topic_id=41',
+  );
+  await expect(action.getByRole('button', { name: 'Onayla' })).toHaveCount(0);
+  await shot(page, '20-action-confirmed');
+
+  consoleErrors.expectNone();
+});
+
 test('the home page card asks Neo at once', async ({ page, consoleErrors }) => {
   const session = await seedSession(page, { admin: true });
   const backend = await mockBackend(page, chatHandlers, { session });

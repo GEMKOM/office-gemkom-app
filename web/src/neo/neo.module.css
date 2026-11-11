@@ -1519,3 +1519,126 @@ h3.mdHeading {
   outline: none;
   box-shadow: var(--gk-focus-ring);
 }
+
+/* ---- action cards (ActionCard): a write waiting for the user's Onayla ---- */
+
+.actionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.action {
+  border: 1px solid var(--gk-line-strong);
+  border-left: 3px solid var(--gk-red-700);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface);
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.action[data-status='confirmed'] {
+  border-left-color: #1e7a46;
+}
+
+.action[data-status='cancelled'],
+.action[data-status='expired'] {
+  border-left-color: var(--gk-line-strong);
+  color: var(--gk-muted);
+}
+
+.action[data-status='failed'] {
+  border-left-color: var(--gk-danger);
+}
+
+.actionHead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: var(--gk-ink);
+}
+
+.actionHead > i {
+  color: var(--gk-red-700);
+}
+
+.actionTitle {
+  flex: 1;
+  min-width: 0;
+}
+
+.actionBadge {
+  flex: none;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.actionFields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.actionSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+}
+
+.actionSummary dd {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.actionRow {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.actionLabel {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--gk-muted);
+}
+
+.actionButtons {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.actionNote {
+  margin: 6px 0 0;
+  font-size: 12px;
+  color: var(--gk-muted);
+}
+
+.actionDone {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: #1e7a46;
+  font-weight: 600;
+}
+
+.actionDone a {
+  color: var(--gk-red-700);
+}
+
+.actionError {
+  margin: 8px 0 0;
+  color: var(--gk-danger);
+  font-size: 12.5px;
+}
