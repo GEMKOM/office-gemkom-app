@@ -113,31 +113,66 @@ export interface QuizHistoryRow {
   finished: boolean;
 }
 
+/**
+ * Thrown when a response is not shaped like the quiz API (a backend without
+ * the quiz app, a proxy's stub): pages show their "yüklenemedi" state instead
+ * of rendering half an object.
+ */
+export class QuizShapeError extends Error {
+  constructor(what: string) {
+    super(`${what} beklenen biçimde gelmedi.`);
+    this.name = 'QuizShapeError';
+  }
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+function shaped<T>(what: string, check: (data: Record<string, unknown>) => boolean) {
+  return (data: unknown): T => {
+    if (!isObject(data) || !check(data)) throw new QuizShapeError(what);
+    return data as T;
+  };
+}
+
+const asToday = shaped<QuizToday>(
+  'Quiz durumu',
+  (d) =>
+    typeof d.status === 'string' && isObject(d.yesterday) && Array.isArray(d.yesterday.winners),
+);
+const asPlay = shaped<QuizPlayResponse>('Quiz sorusu', (d) => typeof d.done === 'boolean');
+const asReview = shaped<QuizReview>('Quiz cevapları', (d) => Array.isArray(d.questions));
+const asLeaderboard = shaped<Leaderboard>('Sıralama', (d) => Array.isArray(d.top));
+
 export function getQuizToday(signal?: AbortSignal) {
-  return apiFetch<QuizToday>('/quiz/today/', { signal });
+  return apiFetch<unknown>('/quiz/today/', { signal }).then(asToday);
 }
 
 export function startQuiz() {
-  return apiFetch<QuizPlayResponse>('/quiz/today/start/', { method: 'POST' });
+  return apiFetch<unknown>('/quiz/today/start/', { method: 'POST' }).then(asPlay);
 }
 
 export function nextQuizQuestion() {
-  return apiFetch<QuizPlayResponse>('/quiz/today/next/', { method: 'POST' });
+  return apiFetch<unknown>('/quiz/today/next/', { method: 'POST' }).then(asPlay);
 }
 
 export function answerQuiz(questionId: number, answer: { choice: number } | { value: string }) {
-  return apiFetch<QuizPlayResponse>('/quiz/today/answer/', {
+  return apiFetch<unknown>('/quiz/today/answer/', {
     method: 'POST',
     body: { question_id: questionId, ...answer },
-  });
+  }).then(asPlay);
 }
 
 export function getQuizReview(date: string, signal?: AbortSignal) {
-  return apiFetch<QuizReview>(`/quiz/days/${encodeURIComponent(date)}/review/`, { signal });
+  return apiFetch<unknown>(`/quiz/days/${encodeURIComponent(date)}/review/`, { signal }).then(
+    asReview,
+  );
 }
 
 export function getLeaderboard(period: LeaderboardPeriod, date?: string, signal?: AbortSignal) {
-  return apiFetch<Leaderboard>('/quiz/leaderboard/', { params: { period, date }, signal });
+  return apiFetch<unknown>('/quiz/leaderboard/', { params: { period, date }, signal }).then(
+    asLeaderboard,
+  );
 }
 
 export function getQuizHistory(signal?: AbortSignal) {

@@ -85,7 +85,8 @@ export function ReviewPage() {
       ) : (
         <Panel>
           <p className={css.lead}>
-            {review.isPending || (!asked && today.isPending)
+            {/* A disabled query (no date yet) stays "pending": only count it while it can run. */}
+            {(date && review.isPending) || (!asked && today.isPending)
               ? 'Yükleniyor…'
               : notClosed
                 ? 'Bu günün cevapları gün bitince açıklanır.'
