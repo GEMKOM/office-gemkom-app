@@ -44,6 +44,10 @@ export const TOOL_LABELS: Record<string, string> = {
   describe_data: 'Veri yapısı inceleniyor',
   query_data: 'Veri sorgulanıyor',
   get_daily_summary: 'Günlük özet okunuyor',
+  // Toplamlar (aggregates.py)
+  get_portfolio_financials: 'Kâr ve marj toplamları hesaplanıyor',
+  get_workload_overview: 'İş yükü toplanıyor',
+  get_procurement_spend: 'Satın alma harcaması hesaplanıyor',
 };
 
 export const GENERIC_TOOL_LABEL = 'Veri alınıyor';
