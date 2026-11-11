@@ -31,8 +31,28 @@ import {
   type PageFigure,
   type RowAction,
 } from '@/ui';
-import { jobColumns, questionColumns, summaryColumns, toolColumns, userColumns } from './columns';
-import { avgReadSeconds, formatSummaryDate, readSecondsLabel, sumSummaryCost, usd } from './labels';
+import {
+  jobColumns,
+  questionColumns,
+  reasonColumns,
+  shareColumns,
+  summaryColumns,
+  toolColumns,
+  userColumns,
+  weekColumns,
+  type ShareRow,
+  type WeekRow,
+} from './columns';
+import {
+  avgReadSeconds,
+  formatSummaryDate,
+  percentileLabel,
+  readSecondsLabel,
+  reasonLabel,
+  sourceLabel,
+  sumSummaryCost,
+  usd,
+} from './labels';
 import { ConversationModal, DailySummaryModal } from './NeoModals';
 import classes from './NeoUsagePage.module.css';
 
@@ -95,6 +115,12 @@ function positiveInt(value: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+/** [key, count] pairs → table rows that know the period's total. */
+function shareRows(pairs: readonly (readonly [string, number])[], label: (key: string) => string): ShareRow[] {
+  const total = pairs.reduce((acc, [, count]) => acc + count, 0);
+  return pairs.map(([key, count]) => ({ key, label: label(key), count, total }));
+}
+
 const isForbidden = (error: unknown) => isApiError(error) && error.status === 403;
 
 /** Port of it/neo (neo.js): Neo usage analytics, gated by manage_assistant_analytics. */
@@ -129,6 +155,7 @@ export function NeoUsagePage() {
   }, [questions.isError, questions.error, questions.errorUpdatedAt]);
 
   const data = summary.data;
+  const engagement = data?.engagement;
   // A failed summaries call shows an empty table and $0 (legacy never let it take the page down).
   const rows = summaryRows.isError ? NO_ROWS : (summaryRows.data ?? NO_ROWS);
 
@@ -142,11 +169,31 @@ export function NeoUsagePage() {
       { id: 'neo-stat-questions', label: data ? `Soru (${data.days} gün)` : 'Soru', value: data ? formatNumber(data.questions) : blank },
       { id: 'neo-stat-users', label: 'Aktif Kullanıcı', value: data ? formatNumber(data.active_users) : blank },
       { id: 'neo-stat-cost', label: 'Maliyet', value: data ? usd(data.total_cost_usd) : blank },
-      {
-        id: 'neo-stat-latency',
-        label: 'Ort. Yanıt Süresi',
-        value: data ? `${((data.avg_latency_ms ?? 0) / 1000).toFixed(1)} sn` : blank,
-      },
+      ...(engagement
+        ? [{ id: 'neo-stat-per-user', label: 'Soru / Kişi', value: formatNumber(engagement.questions_per_user, 1) }]
+        : []),
+      // Median and p90 once the backend sends them: one slow answer moved the
+      // average more than the many quick ones.
+      engagement
+        ? {
+            id: 'neo-stat-latency',
+            label: 'Yanıt Süresi (medyan / %90)',
+            value: percentileLabel(engagement.latency.p50_ms, engagement.latency.p90_ms),
+          }
+        : {
+            id: 'neo-stat-latency',
+            label: 'Ort. Yanıt Süresi',
+            value: data ? `${((data.avg_latency_ms ?? 0) / 1000).toFixed(1)} sn` : blank,
+          },
+      ...(engagement
+        ? [
+            {
+              id: 'neo-stat-incomplete',
+              label: 'Eksik Yanıt',
+              value: `${engagement.truncated} kesik · ${engagement.tool_limit_hits} limit`,
+            },
+          ]
+        : []),
       {
         id: 'neo-stat-feedback',
         label: declined ? `Geri Bildirim · ${declined} red` : 'Geri Bildirim',
@@ -159,7 +206,24 @@ export function NeoUsagePage() {
         value: rowsReady ? readSecondsLabel(avgReadSeconds(rows)) : blank,
       },
     ];
-  }, [data, rows, summaryRows.isSuccess, summaryRows.isError]);
+  }, [data, engagement, rows, summaryRows.isSuccess, summaryRows.isError]);
+
+  // ---- engagement tables: newest week first, shares of the period ----
+  const weekRows = useMemo<WeekRow[]>(() => {
+    const weeks = engagement?.weekly ?? [];
+    const busiest = Math.max(0, ...weeks.map((w) => w.questions));
+    return weeks
+      .map((w) => ({ ...w, scale: busiest ? w.questions / busiest : 0 }))
+      .reverse();
+  }, [engagement]);
+  const sourceRows = useMemo(
+    () => shareRows(engagement?.sources.map((s) => [s.source, s.count] as const) ?? [], sourceLabel),
+    [engagement],
+  );
+  const reasonRows = useMemo(
+    () => shareRows(engagement?.feedback_reasons.map((r) => [r.reason, r.count] as const) ?? [], reasonLabel),
+    [engagement],
+  );
 
   // ---- refresh: everything again, questions from page 1 (legacy loadAll) ----
   const refresh = () => {
@@ -299,6 +363,49 @@ export function NeoUsagePage() {
           onApply={(next) => apply({ ...next, page: '1' })}
           onClear={() => apply({ ...EMPTY_FILTERS, page: '1' })}
         />
+
+        {engagement ? (
+          <div className={`${classes.breakdown} ${classes.engagement}`}>
+            <div className={classes.cell}>
+              <DataTable
+                title="Haftalık Kullanım"
+                icon="fas fa-chart-column"
+                data={weekRows}
+                columns={weekColumns}
+                getRowId={(row) => row.week_start}
+                loading={loadingSummary}
+                emptyMessage="Kayıt yok"
+              />
+            </div>
+            <div className={classes.cell}>
+              <DataTable
+                title="Sorular Nereden Geliyor"
+                icon="fas fa-signs-post"
+                data={sourceRows}
+                columns={shareColumns}
+                getRowId={(row) => row.key}
+                loading={loadingSummary}
+                emptyMessage="Kayıt yok"
+                toolbar={
+                  <span className={classes.muted}>
+                    {formatNumber(engagement.with_page_context)} soru açık kayıtla soruldu
+                  </span>
+                }
+              />
+            </div>
+            <div className={classes.cell}>
+              <DataTable
+                title="Olumsuz Oy Nedenleri"
+                icon="fas fa-thumbs-down"
+                data={reasonRows}
+                columns={reasonColumns}
+                getRowId={(row) => row.key}
+                loading={loadingSummary}
+                emptyMessage="Olumsuz oy yok"
+              />
+            </div>
+          </div>
+        ) : null}
 
         <DataTable
           title="Günlük Özetler"

@@ -163,6 +163,56 @@ it('renders the figures and every table from the analytics endpoints', async () 
   expect(params(callsTo('/assistant/analytics/questions/')[0])).toEqual({ days: '30', page: '1', page_size: '25' });
 });
 
+it('shows reach, answer-time percentiles, entry points and thumbs-down reasons', async () => {
+  respond({
+    'GET /assistant/analytics/summary/': () =>
+      json({
+        ...SUMMARY,
+        engagement: {
+          questions_per_user: 2.5,
+          weekly: [
+            { week_start: '2026-10-26', active_users: 1, questions: 2 },
+            { week_start: '2026-11-02', active_users: 0, questions: 0 },
+            { week_start: '2026-11-09', active_users: 4, questions: 8 },
+          ],
+          latency: { samples: 9, p50_ms: 8000, p90_ms: 31000 },
+          feedback_reasons: [
+            { reason: 'slow', count: 3 },
+            { reason: 'none', count: 1 },
+          ],
+          truncated: 1,
+          tool_limit_hits: 2,
+          sources: [
+            { source: 'page_button', count: 6 },
+            { source: 'panel', count: 3 },
+            { source: 'unknown', count: 1 },
+          ],
+          with_page_context: 6,
+        },
+      }),
+  });
+  renderPage();
+
+  const figure = (id: string) => document.getElementById(id)!;
+  await waitFor(() => expect(within(figure('neo-stat-latency')).getByText('8.0 / 31.0 sn')).toBeInTheDocument());
+  expect(within(figure('neo-stat-latency')).getByText('Yanıt Süresi (medyan / %90)')).toBeInTheDocument();
+  expect(within(figure('neo-stat-per-user')).getByText('2,5')).toBeInTheDocument();
+  expect(within(figure('neo-stat-incomplete')).getByText('1 kesik · 2 limit')).toBeInTheDocument();
+
+  // Newest week first, empty weeks kept.
+  const weeks = screen.getByText('Haftalık Kullanım').closest('section, div[class]')!.parentElement!;
+  const weekCells = within(weeks).getAllByText(/– \d+ (Eki|Kas)/).map((el) => el.textContent);
+  expect(weekCells).toEqual(['9 Kas – 15 Kas', '2 Kas – 8 Kas', '26 Eki – 1 Kas']);
+
+  expect(screen.getByText("Sayfadaki “Neo'ya sor”")).toBeInTheDocument();
+  expect(screen.getByText('60%')).toBeInTheDocument();      // 6 of 10 questions
+  expect(screen.getByText('Bilinmiyor (eski kayıt)')).toBeInTheDocument();
+  expect(screen.getByText('6 soru açık kayıtla soruldu')).toBeInTheDocument();
+  expect(screen.getByText('Çok yavaş')).toBeInTheDocument();
+  expect(screen.getByText('75%')).toBeInTheDocument();      // 3 of 4 thumbs down
+  expect(screen.getByText('Neden seçilmedi')).toBeInTheDocument();
+});
+
 it('filters go into the URL and reach every request with the legacy params', async () => {
   renderPage('/it/neo?page=3');
   await screen.findByText('GS-10162 ne durumda?');

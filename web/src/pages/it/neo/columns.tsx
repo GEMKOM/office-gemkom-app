@@ -1,4 +1,4 @@
-import type { DailySummaryRow, NeoJobUsage, NeoQuestion, NeoToolUsage, NeoUserUsage } from '@/api/it/neo';
+import type { DailySummaryRow, NeoJobUsage, NeoQuestion, NeoToolUsage, NeoUserUsage, NeoWeek } from '@/api/it/neo';
 import { formatNumber } from '@/lib/format';
 import { StatusBadge, type DataTableColumn } from '@/ui';
 import {
@@ -7,11 +7,13 @@ import {
   formatSummaryDate,
   latencyLabel,
   readSecondsLabel,
+  shareLabel,
   summaryStatus,
   toolLabel,
   triggerLabel,
   truncate,
   usd,
+  weekLabel,
 } from './labels';
 import classes from './NeoUsagePage.module.css';
 
@@ -43,6 +45,49 @@ export const toolColumns: DataTableColumn<NeoToolUsage>[] = [
 export const jobColumns: DataTableColumn<NeoJobUsage>[] = [
   { key: 'job_no', header: 'İş Emri', render: (row) => <strong>{row.job_no}</strong> },
   { key: 'times_asked', header: 'Soru', width: 70, render: (row) => row.times_asked ?? '-' },
+];
+
+/** A week, with its question count drawn against the busiest week. */
+export interface WeekRow extends NeoWeek {
+  /** 0..1 of the busiest week's questions. */
+  scale: number;
+}
+
+export const weekColumns: DataTableColumn<WeekRow>[] = [
+  { key: 'week_start', header: 'Hafta', width: 130, render: (row) => weekLabel(row.week_start) },
+  { key: 'active_users', header: 'Kişi', width: 60, render: (row) => row.active_users },
+  {
+    key: 'questions',
+    header: 'Soru',
+    render: (row) => (
+      <span className={classes.barCell}>
+        <span className={classes.barValue}>{row.questions}</span>
+        <span className={classes.barTrack} aria-hidden>
+          {row.questions > 0 ? <span className={classes.bar} style={{ width: `${Math.round(row.scale * 100)}%` }} /> : null}
+        </span>
+      </span>
+    ),
+  },
+];
+
+/** An entry point or a thumbs-down reason, with its share of the total. */
+export interface ShareRow {
+  key: string;
+  label: string;
+  count: number;
+  total: number;
+}
+
+export const shareColumns: DataTableColumn<ShareRow>[] = [
+  { key: 'label', header: 'Kaynak', render: (row) => row.label },
+  { key: 'count', header: 'Adet', width: 60, render: (row) => row.count },
+  { key: 'share', header: 'Pay', width: 60, render: (row) => shareLabel(row.count, row.total) },
+];
+
+export const reasonColumns: DataTableColumn<ShareRow>[] = [
+  { key: 'label', header: 'Neden', render: (row) => row.label },
+  { key: 'count', header: 'Adet', width: 60, render: (row) => row.count },
+  { key: 'share', header: 'Pay', width: 60, render: (row) => shareLabel(row.count, row.total) },
 ];
 
 const QUESTION_TIME: Intl.DateTimeFormatOptions = {
