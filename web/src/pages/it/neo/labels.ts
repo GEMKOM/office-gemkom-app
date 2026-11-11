@@ -6,10 +6,61 @@ import type { StatusFamily } from '@/ui';
 
 export const OUTCOME_LABELS: Record<string, string> = {
   answered: 'Yanıtlandı',
+  answered_local: 'Selamlaşma',
   declined_budget: 'Bütçe reddi',
   declined_permission: 'Yetki reddi',
+  truncated: 'Kesildi',
   error: 'Hata',
 };
+
+/** Where a question started (gemkom-backend assistant/page_context.py SOURCES). */
+export const SOURCE_LABELS: Record<string, string> = {
+  panel: 'Panele yazıldı',
+  suggestion: 'Boş paneldeki öneri',
+  followup: 'Devam sorusu',
+  page_button: "Sayfadaki “Neo'ya sor”",
+  home: 'Ana sayfa kartı',
+  summary: 'Günlük özetten',
+  unknown: 'Bilinmiyor (eski kayıt)',
+};
+
+/** Thumbs-down reasons (Message.FEEDBACK_REASON_CHOICES). */
+export const FEEDBACK_REASON_LABELS: Record<string, string> = {
+  wrong: 'Yanlış bilgi',
+  incomplete: 'Eksik',
+  unclear: 'Anlaşılmaz',
+  slow: 'Çok yavaş',
+  other: 'Diğer',
+  none: 'Neden seçilmedi',
+};
+
+export function sourceLabel(value: string): string {
+  return SOURCE_LABELS[value] || value;
+}
+
+export function reasonLabel(value: string): string {
+  return FEEDBACK_REASON_LABELS[value] || value;
+}
+
+const WEEK_FMT: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'short' };
+
+/** Monday 'YYYY-MM-DD' → '3 Kas – 9 Kas', read as local days. */
+export function weekLabel(weekStart: string): string {
+  const [y, m, d] = weekStart.split('-').map(Number);
+  if (!y || !m || !d) return weekStart;
+  return `${formatDate(new Date(y, m - 1, d), WEEK_FMT)} – ${formatDate(new Date(y, m - 1, d + 6), WEEK_FMT)}`;
+}
+
+/** Median and p90 in ms → '8.0 / 30.0 sn'; '—' with no samples. */
+export function percentileLabel(p50: number | null | undefined, p90: number | null | undefined): string {
+  if (p50 == null || p90 == null) return '—';
+  return `${(p50 / 1000).toFixed(1)} / ${(p90 / 1000).toFixed(1)} sn`;
+}
+
+/** count of total → '35%'; '0%' when total is 0. */
+export function shareLabel(count: number, total: number): string {
+  return total > 0 ? `${Math.round((count / total) * 100)}%` : '0%';
+}
 
 /** Every tool in gemkom-backend assistant/tools, as the usage page names it. */
 export const TOOL_LABELS: Record<string, string> = {

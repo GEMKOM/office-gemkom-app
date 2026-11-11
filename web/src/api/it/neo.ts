@@ -43,6 +43,29 @@ export interface NeoJobUsage {
   [key: string]: unknown;
 }
 
+export interface NeoWeek {
+  /** Monday of the week, 'YYYY-MM-DD', Istanbul. */
+  week_start: string;
+  active_users: number;
+  questions: number;
+}
+
+/** The summary's engagement block: is Neo used, and is it good enough. */
+export interface NeoEngagement {
+  questions_per_user: number;
+  /** Every week of the window, oldest first, empty weeks included. */
+  weekly: NeoWeek[];
+  /** Real answers only (no greetings, refusals or errors); null with no samples. */
+  latency: { samples: number; p50_ms: number | null; p90_ms: number | null };
+  /** Thumbs-down reasons; 'none' = voted down without picking one. */
+  feedback_reasons: { reason: string; count: number }[];
+  truncated: number;
+  tool_limit_hits: number;
+  /** Entry points; 'unknown' = asked before the panel reported one. */
+  sources: { source: string; count: number }[];
+  with_page_context: number;
+}
+
 /** GET /assistant/analytics/summary/?days=N */
 export interface NeoAnalyticsSummary {
   days: number;
@@ -55,6 +78,8 @@ export interface NeoAnalyticsSummary {
   per_user: NeoUserUsage[];
   per_tool: NeoToolUsage[];
   top_job_orders: NeoJobUsage[];
+  /** Absent from backends older than gemkom-backend's neo-metrics change. */
+  engagement?: NeoEngagement;
   [key: string]: unknown;
 }
 

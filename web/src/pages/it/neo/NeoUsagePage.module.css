@@ -20,6 +20,38 @@
   }
 }
 
+/* Weekly use / entry points / thumbs-down reasons: three equal columns. */
+@media (min-width: 75em) {
+  .engagement {
+    grid-template-columns: minmax(0, 4fr) minmax(0, 4fr) minmax(0, 3fr);
+  }
+}
+
+.barCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.barValue {
+  min-width: 2ch;
+  font-variant-numeric: tabular-nums;
+}
+
+.barTrack {
+  flex: 1;
+  display: flex;
+}
+
+.bar {
+  display: block;
+  height: 8px;
+  min-width: 2px;
+  border-radius: 4px;
+  background: var(--gk-red-700);
+  opacity: 0.75;
+}
+
 /* A cell per table, so the panels are not siblings and keep no stacking margin. */
 .cell {
   min-width: 0;
