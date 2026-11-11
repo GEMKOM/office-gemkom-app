@@ -222,7 +222,14 @@ export function Gantt<B extends GanttBar = GanttBar>(props: GanttProps<B>) {
   useLayoutEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
-    const measure = () => setViewportWidth(el.clientWidth);
+    // clientWidth is rounded, and on scaled displays (125%, 150%) the real width
+    // is often fractional: a timeline fitted to a rounded-up width overflows by
+    // a fraction of a pixel and grows a needless horizontal scrollbar.
+    const measure = () => {
+      const scrollbar = el.offsetWidth - el.clientWidth;
+      const exact = Math.floor(el.getBoundingClientRect().width - scrollbar);
+      setViewportWidth(Math.max(0, Math.min(el.clientWidth, exact)));
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(el);
@@ -230,7 +237,9 @@ export function Gantt<B extends GanttBar = GanttBar>(props: GanttProps<B>) {
   }, []);
   const timelineViewport = Math.max(0, viewportWidth - labelWidth);
   const scalePx = computePxPerMs(scale, range, { viewportWidth: timelineViewport, months });
-  const timelineWidth = Math.ceil((range.end - range.start) * scalePx);
+  // The tolerance keeps float error (1221.0000000002) from rounding a fitted
+  // timeline one pixel past the viewport.
+  const timelineWidth = Math.ceil((range.end - range.start) * scalePx - 0.001);
   const canvasWidth = labelWidth + timelineWidth;
   const bodyHeight = Math.max(rows.length, 1) * rowHeight;
 

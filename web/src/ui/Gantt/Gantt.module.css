@@ -12,6 +12,12 @@
 .scroller {
   position: relative;
   overflow: auto;
+  /* The timeline is fitted to this element's width. Reserving the vertical
+     scrollbar's space keeps that width from depending on whether the rows
+     overflow; otherwise a horizontal scrollbar can push the rows into
+     overflow, the vertical scrollbar narrows the area, the refitted timeline
+     stops overflowing, both scrollbars go away, and it repeats every frame. */
+  scrollbar-gutter: stable;
   background: var(--gk-surface);
   font-family: var(--gk-font-sans);
   overscroll-behavior: contain;
