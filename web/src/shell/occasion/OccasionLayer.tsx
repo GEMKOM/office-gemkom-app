@@ -1,25 +1,25 @@
 import { Button, Modal } from '@mantine/core';
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   useSpecialDaysToday,
   type Occasion,
   type ReceivedCelebration,
 } from '@/api/general/specialDays';
 import { useAuth } from '@/auth/AuthProvider';
-import { formatDate } from '@/lib/format';
-import { FaIcon } from '@/ui/FaIcon';
+import { isoDate } from '@/lib/workdays';
+import { bandLook, occasionDesign, occasionKicker, occasionNumeral } from './design';
 import {
+  cachedBand,
   cachedTheme,
   cacheTheme,
   markSeen,
   markSeenInPreview,
-  occasionIcon,
   pendingWelcomes,
   primaryOccasion,
-  THEME_TONE,
 } from './occasionModel';
 import classes from './occasion.module.css';
 import { useOccasionPreview, useOccasionPreviewScope } from './previewStore';
+import { WelcomeTemplate } from './WelcomeTemplate';
 
 /**
  * Today's occasions, for the layer and for pages (the home band, its panel);
@@ -37,10 +37,12 @@ function dialogOpen() {
 }
 
 /**
- * Mounted once in the layout. On a special day it sets data-occasion on
- * <html> (global.css re-themes the band from it) and opens the full-screen
- * welcome once per occasion: a three-day bayram welcomes once, and a
- * birthday that falls on a holiday shows both, one after the other.
+ * Mounted once in the layout. On a special day it paints the band in the
+ * day's tone and motif (inline --gk-band-* vars on <html>, plus
+ * data-occasion) and opens the full-screen welcome once per occasion key: a
+ * greeting shown the working day before a holiday and the holiday itself
+ * share a key, the return-day message has its own; a birthday that falls on
+ * a holiday shows both, one after the other.
  */
 export function OccasionLayer() {
   const { user, isImpersonating } = useAuth();
@@ -63,21 +65,37 @@ export function OccasionLayer() {
   const current = open && open.scope === scope ? open.occasion : null;
   // Until today's answer arrives, the theme this browser saw earlier today,
   // so a full page load doesn't flash the plain red band first.
-  const [cached] = useState(() => cachedTheme());
-  const theme = data ? primary?.theme : preview ? undefined : (cached ?? undefined);
+  const [cached] = useState(() => ({ theme: cachedTheme(), band: cachedBand() }));
+  // The band takes the day's tone and motif unless the day says otherwise.
+  const look = useMemo(() => {
+    if (!primary) return null;
+    const band = bandLook(occasionDesign(primary), primary.color_band ?? true);
+    return band ? { theme: primary.theme, band: { tone: band.tone, motif: band.motif } } : null;
+  }, [primary]);
+  const shown = data ? look : preview ? null : cached.theme ? cached : null;
+  const theme = shown?.theme;
+  const bandTone = shown?.band?.tone;
+  const bandMotif = shown?.band?.motif;
 
   useEffect(() => {
-    if (data && !preview) cacheTheme(primary?.theme ?? null);
-  }, [data, preview, primary?.theme]);
+    if (data && !preview) cacheTheme(look?.theme ?? null, new Date(), look?.band ?? null);
+  }, [data, preview, look]);
 
   useEffect(() => {
     const root = document.documentElement;
     if (theme) root.dataset.occasion = theme;
     else delete root.dataset.occasion;
+    // Inline vars beat the fixed [data-occasion] themes in global.css.
+    if (bandTone) root.style.setProperty('--gk-band-bg', bandTone);
+    else root.style.removeProperty('--gk-band-bg');
+    if (bandMotif) root.style.setProperty('--gk-band-motif', bandMotif);
+    else root.style.removeProperty('--gk-band-motif');
     return () => {
       delete root.dataset.occasion;
+      root.style.removeProperty('--gk-band-bg');
+      root.style.removeProperty('--gk-band-motif');
     };
-  }, [theme]);
+  }, [theme, bandTone, bandMotif]);
 
   const next = useMemo(() => {
     if (!data || isImpersonating) return null;
@@ -125,11 +143,13 @@ export function OccasionWelcome({
   onClose: () => void;
 }) {
   const [showAll, setShowAll] = useState(false);
-  const tone = THEME_TONE[occasion.theme] ?? THEME_TONE.company;
+  const design = occasionDesign(occasion);
   const shown = showAll ? received : received.slice(0, PREVIEW_COUNT);
-  const dateLabel = date
-    ? formatDate(date, { day: 'numeric', month: 'long', year: 'numeric', weekday: 'long' })
-    : '';
+  const today = date || isoDate(new Date());
+  const halfDay =
+    occasion.is_half_day && (occasion.phase ?? 'on') === 'on' ? 'Bugün yarım gün çalışılır.' : '';
+  const celebrated = received.length > 0 ? `${received.length} kişi sizi kutladı` : '';
+  const note = occasion.note || halfDay || celebrated;
 
   return (
     <Modal
@@ -140,35 +160,36 @@ export function OccasionWelcome({
       transitionProps={{ transition: 'fade', duration: 200 }}
       aria-labelledby="occasion-title"
       classNames={{ content: classes.welcome, body: classes.welcomeBody }}
-      styles={{ content: { '--occasion-tone': tone } as CSSProperties }}
+      styles={{ content: { background: design.tone } }}
       data-testid="occasion-welcome"
       data-occasion-theme={occasion.theme}
+      data-layout={design.layout}
     >
-      <div className={classes.motif} data-theme={occasion.theme} aria-hidden />
-      <div className={classes.welcomeInner}>
-        <span className={classes.welcomeIcon} aria-hidden>
-          <FaIcon icon={occasionIcon(occasion.kind, occasion.theme)} />
-        </span>
-        {dateLabel ? <span className={classes.welcomeDate}>{dateLabel}</span> : null}
-        <h1 id="occasion-title" className={classes.welcomeTitle}>
-          {occasion.title || occasion.name}
-        </h1>
-        {occasion.body ? <p className={classes.welcomeText}>{occasion.body}</p> : null}
-        {occasion.is_half_day ? (
-          <p className={classes.welcomeNote}>Bugün yarım gün çalışılır.</p>
-        ) : null}
-        {shown.length > 0 ? (
-          <ul className={classes.messages} aria-label="Kutlama mesajları">
-            {shown.map((message) => (
-              <li key={`${message.sender_id}-${message.created_at}`} className={classes.message}>
-                <span className={classes.messageFrom}>{message.sender_name}</span>
-                <span className={classes.messageText}>{message.message || 'Gününüzü kutladı'}</span>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-        <div className={classes.welcomeActions}>
-          {received.length > PREVIEW_COUNT && !showAll ? (
+      <WelcomeTemplate
+        design={design}
+        kicker={occasionKicker(occasion, today)}
+        title={occasion.title || occasion.name}
+        body={occasion.body}
+        note={note}
+        numeral={occasionNumeral(occasion, design)}
+        titleId="occasion-title"
+        onCta={onClose}
+        extra={
+          shown.length > 0 ? (
+            <ul className={classes.messages} aria-label="Kutlama mesajları">
+              {shown.map((message) => (
+                <li key={`${message.sender_id}-${message.created_at}`} className={classes.message}>
+                  <span className={classes.messageFrom}>{message.sender_name}</span>
+                  <span className={classes.messageText}>
+                    {message.message || 'Gününüzü kutladı'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null
+        }
+        actions={
+          received.length > PREVIEW_COUNT && !showAll ? (
             <Button
               variant="outline"
               size="md"
@@ -177,12 +198,9 @@ export function OccasionWelcome({
             >
               {received.length} Mesajın Tümü
             </Button>
-          ) : null}
-          <Button size="md" className={classes.go} onClick={onClose} data-autofocus>
-            Uygulamaya Geç
-          </Button>
-        </div>
-      </div>
+          ) : null
+        }
+      />
     </Modal>
   );
 }

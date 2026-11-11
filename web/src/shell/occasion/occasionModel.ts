@@ -60,12 +60,36 @@ export function cachedTheme(now: Date = new Date()): OccasionTheme | null {
   }
 }
 
-export function cacheTheme(theme: OccasionTheme | null, now: Date = new Date()): void {
+export function cacheTheme(
+  theme: OccasionTheme | null,
+  now: Date = new Date(),
+  band: CachedBand | null = null,
+): void {
   try {
-    if (theme) localStorage.setItem(THEME_KEY, JSON.stringify({ day: isoDate(now), theme }));
+    if (theme) localStorage.setItem(THEME_KEY, JSON.stringify({ day: isoDate(now), theme, band }));
     else localStorage.removeItem(THEME_KEY);
   } catch {
     // Storage blocked: the band waits for the API instead.
+  }
+}
+
+/** The day's band colour and motif (a CSS url()), cached with the theme. */
+export interface CachedBand {
+  tone: string;
+  motif: string;
+}
+
+/** The band stored earlier today, if the stored day also had one. */
+export function cachedBand(now: Date = new Date()): CachedBand | null {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(THEME_KEY) ?? 'null') as {
+      day?: string;
+      band?: CachedBand | null;
+    } | null;
+    const band = parsed?.day === isoDate(now) ? parsed.band : null;
+    return band && typeof band.tone === 'string' && typeof band.motif === 'string' ? band : null;
+  } catch {
+    return null;
   }
 }
 

@@ -88,6 +88,7 @@ export const CATEGORY_LABEL: Record<SpecialDayCategory, string> = {
   national: 'Milli',
   religious: 'Dini',
   international: 'Uluslararası',
+  commemoration: 'Anma günü',
 };
 
 export const THEME_LABEL: Record<OccasionTheme, string> = {
@@ -105,6 +106,7 @@ export const DEFAULT_THEME: Record<SpecialDayCategory, OccasionTheme> = {
   national: 'national',
   religious: 'religious',
   international: 'soft',
+  commemoration: 'national',
 };
 
 export const MONTHS = [
