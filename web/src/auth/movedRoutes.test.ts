@@ -58,11 +58,13 @@ describe('moved pages', () => {
     legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/remnants']);
     const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
     // '/', '/quiz' and '/general' are open to everyone.
-    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning']);
+    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning', '/warehouse']);
     const planning = tree['/planning']!.children;
     expect(Object.keys(planning)).toEqual(['/planning/cnc-cutting']);
     expect(Object.keys(planning['/planning/cnc-cutting']!.children)).toEqual([
       '/planning/cnc-cutting/remnants',
     ]);
+    // Sac ve Boy Stoğu holds the remnants too, so the same grant opens it.
+    expect(Object.keys(tree['/warehouse']!.children)).toEqual(['/warehouse/pieces']);
   });
 });
