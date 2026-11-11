@@ -16,6 +16,23 @@ export const NAVIGATION_STRUCTURE: NavTree = {
     icon: 'fas fa-home',
     children: {},
   },
+  // Open to everyone (ALWAYS_ALLOWED_ROUTES); a click on the rail opens the quiz.
+  '/quiz': {
+    label: 'Günün Quizi',
+    icon: 'fas fa-trophy',
+    children: {
+      '/quiz/leaderboard': {
+        label: 'Sıralama',
+        icon: 'fas fa-ranking-star',
+        children: {},
+      },
+      '/quiz/review': {
+        label: 'Dünün Cevapları',
+        icon: 'fas fa-list-check',
+        children: {},
+      },
+    },
+  },
   '/reports': {
     label: 'Raporlar',
     icon: 'fas fa-chart-pie',

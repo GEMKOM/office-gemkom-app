@@ -32,6 +32,10 @@ const ALWAYS_ALLOWED_ROUTES = new Set([
   '/general/discussions',
   '/isg',
   '/isg/issues',
+  // Günün Quizi is personal too; the quiz API admits office users only.
+  '/quiz',
+  '/quiz/leaderboard',
+  '/quiz/review',
 ]);
 
 // Routes that are additionally unlocked by a non-page permission codename.

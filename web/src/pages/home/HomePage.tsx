@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { AttentionPanel, HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';
 import { NeoHomePanel } from '@/neo';
+import { QuizHomeCard } from '@/pages/quiz/QuizHomeCard';
 import { allNavPages } from '@/shell/pageVisits';
 import { useUnreadCount } from '@/shell/notifications';
 import { SpecialDaysPanel, useTodayOccasions } from '@/shell/occasion';
@@ -157,6 +158,7 @@ export function HomePage() {
       <ShortcutsBar pages={shortcuts(user.id, departmentCode, pinned)} addable={menuPages} onToggle={toggle} />
       <HubPanels>
         <div key="main" className={css.column}>
+          <QuizHomeCard />
           {left.length > 0 ? (
             left
           ) : (
