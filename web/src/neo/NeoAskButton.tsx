@@ -92,6 +92,8 @@ export function NeoAskButton({
             }
             onClick={() => {
               beforeAsk?.();
+              // force: asked from the record itself, so it goes along even
+              // after the pill's ×. Read now, before any modal closes.
               setNeoPage(page, { force: true });
               void askNeo(question, 'page_button');
             }}
@@ -104,7 +106,9 @@ export function NeoAskButton({
           leftSection={<FaIcon icon="fas fa-pen" size={11} />}
           onClick={() => {
             beforeAsk?.();
-            setNeoPage(page, { force: true });
+            // The question is typed after the modal is gone (beforeAsk):
+            // keep the record for it.
+            setNeoPage(page, { force: true, keep: !!beforeAsk });
             openNeo({ view: 'chat' });
           }}
         >

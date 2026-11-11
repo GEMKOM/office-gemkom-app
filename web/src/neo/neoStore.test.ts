@@ -137,6 +137,42 @@ describe('page context', () => {
     expect(activePage()).toEqual(ncr);
   });
 
+  it('asking from the record brings the pill back after its ×', () => {
+    setNeoPage(job);
+    dismissNeoPage();
+    setNeoPage(job, { force: true });
+    expect(activePage()).toEqual(job);
+  });
+
+  it('a forced record still leaves with its page (no stale pill)', () => {
+    setNeoPage(job);
+    setNeoPage(job, { force: true });
+    clearNeoPage(job);
+    expect(activePage()).toBeNull();
+  });
+
+  it('a kept record outlives its page for one question, then goes', async () => {
+    vi.mocked(streamChat).mockClear();
+    vi.mocked(streamChat).mockResolvedValue(undefined);
+    setNeoPage(job);
+    setNeoPage(job, { force: true, keep: true });
+    clearNeoPage(job); // the modal closed
+    expect(activePage()).toEqual(job);
+    await sendNeoMessage('Bunda ne var?');
+    expect(vi.mocked(streamChat)).toHaveBeenLastCalledWith(
+      expect.objectContaining({ context: expect.objectContaining({ id: '293-10' }) }),
+    );
+    expect(activePage()).toBeNull();
+  });
+
+  it('closing Neo drops a kept record whose page is gone', () => {
+    setNeoPage(job, { force: true, keep: true });
+    clearNeoPage(job);
+    openNeo();
+    closeNeo();
+    expect(activePage()).toBeNull();
+  });
+
   it('sends the record, the page path and the source with a question', async () => {
     const spy = vi.mocked(streamChat);
     spy.mockClear();
