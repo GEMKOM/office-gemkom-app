@@ -5,7 +5,8 @@ import { apiFetch } from './client';
 // the day closes, so nothing here can leak an answer to a colleague.
 
 export type QuizCategory = 'data' | 'app' | 'isg' | 'technical' | 'general';
-export type QuizStatus = 'none' | 'not_open' | 'available' | 'in_progress' | 'finished';
+export type QuizStatus =
+  'none' | 'preparing' | 'not_open' | 'available' | 'in_progress' | 'finished';
 export type LeaderboardPeriod = 'day' | 'week' | 'month';
 
 export interface QuizAttemptSummary {
@@ -52,6 +53,8 @@ export interface QuizToday {
     winners: LeaderboardRow[];
     review_available: boolean;
   };
+  /** Approvers only (manage_quiz): the draft that waits, or the next day's state. */
+  review?: { date: string; status: QuizDayStatus | 'missing' } | null;
 }
 
 export interface QuizQuestion {
@@ -143,6 +146,13 @@ const asToday = shaped<QuizToday>(
 const asPlay = shaped<QuizPlayResponse>('Quiz sorusu', (d) => typeof d.done === 'boolean');
 const asReview = shaped<QuizReview>('Quiz cevapları', (d) => Array.isArray(d.questions));
 const asLeaderboard = shaped<Leaderboard>('Sıralama', (d) => Array.isArray(d.top));
+const asAdminDays = shaped<{ days: AdminDayEntry[] }>('Quiz taslakları', (d) =>
+  Array.isArray(d.days),
+);
+const asAdminDay = shaped<AdminDayResponse>(
+  'Quiz taslağı',
+  (d) => typeof d.date === 'string' && (d.day === null || isObject(d.day)),
+);
 
 export function getQuizToday(signal?: AbortSignal) {
   return apiFetch<unknown>('/quiz/today/', { signal }).then(asToday);
@@ -184,4 +194,80 @@ export function reportQuizQuestion(questionId: number, reason: string) {
     method: 'POST',
     body: { reason },
   });
+}
+
+// ---------------------------------------------------------------- approvers (manage_quiz)
+
+export type QuizDayStatus = 'generating' | 'draft' | 'ready' | 'failed';
+
+export interface AdminQuestion {
+  id: number;
+  order: number;
+  category: QuizCategory;
+  category_label: string;
+  kind: 'choice' | 'estimate';
+  prompt: string;
+  explanation: string;
+  is_voided: boolean;
+  voided_reason: string;
+  choices?: string[];
+  correct_index?: number;
+  unit?: string;
+  correct_value?: number | string | null;
+  /** The number is filled once the day it asks about is over. */
+  value_pending?: boolean;
+  metric?: string;
+  metric_label?: string;
+}
+
+export interface AdminDay {
+  date: string;
+  status: QuizDayStatus;
+  /** False once the first player has started: the questions are frozen. */
+  editable: boolean;
+  opens_at: string;
+  generated_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  players: number;
+  error_detail: string;
+  /** Unused verified questions per category: "Başka soru öner" takes these first. */
+  spares: Partial<Record<QuizCategory, number>>;
+  questions: AdminQuestion[];
+}
+
+export interface AdminDayEntry {
+  date: string;
+  is_today: boolean;
+  day: AdminDay | null;
+}
+
+export interface AdminDayResponse {
+  date: string;
+  day: AdminDay | null;
+  status?: string;
+  question_id?: number;
+}
+
+export function getQuizAdminDays(signal?: AbortSignal) {
+  return apiFetch<unknown>('/quiz/admin/days/', { signal }).then(asAdminDays);
+}
+
+export function approveQuizDay(date: string) {
+  return apiFetch<unknown>(`/quiz/admin/days/${encodeURIComponent(date)}/approve/`, {
+    method: 'POST',
+  }).then(asAdminDay);
+}
+
+export function generateQuizDay(date: string, force = false) {
+  return apiFetch<unknown>(`/quiz/admin/days/${encodeURIComponent(date)}/generate/`, {
+    method: 'POST',
+    body: { force },
+  }).then(asAdminDay);
+}
+
+export function replaceQuizQuestion(questionId: number) {
+  return apiFetch<unknown>(`/quiz/admin/questions/${questionId}/replace/`, {
+    method: 'POST',
+  }).then(asAdminDay);
 }

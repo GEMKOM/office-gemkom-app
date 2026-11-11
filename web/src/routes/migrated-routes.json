@@ -6,6 +6,7 @@
   "/quiz",
   "/quiz/leaderboard",
   "/quiz/review",
+  "/quiz/manage",
   "/general",
   "/general/crane-requests",
   "/general/department-requests",

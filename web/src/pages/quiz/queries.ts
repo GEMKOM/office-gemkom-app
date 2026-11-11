@@ -8,6 +8,7 @@ export const quizKeys = {
   leaderboard: (period: LeaderboardPeriod, date?: string) =>
     ['quiz', 'leaderboard', period, date ?? ''] as const,
   review: (date: string) => ['quiz', 'review', date] as const,
+  adminDays: ['quiz', 'admin', 'days'] as const,
 };
 
 // 403 (not an office user) and 404 (backend without the quiz yet) are answers,

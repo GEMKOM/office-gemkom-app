@@ -330,6 +330,18 @@ export function QuizPlay({ today }: { today: QuizToday }) {
     );
   }
 
+  if (today.status === 'preparing') {
+    return (
+      <div className={css.play}>
+        <div className={css.centered}>
+          <FaIcon icon="fas fa-hourglass-start" />
+          <h2 className={css.heading}>Bugünün quizi hazırlanıyor</h2>
+          <p className={css.lead}>Sorular onaylanınca burada açılacak.</p>
+        </div>
+      </div>
+    );
+  }
+
   if (today.status === 'not_open') {
     return (
       <div className={css.play}>

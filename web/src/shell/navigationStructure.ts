@@ -31,6 +31,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-list-check',
         children: {},
       },
+      // manage_quiz holders only (ROUTE_EXTRA_CODENAMES).
+      '/quiz/manage': {
+        label: 'Quiz Onayı',
+        icon: 'fas fa-clipboard-check',
+        children: {},
+      },
     },
   },
   '/reports': {
