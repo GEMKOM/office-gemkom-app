@@ -7,6 +7,7 @@ const RECEIPTS = '/warehouse/goods-receipts';
 const COUNTS = '/warehouse/counts';
 const SLIPS = '/warehouse/production-slips';
 const TRANSFERS = '/warehouse/transfers';
+const PIECES = '/warehouse/pieces';
 const CARDS = '/planning/inventory/cards';
 const PULLS = '/manufacturing/material-tracking/pull-requests';
 
@@ -51,6 +52,14 @@ export function WarehouseHubPage() {
       icon: 'fas fa-exchange-alt',
       iconColor: 'violet',
       link: TRANSFERS,
+    },
+    {
+      title: 'Sac ve Boy Stoğu',
+      description:
+        'Sac, profil, boru ve çubuk parçaları: ölçü, adet, ağırlık ve yer; fasona gönderme.',
+      icon: 'fas fa-layer-group',
+      iconColor: 'red',
+      link: PIECES,
     },
     {
       title: 'Stok Kartları',
