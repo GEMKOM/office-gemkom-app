@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
-import { NEO_UNAVAILABLE, streamChat, type ChatEvent } from '@/api/assistant';
+import { NEO_UNAVAILABLE, streamChat, type ChatEvent, type NeoAction } from '@/api/assistant';
 import {
   activePage,
   applyChatEvent,
@@ -276,6 +276,49 @@ describe('applyChatEvent', () => {
     expect(partial).toMatchObject({ text: 'Yarım', error: true, streaming: false });
     const empty = applyChatEvent(answer, { event: 'error', data: { detail: 'Kota doldu' } });
     expect(empty.text).toBe('Kota doldu');
+  });
+
+  it('adds action cards, and a card with the same id replaces its old self', () => {
+    const card: NeoAction = {
+      id: 5,
+      kind: 'report',
+      label: 'Bildirim gönder',
+      status: 'pending',
+      fields: [],
+      expires_at: '2026-11-11T12:00:00Z',
+    };
+    const one = applyChatEvent(answer, { event: 'action', data: card });
+    const two = applyChatEvent(one, { event: 'action', data: { ...card, id: 6 } });
+    expect(two.actions?.map((a) => a.id)).toEqual([5, 6]);
+    const replaced = applyChatEvent(two, { event: 'action', data: { ...card, status: 'confirmed' } });
+    expect(replaced.actions?.map((a) => [a.id, a.status])).toEqual([
+      [5, 'confirmed'],
+      [6, 'pending'],
+    ]);
+  });
+});
+
+describe('stored conversations', () => {
+  it('bring their action cards back', () => {
+    const card: NeoAction = {
+      id: 9,
+      kind: 'leave_request',
+      label: 'İzin talebi oluştur',
+      status: 'confirmed',
+      fields: [],
+      expires_at: '2026-11-11T12:00:00Z',
+    };
+    showConversation({
+      id: 3,
+      messages: [
+        { id: 1, role: 'user', content: 'Cuma izin istiyorum' },
+        { id: 2, role: 'assistant', content: 'Kartı onaylayabilirsiniz.', actions: [card] },
+        { id: 3, role: 'assistant', content: 'Başka?', actions: [] },
+      ],
+    });
+    const [, withCard, without] = getNeoState().items as AssistantItem[];
+    expect(withCard?.actions).toEqual([card]);
+    expect(without?.actions).toBeUndefined();
   });
 });
 

@@ -5,6 +5,7 @@ import {
   type ChatEvent,
   type ChatSource,
   type ConversationDetail,
+  type NeoAction,
   type NeoPageContext,
 } from '@/api/assistant';
 import { isApiError } from '@/api/client';
@@ -38,6 +39,8 @@ export type ChatItem =
       feedback?: number | null;
       /** Questions the user may want to ask next (only on fresh answers). */
       followups?: string[];
+      /** Writes this answer proposed, as cards the user confirms. */
+      actions?: NeoAction[];
     };
 
 export type AssistantItem = Extract<ChatItem, { role: 'assistant' }>;
@@ -312,6 +315,7 @@ export function showConversation(detail: ConversationDetail, { keepView = false 
           error: message.outcome === 'error',
           messageId: message.id,
           feedback: message.feedback ?? null,
+          ...(message.actions?.length ? { actions: message.actions } : {}),
         },
   );
   set({
@@ -325,6 +329,25 @@ export function showConversation(detail: ConversationDetail, { keepView = false 
 /** The stored conversation is gone (archived, another user): start empty. */
 export function markRestored(forget: boolean) {
   set(forget ? { restored: true, conversationId: null, items: [] } : { restored: true });
+}
+
+/** A card came back from confirm / cancel: it replaces the one with its id. */
+export function setItemAction(itemId: string, action: NeoAction) {
+  set((s) => ({
+    items: s.items.map((item) =>
+      item.id === itemId && item.role === 'assistant' ? withAction(item, action) : item,
+    ),
+  }));
+}
+
+function withAction(item: AssistantItem, action: NeoAction): AssistantItem {
+  const actions = item.actions ?? [];
+  return {
+    ...item,
+    actions: actions.some((a) => a.id === action.id)
+      ? actions.map((a) => (a.id === action.id ? action : a))
+      : [...actions, action],
+  };
 }
 
 export function setItemFeedback(itemId: string, feedback: number | null) {
@@ -383,6 +406,8 @@ export function applyChatEvent(item: AssistantItem, event: ChatEvent): Assistant
     }
     case 'followups':
       return { ...item, followups: cleanFollowups(event.data.items) };
+    case 'action':
+      return event.data && typeof event.data.id === 'number' ? withAction(item, event.data) : item;
     case 'done': {
       const next: AssistantItem = {
         ...item,

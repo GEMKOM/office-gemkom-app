@@ -48,6 +48,11 @@ export const TOOL_LABELS: Record<string, string> = {
   get_portfolio_financials: 'Kâr ve marj toplamları hesaplanıyor',
   get_workload_overview: 'İş yükü toplanıyor',
   get_procurement_spend: 'Satın alma harcaması hesaplanıyor',
+  // Öneriler (actions.py): nothing is written until the user confirms the card
+  propose_discussion_topic: 'Tartışma konusu hazırlanıyor',
+  propose_discussion_comment: 'Yorum hazırlanıyor',
+  propose_report: 'Bildirim hazırlanıyor',
+  propose_leave_request: 'İzin talebi hazırlanıyor',
 };
 
 export const GENERIC_TOOL_LABEL = 'Veri alınıyor';

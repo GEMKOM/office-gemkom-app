@@ -52,6 +52,47 @@ export interface StoredMessage {
   outcome?: string | null;
   /** 1, -1 or null: the user's thumbs on an answer. */
   feedback?: number | null;
+  /** The action cards this answer proposed. */
+  actions?: NeoAction[];
+}
+
+// --------------------------------------------------------------- actions
+
+/** One row of an action card (gemkom-backend assistant/services/actions.py). */
+export interface NeoActionField {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'date' | 'time' | 'select';
+  value: string | number;
+  editable: boolean;
+  required: boolean;
+  /** For a locked field, what to show instead of the bare value ("960-01 · Tank"). */
+  display?: string;
+  options?: { value: string; label: string }[];
+}
+
+export type NeoActionStatus = 'pending' | 'confirmed' | 'cancelled' | 'expired' | 'failed';
+
+/** A write Neo proposed. Nothing is saved until the user confirms it. */
+export interface NeoAction {
+  id: number;
+  kind: string;
+  label: string;
+  status: NeoActionStatus;
+  fields: NeoActionField[];
+  /** What the confirm created. */
+  result?: { id: number; label: string; url?: string | null } | null;
+  error?: string;
+  expires_at: string;
+}
+
+/** Runs the proposal with the user's edits to its editable fields. */
+export function confirmAction(id: number, payload: Record<string, string>) {
+  return apiFetch<NeoAction>(`/assistant/actions/${id}/confirm/`, { method: 'POST', body: { payload } });
+}
+
+export function cancelAction(id: number) {
+  return apiFetch<NeoAction>(`/assistant/actions/${id}/cancel/`, { method: 'POST' });
 }
 
 export interface ConversationDetail extends ConversationSummary {
@@ -96,6 +137,8 @@ export type ChatEvent =
     }
   /** Up to three follow-up questions, sent after the answer text. */
   | { event: 'followups'; data: { items: string[] } }
+  /** A write Neo proposed, shown as a card the user confirms. */
+  | { event: 'action'; data: NeoAction }
   | {
       event: 'done';
       data: {

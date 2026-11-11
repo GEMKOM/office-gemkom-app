@@ -24,6 +24,7 @@ import { hasSectionAccess } from '@/auth/accessControl';
 import { FaIcon } from '@/ui/FaIcon';
 import { notify } from '@/ui/notify';
 import classes from './neo.module.css';
+import { ActionCard } from './ActionCard';
 import { NeoMarkdown } from './NeoMarkdown';
 import {
   activePage,
@@ -345,6 +346,13 @@ const Message = memo(function Message({
           )
         ) : null}
       </div>
+      {item.actions?.length ? (
+        <div className={classes.actionList}>
+          {item.actions.map((action) => (
+            <ActionCard key={action.id} action={action} itemId={item.id} />
+          ))}
+        </div>
+      ) : null}
       <AnswerActions item={item} bodyRef={bodyRef} isLast={isLast} onAsk={onAsk} />
       {followups.length > 0 && (
         <div className={classes.followups} aria-label="Önerilen sorular">

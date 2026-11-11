@@ -100,6 +100,10 @@ export const TOOL_LABELS: Record<string, string> = {
   get_portfolio_financials: 'Kâr ve marj toplamları',
   get_workload_overview: 'İş yükü',
   get_procurement_spend: 'Satın alma harcaması',
+  propose_discussion_topic: 'Tartışma konusu önerisi',
+  propose_discussion_comment: 'Yorum önerisi',
+  propose_report: 'Bildirim önerisi',
+  propose_leave_request: 'İzin talebi önerisi',
 };
 
 /** DailySummary.status → [label, badge family]; no yellow by house rule. */
