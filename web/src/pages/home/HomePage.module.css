@@ -391,3 +391,50 @@
     display: none;
   }
 }
+
+/* ---- Approval queues under "Onayınızı Bekleyenler" ------------------------- */
+.queues {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.queuesLabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gk-muted);
+  margin-right: 2px;
+}
+
+.queue {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 2px 6px 2px 10px;
+  border: 1px solid var(--gk-line);
+  border-radius: 999px;
+  background: var(--gk-surface);
+  font-size: 13px;
+  color: var(--gk-ink);
+  text-decoration: none;
+  transition:
+    border-color 120ms ease-out,
+    background 120ms ease-out;
+}
+
+.queue:hover {
+  border-color: var(--gk-red-100);
+  background: var(--gk-red-050);
+}
+
+.queue:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.queueIcon {
+  color: var(--fam-fg);
+  font-size: 12px;
+}

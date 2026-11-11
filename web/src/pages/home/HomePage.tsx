@@ -1,7 +1,7 @@
 import { hasRouteAccess } from '@/auth/accessControl';
 import { useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
-import { AttentionPanel, HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';
+import { HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';
 import { NeoHomePanel } from '@/neo';
 import { QuizHomeCard } from '@/pages/quiz/QuizHomeCard';
 import { allNavPages } from '@/shell/pageVisits';
@@ -11,7 +11,7 @@ import { formatDate, formatNumber } from '@/lib/format';
 import { PageHeader, Panel, PendingValue, type PageFigure } from '@/ui';
 import { useApprovals, userDepartment } from './approvals';
 import { greeting } from './homeFormat';
-import { NotificationsPanel, ShortcutsBar, TodayPanel } from './HomePanels';
+import { NotificationsPanel, QueueLinks, ShortcutsBar, TodayPanel } from './HomePanels';
 import { usePinnedPages } from './pinnedPages';
 import { DEPARTMENT_LABELS, shortcuts } from './shortcuts';
 import { TASK_PAGES, useMyIsg, useMyRequests, useMyTasks } from './work';
@@ -109,6 +109,7 @@ export function HomePage() {
         icon="fas fa-stamp"
         query={approvals.records}
         badge={approvals.total}
+        footer={<QueueLinks items={approvals.items} />}
         noun="Onay bekleyen kayıtlar"
         empty="Şu an onayınızı bekleyen bir şey yok. Yeni bir talep geldiğinde burada görünür."
       />
@@ -156,9 +157,10 @@ export function HomePage() {
         figureStyle="tiles"
       />
       <ShortcutsBar pages={shortcuts(user.id, departmentCode, pinned)} addable={menuPages} onToggle={toggle} />
+      {/* Left: what waits on the user (the long lists). Right: short cards about
+          today. The two columns end at about the same height. */}
       <HubPanels>
         <div key="main" className={css.column}>
-          <QuizHomeCard />
           {left.length > 0 ? (
             left
           ) : (
@@ -168,15 +170,13 @@ export function HomePage() {
               </p>
             </Panel>
           )}
+          <NotificationsPanel unread={unread.data} />
         </div>
         <div key="side" className={css.column}>
+          <QuizHomeCard />
           <NeoHomePanel />
-          <SpecialDaysPanel />
-          {!approvals.none ? (
-            <AttentionPanel title="Onay Kuyruklarım" icon="fas fa-inbox" items={approvals.items} badges />
-          ) : null}
           <TodayPanel />
-          <NotificationsPanel unread={unread.data} />
+          <SpecialDaysPanel />
         </div>
       </HubPanels>
     </>

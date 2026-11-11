@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { myVacationSummaryQueryOptions } from '@/api/general/vacation';
 import { formatNumber } from '@/lib/format';
 import { neoLinkTarget, openNeo } from '@/neo';
-import { MoreLink } from '@/pages/hub/HubPanels';
+import { MoreLink, type AttentionItem } from '@/pages/hub/HubPanels';
 import { useAttendanceToday } from '@/shell/attendance';
 import { AppLink, useAppNavigate } from '@/shell/AppLink';
 import { timeAgo, useLatestNotifications, useMarkRead, type AppNotification } from '@/shell/notifications';
@@ -20,6 +20,28 @@ import css from './HomePage.module.css';
 // the shared hub panels.
 
 /** Today: attendance (PDKS) and, for those who can request leave, the balance. */
+/**
+ * The approval queues with something waiting, as a row of links under
+ * "Onayınızı Bekleyenler" (they used to be a second panel, "Onay Kuyruklarım").
+ * Nothing while the counts load or when every queue is empty.
+ */
+export function QueueLinks({ items }: { items: AttentionItem[] }) {
+  const waiting = items.filter((item) => item.count.data);
+  if (!waiting.length) return null;
+  return (
+    <nav className={css.queues} aria-label="Onay kuyrukları">
+      <span className={css.queuesLabel}>Kuyruklar</span>
+      {waiting.map((item) => (
+        <AppLink key={item.id} to={item.link} className={css.queue} data-family={item.color}>
+          <FaIcon icon={item.icon} className={css.queueIcon} />
+          <span>{item.label}</span>
+          <CountBadge count={item.count.data} />
+        </AppLink>
+      ))}
+    </nav>
+  );
+}
+
 export function TodayPanel() {
   const attendance = useAttendanceToday();
   const canVacation = hasRouteAccess(VACATION_PAGE);
