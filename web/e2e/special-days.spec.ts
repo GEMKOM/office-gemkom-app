@@ -211,6 +211,7 @@ test('HR previews a day from İnsan Kaynakları > Özel Günler, like impersonat
   await page.goto('/human_resources/special-days');
   await expect(page.getByRole('heading', { level: 1, name: 'Özel Günler' })).toBeVisible();
   await expect(page.locator('html')).not.toHaveAttribute('data-occasion', /.+/);
+  await page.getByRole('tab', { name: 'Önizleme' }).click();
   await page.getByRole('textbox', { name: 'Gün', exact: true }).fill('2026-10-28');
   if (shots) await page.screenshot({ path: `${shots}/6-hr-preview-page.png` });
   await page.getByRole('button', { name: 'Bu Günü Önizle' }).click();
@@ -232,74 +233,117 @@ test('HR previews a day from İnsan Kaynakları > Özel Günler, like impersonat
   await expect(page.locator('html')).not.toHaveAttribute('data-occasion', /.+/);
 });
 
-test('HR edits a greeting and a company day, then previews the day', async ({ page }) => {
+test('HR designs a day in Tasarım, then previews it across the app', async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   const session = await seedSession(page, { admin: true });
-  let birthdayTemplate = {
+  const flag = {
+    layout: 'flag',
+    tone: '#c8102e',
+    ink: '#ffffff',
+    accent: '#ffffff',
+    accent_on_ink: '',
+    paper: '#fff8f4',
+    font: 'Bebas Neue',
+    motif: 'ayyildiz',
+    numeral: '{years}',
+    cta: 'Uygulamaya Geç',
+  };
+  const texts = {
+    popup_title: 'Cumhuriyet Bayramımız kutlu olsun',
+    popup_body: 'Cumhuriyetimizin {years}. yılını gururla kutluyoruz. İyi bayramlar.',
+    popup_note: '',
+    before_title: 'Cumhuriyet Bayramımız şimdiden kutlu olsun',
+    before_body: '',
+    before_note: '{tatil_gunleri} tatil. {donus_gunu} günü görüşmek üzere.',
+    return_title: '',
+    return_body: '',
+  };
+  let cumhuriyet: Record<string, unknown> = {
+    id: 12,
+    name: 'Cumhuriyet Bayramı',
+    category: 'national',
+    month: null,
+    day: null,
+    date: null,
+    theme: 'national',
+    show_popup: true,
+    is_active: true,
+    created_by: null,
+    created_by_name: null,
+    created_at: '2026-11-11T08:00:00Z',
+    updated_at: '2026-11-11T08:00:00Z',
+    slug: 'cumhuriyet-bayrami',
+    recurrence: 'holiday',
+    holiday_key: 'cumhuriyet-bayrami',
+    since_year: 1923,
+    show_on: 'both',
+    color_band: true,
+    keep_theme_during: true,
+    return_enabled: false,
+    design: flag,
+    defaults: {
+      design: flag,
+      ...texts,
+      show_on: 'both',
+      color_band: true,
+      keep_theme_during: true,
+      show_popup: true,
+      return_enabled: false,
+    },
+    ...texts,
+  };
+  const birthday = {
     kind: 'birthday',
     kind_label: 'Doğum günü',
     title: 'İyi ki doğdunuz, {first_name}',
-    body: 'GEMKOM ailesi olarak yeni yaşınızı kutlarız.',
+    body: 'GEMKOM ailesi olarak sağlıklı, mutlu ve başarılı bir yaş dileriz.',
     show_popup: true,
-    updated_by: null as number | null,
-    updated_at: null as string | null,
+    updated_by: null,
+    updated_at: null,
   };
-  const otherTemplates = [
-    {
-      kind: 'work_anniversary',
-      kind_label: 'İş yıl dönümü',
-      title: '{years}. yılınız kutlu olsun, {first_name}',
-      body: '',
-      show_popup: true,
-      updated_by: null,
-      updated_at: null,
-    },
-    {
-      kind: 'public_holiday',
-      kind_label: 'Resmi tatil',
-      title: '{holiday_name} kutlu olsun',
-      body: '',
-      show_popup: true,
-      updated_by: null,
-      updated_at: null,
-    },
-  ];
-  let yilsonu = {
-    id: 4,
-    name: 'Yılsonu',
-    category: 'company',
-    month: 12,
-    day: 31,
-    date: null as string | null,
-    theme: 'company',
-    popup_title: '',
-    popup_body: '',
-    show_popup: true,
+  const calendarRow = (year: string) => ({
+    date: `${year}-10-29`,
+    end_date: `${year}-10-29`,
+    kind: 'public_holiday',
+    theme: 'national',
+    name: 'Cumhuriyet Bayramı',
+    key: `holiday:cumhuriyet-bayrami:${year}`,
+    id: 12,
+    slug: 'cumhuriyet-bayrami',
+    before_date: `${year}-10-27`,
+    display_date: `${year}-10-27`,
+    return_date: null,
+    design: cumhuriyet.design,
+    show_on: 'both',
     is_active: true,
-    created_by: 1,
-    created_by_name: 'İK',
-    created_at: '2026-11-01T08:00:00Z',
-    updated_at: '2026-11-01T08:00:00Z',
-  };
+  });
   const backend = await mockBackend(
     page,
     {
       'GET /special-days/today/': ({ query }) =>
-        query.get('date')
+        query.get('date') === '2026-10-27'
           ? {
               json: {
-                date: query.get('date'),
+                date: '2026-10-27',
                 occasions: [
                   {
-                    key: `special:4:${query.get('date')?.slice(0, 4)}`,
-                    kind: 'special_day',
-                    theme: 'company',
-                    name: yilsonu.name,
-                    category: 'company',
-                    title: yilsonu.popup_title.replace('{first_name}', 'E2E') || yilsonu.name,
-                    body: yilsonu.popup_body,
+                    key: 'holiday:cumhuriyet-bayrami:2026',
+                    kind: 'public_holiday',
+                    theme: 'national',
+                    name: 'Cumhuriyet Bayramı',
+                    phase: 'before',
+                    date: '2026-10-29',
+                    end_date: '2026-10-29',
+                    display_date: '2026-10-27',
+                    kicker: '',
+                    title: String(cumhuriyet.before_title),
+                    body: 'Cumhuriyetimizin 103. yılını gururla kutluyoruz. İyi bayramlar.',
+                    note: '28 Ekim arifesi ve 29 Ekim tatil. 30 Ekim Cuma günü görüşmek üzere.',
+                    numeral: '103',
+                    design: cumhuriyet.design,
+                    color_band: true,
                     show_popup: true,
-                    years: null,
+                    years: 103,
                     is_half_day: false,
                   },
                 ],
@@ -312,118 +356,88 @@ test('HR edits a greeting and a company day, then previews the day', async ({ pa
       'GET /special-days/calendar/': ({ query }) => ({
         json: {
           year: Number(query.get('year')),
-          results: [
-            {
-              date: `${query.get('year')}-10-29`,
-              end_date: `${query.get('year')}-10-29`,
-              kind: 'public_holiday',
-              theme: 'national',
-              name: 'Cumhuriyet Bayramı',
-              key: `holiday:cumhuriyet-bayrami:${query.get('year')}`,
-              is_half_day: false,
-            },
-            {
-              date: `${query.get('year')}-12-31`,
-              end_date: `${query.get('year')}-12-31`,
-              kind: 'special_day',
-              theme: 'company',
-              name: yilsonu.name,
-              category: 'company',
-              key: `special:4:${query.get('year')}`,
-              id: 4,
-            },
-          ],
+          results: [calendarRow(String(query.get('year')))],
         },
       }),
-      'GET /special-days/templates/': () => ({ json: [birthdayTemplate, ...otherTemplates] }),
-      'PATCH /special-days/templates/birthday/': ({ body }) => {
-        birthdayTemplate = {
-          ...birthdayTemplate,
-          ...(body as object),
-          updated_at: '2026-11-11T09:30:00Z',
-        };
-        return { json: birthdayTemplate };
+      'GET /special-days/days/': () => ({ json: [cumhuriyet] }),
+      'PATCH /special-days/days/12/': ({ body }) => {
+        cumhuriyet = { ...cumhuriyet, ...(body as object) };
+        return { json: cumhuriyet };
       },
-      'GET /special-days/days/': () => ({ json: [yilsonu] }),
-      'PATCH /special-days/days/4/': ({ body }) => {
-        yilsonu = { ...yilsonu, ...(body as object) };
-        return { json: yilsonu };
-      },
+      'GET /special-days/templates/': () => ({ json: [birthday] }),
+      'GET /special-days/settings/': { json: { arife_is_holiday: true, founded_on: null } },
     },
     { session },
   );
 
+  // Takvim: the year by month, each day's look, and when its welcome shows.
   await page.goto('/human_resources/special-days');
-  await expect(page.getByText('İyi ki doğdunuz, Ayşe')).toBeVisible();
-
-  // The whole year, by month; next year is a click away.
   const year = new Date().getFullYear();
   const yearList = page.getByTestId('year-calendar');
-  await expect(yearList.getByRole('region', { name: `Ekim ${year}` })).toContainText(
-    'Cumhuriyet Bayramı',
-  );
+  const october = yearList.getByRole('region', { name: `Ekim ${year}` });
+  await expect(october).toContainText('Cumhuriyet Bayramı');
+  await expect(october).toContainText('Karşılama 27 Ekim');
+  await expect(october.getByTestId('design-chip')).toBeVisible();
   await page
     .locator('label')
     .filter({ hasText: new RegExp(`^${year + 1}$`) })
     .click();
-  await expect(yearList.getByRole('region', { name: `Aralık ${year + 1}` })).toContainText(
-    'Yılsonu',
-  );
+  await expect(yearList.getByRole('region', { name: `Ekim ${year + 1}` })).toBeVisible();
   await page
     .locator('label')
     .filter({ hasText: new RegExp(`^${year}$`) })
     .click();
-  await expect(yearList.getByRole('region', { name: `Aralık ${year}` })).toBeVisible();
-  if (shots) await page.screenshot({ path: `${shots}/8-hr-page.png`, fullPage: true });
+  if (shots) await page.screenshot({ path: `${shots}/8-hr-takvim.png`, fullPage: true });
 
-  // Kutlama metinleri: the preview follows the text as it is typed.
-  await page.getByRole('button', { name: 'Doğum günü metnini düzenle' }).click();
-  const dialog = page.getByRole('dialog');
-  await dialog.getByLabel('Başlık').fill('Doğum gününüz kutlu olsun, {full_name}');
-  await expect(dialog.getByTestId('greeting-preview')).toContainText(
-    'Doğum gününüz kutlu olsun, Ayşe Kaya',
+  // Tasarım, opened from the day's row.
+  await yearList.getByRole('button', { name: 'Cumhuriyet Bayramı 29 Ekim tasarımı' }).click();
+  await expect(page.getByRole('tab', { name: 'Tasarım' })).toHaveAttribute('aria-selected', 'true');
+  const preview = page.getByTestId('design-welcome-preview');
+  await expect(preview).toContainText('Cumhuriyet Bayramımız şimdiden kutlu olsun');
+  await expect(preview).toContainText('30 Ekim Cuma günü görüşmek üzere');
+  await expect(page.getByTestId('when-hint')).toContainText('27 Ekim Salı gösterilir');
+  if (shots) await page.screenshot({ path: `${shots}/9-hr-tasarim.png`, fullPage: true });
+
+  await page
+    .getByRole('radiogroup', { name: 'Düzen' })
+    .getByRole('radio', { name: 'Anma' })
+    .click();
+  await page
+    .getByRole('radiogroup', { name: 'Motif' })
+    .getByRole('radio', { name: 'Defne' })
+    .click();
+  await page
+    .getByLabel('Başlık', { exact: true })
+    .fill('Cumhuriyetimizin 103. yılı şimdiden kutlu olsun');
+  await expect(preview.getByTestId('welcome-template')).toHaveAttribute('data-layout', 'solemn');
+  await expect(preview).toContainText('Cumhuriyetimizin 103. yılı şimdiden kutlu olsun');
+  if (shots) await page.screenshot({ path: `${shots}/10-hr-tasarim-edit.png`, fullPage: true });
+  await expect(page.getByRole('button', { name: 'Bu Günü Önizle' })).toBeDisabled();
+  await page.getByRole('button', { name: 'Kaydet' }).click();
+  await expect(page.getByRole('button', { name: 'Bu Günü Önizle' })).toBeEnabled();
+  const patched = backend.calls.find(
+    (c) => c.method === 'PATCH' && c.path === '/special-days/days/12/',
   );
-  if (shots) await page.screenshot({ path: `${shots}/8b-hr-edit-template.png` });
-  await dialog.getByRole('button', { name: 'Kaydet' }).click();
-  await expect(dialog).toHaveCount(0);
-  await expect(page.getByText('Doğum gününüz kutlu olsun, Ayşe Kaya')).toBeVisible();
-  const patchedTemplate = backend.calls.find(
-    (c) => c.method === 'PATCH' && c.path === '/special-days/templates/birthday/',
-  );
-  expect(patchedTemplate?.body).toEqual({
-    title: 'Doğum gününüz kutlu olsun, {full_name}',
-    body: 'GEMKOM ailesi olarak yeni yaşınızı kutlarız.',
-    show_popup: true,
+  expect(patched?.body).toMatchObject({
+    design: { ...flag, layout: 'solemn', motif: 'defne' },
+    before_title: 'Cumhuriyetimizin 103. yılı şimdiden kutlu olsun',
+    popup_title: 'Cumhuriyet Bayramımız kutlu olsun',
   });
 
-  // Şirket özel günleri: a new welcome title for Yılsonu.
-  await page.getByRole('button', { name: 'Yılsonu düzenle' }).click();
-  await dialog.getByLabel('Başlık').fill('Yeni yılınız kutlu olsun, {first_name}');
-  await expect(dialog.getByTestId('greeting-preview')).toContainText(
-    'Yeni yılınız kutlu olsun, Ayşe',
-  );
-  if (shots) await page.screenshot({ path: `${shots}/9-hr-edit-day.png` });
-  await dialog.getByRole('button', { name: 'Kaydet' }).click();
-  await expect(dialog).toHaveCount(0);
-  const patchedDay = backend.calls.find(
-    (c) => c.method === 'PATCH' && c.path === '/special-days/days/4/',
-  );
-  expect(patchedDay?.body).toMatchObject({
-    name: 'Yılsonu',
-    month: 12,
-    day: 31,
-    date: null,
-    popup_title: 'Yeni yılınız kutlu olsun, {first_name}',
-  });
-
-  // Right after saving: preview that day across the app.
-  const saved = page.getByTestId('day-saved');
-  await expect(saved).toContainText('Yılsonu kaydedildi.');
-  await saved.getByRole('button', { name: 'Bu Günü Önizle' }).click();
+  // The preview opens on the working day before, in the saved design.
+  await page.getByRole('button', { name: 'Bu Günü Önizle' }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByTestId('occasion-preview-banner')).toContainText('31 Aralık');
+  await expect(page.getByTestId('occasion-preview-banner')).toContainText('27 Ekim 2026');
+  const welcome = page.getByTestId('occasion-welcome');
+  await expect(welcome.getByTestId('welcome-template')).toHaveAttribute('data-layout', 'solemn');
   await expect(
-    page.getByRole('heading', { level: 1, name: 'Yeni yılınız kutlu olsun, E2E' }).last(),
+    page.getByRole('heading', {
+      level: 1,
+      name: 'Cumhuriyetimizin 103. yılı şimdiden kutlu olsun',
+    }),
   ).toBeVisible();
-  if (shots) await page.screenshot({ path: `${shots}/10-hr-day-preview.png` });
+  await expect(page.getByText('Perşembe · 29 Ekim')).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/11-hr-preview-welcome.png` });
+  await page.getByRole('button', { name: 'Uygulamaya Geç' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-occasion', 'national');
 });

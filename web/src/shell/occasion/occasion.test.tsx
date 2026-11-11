@@ -165,6 +165,74 @@ describe('OccasionLayer', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it("paints the band in the day's design and opens its welcome in that layout", async () => {
+    responses['/special-days/today/'] = {
+      date: '2026-10-27',
+      occasions: [
+        {
+          key: 'holiday:cumhuriyet-bayrami:2026',
+          kind: 'public_holiday',
+          theme: 'national',
+          name: 'Cumhuriyet Bayramı',
+          phase: 'before',
+          date: '2026-10-29',
+          end_date: '2026-10-29',
+          display_date: '2026-10-27',
+          kicker: '',
+          title: 'Cumhuriyet Bayramımız şimdiden kutlu olsun',
+          body: 'Cumhuriyetimizin 103. yılını gururla kutluyoruz.',
+          note: '28 Ekim arifesi ve 29 Ekim tatil. 30 Ekim Cuma günü görüşmek üzere.',
+          numeral: '103',
+          design: {
+            layout: 'solemn',
+            tone: '#16213a',
+            ink: '#ffffff',
+            accent: '#c8102e',
+            accent_on_ink: '',
+            paper: '#fff8f4',
+            font: 'Cormorant Garamond',
+            motif: 'ayyildiz',
+            numeral: '',
+            cta: 'Devam Et',
+          },
+          color_band: true,
+          show_popup: true,
+          years: 103,
+          is_half_day: false,
+        },
+      ],
+      colleagues: [],
+      received: [],
+    };
+    const view = renderWithProviders(<OccasionLayer />);
+    const welcome = await screen.findByRole('dialog');
+    expect(within(welcome).getByTestId('welcome-template')).toHaveAttribute(
+      'data-layout',
+      'solemn',
+    );
+    expect(within(welcome).getByText('Perşembe · 29 Ekim')).toBeInTheDocument();
+    expect(within(welcome).getByText(/30 Ekim Cuma günü görüşmek üzere/)).toBeInTheDocument();
+    expect(within(welcome).getByRole('button', { name: 'Devam Et' })).toBeInTheDocument();
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue('--gk-band-bg')).toBe('#16213a');
+    expect(root.style.getPropertyValue('--gk-band-motif')).toMatch(/^url\("data:image\/svg\+xml,/);
+    view.unmount();
+    expect(root.style.getPropertyValue('--gk-band-bg')).toBe('');
+  });
+
+  it('keeps the band red when the day says so', async () => {
+    const [birthday] = BIRTHDAY_DAY.occasions;
+    responses['/special-days/today/'] = {
+      ...BIRTHDAY_DAY,
+      occasions: [{ ...birthday, color_band: false, show_popup: false }],
+    };
+    renderWithProviders(<OccasionLayer />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(document.documentElement.dataset.occasion).toBeUndefined();
+    expect(document.documentElement.style.getPropertyValue('--gk-band-bg')).toBe('');
+  });
+
   it('leaves the band alone on an ordinary day', async () => {
     responses['/special-days/today/'] = {
       date: '2026-11-12',

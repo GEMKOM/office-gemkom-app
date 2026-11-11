@@ -164,71 +164,13 @@ async function pick(dialog: HTMLElement, label: RegExp, option: string) {
   fireEvent.click(await screen.findByRole('option', { name: option, hidden: true }));
 }
 
-describe('Kutlama metinleri', () => {
-  it('lists the three greetings rendered for a sample colleague', async () => {
-    renderPage();
-    expect(await screen.findByText('İyi ki doğdunuz, Ayşe')).toBeInTheDocument();
-    expect(screen.getByText('5. yılınız kutlu olsun, Ayşe')).toBeInTheDocument();
-    expect(screen.getByText('Cumhuriyet Bayramı kutlu olsun')).toBeInTheDocument();
-  });
-
-  it('edits a greeting with a live preview and saves it', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'İş yıl dönümü metnini düzenle' }));
-    const dialog = await screen.findByRole('dialog');
-    const preview = within(dialog).getByTestId('greeting-preview');
-    expect(preview).toHaveTextContent('5. yılınız kutlu olsun, Ayşe');
-    expect(within(dialog).getByRole('button', { name: '{years} ekle' })).toBeInTheDocument();
-    expect(within(dialog).queryByRole('button', { name: '{holiday_name} ekle' })).toBeNull();
-
-    const title = within(dialog).getByLabelText('Başlık');
-    fireEvent.change(title, { target: { value: 'Tebrikler {full_name}, ' } });
-    expect(preview).toHaveTextContent('Tebrikler Ayşe Kaya,');
-    fireEvent.focus(title);
-    (title as HTMLInputElement).setSelectionRange(24, 24);
-    fireEvent.click(within(dialog).getByRole('button', { name: '{years} ekle' }));
-    expect(title).toHaveValue('Tebrikler {full_name}, {years}');
-    expect(preview).toHaveTextContent('Tebrikler Ayşe Kaya, 5');
-
-    fireEvent.change(title, { target: { value: 'Tebrikler {full_name} {holiday_name}' } });
-    expect(within(dialog).getByText(/karşılığı olmayan değişken var/)).toHaveTextContent(
-      '{holiday_name}',
-    );
-    fireEvent.change(title, {
-      target: { value: '{years}. yılınız için teşekkürler, {first_name}' },
-    });
-    fireEvent.click(within(dialog).getByLabelText(/karşılama ekranını göster/));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
-
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    const patch = calls.find((c) => c.method === 'PATCH');
-    expect(patch?.path).toBe('/special-days/templates/work_anniversary/');
-    expect(patch?.body).toEqual({
-      title: '{years}. yılınız için teşekkürler, {first_name}',
-      body: 'GEMKOM ailesindeki {years} yılınız için teşekkür ederiz.',
-      show_popup: false,
-    });
-    expect(await screen.findByText('5. yılınız için teşekkürler, Ayşe')).toBeInTheDocument();
-    expect(screen.getByText('Karşılama kapalı')).toBeInTheDocument();
-  });
-
-  it('does not save an empty title', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Doğum günü metnini düzenle' }));
-    const dialog = await screen.findByRole('dialog');
-    fireEvent.change(within(dialog).getByLabelText('Başlık'), { target: { value: '  ' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
-    expect(await within(dialog).findByText('Başlık boş olamaz.')).toBeInTheDocument();
-    expect(calls.some((c) => c.method === 'PATCH')).toBe(false);
-  });
-});
-
 describe('Şirket özel günleri', () => {
-  it('adds a yearly day, then offers to preview it', async () => {
+  it('adds a yearly day, then offers to preview it or open its design', async () => {
     renderPage();
     expect(await screen.findByText('Her yıl 31 Aralık')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Yeni Özel Gün' }));
     const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText(/Tasarım bölümünde düzenlenir/)).toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
     expect(await within(dialog).findByText('Ad zorunludur.')).toBeInTheDocument();
@@ -240,27 +182,17 @@ describe('Şirket özel günleri', () => {
     expect(await within(dialog).findByText('Bu ayda böyle bir gün yok.')).toBeInTheDocument();
 
     fireEvent.change(within(dialog).getByLabelText('Gün'), { target: { value: '14' } });
-    // An empty title falls back to the day's name.
-    expect(within(dialog).getByTestId('greeting-preview')).toHaveTextContent('Kuruluş Günü');
-    fireEvent.change(within(dialog).getByLabelText('Metin'), {
-      target: { value: '{name} kutlu olsun, {first_name}' },
-    });
-    expect(within(dialog).getByTestId('greeting-preview')).toHaveTextContent(
-      'Kuruluş Günü kutlu olsun, Ayşe',
-    );
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
 
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     const post = calls.find((c) => c.method === 'POST');
+    // The look and the texts are Tasarım's: the backend starts from the category's design.
     expect(post?.body).toEqual({
       name: 'Kuruluş Günü',
       category: 'company',
       month: 2,
       day: 14,
       date: null,
-      popup_title: '',
-      popup_body: '{name} kutlu olsun, {first_name}',
-      show_popup: true,
       is_active: true,
     });
     expect(await screen.findByText('Her yıl 14 Şubat')).toBeInTheDocument();
@@ -275,9 +207,6 @@ describe('Şirket özel günleri', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Yılsonu düzenle' }));
     const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByTestId('greeting-preview')).toHaveTextContent(
-      'Yeni yılınız kutlu olsun, Ayşe',
-    );
     fireEvent.click(within(dialog).getByRole('radio', { name: 'Bir kez' }));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
     expect(await within(dialog).findByText('Tarih seçin.')).toBeInTheDocument();
@@ -288,13 +217,13 @@ describe('Şirket özel günleri', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     const patch = calls.find((c) => c.method === 'PATCH');
     expect(patch?.path).toBe('/special-days/days/4/');
-    expect(patch?.body).toMatchObject({
+    expect(patch?.body).toEqual({
+      name: 'Yılsonu',
+      category: 'international',
       date: '2026-12-31',
       month: null,
       day: null,
-      category: 'international',
-      // "Kategoriye göre" follows the new category.
-      theme: 'soft',
+      is_active: true,
     });
     expect(await screen.findByText('31 Aralık 2026')).toBeInTheDocument();
   });
@@ -325,19 +254,18 @@ describe('Şirket özel günleri', () => {
     expect(getOccasionPreview()).toMatch(/^\d{4}-12-31$/);
   });
 
-  it('opens a company day from the year list in the same editor', async () => {
+  it('lists only the custom days; seeded ones are designed in Tasarım', async () => {
+    days = [
+      { ...yilsonu },
+      { ...yilsonu, id: 12, name: 'Cumhuriyet Bayramı', slug: 'cumhuriyet-bayrami' },
+    ];
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Yılsonu 31 Aralık düzenle' }));
-    const dialog = await screen.findByRole('dialog');
-    expect(within(dialog).getByLabelText(/^Ad/)).toHaveValue('Yılsonu');
-    fireEvent.change(within(dialog).getByLabelText(/^Ad/), { target: { value: 'Yıl Sonu' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
-    expect(calls.find((c) => c.method === 'PATCH')?.body).toMatchObject({ name: 'Yıl Sonu' });
-    expect(screen.getByTestId('day-saved')).toHaveTextContent('Yıl Sonu kaydedildi.');
-    // The year list refetches with the new name.
-    expect(
-      await screen.findByRole('button', { name: 'Yıl Sonu 31 Aralık düzenle' }),
-    ).toBeInTheDocument();
+    expect(await screen.findByTestId('special-day-4')).toBeInTheDocument();
+    expect(screen.queryByTestId('special-day-12')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Yılsonu tasarımı' }));
+    expect(await screen.findByRole('tab', { name: 'Tasarım' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
   });
 });

@@ -13,7 +13,6 @@ import {
   useCompanyDays,
   useDeleteSpecialDay,
   useSaveSpecialDay,
-  type OccasionTheme,
   type SpecialDay,
   type SpecialDayCategory,
   type SpecialDayInput,
@@ -30,15 +29,10 @@ import {
   notify,
   type StatusFamily,
 } from '@/ui';
-import { GreetingFields } from './GreetingFields';
 import css from './SpecialDaysPreviewPage.module.css';
 import {
   CATEGORY_LABEL,
-  DAY_PLACEHOLDERS,
-  DEFAULT_THEME,
   MONTHS,
-  SAMPLE_PERSON,
-  THEME_LABEL,
   isValidMonthDay,
   nextOccurrence,
   whenLabel,
@@ -49,6 +43,7 @@ const CATEGORY_FAMILY: Record<SpecialDayCategory, StatusFamily> = {
   national: 'red',
   religious: 'green',
   international: 'blue',
+  commemoration: 'grey',
 };
 
 type ActiveFilter = 'all' | 'active' | 'inactive';
@@ -71,7 +66,9 @@ export type DayEditing = SpecialDay | 'new' | null;
 export interface CompanyDaysPanelProps {
   /** Starts the app-wide preview of `date` (the page also navigates home). */
   onPreview: (date: string) => void;
-  /** Held by the page so the year list can open a day's editor too. */
+  /** Opens the day in the Tasarım section. */
+  onDesign?: (id: number) => void;
+  /** Held by the page. */
   editing: DayEditing;
   onEditingChange: (editing: DayEditing) => void;
 }
@@ -79,6 +76,7 @@ export interface CompanyDaysPanelProps {
 /** Şirket özel günleri: HR adds, edits and removes the company's own days. */
 export function CompanyDaysPanel({
   onPreview,
+  onDesign,
   editing,
   onEditingChange: setEditing,
 }: CompanyDaysPanelProps) {
@@ -87,7 +85,9 @@ export function CompanyDaysPanel({
   const remove = useDeleteSpecialDay();
   const [saved, setSaved] = useState<Saved | null>(null);
   const today = isoDate(new Date());
-  const rows = days.data ?? [];
+  // Seeded days (holidays, commemorations, special days) are designed in
+  // Tasarım and cannot be deleted; this list is the company's own days.
+  const rows = (days.data ?? []).filter((row) => !row.slug);
 
   const askDelete = async (row: SpecialDay) => {
     const ok = await confirm({
@@ -152,6 +152,16 @@ export function CompanyDaysPanel({
                 Bu Günü Önizle
               </Button>
             ) : null}
+            {onDesign ? (
+              <Button
+                size="compact-sm"
+                variant="default"
+                leftSection={<i className="fas fa-palette" aria-hidden />}
+                onClick={() => onDesign(saved.id)}
+              >
+                Tasarımı Düzenle
+              </Button>
+            ) : null}
             <Button size="compact-sm" variant="default" onClick={() => setSaved(null)}>
               Kapat
             </Button>
@@ -199,6 +209,16 @@ export function CompanyDaysPanel({
                       aria-label={`${row.name} önizle`}
                     >
                       Önizle
+                    </Button>
+                  ) : null}
+                  {onDesign ? (
+                    <Button
+                      size="compact-sm"
+                      variant="default"
+                      onClick={() => onDesign(row.id)}
+                      aria-label={`${row.name} tasarımı`}
+                    >
+                      <i className="fas fa-palette" aria-hidden />
                     </Button>
                   ) : null}
                   <Button
@@ -253,11 +273,6 @@ interface DayForm {
   month: string;
   day: number | string;
   date: string;
-  /** 'auto' follows the category. */
-  theme: OccasionTheme | 'auto';
-  popup_title: string;
-  popup_body: string;
-  show_popup: boolean;
   is_active: boolean;
 }
 
@@ -270,10 +285,6 @@ function initialValues(day: SpecialDay | null): DayForm {
       month: '',
       day: '',
       date: '',
-      theme: 'auto',
-      popup_title: '',
-      popup_body: '',
-      show_popup: true,
       is_active: true,
     };
   }
@@ -284,22 +295,19 @@ function initialValues(day: SpecialDay | null): DayForm {
     month: day.month ? String(day.month) : '',
     day: day.day ?? '',
     date: day.date ?? '',
-    theme: day.theme === DEFAULT_THEME[day.category] ? 'auto' : day.theme,
-    popup_title: day.popup_title,
-    popup_body: day.popup_body,
-    show_popup: day.show_popup,
     is_active: day.is_active,
   };
 }
 
-/** The request body; one side of month/day vs date is sent as null so it clears. */
-export function dayPayload(values: DayForm, isNew: boolean): SpecialDayInput {
+/**
+ * The request body; one side of month/day vs date is sent as null so it
+ * clears. The look and the texts are the Tasarım section's; a new day starts
+ * from its category's design on the backend.
+ */
+export function dayPayload(values: DayForm): SpecialDayInput {
   const payload: SpecialDayInput = {
     name: values.name.trim(),
     category: values.category,
-    popup_title: values.popup_title.trim(),
-    popup_body: values.popup_body.trim(),
-    show_popup: values.show_popup,
     is_active: values.is_active,
   };
   if (values.repeat === 'yearly') {
@@ -311,8 +319,6 @@ export function dayPayload(values: DayForm, isNew: boolean): SpecialDayInput {
     payload.month = null;
     payload.day = null;
   }
-  if (values.theme !== 'auto') payload.theme = values.theme;
-  else if (!isNew) payload.theme = DEFAULT_THEME[values.category];
   return payload;
 }
 
@@ -343,11 +349,10 @@ function SpecialDayFormModal({
     },
   });
   const values = form.values;
-  const theme = values.theme === 'auto' ? DEFAULT_THEME[values.category] : values.theme;
 
   const submit = (input: DayForm) => {
     save.mutate(
-      { id: day?.id ?? null, input: dayPayload(input, day === null) },
+      { id: day?.id ?? null, input: dayPayload(input) },
       {
         onSuccess: (row) => {
           notify.success(`${row.name} kaydedildi.`);
@@ -365,7 +370,7 @@ function SpecialDayFormModal({
       title={day ? 'Özel Günü Düzenle' : 'Yeni Özel Gün'}
       subtitle={day ? day.name : 'Şirket için her yıl ya da bir kez kutlanan gün'}
       icon={day ? 'fas fa-pen' : 'fas fa-plus'}
-      size="xl"
+      size="lg"
       onSubmit={form.onSubmit(submit)}
       submitting={save.isPending}
       error={save.error}
@@ -424,50 +429,17 @@ function SpecialDayFormModal({
             </Grid.Col>
           )}
           <Grid.Col span={{ base: 12, sm: 4 }}>
-            <Select
-              label="Tema"
-              allowDeselect={false}
-              data={[
-                {
-                  value: 'auto',
-                  label: `Kategoriye göre (${THEME_LABEL[DEFAULT_THEME[values.category]]})`,
-                },
-                ...(Object.keys(THEME_LABEL) as OccasionTheme[]).map((value) => ({
-                  value,
-                  label: THEME_LABEL[value],
-                })),
-              ]}
-              {...form.getInputProps('theme')}
-            />
-          </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 4 }}>
             <Switch
               mt={{ base: 0, sm: 30 }}
-              label="Aktif"
+              label="Kullanımda"
               {...form.getInputProps('is_active', { type: 'checkbox' })}
             />
           </Grid.Col>
         </Grid>
       </ModalSection>
-      <ModalSection title="Karşılama" icon="fas fa-envelope-open-text">
-        <GreetingFields
-          title={values.popup_title}
-          body={values.popup_body}
-          onChange={(field, value) =>
-            form.setFieldValue(field === 'title' ? 'popup_title' : 'popup_body', value)
-          }
-          titleFallback={values.name.trim()}
-          placeholders={DAY_PLACEHOLDERS}
-          sample={{ ...SAMPLE_PERSON, name: values.name.trim() }}
-          theme={theme}
-        />
-        <Switch
-          mt="md"
-          label="Gün açılışında karşılama ekranını göster"
-          description="Kapalıyken bant rengi yine değişir, tam ekran karşılama açılmaz."
-          {...form.getInputProps('show_popup', { type: 'checkbox' })}
-        />
-      </ModalSection>
+      <p className={css.modalHint}>
+        Karşılama ekranının görünümü ve metinleri Tasarım bölümünde düzenlenir.
+      </p>
     </FormModal>
   );
 }

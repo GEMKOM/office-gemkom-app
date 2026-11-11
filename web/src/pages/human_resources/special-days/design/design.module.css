@@ -1,0 +1,354 @@
+/* Tasarım: the per-day design editor, after the canvas's Editor. */
+
+.layout {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 16px;
+  align-items: start;
+}
+
+/* Panels stack with a top margin elsewhere; side by side they line up. */
+.layout > section:nth-child(n),
+.previewColumn > section:nth-child(n) {
+  margin-top: 0;
+}
+
+@media (max-width: 80em) {
+  .layout {
+    grid-template-columns: 220px minmax(0, 1fr);
+  }
+
+  .previewColumn {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 48em) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.listPanel {
+  position: sticky;
+  top: 16px;
+}
+
+.dayList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.dayRow {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  border: 0;
+  border-top: 1px solid var(--gk-line);
+  background: transparent;
+  font: inherit;
+  font-size: 13px;
+  color: var(--gk-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+li:first-child > .dayRow {
+  border-top: 0;
+}
+
+.dayRow:hover {
+  background: var(--gk-surface-subtle);
+}
+
+.dayRow[data-on] {
+  background: #fff0f0;
+  color: var(--gk-red-700);
+  font-weight: 600;
+}
+
+.dayRow[data-off] .dayName {
+  color: var(--gk-muted);
+}
+
+.dayChip {
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.dayName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--gk-muted);
+}
+
+.layoutGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.whenGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.choice {
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--gk-line-strong, #8a929b);
+  background: var(--gk-surface);
+  color: var(--gk-ink);
+  font: 500 13px var(--gk-font-sans);
+  cursor: pointer;
+}
+
+.choice[data-on],
+.fontPill[data-on],
+.motifButton[data-on] {
+  border-color: var(--gk-red-700);
+  background: #fff0f0;
+  color: var(--gk-red-700);
+}
+
+.palettes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.palettes[data-count='4'] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 0;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+
+.swatch[data-on] {
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px var(--gk-red-700);
+}
+
+.hex,
+.mono {
+  font-family: var(--gk-font-mono);
+}
+
+.hexDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.fonts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fontPill {
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--gk-line-strong, #8a929b);
+  background: var(--gk-surface);
+  color: var(--gk-ink);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.motifs {
+  display: grid;
+  grid-template-columns: repeat(10, minmax(0, 1fr));
+  gap: 6px;
+}
+
+@media (max-width: 36em) {
+  .motifs {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+.motifButton {
+  height: 42px;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--gk-line-strong, #8a929b);
+  background: var(--gk-surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.twoCols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.textsHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.token {
+  padding: 2px 8px;
+  border: 1px solid var(--gk-line);
+  border-radius: 999px;
+  background: var(--gk-surface);
+  font-family: var(--gk-font-mono);
+  font-size: 12px;
+  color: var(--gk-ink);
+  cursor: pointer;
+}
+
+.token:hover {
+  border-color: var(--gk-muted);
+}
+
+.hint {
+  font-size: 12px;
+  color: var(--gk-ink-2);
+}
+
+.switches {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+
+@media (max-width: 36em) {
+  .switches,
+  .twoCols,
+  .palettes {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.footerRight {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.previewColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.welcomeBox {
+  aspect-ratio: 16 / 10;
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.band {
+  position: relative;
+  min-height: 104px;
+  box-sizing: border-box;
+  padding: 14px 18px;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--gk-red-700);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.bandMotif {
+  position: absolute;
+  right: 20px;
+  top: -10px;
+  opacity: 0.22;
+  line-height: 0;
+}
+
+.bandCrumb {
+  position: relative;
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.bandTitle {
+  position: relative;
+  font-size: 22px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.bandLine {
+  position: relative;
+  font-size: 12px;
+  opacity: 0.9;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.muted {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--gk-ink-2);
+}

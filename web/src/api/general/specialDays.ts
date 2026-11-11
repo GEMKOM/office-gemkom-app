@@ -19,8 +19,34 @@ export type OccasionTheme =
 export type OccasionKind = 'birthday' | 'work_anniversary' | 'public_holiday' | 'special_day';
 export type PersonKind = 'birthday' | 'work_anniversary';
 
+export type DesignLayout = 'celebration' | 'flag' | 'solemn' | 'split';
+
+/**
+ * A day's look: one welcome template, these settings per day. `tone` is the
+ * background and band, `ink` the text, `paper` the split layout's right
+ * panel; `font` is for the title only.
+ */
+export interface OccasionDesign {
+  layout: DesignLayout;
+  tone: string;
+  ink: string;
+  accent: string;
+  /** The motif accent inside the round ink badge; '' = the tone. */
+  accent_on_ink: string;
+  paper: string;
+  font: string;
+  motif: string;
+  /** '' or a placeholder such as '{years}'. */
+  numeral: string;
+  cta: string;
+}
+
+/** before: the last working day before a day off; return: the first one after. */
+export type OccasionPhase = 'before' | 'on' | 'return';
+export type ShowOn = 'before' | 'day' | 'both';
+
 export interface Occasion {
-  /** Stable for the occasion in one year (a three-day bayram shares one). */
+  /** Stable for the occasion in one year (a three-day bayram shares one); return is `<key>:return`. */
   key: string;
   kind: OccasionKind;
   theme: OccasionTheme;
@@ -32,6 +58,17 @@ export interface Occasion {
   is_half_day: boolean;
   local_name?: string;
   category?: string;
+  // Per-day designs (the backend's design contract). Optional so an older
+  // backend still works: the welcome then derives a design from `theme`.
+  phase?: OccasionPhase;
+  date?: string;
+  end_date?: string;
+  display_date?: string;
+  kicker?: string;
+  note?: string;
+  numeral?: string;
+  design?: OccasionDesign;
+  color_band?: boolean;
 }
 
 export interface ColleagueOccasion {
@@ -187,13 +224,24 @@ export interface CelebrationTemplate {
   show_popup: boolean;
   updated_by: number | null;
   updated_at: string | null;
+  design?: OccasionDesign;
+  note?: string;
+  color_band?: boolean;
+  show_on?: ShowOn;
 }
 
 export type CelebrationTemplateInput = Partial<
-  Pick<CelebrationTemplate, 'title' | 'body' | 'show_popup'>
+  Pick<
+    CelebrationTemplate,
+    'title' | 'body' | 'show_popup' | 'design' | 'note' | 'color_band' | 'show_on'
+  >
 >;
 
-export type SpecialDayCategory = 'company' | 'national' | 'religious' | 'international';
+export type SpecialDayCategory =
+  'company' | 'national' | 'religious' | 'international' | 'commemoration';
+
+export type Recurrence =
+  'yearly' | 'once' | 'nth_weekday' | 'week' | 'hijri' | 'kandil' | 'holiday' | 'founding';
 
 export interface SpecialDay {
   id: number;
@@ -212,6 +260,46 @@ export interface SpecialDay {
   created_by_name: string | null;
   created_at: string;
   updated_at: string;
+  // Per-day designs. Optional until the backend has them everywhere.
+  slug?: string | null;
+  recurrence?: Recurrence;
+  weekday?: number | null;
+  nth?: number | null;
+  span_days?: number | null;
+  hijri_month?: number | null;
+  hijri_day?: number | null;
+  holiday_key?: string | null;
+  since_year?: number | null;
+  show_on?: ShowOn;
+  color_band?: boolean;
+  keep_theme_during?: boolean;
+  popup_note?: string;
+  before_title?: string;
+  before_body?: string;
+  before_note?: string;
+  return_enabled?: boolean;
+  return_title?: string;
+  return_body?: string;
+  design?: OccasionDesign;
+  /** The seeded (or category) values "Varsayılana Dön" restores. */
+  defaults?: SpecialDayDefaults;
+}
+
+export interface SpecialDayDefaults {
+  design: OccasionDesign;
+  popup_title: string;
+  popup_body: string;
+  popup_note: string;
+  before_title: string;
+  before_body: string;
+  before_note: string;
+  return_title: string;
+  return_body: string;
+  show_on: ShowOn;
+  color_band: boolean;
+  keep_theme_during: boolean;
+  show_popup: boolean;
+  return_enabled: boolean;
 }
 
 export type SpecialDayInput = Partial<
@@ -227,6 +315,17 @@ export type SpecialDayInput = Partial<
     | 'popup_body'
     | 'show_popup'
     | 'is_active'
+    | 'show_on'
+    | 'color_band'
+    | 'keep_theme_during'
+    | 'popup_note'
+    | 'before_title'
+    | 'before_body'
+    | 'before_note'
+    | 'return_enabled'
+    | 'return_title'
+    | 'return_body'
+    | 'design'
   >
 >;
 
@@ -332,6 +431,18 @@ export interface CalendarDay {
   /** Special days only. */
   category?: SpecialDayCategory;
   id?: number;
+  // Per-day designs.
+  slug?: string | null;
+  /** The last working day before the time off (after commemoration clashes). */
+  before_date?: string;
+  /** When the welcome shows, per the saved show_on. */
+  display_date?: string;
+  return_date?: string | null;
+  design?: OccasionDesign;
+  show_on?: ShowOn;
+  is_active?: boolean;
+  /** Kandil rows: the night's name ("Kadir Gecesi"). */
+  kicker?: string;
 }
 
 export const specialDayCalendarKey = (year: number) =>
@@ -351,5 +462,38 @@ export function useSpecialDayCalendar(year: number) {
     queryKey: specialDayCalendarKey(year),
     queryFn: ({ signal }) => fetchSpecialDayCalendar(year, signal),
     staleTime: 10 * 60_000,
+  });
+}
+
+/* Company-wide settings: GEMKOM turns arife half days into full days off;
+   founded_on turns on the founding anniversary. */
+
+export interface SpecialDaySettings {
+  arife_is_holiday: boolean;
+  founded_on: string | null;
+}
+
+export const specialDaySettingsKey = [...specialDayKeys.all, 'settings'] as const;
+
+export function fetchSpecialDaySettings(signal?: AbortSignal) {
+  return apiFetch<SpecialDaySettings>('/special-days/settings/', { signal });
+}
+
+export function updateSpecialDaySettings(input: Partial<SpecialDaySettings>) {
+  return apiFetch<SpecialDaySettings>('/special-days/settings/', { method: 'PATCH', body: input });
+}
+
+export function useSpecialDaySettings() {
+  return useQuery({
+    queryKey: specialDaySettingsKey,
+    queryFn: ({ signal }) => fetchSpecialDaySettings(signal),
+  });
+}
+
+export function useUpdateSpecialDaySettings() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: updateSpecialDaySettings,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: specialDayKeys.all }),
   });
 }

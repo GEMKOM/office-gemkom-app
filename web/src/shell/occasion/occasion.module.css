@@ -2,97 +2,17 @@
    panel and the Kutla popover. The band itself is themed in global.css. */
 
 /* ---- Welcome ------------------------------------------------------------- */
+/* The layouts live in welcome.module.css (WelcomeTemplate); these are the
+   full-screen shell and the celebration messages shown in it. */
 .welcome {
   position: relative;
   overflow: hidden;
-  background: var(--occasion-tone, var(--gk-red-700));
-  color: var(--gk-on-dark);
   font-family: var(--gk-font-sans);
 }
 
 .welcomeBody {
-  min-height: 100%;
+  height: 100%;
   padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.motif {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: cover;
-  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1208 800' preserveAspectRatio='xMidYMid slice'><g fill='white' opacity='.16'><circle cx='90' cy='110' r='9'/><circle cx='260' cy='60' r='5'/><circle cx='1040' cy='90' r='8'/><circle cx='1140' cy='300' r='5'/><circle cx='140' cy='640' r='7'/><circle cx='980' cy='700' r='9'/><circle cx='620' cy='60' r='4'/><circle cx='420' cy='740' r='5'/><rect x='180' y='300' width='16' height='16' transform='rotate(30 188 308)'/><rect x='900' y='200' width='14' height='14' transform='rotate(15 907 207)'/><rect x='1080' y='560' width='16' height='16' transform='rotate(45 1088 568)'/><rect x='300' y='520' width='12' height='12' transform='rotate(20 306 526)'/><path d='M60 420l14-26 14 26zM1160 440l14-26 14 26zM760 740l14-26 14 26z'/></g><g fill='none' stroke='white' stroke-width='4' stroke-linecap='round' opacity='.22'><path d='M360 120q14-20 28 0t28 0M820 640q14-20 28 0t28 0M120 220q14-20 28 0t28 0M1000 380q14-20 28 0t28 0'/><path d='M760 120l24 24M240 720l24-24'/></g></svg>");
-}
-
-.motif[data-theme='national'] {
-  background-size: auto 90%;
-  background-position: right -6% center;
-  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 240'><defs><mask id='m'><rect width='300' height='240' fill='white'/><circle cx='150' cy='120' r='84' fill='black'/></mask></defs><g fill='white' opacity='.14'><circle cx='120' cy='120' r='105' mask='url(%23m)'/><path d='M236 120L189 135.3 218 95.3 218 144.7 189 104.7z'/></g></svg>");
-}
-
-.motif[data-theme='religious'] {
-  background-size: auto 80%;
-  background-position: right -4% center;
-  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 240'><defs><mask id='m'><rect width='300' height='240' fill='white'/><circle cx='175' cy='105' r='80' fill='black'/></mask></defs><g fill='white' opacity='.14'><circle cx='140' cy='120' r='95' mask='url(%23m)'/><circle cx='250' cy='60' r='5'/><circle cx='275' cy='150' r='3.5'/><circle cx='225' cy='200' r='4'/></g></svg>");
-}
-
-.welcomeInner {
-  position: relative;
-  width: min(760px, 100%);
-  box-sizing: border-box;
-  padding: 48px 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  text-align: center;
-}
-
-.welcomeIcon {
-  width: 96px;
-  height: 96px;
-  border-radius: 999px;
-  background: #fff;
-  color: var(--occasion-tone, var(--gk-red-700));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 42px;
-}
-
-.welcomeDate {
-  font-size: 13px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
-}
-
-.welcomeTitle {
-  margin: 0;
-  font-size: 52px;
-  line-height: 1.1;
-  font-weight: 700;
-  text-wrap: balance;
-}
-
-.welcomeText {
-  margin: 0;
-  max-width: 560px;
-  font-size: 17px;
-  line-height: 1.55;
-  color: rgba(255, 255, 255, 0.92);
-}
-
-.welcomeNote {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.14);
 }
 
 .messages {
@@ -104,7 +24,7 @@
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 12px;
   text-align: left;
-  max-height: 40vh;
+  max-height: 220px;
   overflow-y: auto;
 }
 
@@ -127,25 +47,6 @@
   font-size: 13px;
   color: rgba(255, 255, 255, 0.92);
   overflow-wrap: anywhere;
-}
-
-.welcomeActions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 10px;
-  margin-top: 10px;
-}
-
-.go {
-  background: #fff;
-  color: var(--occasion-tone, var(--gk-red-700));
-  box-shadow: var(--gk-shadow-band-button);
-}
-
-.go:hover {
-  background: #f4f5f7;
-  color: var(--occasion-tone, var(--gk-red-700));
 }
 
 .ghost {
