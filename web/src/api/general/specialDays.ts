@@ -162,3 +162,158 @@ export function useCelebrate() {
     onSettled: () => queryClient.invalidateQueries({ queryKey: specialDayKeys.all }),
   });
 }
+
+/* ------------------------------------------------------------------------ */
+/* HR editing: greeting templates and company special days.                 */
+/*                                                                          */
+/*   GET    /special-days/templates/          birthday, work_anniversary,   */
+/*                                            public_holiday                */
+/*   PATCH  /special-days/templates/<kind>/                                 */
+/*   GET    /special-days/days/?is_active=    not paginated                 */
+/*   POST   /special-days/days/                                             */
+/*   PATCH  /special-days/days/<id>/                                        */
+/*   DELETE /special-days/days/<id>/                                        */
+/*                                                                          */
+/* Everyone may read; writes need is_staff, a superuser or manage_hr.       */
+/* ------------------------------------------------------------------------ */
+
+export type TemplateKind = 'birthday' | 'work_anniversary' | 'public_holiday';
+
+export interface CelebrationTemplate {
+  kind: TemplateKind;
+  kind_label: string;
+  title: string;
+  body: string;
+  show_popup: boolean;
+  updated_by: number | null;
+  updated_at: string | null;
+}
+
+export type CelebrationTemplateInput = Partial<
+  Pick<CelebrationTemplate, 'title' | 'body' | 'show_popup'>
+>;
+
+export type SpecialDayCategory = 'company' | 'national' | 'religious' | 'international';
+
+export interface SpecialDay {
+  id: number;
+  name: string;
+  category: SpecialDayCategory;
+  /** A yearly day has month + day and no date; a one-off has only a date. */
+  month: number | null;
+  day: number | null;
+  date: string | null;
+  theme: OccasionTheme;
+  popup_title: string;
+  popup_body: string;
+  show_popup: boolean;
+  is_active: boolean;
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type SpecialDayInput = Partial<
+  Pick<
+    SpecialDay,
+    | 'name'
+    | 'category'
+    | 'month'
+    | 'day'
+    | 'date'
+    | 'theme'
+    | 'popup_title'
+    | 'popup_body'
+    | 'show_popup'
+    | 'is_active'
+  >
+>;
+
+export const specialDayEditKeys = {
+  templates: [...specialDayKeys.all, 'templates'] as const,
+  days: (active: boolean | null) => [...specialDayKeys.all, 'days', active ?? 'all'] as const,
+};
+
+export async function fetchCelebrationTemplates(
+  signal?: AbortSignal,
+): Promise<CelebrationTemplate[]> {
+  const data = await apiFetch<unknown>('/special-days/templates/', { signal });
+  const body = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+  return list<CelebrationTemplate>(Array.isArray(data) ? data : body.results);
+}
+
+export function updateCelebrationTemplate(kind: TemplateKind, input: CelebrationTemplateInput) {
+  return apiFetch<CelebrationTemplate>(`/special-days/templates/${kind}/`, {
+    method: 'PATCH',
+    body: input,
+  });
+}
+
+export async function fetchCompanyDays(
+  active: boolean | null = null,
+  signal?: AbortSignal,
+): Promise<SpecialDay[]> {
+  const data = await apiFetch<unknown>('/special-days/days/', {
+    params: active === null ? undefined : { is_active: active ? 'true' : 'false' },
+    signal,
+  });
+  const body = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+  return list<SpecialDay>(Array.isArray(data) ? data : body.results);
+}
+
+export function createSpecialDay(input: SpecialDayInput) {
+  return apiFetch<SpecialDay>('/special-days/days/', { method: 'POST', body: input });
+}
+
+export function updateSpecialDay(id: number, input: SpecialDayInput) {
+  return apiFetch<SpecialDay>(`/special-days/days/${id}/`, { method: 'PATCH', body: input });
+}
+
+export function deleteSpecialDay(id: number) {
+  return apiFetch<void>(`/special-days/days/${id}/`, { method: 'DELETE' });
+}
+
+export function useCelebrationTemplates() {
+  return useQuery({
+    queryKey: specialDayEditKeys.templates,
+    queryFn: ({ signal }) => fetchCelebrationTemplates(signal),
+  });
+}
+
+/** Company days; `active` null lists them all. */
+export function useCompanyDays(active: boolean | null = null) {
+  return useQuery({
+    queryKey: specialDayEditKeys.days(active),
+    queryFn: ({ signal }) => fetchCompanyDays(active, signal),
+  });
+}
+
+// A text or day change shows up in today/ and upcoming/ too, so every
+// special-days query refetches.
+
+export function useUpdateCelebrationTemplate() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, input }: { kind: TemplateKind; input: CelebrationTemplateInput }) =>
+      updateCelebrationTemplate(kind, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: specialDayKeys.all }),
+  });
+}
+
+export function useSaveSpecialDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, input }: { id: number | null; input: SpecialDayInput }) =>
+      id === null ? createSpecialDay(input) : updateSpecialDay(id, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: specialDayKeys.all }),
+  });
+}
+
+export function useDeleteSpecialDay() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: deleteSpecialDay,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: specialDayKeys.all }),
+  });
+}

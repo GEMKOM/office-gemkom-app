@@ -17,8 +17,12 @@ const fetchMock = vi.mocked(authedFetch);
 beforeEach(() => {
   sessionStorage.clear();
   fetchMock.mockReset();
-  fetchMock.mockImplementation(() =>
-    Promise.resolve(
+  fetchMock.mockImplementation((url) => {
+    const { pathname } = new URL(url);
+    if (pathname !== '/special-days/upcoming/') {
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    }
+    return Promise.resolve(
       new Response(
         JSON.stringify({
           start: '2026-11-11',
@@ -54,8 +58,8 @@ beforeEach(() => {
         }),
         { status: 200 },
       ),
-    ),
-  );
+    );
+  });
 });
 
 it('lists the coming holidays and company days, not birthdays, and previews one', async () => {

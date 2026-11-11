@@ -6,6 +6,8 @@ import { isoDate } from '@/lib/workdays';
 import { useAppNavigate } from '@/shell/AppLink';
 import { endOccasionPreview, startOccasionPreview, useOccasionPreview } from '@/shell/occasion';
 import { PageHeader, Panel, PendingValue, StatusBadge, type StatusFamily } from '@/ui';
+import { CelebrationTemplatesPanel } from './CelebrationTemplatesPanel';
+import { CompanyDaysPanel } from './CompanyDaysPanel';
 import css from './SpecialDaysPreviewPage.module.css';
 
 const UPCOMING_DAYS = 60;
@@ -32,7 +34,8 @@ function dayRange(row: UpcomingDay): string {
  * İnsan Kaynakları > Özel Günler: HR picks a day and the app behaves as if it
  * were that day (band theme, welcome, the home panel), the way impersonation
  * shows the app as another user. A strip on every page names the day and
- * ends the preview; it lasts for this tab.
+ * ends the preview; it lasts for this tab. Below, HR edits the greeting texts
+ * and the company's own days, which the backend serves to everyone.
  */
 export function SpecialDaysPreviewPage() {
   const navigate = useAppNavigate();
@@ -53,7 +56,7 @@ export function SpecialDaysPreviewPage() {
     <>
       <PageHeader
         title="Özel Günler"
-        subtitle="Uygulamanın bir özel günde nasıl görüneceğini önizleyin"
+        subtitle="Kutlama metinlerini ve şirket özel günlerini düzenleyin, uygulamanın o gün nasıl görüneceğini önizleyin"
         icon="fas fa-cake-candles"
       />
       <div className={css.grid}>
@@ -145,6 +148,8 @@ export function SpecialDaysPreviewPage() {
           )}
         </Panel>
       </div>
+      <CelebrationTemplatesPanel />
+      <CompanyDaysPanel onPreview={start} />
     </>
   );
 }
