@@ -1376,13 +1376,84 @@ h3.mdHeading {
   }
 }
 
-/* ---- the home page card (NeoHomePanel) ---- */
+/* ---- the home page card (NeoHomePanel) ----
+   A red band like the page header, a red-tinted edge and a faint red wash,
+   so it is the card the eye lands on among the white ones. */
 
-.homeIntro {
-  margin: 0 0 10px;
-  color: var(--gk-muted);
-  font-size: 13px;
-  line-height: 1.45;
+.homeCard {
+  overflow: hidden;
+  border-color: rgba(139, 0, 0, 0.32);
+  box-shadow:
+    0 1px 2px rgba(139, 0, 0, 0.08),
+    0 8px 24px rgba(139, 0, 0, 0.12);
+}
+
+.homeHead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  color: #fff;
+  background:
+    radial-gradient(circle at 100% 0, rgba(255, 255, 255, 0.16), transparent 55%),
+    linear-gradient(135deg, var(--gk-red-700), var(--gk-red-900));
+}
+
+.homeMark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.14);
+  font-size: 17px;
+}
+
+.homeHeadText {
+  flex: 1;
+  min-width: 0;
+}
+
+.homeTitle {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 600;
+  color: #fff;
+}
+
+.homeTagline {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.homeKbd {
+  flex: none;
+  align-self: flex-start;
+  padding: 0 7px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 11px;
+  line-height: 20px;
+  font-family: var(--gk-font-sans);
+}
+
+/* Phones have no keyboard shortcut to offer. */
+@media (max-width: 48em) {
+  .homeKbd {
+    display: none;
+  }
+}
+
+.homeBody {
+  padding: 14px 18px 16px;
+  background: linear-gradient(180deg, var(--gk-red-050), var(--gk-surface) 75%);
 }
 
 .homeForm {
@@ -1390,7 +1461,7 @@ h3.mdHeading {
   align-items: center;
   gap: 6px;
   padding: 4px 4px 4px 12px;
-  border: 1px solid var(--gk-line-strong);
+  border: 1px solid rgba(139, 0, 0, 0.3);
   border-radius: var(--gk-radius-md);
   background: var(--gk-surface);
 }
