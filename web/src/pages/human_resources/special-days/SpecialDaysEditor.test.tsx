@@ -92,6 +92,23 @@ beforeEach(() => {
     calls.push({ method, path, query: parsed.searchParams, body });
 
     if (path === '/special-days/upcoming/') return json({ results: [] });
+    if (path === '/special-days/calendar/') {
+      return json({
+        year: 2026,
+        results: days
+          .filter((d) => d.is_active && d.month && d.day)
+          .map((d) => ({
+            date: `2026-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`,
+            end_date: `2026-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`,
+            kind: 'special_day',
+            theme: d.theme,
+            name: d.name,
+            category: d.category,
+            key: `special:${d.id}:2026`,
+            id: d.id,
+          })),
+      });
+    }
     if (path === '/special-days/templates/') return json(templates);
     const tpl = /^\/special-days\/templates\/(\w+)\/$/.exec(path);
     if (tpl && method === 'PATCH') {
@@ -301,10 +318,26 @@ describe('Şirket özel günleri', () => {
     expect(screen.queryByRole('button', { name: 'Eski Gün önizle' })).toBeNull();
     fireEvent.click(screen.getByRole('radio', { name: 'Pasif' }));
     await waitFor(() => expect(calls.some((c) => c.query.get('is_active') === 'false')).toBe(true));
-    await waitFor(() => expect(screen.queryByText('Yılsonu')).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId('special-day-4')).toBeNull());
 
     fireEvent.click(screen.getByRole('radio', { name: 'Tümü' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Yılsonu önizle' }));
     expect(getOccasionPreview()).toMatch(/^\d{4}-12-31$/);
+  });
+
+  it('opens a company day from the year list in the same editor', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Yılsonu 31 Aralık düzenle' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByLabelText(/^Ad/)).toHaveValue('Yılsonu');
+    fireEvent.change(within(dialog).getByLabelText(/^Ad/), { target: { value: 'Yıl Sonu' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(calls.find((c) => c.method === 'PATCH')?.body).toMatchObject({ name: 'Yıl Sonu' });
+    expect(screen.getByTestId('day-saved')).toHaveTextContent('Yıl Sonu kaydedildi.');
+    // The year list refetches with the new name.
+    expect(
+      await screen.findByRole('button', { name: 'Yıl Sonu 31 Aralık düzenle' }),
+    ).toBeInTheDocument();
   });
 });

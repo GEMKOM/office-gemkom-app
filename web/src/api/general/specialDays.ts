@@ -317,3 +317,39 @@ export function useDeleteSpecialDay() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: specialDayKeys.all }),
   });
 }
+
+/* GET /special-days/calendar/?year=  every public holiday and active special
+   day in the year, by date; holidays are merged per occasion key. No people. */
+
+export interface CalendarDay {
+  date: string;
+  end_date: string;
+  kind: 'public_holiday' | 'special_day';
+  theme: OccasionTheme;
+  name: string;
+  key: string;
+  is_half_day?: boolean;
+  /** Special days only. */
+  category?: SpecialDayCategory;
+  id?: number;
+}
+
+export const specialDayCalendarKey = (year: number) =>
+  [...specialDayKeys.all, 'calendar', year] as const;
+
+export async function fetchSpecialDayCalendar(
+  year: number,
+  signal?: AbortSignal,
+): Promise<CalendarDay[]> {
+  const data = await apiFetch<unknown>('/special-days/calendar/', { params: { year }, signal });
+  const body = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
+  return list<CalendarDay>(Array.isArray(data) ? data : body.results);
+}
+
+export function useSpecialDayCalendar(year: number) {
+  return useQuery({
+    queryKey: specialDayCalendarKey(year),
+    queryFn: ({ signal }) => fetchSpecialDayCalendar(year, signal),
+    staleTime: 10 * 60_000,
+  });
+}
