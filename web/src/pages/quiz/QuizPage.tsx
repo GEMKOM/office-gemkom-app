@@ -1,7 +1,9 @@
-import { Loader } from '@mantine/core';
+import { Button, Loader } from '@mantine/core';
 import { isApiError } from '@/api/client';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { formatDate, formatNumber } from '@/lib/format';
 import { HubPanels, MoreLink } from '@/pages/hub/HubPanels';
+import { AppLink } from '@/shell/AppLink';
 import { FaIcon, PageHeader, Panel, PendingValue, type PageFigure } from '@/ui';
 import { useLeaderboard, useQuizToday } from './queries';
 import { QuizPlay } from './QuizPlay';
@@ -45,6 +47,23 @@ export function QuizPage() {
         subtitle="Her iş günü 5 soru, yaklaşık 2 dakika. Doğru cevaplar gece yarısı açıklanır."
         icon="fas fa-trophy"
         stats={forbidden ? undefined : stats}
+        actions={
+          // Approvers: the expanded rail has no flyout, so the way in is here.
+          hasRouteAccess('/quiz/manage') ? (
+            <Button
+              component={AppLink}
+              to={
+                today.data?.review?.status === 'draft'
+                  ? `/quiz/manage?date=${today.data.review.date}`
+                  : '/quiz/manage'
+              }
+              variant={today.data?.review?.status === 'draft' ? 'filled' : 'default'}
+              leftSection={<FaIcon icon="fas fa-clipboard-check" />}
+            >
+              {today.data?.review?.status === 'draft' ? 'Onay Bekliyor' : 'Quiz Onayı'}
+            </Button>
+          ) : null
+        }
       />
       <HubPanels>
         <Panel key="play">
