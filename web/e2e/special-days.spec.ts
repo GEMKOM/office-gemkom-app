@@ -309,6 +309,32 @@ test('HR edits a greeting and a company day, then previews the day', async ({ pa
             }
           : { json: { date: '2026-11-11', occasions: [], colleagues: [], received: [] } },
       'GET /special-days/upcoming/': { json: { start: '2026-11-11', days: 60, results: [] } },
+      'GET /special-days/calendar/': ({ query }) => ({
+        json: {
+          year: Number(query.get('year')),
+          results: [
+            {
+              date: `${query.get('year')}-10-29`,
+              end_date: `${query.get('year')}-10-29`,
+              kind: 'public_holiday',
+              theme: 'national',
+              name: 'Cumhuriyet Bayramı',
+              key: `holiday:cumhuriyet-bayrami:${query.get('year')}`,
+              is_half_day: false,
+            },
+            {
+              date: `${query.get('year')}-12-31`,
+              end_date: `${query.get('year')}-12-31`,
+              kind: 'special_day',
+              theme: 'company',
+              name: yilsonu.name,
+              category: 'company',
+              key: `special:4:${query.get('year')}`,
+              id: 4,
+            },
+          ],
+        },
+      }),
       'GET /special-days/templates/': () => ({ json: [birthdayTemplate, ...otherTemplates] }),
       'PATCH /special-days/templates/birthday/': ({ body }) => {
         birthdayTemplate = {
@@ -330,6 +356,26 @@ test('HR edits a greeting and a company day, then previews the day', async ({ pa
   await page.goto('/human_resources/special-days');
   await expect(page.getByText('İyi ki doğdunuz, Ayşe')).toBeVisible();
 
+  // The whole year, by month; next year is a click away.
+  const year = new Date().getFullYear();
+  const yearList = page.getByTestId('year-calendar');
+  await expect(yearList.getByRole('region', { name: `Ekim ${year}` })).toContainText(
+    'Cumhuriyet Bayramı',
+  );
+  await page
+    .locator('label')
+    .filter({ hasText: new RegExp(`^${year + 1}$`) })
+    .click();
+  await expect(yearList.getByRole('region', { name: `Aralık ${year + 1}` })).toContainText(
+    'Yılsonu',
+  );
+  await page
+    .locator('label')
+    .filter({ hasText: new RegExp(`^${year}$`) })
+    .click();
+  await expect(yearList.getByRole('region', { name: `Aralık ${year}` })).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/8-hr-page.png`, fullPage: true });
+
   // Kutlama metinleri: the preview follows the text as it is typed.
   await page.getByRole('button', { name: 'Doğum günü metnini düzenle' }).click();
   const dialog = page.getByRole('dialog');
@@ -337,7 +383,7 @@ test('HR edits a greeting and a company day, then previews the day', async ({ pa
   await expect(dialog.getByTestId('greeting-preview')).toContainText(
     'Doğum gününüz kutlu olsun, Ayşe Kaya',
   );
-  if (shots) await page.screenshot({ path: `${shots}/8-hr-edit-template.png` });
+  if (shots) await page.screenshot({ path: `${shots}/8b-hr-edit-template.png` });
   await dialog.getByRole('button', { name: 'Kaydet' }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByText('Doğum gününüz kutlu olsun, Ayşe Kaya')).toBeVisible();

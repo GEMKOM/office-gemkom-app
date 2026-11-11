@@ -3,11 +3,20 @@
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
+  margin-bottom: 16px;
 }
 
 /* Panels stack with a top margin elsewhere; side by side they line up. */
-.grid > section:nth-child(n) {
+.grid > section:nth-child(n),
+.column > section:nth-child(n) {
   margin-top: 0;
+}
+
+.column {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
 }
 
 @media (max-width: 62em) {
@@ -164,4 +173,31 @@
   .rowText {
     flex-basis: 100%;
   }
+}
+
+.monthHead {
+  margin: 0;
+  padding: 8px 20px;
+  background: var(--gk-surface-subtle);
+  border-top: 1px solid var(--gk-line);
+  border-bottom: 1px solid var(--gk-line);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--gk-muted);
+}
+
+section:first-child > .monthHead {
+  border-top: 0;
+}
+
+/* Days already behind us this year stay listed, quieter. */
+.rowPast .rowName,
+.rowPast .rowDate {
+  color: var(--gk-muted);
+}
+
+.rowPast .rowName {
+  font-weight: 500;
 }

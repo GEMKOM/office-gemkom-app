@@ -65,17 +65,26 @@ interface Saved {
   is_active: boolean;
 }
 
+/** The day whose editor is open: a row, a new one, or none. */
+export type DayEditing = SpecialDay | 'new' | null;
+
 export interface CompanyDaysPanelProps {
   /** Starts the app-wide preview of `date` (the page also navigates home). */
   onPreview: (date: string) => void;
+  /** Held by the page so the year list can open a day's editor too. */
+  editing: DayEditing;
+  onEditingChange: (editing: DayEditing) => void;
 }
 
 /** Şirket özel günleri: HR adds, edits and removes the company's own days. */
-export function CompanyDaysPanel({ onPreview }: CompanyDaysPanelProps) {
+export function CompanyDaysPanel({
+  onPreview,
+  editing,
+  onEditingChange: setEditing,
+}: CompanyDaysPanelProps) {
   const [filter, setFilter] = useState<ActiveFilter>('all');
   const days = useCompanyDays(FILTER_VALUE[filter]);
   const remove = useDeleteSpecialDay();
-  const [editing, setEditing] = useState<SpecialDay | 'new' | null>(null);
   const [saved, setSaved] = useState<Saved | null>(null);
   const today = isoDate(new Date());
   const rows = days.data ?? [];
