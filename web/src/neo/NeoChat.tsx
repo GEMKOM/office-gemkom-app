@@ -16,7 +16,9 @@ import {
   quotaLine,
   sendMessageFeedback,
   type AssistantQuota,
+  type ChatSource,
   type FeedbackReason,
+  type NeoPageContext,
 } from '@/api/assistant';
 import { hasSectionAccess } from '@/auth/accessControl';
 import { FaIcon } from '@/ui/FaIcon';
@@ -24,7 +26,9 @@ import { notify } from '@/ui/notify';
 import classes from './neo.module.css';
 import { NeoMarkdown } from './NeoMarkdown';
 import {
+  activePage,
   consumeDraft,
+  dismissNeoPage,
   lastQuestion,
   sendNeoMessage,
   setItemFeedback,
@@ -35,6 +39,45 @@ import {
 } from './neoStore';
 import { neoKeys } from './queries';
 import { toolLabel } from './toolLabels';
+
+type Ask = (text: string, source?: ChatSource) => void;
+
+/** "İş emri 293-10 · TUNNEL PANEL", for the pill and the question tag. */
+export const PAGE_NOUNS: Record<NeoPageContext['type'], string> = {
+  job_order: 'İş emri',
+  purchase_request: 'Talep',
+  purchase_order: 'Sipariş',
+  ncr: 'NCR',
+  planning_request: 'Planlama talebi',
+  daily_summary: 'Günlük özet',
+};
+
+export function pageLabel(page: NeoPageContext): string {
+  const head = `${PAGE_NOUNS[page.type]} ${page.id}`;
+  return page.label ? `${head} · ${page.label}` : head;
+}
+
+/** The record the next question goes with; × sends it without. */
+function PagePill() {
+  const page = useNeo((s) => activePage(s));
+  if (!page) return null;
+  return (
+    <div className={classes.pagePill}>
+      <FaIcon icon="fas fa-paperclip" size={11} />
+      <span className={classes.pagePillText} title="Sorunuz bu kayıt hakkında gönderilir">
+        {pageLabel(page)}
+      </span>
+      <UnstyledButton
+        className={classes.pagePillX}
+        aria-label="Kaydı sorudan çıkar"
+        title="Kaydı sorudan çıkar"
+        onClick={dismissNeoPage}
+      >
+        <FaIcon icon="fas fa-xmark" size={11} />
+      </UnstyledButton>
+    </div>
+  );
+}
 
 /** Shown to everyone; role suggestions are added in front (see suggestionsFor). */
 export const SUGGESTIONS = [
@@ -182,7 +225,7 @@ function AnswerActions({
   item: AssistantItem;
   bodyRef: React.RefObject<HTMLDivElement | null>;
   isLast: boolean;
-  onAsk: (text: string) => void;
+  onAsk: Ask;
 }) {
   const [askReason, setAskReason] = useState(false);
   const messageId = item.messageId;
@@ -261,13 +304,21 @@ const Message = memo(function Message({
 }: {
   item: ChatItem;
   isLast: boolean;
-  onAsk: (text: string) => void;
+  onAsk: Ask;
 }) {
   const bodyRef = useRef<HTMLDivElement>(null);
   if (item.role === 'user') {
     return (
-      <div className={classes.user}>
-        <UserText text={item.text} />
+      <div className={classes.userWrap}>
+        {item.page && (
+          <span className={classes.userPage} title="Bu kayıt hakkında soruldu">
+            <FaIcon icon="fas fa-paperclip" size={10} />
+            {pageLabel(item.page)}
+          </span>
+        )}
+        <div className={classes.user}>
+          <UserText text={item.text} />
+        </div>
       </div>
     );
   }
@@ -298,7 +349,11 @@ const Message = memo(function Message({
       {followups.length > 0 && (
         <div className={classes.followups} aria-label="Önerilen sorular">
           {followups.map((text) => (
-            <UnstyledButton key={text} className={classes.followup} onClick={() => onAsk(text)}>
+            <UnstyledButton
+              key={text}
+              className={classes.followup}
+              onClick={() => onAsk(text, 'followup')}
+            >
               <FaIcon icon="fas fa-arrow-turn-down" size={10} />
               {text}
             </UnstyledButton>
@@ -309,7 +364,7 @@ const Message = memo(function Message({
   );
 });
 
-function EmptyState({ onPick }: { onPick: (text: string) => void }) {
+function EmptyState({ onPick }: { onPick: Ask }) {
   const suggestions = useMemo(() => suggestionsFor(hasSectionAccess), []);
   return (
     <div className={classes.empty}>
@@ -322,7 +377,11 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
       </p>
       <div className={classes.suggestions}>
         {suggestions.map((text) => (
-          <UnstyledButton key={text} className={classes.suggestion} onClick={() => onPick(text)}>
+          <UnstyledButton
+            key={text}
+            className={classes.suggestion}
+            onClick={() => onPick(text, 'suggestion')}
+          >
             {text}
           </UnstyledButton>
         ))}
@@ -402,20 +461,32 @@ export function NeoChat({
     latest.current = { streaming, outOfQuota };
   }, [streaming, outOfQuota]);
 
+  // After every answer, from here or from a page's "Neo'ya sor": the quota
+  // line and the history list move on.
+  const wasStreaming = useRef(streaming);
+  useEffect(() => {
+    if (wasStreaming.current && !streaming) {
+      void queryClient.invalidateQueries({ queryKey: neoKeys.quota });
+      void queryClient.invalidateQueries({ queryKey: neoKeys.conversations });
+    }
+    wasStreaming.current = streaming;
+  }, [streaming, queryClient]);
+
   const send = useCallback(
-    async (value: string, { fromBox = false } = {}) => {
+    async (value: string, { fromBox = false, source = 'panel' as ChatSource } = {}) => {
       if (!value.trim() || latest.current.streaming || latest.current.outOfQuota) return;
       if (fromBox) setText('');
       nearBottom.current = true;
-      await sendNeoMessage(value);
-      void queryClient.invalidateQueries({ queryKey: neoKeys.quota });
-      void queryClient.invalidateQueries({ queryKey: neoKeys.conversations });
+      await sendNeoMessage(value, { source });
       inputRef.current?.focus();
     },
-    [queryClient, inputRef],
+    [inputRef],
   );
 
-  const ask = useCallback((value: string) => void send(value), [send]);
+  const ask = useCallback(
+    (value: string, source: ChatSource = 'panel') => void send(value, { source }),
+    [send],
+  );
 
   const onSubmit = (event: FormEvent) => {
     event.preventDefault();
@@ -460,6 +531,7 @@ export function NeoChat({
       </div>
       {!locked && (
         <form className={classes.composer} onSubmit={onSubmit}>
+          <PagePill />
           <div className={classes.inputWrap}>
             <textarea
               ref={inputRef}

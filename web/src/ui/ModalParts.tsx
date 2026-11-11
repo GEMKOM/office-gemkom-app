@@ -23,6 +23,8 @@ export interface ModalHeaderProps {
   tone?: ModalTone;
   /** Default true. Closes through the Modal's onClose. */
   withCloseButton?: boolean;
+  /** Small controls before the close button, e.g. "Neo'ya sor". */
+  actions?: ReactNode;
 }
 
 /**
@@ -35,6 +37,7 @@ export function ModalHeader({
   icon,
   tone = 'brand',
   withCloseButton = true,
+  actions,
 }: ModalHeaderProps) {
   return (
     <div className={classes.header} data-tone={tone}>
@@ -47,6 +50,7 @@ export function ModalHeader({
         <Modal.Title className={classes.title}>{title}</Modal.Title>
         {subtitle ? <p className={classes.subtitle}>{subtitle}</p> : null}
       </div>
+      {actions ? <div className={classes.headerActions}>{actions}</div> : null}
       {withCloseButton ? <Modal.CloseButton className={classes.close} aria-label="Kapat" /> : null}
     </div>
   );

@@ -10,6 +10,7 @@ import {
   type PurchaseOrderLine,
 } from '@/api/procurement/purchaseOrders';
 import { formatDate, formatNumber } from '@/lib/format';
+import { NeoAskButton } from '@/neo';
 import { DataTable, DetailModal, FaIcon, notify, type DataTableColumn } from '@/ui';
 import classes from '../FinanceOperations.module.css';
 import { CurrencyBadge, money, parseMoney } from '../shared';
@@ -228,6 +229,19 @@ export function PurchaseOrderDetailModal({
         icon="fas fa-shopping-cart"
         size="xl"
         loading={detail.isPending}
+        headerActions={
+          <NeoAskButton
+            page={
+              order
+                ? {
+                    type: 'purchase_order',
+                    id: String(order.id),
+                    label: order.supplier_name ? String(order.supplier_name) : undefined,
+                  }
+                : null
+            }
+          />
+        }
         footerActions={
           order && canWriteProcurement() && order.status !== 'cancelled' ? (
             <Button

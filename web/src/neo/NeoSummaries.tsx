@@ -26,6 +26,7 @@ import { ModalBody, ModalFooter, ModalHeader, modalClassNames } from '@/ui/Modal
 import { StatusBadge } from '@/ui/StatusBadge';
 import classes from './neo.module.css';
 import { liteOf, noteSummaryRead, rememberShown, snoozeSummary } from './dailySummary';
+import { NeoAskButton } from './NeoAskButton';
 import { clearSummaryRequest, openNeo, useNeo } from './neoStore';
 import { neoKeys, useDailySummaries, useNeoAccess } from './queries';
 
@@ -123,6 +124,24 @@ export function SummaryModal({
         icon="fas fa-newspaper"
         title={formatSummaryDate(summary.summary_date) || 'Günlük Özet'}
         subtitle={detail ? windowLabel(detail) || undefined : undefined}
+        actions={
+          locked ? null : (
+            <NeoAskButton
+              page={
+                summary.summary_date
+                  ? {
+                      type: 'daily_summary',
+                      id: summary.summary_date,
+                      label: detail?.headline ? String(detail.headline) : undefined,
+                    }
+                  : null
+              }
+              // The modal lives in Neo's summaries view, which the chat
+              // replaces: leave it the way the old "Neo'ya Sor" did.
+              beforeAsk={() => finish(!offer)}
+            />
+          )
+        }
       />
       <ModalBody>
         {detail ? (
@@ -146,15 +165,6 @@ export function SummaryModal({
               }
             >
               Geçmiş Özetler
-            </Button>
-          )}
-          {!locked && (
-            <Button
-              variant="default"
-              leftSection={<FaIcon icon="fas fa-robot" />}
-              onClick={() => finish(!offer, () => openNeo({ prompt: 'Dün neler oldu?' }))}
-            >
-              Neo&apos;ya Sor
             </Button>
           )}
         </Group>

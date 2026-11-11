@@ -2,6 +2,7 @@ import { hasRouteAccess } from '@/auth/accessControl';
 import { useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { AttentionPanel, HubPanels, RecordsPanel } from '@/pages/hub/HubPanels';
+import { NeoHomePanel } from '@/neo';
 import { allNavPages } from '@/shell/pageVisits';
 import { useUnreadCount } from '@/shell/notifications';
 import { formatDate, formatNumber } from '@/lib/format';
@@ -158,6 +159,7 @@ export function HomePage() {
           )}
         </div>
         <div key="side" className={css.column}>
+          <NeoHomePanel />
           {!approvals.none ? (
             <AttentionPanel title="Onay Kuyruklarım" icon="fas fa-inbox" items={approvals.items} badges />
           ) : null}

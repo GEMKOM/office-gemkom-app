@@ -10,6 +10,11 @@ import { NEO_PANEL_ID } from './NeoPanel';
 
 export const UNREAD_TITLE = 'Bugünün özeti okunmadı';
 export const NEO_HINT = "Neo'ya her sayfadan soru sorabilirsiniz";
+/** Shown once to users who already saw NEO_HINT; bump NEWS_VERSION for the next one. */
+export const NEO_NEWS =
+  "Neo yenilendi: tablolar ve Excel'e aktarma, kayıtlara bağlantılar, önerilen sorular. Kayıt ekranlarındaki “Neo'ya sor” ile o kayıt hakkında sorabilirsiniz.";
+const NEWS_VERSION = '2026-11';
+export const newsKey = (userId: number) => `gk.neoNews.${NEWS_VERSION}.${userId}`;
 
 function hintSeen(key: string): boolean {
   try {
@@ -38,21 +43,28 @@ export function NeoEntry({ variant }: { variant: 'icon' | 'row' | 'bar' }) {
   const unread = useNeo((s) => s.unreadSummary !== null);
   const { user } = useAuth();
   const key = hintKey(user.id);
+  const news = newsKey(user.id);
   const [seen, setSeen] = useState(() => hintSeen(key));
+  const [newsSeen, setNewsSeen] = useState(() => hintSeen(news));
   // Rail and top bar are both mounted; only the one on screen shows the hint.
   const desktop = useMediaQuery('(min-width: 48em)', undefined, { getInitialValueInEffect: true });
   const onScreen = variant === 'bar' ? desktop === false : desktop === true;
-  const showHint = !seen && onScreen && !open;
+  // First visit: what Neo is. Later: what is new, once.
+  const message = !seen ? NEO_HINT : !newsSeen ? NEO_NEWS : null;
+  const showHint = message !== null && onScreen && !open;
   const mac = useOs() === 'macos';
   const shortcut = mac ? '⌘K' : 'Ctrl+K';
 
+  // A new user's first hint also covers the news: one popup, not two.
   const dismiss = () => {
     rememberHint(key);
+    rememberHint(news);
     setSeen(true);
+    setNewsSeen(true);
   };
 
   const onClick = () => {
-    if (!seen) dismiss();
+    if (message) dismiss();
     clickNeoEntry();
   };
 
@@ -116,7 +128,7 @@ export function NeoEntry({ variant }: { variant: 'icon' | 'row' | 'bar' }) {
         </Tooltip>
       </Popover.Target>
       <Popover.Dropdown role="status">
-        <div>{NEO_HINT}</div>
+        <div>{message}</div>
         <UnstyledButton className={classes.hintAction} onClick={dismiss}>
           Tamam
         </UnstyledButton>

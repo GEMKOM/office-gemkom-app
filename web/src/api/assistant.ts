@@ -140,6 +140,28 @@ export function parseSseFrames(buffer: string): { events: ChatEvent[]; rest: str
 
 export const NEO_UNAVAILABLE = 'Neo şu anda yanıt veremiyor.';
 
+/** Record types a page can tell Neo about (gemkom-backend assistant/page_context.py). */
+export type NeoPageType =
+  | 'job_order'
+  | 'purchase_request'
+  | 'purchase_order'
+  | 'ncr'
+  | 'planning_request'
+  | 'daily_summary';
+
+/** The record on screen, sent with a question so "bu iş" means it. */
+export interface NeoPageContext {
+  type: NeoPageType;
+  /** What the record's page and Neo's tools know it by: job no, request no, ... */
+  id: string;
+  /** A short human name, e.g. the job title. */
+  label?: string;
+  path?: string;
+}
+
+/** Where a question came from, for the usage analytics. */
+export type ChatSource = 'panel' | 'suggestion' | 'followup' | 'page_button' | 'home' | 'summary';
+
 /**
  * Sends one question and calls `onEvent` for every frame of the streamed
  * answer. EventSource cannot send the JWT header, so this POSTs through
@@ -148,16 +170,22 @@ export const NEO_UNAVAILABLE = 'Neo şu anda yanıt veremiyor.';
 export async function streamChat({
   message,
   conversationId,
+  context,
+  source,
   onEvent,
   signal,
 }: {
   message: string;
   conversationId: number | null;
+  context?: NeoPageContext | null;
+  source?: ChatSource;
   onEvent: (event: ChatEvent) => void;
   signal?: AbortSignal;
 }): Promise<void> {
   const body: Record<string, unknown> = { message };
   if (conversationId) body.conversation_id = conversationId;
+  if (context) body.context = context;
+  if (source) body.source = source;
 
   const response = await authedFetch(buildUrl('/assistant/chat/'), {
     method: 'POST',

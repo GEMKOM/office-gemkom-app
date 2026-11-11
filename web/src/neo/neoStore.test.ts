@@ -2,15 +2,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/api/client';
 import { NEO_UNAVAILABLE, streamChat, type ChatEvent } from '@/api/assistant';
 import {
+  activePage,
   applyChatEvent,
+  askNeo,
   bindNeoUser,
+  clearNeoPage,
   closeNeo,
   CONVERSATION_KEY,
+  dismissNeoPage,
   getNeoState,
   openKey,
   openNeo,
   resetNeoStore,
   sendNeoMessage,
+  setNeoPage,
   showConversation,
   startNewChat,
   toggleNeo,
@@ -102,6 +107,70 @@ describe('openNeo', () => {
     expect(getNeoState().view).toBe('history');
     toggleNeoView('history');
     expect(getNeoState().view).toBe('chat');
+  });
+});
+
+describe('page context', () => {
+  const job = { type: 'job_order' as const, id: '293-10', label: 'TUNNEL PANEL' };
+  const ncr = { type: 'ncr' as const, id: 'NCR-1' };
+
+  beforeEach(() => resetNeoStore());
+
+  it('follows the page, keeps another page’s record when an old one clears', () => {
+    setNeoPage(job);
+    expect(activePage()).toEqual(job);
+    // The next page registers before the old one unmounts.
+    setNeoPage(ncr);
+    clearNeoPage(job);
+    expect(activePage()).toEqual(ncr);
+    clearNeoPage(ncr);
+    expect(activePage()).toBeNull();
+  });
+
+  it('the pill’s × holds until a different record comes', () => {
+    setNeoPage(job);
+    dismissNeoPage();
+    expect(activePage()).toBeNull();
+    setNeoPage({ ...job });
+    expect(activePage()).toBeNull();
+    setNeoPage(ncr);
+    expect(activePage()).toEqual(ncr);
+  });
+
+  it('sends the record, the page path and the source with a question', async () => {
+    const spy = vi.mocked(streamChat);
+    spy.mockClear();
+    spy.mockResolvedValue(undefined);
+    setNeoPage(job);
+    await sendNeoMessage('Bu işin maliyeti ne?', { source: 'page_button' });
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'Bu işin maliyeti ne?',
+        context: expect.objectContaining({
+          type: 'job_order',
+          id: '293-10',
+          path: expect.any(String),
+        }),
+        source: 'page_button',
+      }),
+    );
+    const question = getNeoState().items[0];
+    expect(question).toMatchObject({ role: 'user', page: job });
+
+    dismissNeoPage();
+    await sendNeoMessage('Genel soru');
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ context: null, source: 'panel' }),
+    );
+  });
+
+  it('askNeo opens the panel and asks; while streaming it only fills the box', async () => {
+    const spy = vi.mocked(streamChat);
+    spy.mockClear();
+    spy.mockResolvedValue(undefined);
+    await askNeo('293-10 işinin genel durumu ne?');
+    expect(getNeoState().open).toBe(true);
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ source: 'page_button' }));
   });
 });
 

@@ -10,6 +10,7 @@ import {
   type PurchaseRequestDetail,
 } from '@/api/procurement/purchaseRequests';
 import { formatDateTime } from '@/lib/format';
+import { NeoAskButton } from '@/neo';
 import { DetailModal, FaIcon, FileAttachments, notify, type DetailSection } from '@/ui';
 import { AdjustPricesModal, hasAdjustableOffers } from './AdjustPricesModal';
 import { toAttachment } from './badges';
@@ -129,6 +130,19 @@ export function RequestDetailsModal({
         size="95%"
         loading={detail.isPending}
         sections={sections}
+        headerActions={
+          <NeoAskButton
+            page={
+              request?.request_number
+                ? {
+                    type: 'purchase_request',
+                    id: request.request_number,
+                    label: request.title ? String(request.title) : undefined,
+                  }
+                : null
+            }
+          />
+        }
         footerActions={
           request ? (
             <>

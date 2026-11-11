@@ -34,11 +34,15 @@
 
 @keyframes neo-unread-ping {
   0% {
-    box-shadow: 0 0 0 2px var(--gk-rail), 0 0 0 2px rgba(229, 72, 77, 0.55);
+    box-shadow:
+      0 0 0 2px var(--gk-rail),
+      0 0 0 2px rgba(229, 72, 77, 0.55);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 2px var(--gk-rail), 0 0 0 9px rgba(229, 72, 77, 0);
+    box-shadow:
+      0 0 0 2px var(--gk-rail),
+      0 0 0 9px rgba(229, 72, 77, 0);
   }
 }
 
@@ -1236,4 +1240,211 @@ h3.mdHeading {
   .headBtn[data-desktop-only] {
     display: none;
   }
+}
+
+/* ---- page context: the pill over the box, the tag on a question ---- */
+
+.pagePill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin-bottom: 6px;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--gk-line);
+  border-radius: 999px;
+  background: var(--gk-surface-subtle);
+  color: var(--gk-ink-2);
+  font-size: 12px;
+  width: fit-content;
+}
+
+.pagePill > i {
+  flex: none;
+  color: var(--gk-muted);
+}
+
+.pagePillText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pagePillX {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--gk-muted);
+}
+
+.pagePillX:hover {
+  background: var(--gk-surface);
+  color: var(--gk-ink);
+}
+
+.pagePillX:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
+}
+
+.userWrap {
+  align-self: flex-end;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  max-width: 85%;
+}
+
+.userWrap > .user {
+  max-width: 100%;
+}
+
+.userPage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  color: var(--gk-muted);
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---- "Neo'ya sor" on record headers (NeoAskButton) ---- */
+
+.askBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background 150ms ease-out,
+    color 150ms ease-out;
+}
+
+.askBtn[data-tone='brand'] {
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+}
+
+.askBtn[data-tone='brand']:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.askBtn[data-tone='plain'] {
+  border: 1px solid var(--gk-line);
+  background: var(--gk-surface);
+  color: var(--gk-ink-2);
+}
+
+.askBtn[data-tone='plain']:hover {
+  border-color: var(--gk-red-700);
+  color: var(--gk-red-700);
+}
+
+.askBtn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--gk-on-dark);
+}
+
+.askItemIcon {
+  color: var(--gk-muted);
+  transform: rotate(-90deg) scaleX(-1);
+}
+
+/* Narrow headers: the robot alone. */
+@media (max-width: 36em) {
+  .askBtnText {
+    display: none;
+  }
+
+  .askBtn {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+}
+
+/* ---- the home page card (NeoHomePanel) ---- */
+
+.homeIntro {
+  margin: 0 0 10px;
+  color: var(--gk-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.homeForm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 4px 4px 12px;
+  border: 1px solid var(--gk-line-strong);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-surface);
+}
+
+.homeForm:focus-within {
+  border-color: var(--gk-red-700);
+  box-shadow: var(--gk-focus-ring);
+}
+
+.homeInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--gk-ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+.homeInput::placeholder {
+  color: var(--gk-muted);
+}
+
+.homeSuggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.homeSummary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 8px 10px;
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.homeSummary > i:last-child {
+  margin-left: auto;
+}
+
+.homeSummary:hover {
+  background: var(--gk-red-100);
+}
+
+.homeSummary:focus-visible {
+  outline: none;
+  box-shadow: var(--gk-focus-ring);
 }

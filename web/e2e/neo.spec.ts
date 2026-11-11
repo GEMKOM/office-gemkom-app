@@ -102,7 +102,7 @@ test('opens from the rail, answers, and keeps the conversation across pages', as
   await expect(log.getByRole('button', { name: 'Faydalı' })).toBeVisible();
   const chat = backend.callsTo('/assistant/chat/', 'POST');
   expect(chat).toHaveLength(1);
-  expect(chat[0]!.body).toEqual({ message: QUESTION });
+  expect(chat[0]!.body).toEqual({ message: QUESTION, source: 'panel' });
   await shot(page, '11-desktop-answer');
 
   // To another React page, client-side: the panel and its conversation stay.
@@ -370,7 +370,112 @@ test('locked access shows the legacy message instead of a chat', async ({
   consoleErrors.expectNone();
 });
 
-test("daily summaries open in a modal whose Neo'ya Sor prefills the chat", async ({
+// A record's modal: "Neo'ya sor" asks about that record, with it as context.
+const ORDER = {
+  id: 44,
+  supplier_name: 'e2e Çelik A.Ş.',
+  purchase_request_number: 'SAT-44',
+  status: 'awaiting_payment',
+  status_label: 'Ödeme Bekliyor',
+  total_amount: '12000.00',
+  total_tax_amount: '2400.00',
+  tax_rate: '20.00',
+  tax_outstanding: '2400.00',
+  currency: 'EUR',
+  priority: 'normal',
+  created_at: '2026-10-20T08:00:00Z',
+  payment_schedules: [],
+  lines: [],
+};
+
+test("a record modal's Neo'ya sor asks about that record, and Neo stays usable beside it", async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: true });
+  const backend = await mockBackend(
+    page,
+    {
+      ...chatHandlers,
+      'GET /procurement/purchase-orders/': {
+        json: { count: 1, next: null, previous: null, results: [ORDER] },
+      },
+      'GET /procurement/purchase-orders/44/': { json: ORDER },
+    },
+    { session },
+  );
+
+  await page.goto('/finance/purchase-orders/?order=44');
+  const dialog = page.getByRole('dialog', { name: /Sipariş Detayları/ });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: "Neo'ya sor" }).click();
+  await page.getByRole('menuitem', { name: '44 numaralı sipariş ne durumda?' }).click();
+
+  // Asked at once, with the record, the page and where it came from.
+  await expect.poll(() => backend.callsTo('/assistant/chat/', 'POST').length).toBe(1);
+  const body = backend.callsTo('/assistant/chat/', 'POST')[0]!.body as Record<string, unknown>;
+  expect(body).toMatchObject({
+    message: '44 numaralı sipariş ne durumda?',
+    source: 'page_button',
+    context: { type: 'purchase_order', id: '44', label: 'e2e Çelik A.Ş.' },
+  });
+  expect(String((body.context as { path: string }).path)).toContain('/finance/purchase-orders/');
+
+  // The modal stays; the panel is beside it, not under its overlay.
+  await expect(dialog).toBeVisible();
+  const log = panel(page).getByRole('log', { name: 'Neo sohbeti' });
+  await expect(log.getByText(ANSWER)).toBeVisible();
+  await expect(log.getByText('Sipariş 44 · e2e Çelik A.Ş.')).toBeVisible();
+  const box = await panel(page).boundingBox();
+  const hit = await page.evaluate(
+    ([x, y]) => document.elementFromPoint(x!, y!)?.closest('#neo-panel') !== null,
+    [box!.x + box!.width / 2, box!.y + box!.height / 2],
+  );
+  expect(hit).toBe(true);
+  // ...and the modal narrows into the space left of it, fully on screen.
+  const modalBox = await dialog.boundingBox();
+  expect(modalBox!.x).toBeGreaterThanOrEqual(0);
+  expect(modalBox!.x + modalBox!.width).toBeLessThanOrEqual(box!.x + 1);
+  await shot(page, '17-record-modal');
+
+  // The pill carries the record to the next question until it is taken off.
+  const input = panel(page).getByRole('textbox', { name: "Neo'ya sorunuz" });
+  await input.fill('Teslim tarihi ne?');
+  await expect(input).toHaveValue('Teslim tarihi ne?');
+  await expect(panel(page).getByText('Sipariş 44 · e2e Çelik A.Ş.').last()).toBeVisible();
+  await panel(page).getByRole('button', { name: 'Kaydı sorudan çıkar' }).click();
+  await input.press('Enter');
+  await expect.poll(() => backend.callsTo('/assistant/chat/', 'POST').length).toBe(2);
+  expect(backend.callsTo('/assistant/chat/', 'POST')[1]!.body).not.toHaveProperty('context');
+
+  consoleErrors.expectNone();
+});
+
+test('the home page card asks Neo at once', async ({ page, consoleErrors }) => {
+  const session = await seedSession(page, { admin: true });
+  const backend = await mockBackend(page, chatHandlers, { session });
+
+  await page.goto('/');
+  const card = page
+    .getByRole('main')
+    .locator('section')
+    .filter({ has: page.getByRole('heading', { name: "Neo'ya sorun" }) });
+  await expect(card).toBeVisible();
+  await card.getByRole('textbox', { name: "Neo'ya sorunuz" }).fill(QUESTION);
+  await card.getByRole('button', { name: "Neo'ya sor" }).click();
+
+  await expect(panel(page)).toBeVisible();
+  await expect(panel(page).getByText(ANSWER)).toBeVisible();
+  expect(backend.callsTo('/assistant/chat/', 'POST')[0]!.body).toMatchObject({
+    message: QUESTION,
+    source: 'home',
+  });
+  await shot(page, '18-home-card');
+
+  consoleErrors.expectNone();
+});
+
+test("daily summaries open in a modal whose Neo'ya sor asks about that summary", async ({
   page,
   consoleErrors,
 }) => {
@@ -417,13 +522,20 @@ test("daily summaries open in a modal whose Neo'ya Sor prefills the chat", async
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Kaynakhanede iki iş emri tamamlandı')).toBeVisible();
   await shot(page, '30-desktop-summary-modal');
-  await dialog.getByRole('button', { name: "Neo'ya Sor" }).click();
+  await dialog.getByRole('button', { name: "Neo'ya sor" }).click();
+  await page
+    .getByRole('menuitem', { name: '02.11.2026 özetinde beni ilgilendiren ne var?' })
+    .click();
+  await expect.poll(() => backend.callsTo('/assistant/chat/', 'POST').length).toBe(1);
+  expect(backend.callsTo('/assistant/chat/', 'POST')[0]!.body).toMatchObject({
+    source: 'page_button',
+    context: { type: 'daily_summary', id: '2026-11-02' },
+  });
+  // Opened from the summaries list, asking leaves the summary as read (as
+  // the old button did), and the answer comes up in the chat.
   await expect(dialog).toHaveCount(0);
-  await expect(panel(page).getByRole('textbox', { name: "Neo'ya sorunuz" })).toHaveValue(
-    'Dün neler oldu?',
-  );
-  expect(backend.callsTo('/assistant/daily-summary/61/read/', 'POST')).toHaveLength(1);
-  expect(backend.callsTo('/assistant/chat/', 'POST')).toHaveLength(0);
+  await expect(panel(page).getByText(ANSWER)).toBeVisible();
+  await expect.poll(() => backend.callsTo('/assistant/daily-summary/61/read/', 'POST').length).toBe(1);
 
   consoleErrors.expectNone();
 });

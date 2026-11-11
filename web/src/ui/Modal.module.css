@@ -1,6 +1,6 @@
 /* Modals, direction A "Kırmızı şerit": a slim red strip echoes the page band,
-   white body, footer on surface-subtle. Root, overlay and content apply to
-   every Mantine Modal (theme.ts); the rest is used by ModalParts. */
+   white body, footer on surface-subtle. Root, inner, overlay and content
+   apply to every Mantine Modal (theme.ts); the rest is used by ModalParts. */
 
 .root {
   --modal-y-offset: 6dvh;
@@ -20,6 +20,23 @@
 
 .content[data-full-screen] {
   border-radius: 0;
+}
+
+/* While Neo is docked open, modals stop short of it: the panel stays usable
+   beside a record's modal instead of sitting under its overlay. NeoPanel sets
+   --neo-offset (phones get Neo as a full sheet, so no room is kept there). */
+@media (min-width: 48em) {
+  .root .overlay {
+    right: var(--neo-offset, 0px);
+  }
+
+  /* Mantine sizes the inner box with width: 100% and no left; pin both
+     sides so it narrows instead of sliding off to the left. */
+  .root .inner {
+    left: 0;
+    right: var(--neo-offset, 0px);
+    width: auto;
+  }
 }
 
 /* Pairs with modalClassNames: ModalHeader, sections and ModalFooter pad themselves. */
@@ -95,6 +112,13 @@
 
 .header[data-tone='brand'] .subtitle {
   color: var(--gk-on-band-muted);
+}
+
+.headerActions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .close {
