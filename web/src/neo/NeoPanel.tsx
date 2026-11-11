@@ -18,6 +18,7 @@ import {
   startNewChat,
   toggleNeo,
   toggleNeoView,
+  toggleNeoWide,
   useNeo,
   type NeoView,
 } from './neoStore';
@@ -38,16 +39,19 @@ function HeadButton({
   icon,
   active,
   onClick,
+  desktopOnly,
 }: {
   label: string;
   icon: string;
   active?: boolean;
   onClick: () => void;
+  desktopOnly?: boolean;
 }) {
   return (
     <Tooltip label={label} position="bottom" withArrow openDelay={300}>
       <UnstyledButton
         className={classes.headBtn}
+        data-desktop-only={desktopOnly || undefined}
         aria-label={label}
         aria-pressed={active === undefined ? undefined : active}
         data-active={active || undefined}
@@ -100,6 +104,7 @@ export function NeoAside() {
   const open = useNeo((s) => s.open);
   const view = useNeo((s) => s.view);
   const restored = useNeo((s) => s.restored);
+  const wide = useNeo((s) => s.wide);
   // Asked on first open; closing keeps what the cache holds.
   const { quota, locked, ready } = useNeoAccess(open);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -188,6 +193,17 @@ export function NeoAside() {
             </span>
           </span>
           <span className={classes.headActions}>
+            <HeadButton
+              label={wide ? 'Daralt' : 'Genişlet'}
+              icon={
+                wide
+                  ? 'fas fa-down-left-and-up-right-to-center'
+                  : 'fas fa-up-right-and-down-left-from-center'
+              }
+              active={wide}
+              onClick={toggleNeoWide}
+              desktopOnly
+            />
             <HeadButton
               label="Günlük Özetler"
               icon="fas fa-newspaper"

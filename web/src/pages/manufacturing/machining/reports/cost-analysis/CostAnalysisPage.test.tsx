@@ -38,6 +38,8 @@ function json(body: unknown, status = 200) {
 }
 
 const urls = () => fetchMock.mock.calls.map(([url]) => new URL(String(url)));
+// The İş No box also loads the job-order list for its suggestions.
+const reportUrls = () => urls().filter((u) => u.pathname === '/machining/reports/job-costs/');
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -54,7 +56,7 @@ it('lists every job with its costs and the leader cards', async () => {
     route: '/manufacturing/machining/reports/cost-analysis/',
   });
   expect(await screen.findByRole('cell', { name: '225-02' })).toBeInTheDocument();
-  expect(urls()[0]!.search).toBe('');
+  expect(reportUrls()[0]!.search).toBe('');
 
   const card = document.getElementById('most-expensive-per-hour')!;
   // 160 € over 2 hours beats 390 € over 12.
@@ -70,7 +72,7 @@ it('the job filter goes to the request', async () => {
     route: '/manufacturing/machining/reports/cost-analysis/?job_no=225-01',
   });
   await screen.findByRole('cell', { name: '225-01' });
-  expect(urls()[0]!.searchParams.get('job_no')).toBe('225-01');
+  expect(reportUrls()[0]!.searchParams.get('job_no')).toBe('225-01');
 });
 
 it('a row opens the per-user details of that job', async () => {

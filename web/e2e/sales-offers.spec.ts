@@ -141,3 +141,51 @@ test('lists offers and opens one on the tab its status is about', async ({
   await expect(page).not.toHaveURL(/offer_no=/);
   consoleErrors.expectNone();
 });
+
+test('a file dropped on Dosya Yükle is uploaded with its type', async ({ page, consoleErrors }) => {
+  const backend = await openPage(page);
+  await page
+    .locator('tr')
+    .filter({ hasText: OFFER.offer_no })
+    .getByTitle('Fiyatlandırma sekmesini aç')
+    .click();
+  const dialog = page.getByRole('dialog', { name: `${OFFER.offer_no} — ${OFFER.title}` });
+  await dialog.getByRole('tab', { name: 'Dosyalar' }).click();
+  await dialog.getByRole('button', { name: 'Dosya Yükle' }).click();
+
+  const upload = page.getByRole('dialog', { name: 'Dosya Yükle' });
+  const target = upload.getByTestId('file-drop-target');
+  await expect(
+    upload.getByText('Dosyaları buraya sürükleyin veya seçmek için tıklayın'),
+  ).toBeVisible();
+
+  // A real DataTransfer with a file, as the OS hands one to the page.
+  const files = await page.evaluateHandle(() => {
+    const data = new DataTransfer();
+    data.items.add(new File(['%PDF-1.4 e2e'], 'cizim.pdf', { type: 'application/pdf' }));
+    return data;
+  });
+  await target.dispatchEvent('dragenter', { dataTransfer: files });
+  await target.dispatchEvent('dragover', { dataTransfer: files });
+  await expect(target).toHaveAttribute('data-over', 'true');
+  await expect(upload.getByText('Dosyaları buraya bırakın')).toBeVisible();
+  await page.screenshot({ path: 'test-results/offers-file-drag-over.png' });
+  await target.dispatchEvent('drop', { dataTransfer: files });
+
+  await expect(target).not.toHaveAttribute('data-over');
+  await expect(upload.getByText('Seçilen dosyalar (1):')).toBeVisible();
+  await expect(upload.getByText('cizim.pdf').first()).toBeVisible();
+  await page.screenshot({ path: 'test-results/offers-file-dropped.png' });
+
+  await upload.getByRole('combobox', { name: 'Dosya Türü' }).click();
+  await page.getByRole('option', { name: 'Çizim' }).click();
+  await upload.getByRole('button', { name: 'Kaydet' }).click();
+
+  await expect
+    .poll(() => backend.callsTo(`/sales/offers/${OFFER.id}/files/`, 'POST').length)
+    .toBe(1);
+  const [sent] = backend.callsTo(`/sales/offers/${OFFER.id}/files/`, 'POST');
+  expect(String(sent!.body)).toContain('filename="cizim.pdf"');
+  expect(String(sent!.body)).toContain('drawing');
+  consoleErrors.expectNone();
+});

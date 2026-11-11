@@ -3,7 +3,6 @@ import {
   Box,
   Button,
   Checkbox,
-  FileInput,
   Grid,
   Group,
   NumberInput,
@@ -25,7 +24,7 @@ import {
   type DepartmentRequestItemInput,
 } from '@/api/general/departmentRequests';
 import { useJobOrderOptions } from '@/api/reference';
-import { errorMessage, FaIcon, FormModal, ModalSection, notify } from '@/ui';
+import { errorMessage, FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 import { FileAttachmentList, ItemsTable } from '../shared';
 import { PREDEFINED_PROCESS_ITEMS, UNIT_CHOICES } from './constants';
 import { shiftAttachTargets, type AttachTarget } from './fileItemMapping';
@@ -321,11 +320,10 @@ export function DepartmentRequestFormModal({
                 {...form.getInputProps('needed_date')}
               />
               {!editing ? (
-                <FileInput
+                <FileDropInput
                   multiple
                   label="Dosyalar"
                   description="Ek dosyalar (opsiyonel) - Birden fazla dosya seçebilirsiniz"
-                  placeholder="Dosya seçin"
                   leftSection={<FaIcon icon="fas fa-paperclip" />}
                   value={files.map((m) => m.file)}
                   onChange={addFiles}

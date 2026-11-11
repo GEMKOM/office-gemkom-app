@@ -80,7 +80,14 @@ const EMPTY_JOBS: JobOrderOption[] = [];
 
 function filterConfig(users: readonly UserOption[]): FilterConfig<FilterKeys>[] {
   return [
-    { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş numarası', span: 2 },
+    {
+      type: 'text',
+      key: 'job_no',
+      label: 'İş No',
+      placeholder: 'İş numarası',
+      span: 2,
+      suggestions: 'jobOrders',
+    },
     {
       type: 'select',
       key: 'employee',

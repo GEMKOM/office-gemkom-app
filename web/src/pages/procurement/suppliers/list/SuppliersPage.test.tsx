@@ -219,6 +219,19 @@ it('the create form validates and then posts the legacy body', async () => {
   });
   // DBS fields only go out when DBS is ticked.
   fireEvent.change(within(dialog).getByLabelText('DBS bankası'), { target: { value: 'İşbank' } });
+  // New suppliers default to Türkiye, where the tax id is a 10-digit VKN or 11-digit TCKN.
+  fireEvent.change(within(dialog).getByLabelText(/VKN \/ TCKN/), { target: { value: '12345' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  expect(
+    await within(dialog).findByText('Türkiye için VKN 10, TCKN 11 haneli olmalıdır'),
+  ).toBeInTheDocument();
+  expect(calls().some((c) => c.method === 'POST')).toBe(false);
+  fireEvent.change(within(dialog).getByLabelText(/VKN \/ TCKN/), {
+    target: { value: '123 456-7890' },
+  });
+  fireEvent.change(within(dialog).getByLabelText('Vergi dairesi'), {
+    target: { value: ' Gebze ' },
+  });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
 
   await waitFor(() =>
@@ -237,6 +250,9 @@ it('the create form validates and then posts the legacy body', async () => {
     default_currency: 'TRY',
     default_payment_terms: null,
     default_tax_rate: 18,
+    tax_id: '1234567890',
+    tax_office: 'Gebze',
+    country: 'TR',
     is_active: true,
     has_dbs: false,
     dbs_bank: '',

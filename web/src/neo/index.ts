@@ -17,6 +17,8 @@ export {
   bindNeoUser,
   closeNeo,
   getNeoState,
+  NEO_WIDE_WIDTH,
+  NEO_WIDTH,
   openNeo,
   toggleNeo,
   useNeo,

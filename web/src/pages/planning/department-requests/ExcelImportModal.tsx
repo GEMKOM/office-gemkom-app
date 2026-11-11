@@ -4,7 +4,6 @@ import {
   Badge,
   Button,
   Code,
-  FileInput,
   Group,
   List,
   Modal,
@@ -16,7 +15,15 @@ import {
 } from '@mantine/core';
 import { useState } from 'react';
 import { lookupCardsByCode, type Item } from '@/api/procurement/items';
-import { FaIcon, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify } from '@/ui';
+import {
+  FaIcon,
+  FileDropInput,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  modalClassNames,
+  notify,
+} from '@/ui';
 import {
   detectColumnMapping,
   EXCEL_FIELDS,
@@ -270,10 +277,10 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
                   <Text size="sm">adet, kg, metre, litre, paket, kutu, set, m2, varil</Text>
                 </Stack>
               </SimpleGrid>
-              <FileInput
+              <FileDropInput
                 label="Excel Dosyası Seçin:"
                 description="Desteklenen formatlar: .xlsx, .xls, .csv"
-                placeholder="Excel veya CSV dosyası seçin..."
+                placeholder="Excel veya CSV dosyasını sürükleyin ya da seçin..."
                 accept=".xlsx,.xls,.csv"
                 clearable
                 value={file}

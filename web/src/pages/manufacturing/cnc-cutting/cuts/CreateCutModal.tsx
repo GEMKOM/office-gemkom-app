@@ -1,7 +1,6 @@
 import {
   ActionIcon,
   Button,
-  FileInput,
   Grid,
   Group,
   NumberInput,
@@ -16,7 +15,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { useRef, useState, type FormEvent } from 'react';
 import { cncTaskKeys, createCncTask, type CncPartInput } from '@/api/manufacturing/cncTasks';
-import { FaIcon, FormModal, ModalSection, notify } from '@/ui';
+import { FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 import { CutBasicFields, cutInput, cutSchema, EMPTY_CUT_FORM, useJobOrderChoices } from './cutForm';
 import { parsePartsFromText } from './partsPaste';
 import { EMPTY_PLATE_SOURCE, PlateSourceSection, type PlateSourceValue } from './PlateSource';
@@ -135,12 +134,11 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
           form={form}
           dimensionsHelp="Plaka boyutları (opsiyonel; fire plaka seçilirse otomatik alınır)"
         />
-        <FileInput
+        <FileDropInput
           mt="sm"
           label="Dosyalar"
           multiple
           clearable
-          placeholder="Dosya seçin"
           value={files}
           onChange={setFiles}
           description={

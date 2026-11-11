@@ -10,6 +10,7 @@ import {
   type Customer,
   type CustomerInput,
 } from '@/api';
+import { countryOptions } from '@/lib/countries';
 import { FormModal, ModalSection, notify } from '@/ui';
 
 const REQUIRED = 'Bu alan gereklidir';
@@ -27,6 +28,7 @@ export const customerSchema = z.object({
   address: z.string(),
   tax_id: z.string(),
   tax_office: z.string(),
+  country: z.string(),
   is_active: z.boolean(),
   notes: z.string(),
 });
@@ -45,6 +47,8 @@ export function customerFormValues(customer?: Customer | null): CustomerFormValu
     address: customer?.address || '',
     tax_id: customer?.tax_id || '',
     tax_office: customer?.tax_office || '',
+    // New customers default to Türkiye; old ones stay unknown until picked.
+    country: customer ? customer.country || '' : 'TR',
     is_active: customer ? customer.is_active !== false : true,
     notes: customer?.notes || '',
   };
@@ -94,7 +98,8 @@ export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormMo
       const saved = customer
         ? await patch.mutateAsync({ id: customer.id, data })
         : await create.mutateAsync(data);
-      if (!saved?.id) throw new Error(customer ? 'Müşteri güncellenemedi' : 'Müşteri oluşturulamadı');
+      if (!saved?.id)
+        throw new Error(customer ? 'Müşteri güncellenemedi' : 'Müşteri oluşturulamadı');
       notify.success(customer ? 'Müşteri başarıyla güncellendi' : 'Müşteri başarıyla oluşturuldu');
       onSaved?.(saved);
       onClose();
@@ -143,12 +148,16 @@ export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormMo
       <ModalSection title="Temel Bilgiler">
         <Grid gap="sm">
           <Grid.Col span={{ base: 12, sm: 6 }}>
-            {text('code', 'Müşteri Kodu', 'Müşteri kodunu girin', 'Benzersiz müşteri kodu', { required: true })}
+            {text('code', 'Müşteri Kodu', 'Müşteri kodunu girin', 'Benzersiz müşteri kodu', {
+              required: true,
+            })}
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6 }}>
             {text('name', 'Firma Adı', 'Firma adını girin', 'Tam firma adı', { required: true })}
           </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>{text('short_name', 'Kısa Ad', 'Kısa gösterim adı')}</Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 6 }}>
+            {text('short_name', 'Kısa Ad', 'Kısa gösterim adı')}
+          </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6 }}>
             <Select
               label="Para Birimi"
@@ -166,22 +175,40 @@ export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormMo
           <Grid.Col span={{ base: 12, sm: 4 }}>
             {text('contact_person', 'İletişim Kişisi', 'İletişim kişisi adı')}
           </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 4 }}>{text('phone', 'Telefon', 'Telefon numarası')}</Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            {text('phone', 'Telefon', 'Telefon numarası')}
+          </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 4 }}>
             {text('email', 'E-posta', 'E-posta adresi', undefined, { type: 'email' })}
           </Grid.Col>
           <Grid.Col span={12}>
-            <Textarea label="Adres" placeholder="Tam adres" rows={2} {...form.getInputProps('address')} />
+            <Textarea
+              label="Adres"
+              placeholder="Tam adres"
+              rows={2}
+              {...form.getInputProps('address')}
+            />
           </Grid.Col>
         </Grid>
       </ModalSection>
 
       <ModalSection title="Vergi Bilgileri">
         <Grid gap="sm">
-          <Grid.Col span={{ base: 12, sm: 6 }}>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
+            <Select
+              label="Ülke"
+              placeholder="Seçiniz..."
+              data={countryOptions()}
+              searchable
+              nothingFoundMessage="Ülke bulunamadı"
+              value={form.values.country || null}
+              onChange={(value) => form.setFieldValue('country', value ?? '')}
+            />
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
             {text('tax_id', 'Vergi Numarası', 'Vergi kimlik numarası')}
           </Grid.Col>
-          <Grid.Col span={{ base: 12, sm: 6 }}>
+          <Grid.Col span={{ base: 12, sm: 4 }}>
             {text('tax_office', 'Vergi Dairesi', 'Bağlı olduğu vergi dairesi')}
           </Grid.Col>
         </Grid>
@@ -194,7 +221,12 @@ export function CustomerFormModal({ customer, onClose, onSaved }: CustomerFormMo
             description="Pasif müşteriler listede varsayılan olarak gizlenir"
             {...form.getInputProps('is_active', { type: 'checkbox' })}
           />
-          <Textarea label="Notlar" placeholder="İç notlar" rows={3} {...form.getInputProps('notes')} />
+          <Textarea
+            label="Notlar"
+            placeholder="İç notlar"
+            rows={3}
+            {...form.getInputProps('notes')}
+          />
         </Stack>
       </ModalSection>
     </FormModal>

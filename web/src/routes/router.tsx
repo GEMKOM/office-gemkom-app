@@ -211,6 +211,38 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/warehouse',
+    handle: hub,
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/WarehouseHubPage')).WarehouseHubPage,
+    }),
+  },
+  {
+    path: '/warehouse/counts',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/counts/StockCountsPage')).StockCountsPage,
+    }),
+  },
+  {
+    path: '/warehouse/production-slips',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/production/ProductionSlipsPage'))
+        .ProductionSlipsPage,
+    }),
+  },
+  {
+    path: '/warehouse/transfers',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/transfers/TransfersPage')).TransfersPage,
+    }),
+  },
+  {
+    path: '/warehouse/goods-receipts',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/receipts/GoodsReceiptsPage')).GoodsReceiptsPage,
+    }),
+  },
+  {
     path: '/logistics',
     handle: hub,
     lazy: async () => ({
@@ -420,6 +452,12 @@ export const appRoutes: RouteObject[] = [
       Component: (
         await import('@/pages/accounting/subcontracting-statements/SubcontractingStatementsPage')
       ).SubcontractingStatementsPage,
+    }),
+  },
+  {
+    path: '/accounting/job-cost-by-period',
+    lazy: async () => ({
+      Component: (await import('@/pages/accounting/period-cost/PeriodCostPage')).PeriodCostPage,
     }),
   },
   {
@@ -663,7 +701,8 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/manufacturing/reports/job-costs',
     lazy: async () => ({
-      Component: (await import('@/pages/manufacturing/reports/job-costs/JobCostsPage')).JobCostsPage,
+      Component: (await import('@/pages/manufacturing/reports/job-costs/JobCostsPage'))
+        .JobCostsPage,
     }),
   },
   ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
@@ -792,6 +831,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/procurement/planning-items',
+    lazy: async () => ({
+      Component: (await import('@/pages/procurement/planning-items/ProcurementPlanningItemsPage'))
+        .ProcurementPlanningItemsPage,
+    }),
+  },
+  {
     path: '/procurement/reports/items',
     lazy: async () => ({
       Component: (await import('@/pages/procurement/reports/items/ItemsReportPage'))
@@ -901,8 +947,9 @@ export const appRoutes: RouteObject[] = [
   {
     path: '/procurement/purchase-requests/create',
     lazy: async () => ({
-      Component: (await import('@/pages/procurement/purchase-requests/create/CreatePurchaseRequestPage'))
-        .CreatePurchaseRequestPage,
+      Component: (
+        await import('@/pages/procurement/purchase-requests/create/CreatePurchaseRequestPage')
+      ).CreatePurchaseRequestPage,
     }),
   },
   {

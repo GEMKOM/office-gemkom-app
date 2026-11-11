@@ -1,5 +1,6 @@
 import { Text } from '@mantine/core';
 import type { PaymentTermOption, Supplier } from '@/api/procurement/suppliers';
+import { countryName } from '@/lib/countries';
 import { StatusBadge, type DataTableColumn } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
 import { StarRating, SupplierStatusBadge } from './supplierBadges';
@@ -51,6 +52,11 @@ export function supplierColumns(terms: readonly PaymentTermOption[]): DataTableC
       ),
     },
     {
+      key: 'tax_id',
+      header: 'VKN / TCKN',
+      render: (row) => (row.tax_id ? <span className={uiClasses.code}>{row.tax_id}</span> : '-'),
+    },
+    {
       key: 'contact_person',
       header: 'İletişim Kişisi',
       maxWidth: 'clamp(90px, 8.5vw, 220px)',
@@ -73,6 +79,12 @@ export function supplierColumns(terms: readonly PaymentTermOption[]): DataTableC
       align: 'center',
       hideBelow: 1600,
       render: (row) => <StatusBadge color="grey">{row.default_currency || 'TRY'}</StatusBadge>,
+    },
+    {
+      key: 'country',
+      header: 'Ülke',
+      hideBelow: 1600,
+      render: (row) => (row.country ? countryName(row.country) : '-'),
     },
     {
       key: 'default_tax_rate',

@@ -540,6 +540,32 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       },
     },
   },
+  '/warehouse': {
+    label: 'Depo',
+    icon: 'fas fa-warehouse',
+    children: {
+      '/warehouse/goods-receipts': {
+        label: 'Mal Kabul',
+        icon: 'fas fa-truck-loading',
+        children: {},
+      },
+      '/warehouse/counts': {
+        label: 'Sayım',
+        icon: 'fas fa-clipboard-check',
+        children: {},
+      },
+      '/warehouse/production-slips': {
+        label: 'İmalata Çıkış / İade',
+        icon: 'fas fa-dolly-flatbed',
+        children: {},
+      },
+      '/warehouse/transfers': {
+        label: 'Depo Transferi',
+        icon: 'fas fa-exchange-alt',
+        children: {},
+      },
+    },
+  },
   '/logistics': {
     label: 'Lojistik',
     icon: 'fas fa-truck',
@@ -584,6 +610,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       '/procurement/critical-items': {
         label: 'Kritik Malzemeler',
         icon: 'fas fa-circle-exclamation',
+        children: {},
+      },
+      '/procurement/planning-items': {
+        label: 'Satın Alma Kalemleri',
+        icon: 'fas fa-list-check',
         children: {},
       },
       '/procurement/purchase-requests': {
@@ -669,6 +700,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       '/accounting/subcontracting-statements': {
         label: 'Hakedişler',
         icon: 'fas fa-file-invoice-dollar',
+        children: {},
+      },
+      '/accounting/job-cost-by-period': {
+        label: 'Dönemsel İş Maliyeti',
+        icon: 'fas fa-calendar-alt',
         children: {},
       },
     },

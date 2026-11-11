@@ -42,6 +42,14 @@ export function AccountingHubPage() {
       link: exportLink,
       stat: { value: countValue(exportable), label: `hakediş (${monthName}) aktarıma hazır` },
     },
+    {
+      title: 'Dönemsel İş Maliyeti',
+      description:
+        'Seçilen ay aralığında iş emirlerinde oluşan maliyeti kalem bazında görüntüle, Excel’e aktar.',
+      icon: 'fas fa-calendar-alt',
+      iconColor: 'primary',
+      link: '/accounting/job-cost-by-period',
+    },
   ];
 
   const stats: PageFigure[] = canExport

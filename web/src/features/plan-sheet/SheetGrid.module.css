@@ -292,6 +292,12 @@
 
 .rowTime {
   position: relative;
+  /* Everything drawn in the lane stays in the lane's own stacking context,
+     so it always goes UNDER the sticky table pane (.rowGrid, z-index 2). The
+     row is a stacking context of its own (content-visibility), and without
+     this the gap pill's z-index 4 painted the "−72g" bubbles of early jobs
+     on top of the Plan Bitiş column once their bars scrolled under it. */
+  isolation: isolate;
   flex: 0 0 var(--pg-time-w);
   width: var(--pg-time-w);
   /* Weekend/holiday shading and the column rules are painted, not built. */

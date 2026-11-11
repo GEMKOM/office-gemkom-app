@@ -612,6 +612,22 @@ export function validateAll(state: PrState): string[] {
   return errors;
 }
 
+/**
+ * Rows that don't come from a planning line. A purchase request is made only
+ * from planning lines (2026-11-09); the backend refuses any other row, e.g.
+ * one left in an old draft.
+ */
+export function unplannedItemsMessage(items: readonly PrItem[]): string | null {
+  const rows = items.flatMap((item, index) =>
+    item.source_planning_request_item_id ? [] : [`Malzeme ${index + 1}: ${item.code || item.name || '-'}`],
+  );
+  if (!rows.length) return null;
+  return [
+    'Satın alma talebi yalnızca planlama talebi kalemlerinden oluşturulabilir. Şu malzemeleri listeden kaldırın; gerekiyorsa departman talebi açılıp planlamadan geçmelidir:',
+    ...rows,
+  ].join('\n');
+}
+
 /** detectProblematicItems + showProblematicItemsError: rows the backend cannot take. */
 export function duplicateItemsMessage(items: readonly PrItem[]): string | null {
   const groups = new Map<string, { item: PrItem; index: number }[]>();

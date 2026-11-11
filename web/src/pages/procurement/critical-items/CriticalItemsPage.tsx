@@ -47,7 +47,14 @@ type FilterState = {
 };
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
-  { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş no...', span: 3 },
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş No',
+    placeholder: 'İş no...',
+    span: 3,
+    suggestions: 'jobOrders',
+  },
   { type: 'text', key: 'item_code', label: 'Ürün Kodu', placeholder: 'Ürün kodu...', span: 3 },
   { type: 'text', key: 'item_name', label: 'Ürün Adı', placeholder: 'Ürün adı...', span: 3 },
   {

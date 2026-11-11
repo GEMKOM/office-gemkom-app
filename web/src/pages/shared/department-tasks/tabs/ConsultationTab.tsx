@@ -1,7 +1,6 @@
 import {
   Badge,
   Button,
-  FileInput,
   Grid,
   Group,
   Paper,
@@ -30,6 +29,7 @@ import {
   confirm,
   downloadFilesAsZip,
   FaIcon,
+  FileDropInput,
   FileAttachments,
   notify,
   RichText,
@@ -424,10 +424,10 @@ export function ConsultationTab({ task }: { task: DepartmentTask }) {
         />
         <Grid mt="sm" pt="sm" gap="xs" style={{ borderTop: '1px solid var(--gk-line)' }}>
           <Grid.Col span={5}>
-            <FileInput
+            <FileDropInput
               size="xs"
               aria-label="Dosya"
-              placeholder="Dosya seçin"
+              placeholder="Dosya seçin veya sürükleyin"
               value={file}
               onChange={setFile}
               clearable

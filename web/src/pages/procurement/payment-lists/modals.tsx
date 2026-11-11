@@ -2,7 +2,6 @@ import {
   ActionIcon,
   Anchor,
   Checkbox,
-  FileInput,
   Grid,
   Group,
   Loader,
@@ -33,7 +32,7 @@ import {
   type PaymentListInput,
   type PoolRow,
 } from '@/api/procurement/paymentLists';
-import { confirm, FaIcon, FormModal, notify } from '@/ui';
+import { confirm, FaIcon, FileDropInput, FormModal, notify } from '@/ui';
 import {
   currencyBreakdown,
   fmtDate,
@@ -750,7 +749,7 @@ export function ProformaModal({ row, onClose }: { row: PoolRow; onClose: () => v
         )}
         <Grid gap="sm">
           <Grid.Col span={{ base: 12, sm: 8 }}>
-            <FileInput
+            <FileDropInput
               label="Dosya(lar)"
               multiple
               clearable

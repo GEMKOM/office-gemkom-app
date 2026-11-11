@@ -1,20 +1,10 @@
-import {
-  Box,
-  Checkbox,
-  FileInput,
-  Grid,
-  Group,
-  Select,
-  Text,
-  TextInput,
-  Textarea,
-} from '@mantine/core';
+import { Box, Checkbox, Grid, Group, Select, Text, TextInput, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { z } from 'zod';
 import { craneErrorText, useCreateCraneRequest, type CraneType } from '@/api/general/craneRequests';
 import type { JobOrderOption } from '@/api/reference';
-import { FaIcon, FormModal, ModalSection, notify } from '@/ui';
+import { FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 import {
   availablePricingOptions,
   computeCraneEstimate,
@@ -244,11 +234,10 @@ export function CraneRequestCreateModal({
             />
           </Grid.Col>
           <Grid.Col span={12}>
-            <FileInput
+            <FileDropInput
               label="Dosyalar"
               multiple
               clearable
-              placeholder="Dosya seçin"
               description="Ek dosyalar (opsiyonel)"
               leftSection={<FaIcon icon="fas fa-paperclip" />}
               {...form.getInputProps('files')}

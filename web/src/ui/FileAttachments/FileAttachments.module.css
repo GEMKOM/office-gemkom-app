@@ -287,3 +287,26 @@
 .dropHint {
   color: inherit;
 }
+
+/* ---- a drop target around another control (FileDropTarget, FileDropInput) ---- */
+
+.dropTarget {
+  position: relative;
+}
+
+.dropOverlay {
+  position: absolute;
+  inset: -4px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 2px dashed var(--gk-red-700);
+  border-radius: var(--gk-radius-md);
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+}

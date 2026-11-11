@@ -27,7 +27,13 @@ type FilterKeys = 'job_no' | 'image_no' | 'position_no';
 type FilterState = Record<FilterKeys, string>;
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
-  { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'İş numarası...' },
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş No',
+    placeholder: 'İş numarası...',
+    suggestions: 'jobOrders',
+  },
   { type: 'text', key: 'image_no', label: 'Resim No', placeholder: 'Resim numarası...' },
   { type: 'text', key: 'position_no', label: 'Pozisyon No', placeholder: 'Pozisyon numarası...' },
 ];
