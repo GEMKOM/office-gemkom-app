@@ -322,9 +322,11 @@ export function ConsultationTab({ task }: { task: DepartmentTask }) {
           <Grid.Col span={6}>
             <strong>Teklif Sahibi:</strong> {summary.offer_owner_name || '-'}
           </Grid.Col>
+          <Grid.Col span={6}>
+            <strong>Müşteri / Firma:</strong> {summary.customer_name || '-'}
+          </Grid.Col>
           {task.department === 'logistics' ? (
             <>
-              <Grid.Col span={6} />
               <Grid.Col span={6}>
                 <strong>Incoterms:</strong> {summary.incoterms || '-'}
               </Grid.Col>
