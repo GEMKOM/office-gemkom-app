@@ -49,6 +49,8 @@ export interface OfferSummary {
   description?: string;
   delivery_date_requested?: string | null;
   offer_owner_name?: string;
+  /** Customer of the offer behind a consultation task (Offer.customer_name). */
+  customer_name?: string | null;
   incoterms?: string;
   delivery_place?: string;
   [key: string]: unknown;
