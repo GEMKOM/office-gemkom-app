@@ -7,6 +7,7 @@ import {
   useSubmitProcurementLines,
 } from '@/api/planning/procurementLines';
 import {
+  confirm,
   DataTable,
   FaIcon,
   FileDropInput,
@@ -211,6 +212,20 @@ export function ProcurementLinesModal({
 
   const save = async () => {
     if (loading) return;
+    // Önizle loads suggested lines, not the saved set. Kaydet still POSTs a
+    // full replace, so a look at the preview would otherwise wipe custom costs.
+    if (usePreview) {
+      const ok = await confirm({
+        title: 'Önerilen satırları kaydet',
+        icon: 'fas fa-exclamation-triangle',
+        message: `${jobNo} için kayıtlı malzeme maliyeti satırları önerilen satırlarla değiştirilecek. Devam edilsin mi?`,
+        description: 'Mevcut miktarlar, birim fiyatlar ve serbest satırlar silinir.',
+        confirmLabel: 'Evet, değiştir',
+        cancelLabel: 'Vazgeç',
+        danger: true,
+      });
+      if (!ok) return;
+    }
     try {
       await submit.mutateAsync({ jobNo, lines: linesForSubmit(rows) });
       notify.success('Satırlar kaydedildi.');

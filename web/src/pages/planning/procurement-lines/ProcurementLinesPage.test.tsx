@@ -307,6 +307,39 @@ it('removes a row and opens the preview from Önizle or when nothing is saved', 
   await within(preview).findByText('STK-777');
   expect(callsTo('/projects/procurement-lines/')).toHaveLength(1);
   expect(callsTo('/projects/procurement-lines/preview/')).toHaveLength(2);
+
+  // Kaydet from Önizle replaces saved lines; confirm first, cancel is a no-op.
+  fireEvent.click(within(preview).getByRole('button', { name: 'Kaydet' }));
+  expect(
+    await screen.findByText(
+      '250-07 için kayıtlı malzeme maliyeti satırları önerilen satırlarla değiştirilecek. Devam edilsin mi?',
+    ),
+  ).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Vazgeç' }));
+  await waitFor(() =>
+    expect(
+      screen.queryByText(
+        '250-07 için kayıtlı malzeme maliyeti satırları önerilen satırlarla değiştirilecek. Devam edilsin mi?',
+      ),
+    ).toBeNull(),
+  );
+  expect(callsTo('/projects/procurement-lines/submit/')).toHaveLength(0);
+
+  fireEvent.click(within(preview).getByRole('button', { name: 'Kaydet' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Evet, değiştir' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Satırlar kaydedildi.'));
+  expect(callsTo('/projects/procurement-lines/submit/')[0]!.body).toEqual({
+    job_order: '250-07',
+    lines: [
+      {
+        item: 777,
+        quantity: '4',
+        unit_price: '12.5',
+        planning_request_item: 55,
+        order: 0,
+      },
+    ],
+  });
 });
 
 function excelFile(rows: unknown[][], name = 'siparis.xlsx'): File {
