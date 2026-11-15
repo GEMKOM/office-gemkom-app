@@ -163,3 +163,31 @@ it('the lines modal loads, edits and replaces the lines', async () => {
   await waitFor(() => expect(callsTo('/projects/job-orders/has_qc/').length).toBeGreaterThan(1));
   await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 });
+
+it('does not replace saved QC lines when the editor failed to load them', async () => {
+  fetchMock.mockImplementation((url, init) => {
+    const method = init?.method ?? 'GET';
+    const path = new URL(String(url)).pathname;
+    if (path === '/projects/job-orders/qc_pending/')
+      return json({ count: 7, next: null, previous: null, results: PENDING });
+    if (path === '/projects/job-orders/has_qc/')
+      return json({ count: 3, next: null, previous: null, results: HAS_QC });
+    if (path === '/projects/qc-cost-lines/' && method === 'GET') return json({ detail: 'boom' }, 500);
+    if (path === '/projects/qc-cost-lines/submit/') return json([]);
+    return json({ detail: 'not mocked' }, 404);
+  });
+  renderPage();
+  await screen.findByText('254-01');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Satırları Aç' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: 'KK Maliyet Satırları — 254-01' });
+  await waitFor(() =>
+    expect(notify.error).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 500 }),
+      expect.anything(),
+    ),
+  );
+  expect(within(dialog).getByRole('button', { name: 'Kaydet' })).toBeDisabled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  fireEvent.submit(dialog.querySelector('form')!);
+  expect(callsTo('/projects/qc-cost-lines/submit/')).toHaveLength(0);
+});

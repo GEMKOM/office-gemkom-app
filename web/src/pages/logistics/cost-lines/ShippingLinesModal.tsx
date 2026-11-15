@@ -59,9 +59,12 @@ export function ShippingLinesModal({ jobNo, onClose, onSaved }: ShippingLinesMod
       const loaded = query.data.map(toEditLine);
       return loaded.length ? loaded : [emptyLine()];
     }
-    return query.isError ? [emptyLine()] : null;
-  }, [query.isSuccess, query.isError, query.data]);
+    // A failed GET must not look like an empty job: submit/ replaces every
+    // shipping line, so Kaydet from this state would clear saved costs.
+    return null;
+  }, [query.isSuccess, query.data]);
   const lines = edited ?? initial;
+  const loadFailed = query.isError;
 
   useEffect(() => {
     if (!query.isError) return;
@@ -69,7 +72,8 @@ export function ShippingLinesModal({ jobNo, onClose, onSaved }: ShippingLinesMod
     notify.error(query.error, { fallback: 'Satırlar yüklenemedi' });
   }, [query.isError, query.error]);
 
-  const loading = lines === null;
+  const loading = lines === null && !loadFailed;
+  const blocked = loading || loadFailed;
   const rows = lines ?? [];
   const total = rows.reduce((sum, line) => sum + (Number.parseFloat(line.amount_eur) || 0), 0);
 
@@ -86,7 +90,7 @@ export function ShippingLinesModal({ jobNo, onClose, onSaved }: ShippingLinesMod
     });
 
   const save = async () => {
-    if (loading) return;
+    if (blocked) return;
     try {
       await submit.mutateAsync({ jobNo, lines: linesForSubmit(rows) });
       notify.success('Satırlar kaydedildi.');
@@ -107,7 +111,8 @@ export function ShippingLinesModal({ jobNo, onClose, onSaved }: ShippingLinesMod
       size="xl"
       cancelLabel="Kapat"
       submitting={submit.isPending}
-      submitDisabled={loading}
+      submitDisabled={blocked}
+      error={loadFailed ? query.error : undefined}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -117,7 +122,7 @@ export function ShippingLinesModal({ jobNo, onClose, onSaved }: ShippingLinesMod
         <Button
           size="xs"
           leftSection={<FaIcon icon="fas fa-plus" />}
-          disabled={loading}
+          disabled={blocked}
           onClick={() => change((current) => [...current, emptyLine()])}
         >
           Satır Ekle

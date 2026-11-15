@@ -61,6 +61,10 @@ export function QcCostLinesModal({ jobNo, onClose }: QcCostLinesModalProps) {
   const submit = useSubmitQcCostLines();
   const form = useForm<{ lines: LineDraft[] }>({ initialValues: { lines: [] } });
   const loading = lines.isPending;
+  // submit/ replaces every QC line. An empty form after a failed GET would
+  // POST [] and clear the job's saved costs.
+  const loadFailed = lines.isError;
+  const blocked = loading || loadFailed;
 
   const { initialize } = form;
   useEffect(() => {
@@ -68,7 +72,6 @@ export function QcCostLinesModal({ jobNo, onClose }: QcCostLinesModalProps) {
       initialize({ lines: lines.data.length ? lines.data.map(toDraft) : [emptyLine()] });
     } else if (lines.isError) {
       notify.error(lines.error, { fallback: 'Satırlar yüklenemedi' });
-      initialize({ lines: [emptyLine()] });
     }
     // initialize only runs once per form; that is the point.
   }, [lines.isSuccess, lines.isError, lines.data, lines.error, initialize]);
@@ -85,7 +88,7 @@ export function QcCostLinesModal({ jobNo, onClose }: QcCostLinesModalProps) {
   };
 
   const save = async (values: { lines: LineDraft[] }) => {
-    if (loading) return;
+    if (blocked) return;
     try {
       await submit.mutateAsync({ jobNo, lines: linesToSubmit(values.lines) });
       notify.success('Satırlar kaydedildi.');
@@ -104,13 +107,14 @@ export function QcCostLinesModal({ jobNo, onClose }: QcCostLinesModalProps) {
       icon="fas fa-clipboard-check"
       size="xl"
       submitting={submit.isPending}
-      submitDisabled={loading}
+      submitDisabled={blocked}
+      error={loadFailed ? lines.error : undefined}
       onSubmit={form.onSubmit(save)}
       footerActions={
         <Button
           variant="default"
           mr="auto"
-          disabled={loading}
+          disabled={blocked}
           leftSection={<FaIcon icon="fas fa-plus" />}
           onClick={() => form.insertListItem('lines', emptyLine())}
         >
