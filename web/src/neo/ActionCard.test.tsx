@@ -117,6 +117,44 @@ it('an expired card offers nothing to confirm', () => {
   expect(screen.queryByRole('button', { name: 'Onayla' })).toBeNull();
 });
 
+it('a purchase request card lists its planning lines read-only and links the new request', async () => {
+  const card: NeoAction = {
+    id: 12,
+    kind: 'purchase_request',
+    label: 'Satın alma talebi oluştur',
+    status: 'pending',
+    expires_at: inAnHour(),
+    fields: [
+      { key: 'planning_requests', label: 'Planlama talepleri', type: 'text', value: 'GR-2026-0901', editable: false, required: true },
+      {
+        key: 'lines',
+        label: 'Kalemler (kalan miktar · iş)',
+        type: 'text',
+        value: 'SAC-10 · Sac 10 mm · 120.00 kg · 970-01\nCIV-M12 · Cıvata M12 · 40.00 adet · 970-01',
+        editable: false,
+        required: true,
+      },
+      { key: 'title', label: 'Başlık', type: 'text', value: 'GR-2026-0901 malzemeleri', editable: true, required: true },
+    ],
+  };
+  confirmMock.mockResolvedValue({
+    ...card,
+    status: 'confirmed',
+    result: { id: 3, label: 'PR-2026-0101', url: '/procurement/purchase-requests/registry/?talep=PR-2026-0101' },
+  });
+  renderCard(card);
+  expect(screen.getByText(/SAC-10 · Sac 10 mm · 120.00 kg · 970-01/)).toBeInTheDocument();
+  expect(screen.getByText(/CIV-M12 · Cıvata M12/)).toBeInTheDocument();
+  expect(screen.queryByRole('textbox', { name: /Kalemler/ })).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Onayla' }));
+  await waitFor(() => expect(confirmMock).toHaveBeenCalledWith(12, {}));
+  expect(await screen.findByText(/PR-2026-0101 oluşturuldu/)).toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Aç' })).toHaveAttribute(
+    'href',
+    '/procurement/purchase-requests/registry/?talep=PR-2026-0101',
+  );
+});
+
 it('a failed write shows why', () => {
   renderCard(topicCard({ status: 'failed', error: 'Onay politikası yok' }));
   expect(screen.getByText('Kaydedilemedi: Onay politikası yok')).toBeInTheDocument();

@@ -23,6 +23,8 @@ const ICONS: Record<string, string> = {
   discussion_comment: 'fas fa-comment',
   report: 'fas fa-bug',
   leave_request: 'fas fa-umbrella-beach',
+  planning_request: 'fas fa-clipboard-list',
+  purchase_request: 'fas fa-cart-shopping',
 };
 
 /** What a confirmed action changes, so open pages show it without a reload. */
@@ -31,6 +33,8 @@ const INVALIDATES: Record<string, QueryKey[]> = {
   discussion_comment: [['discussionTopics'], ['myDiscussions']],
   report: [neoKeys.reports, ['feedbackReports']],
   leave_request: [['vacationRequests'], ['vacation']],
+  planning_request: [['planningRequests'], ['planningItems'], ['procurementLines']],
+  purchase_request: [['purchaseRequests'], ['planningRequests'], ['planningItems'], ['procurementLines']],
 };
 
 const CLOSED_TEXT: Record<string, string> = {

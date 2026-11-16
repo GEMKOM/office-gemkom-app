@@ -1621,6 +1621,9 @@ h3.mdHeading {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  /* Line lists come one per row ("SAC-10 · Sac 10 mm · 120 kg · 970-01"). */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .actionLabel {

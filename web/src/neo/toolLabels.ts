@@ -53,6 +53,8 @@ export const TOOL_LABELS: Record<string, string> = {
   propose_discussion_comment: 'Yorum hazırlanıyor',
   propose_report: 'Bildirim hazırlanıyor',
   propose_leave_request: 'İzin talebi hazırlanıyor',
+  propose_planning_request: 'Planlama talebi hazırlanıyor',
+  propose_purchase_request: 'Satın alma talebi hazırlanıyor',
 };
 
 export const GENERIC_TOOL_LABEL = 'Veri alınıyor';

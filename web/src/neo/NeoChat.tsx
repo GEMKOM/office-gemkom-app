@@ -121,11 +121,22 @@ export const ACTION_SUGGESTIONS = [
   'Bir hata bildirmek istiyorum',
 ];
 
+/** Openers for writes tied to a section: shown to those who can open it. */
+const ROLE_ACTION_SUGGESTIONS: { section: string; text: string }[] = [
+  { section: 'planning', text: 'Planlama talebi oluşturmak istiyorum' },
+  { section: 'procurement', text: 'Hazır planlama talebinden satın alma talebi aç' },
+];
+
+export function actionSuggestionsFor(canOpen: (section: string) => boolean): string[] {
+  return [...ACTION_SUGGESTIONS, ...ROLE_ACTION_SUGGESTIONS.filter((s) => canOpen(s.section)).map((s) => s.text)];
+}
+
 /** The same writes, for the "what can Neo do" list. */
 export const ACTION_CAPABILITIES = [
   'Tartışma konusu açma ve yorum yazma',
   'Hata ve öneri bildirimi',
   'Kendi izin talebiniz',
+  'Planlama talebi ve hazır planlama kalemlerinden satın alma talebi (yetkiniz varsa)',
 ];
 
 const MAX_SUGGESTIONS = 6;
@@ -392,6 +403,7 @@ const Message = memo(function Message({
 
 function EmptyState({ onPick }: { onPick: Ask }) {
   const suggestions = useMemo(() => suggestionsFor(hasSectionAccess), []);
+  const actionSuggestions = useMemo(() => actionSuggestionsFor(hasSectionAccess), []);
   return (
     <div className={classes.empty}>
       <span className={classes.emptyTile}>
@@ -417,7 +429,7 @@ function EmptyState({ onPick }: { onPick: Ask }) {
         Sizin için kayıt da hazırlar, onayınızla kaydeder:
       </p>
       <div className={classes.suggestions}>
-        {ACTION_SUGGESTIONS.map((text) => (
+        {actionSuggestions.map((text) => (
           <UnstyledButton
             key={text}
             className={`${classes.suggestion} ${classes.actionSuggestion}`}
