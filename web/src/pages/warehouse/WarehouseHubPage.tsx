@@ -8,6 +8,7 @@ const COUNTS = '/warehouse/counts';
 const SLIPS = '/warehouse/production-slips';
 const TRANSFERS = '/warehouse/transfers';
 const PIECES = '/warehouse/pieces';
+const PIECE_COUNTS = '/warehouse/piece-counts';
 const CARDS = '/planning/inventory/cards';
 const PULLS = '/manufacturing/material-tracking/pull-requests';
 
@@ -60,6 +61,13 @@ export function WarehouseHubPage() {
       icon: 'fas fa-layer-group',
       iconColor: 'red',
       link: PIECES,
+    },
+    {
+      title: 'Sac ve Boy Sayımı',
+      description: 'Sac ve boy parçalarının adet ve ölçüyle sayımı; ilk sayım açılış stoğu olur.',
+      icon: 'fas fa-ruler-combined',
+      iconColor: 'primary',
+      link: PIECE_COUNTS,
     },
     {
       title: 'Stok Kartları',

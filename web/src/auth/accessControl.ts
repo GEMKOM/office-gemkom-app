@@ -80,6 +80,7 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
   // Sac ve boy stoğu holds the old Fire Plakalar too: whoever opens that page
   // (CNC planning) sees the pieces as well.
   '/warehouse/pieces': ['/warehouse', '/planning/cnc-cutting/remnants'],
+  '/warehouse/piece-counts': ['/warehouse'],
   // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
   '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking'],
   // Reports merged from one page per department: the grants stay on the old
