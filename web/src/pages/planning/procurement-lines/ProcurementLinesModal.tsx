@@ -97,9 +97,13 @@ export function ProcurementLinesModal({
 
   // What the user changed; until then the editor shows what was loaded.
   const [edited, setEdited] = useState<EditLine[] | null>(null);
-  const initial = query.isSuccess ? query.data : query.isError ? [] : null;
+  // A failed GET must not look like "no lines": submit/ replaces the job's
+  // whole set, so Kaydet from an empty error state would delete saved costs.
+  const loadFailed = query.isError;
+  const initial = query.isSuccess ? query.data : null;
   const lines = edited ?? initial;
-  const loading = lines === null;
+  const loading = lines === null && !loadFailed;
+  const blocked = loading || loadFailed;
   const rows = useMemo(() => lines ?? [], [lines]);
 
   useEffect(() => {
@@ -210,7 +214,7 @@ export function ProcurementLinesModal({
   ];
 
   const save = async () => {
-    if (loading) return;
+    if (blocked) return;
     try {
       await submit.mutateAsync({ jobNo, lines: linesForSubmit(rows) });
       notify.success('Satırlar kaydedildi.');
@@ -233,7 +237,8 @@ export function ProcurementLinesModal({
       size={1140}
       cancelLabel="Kapat"
       submitting={submit.isPending}
-      submitDisabled={loading}
+      submitDisabled={blocked}
+      error={loadFailed ? query.error : undefined}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -245,7 +250,7 @@ export function ProcurementLinesModal({
             <Button
               size="xs"
               leftSection={<FaIcon icon="fas fa-plus" />}
-              disabled={loading}
+              disabled={blocked}
               onClick={addLine}
             >
               Satır Ekle
@@ -277,7 +282,7 @@ export function ProcurementLinesModal({
               size="xs"
               variant="outline"
               leftSection={<FaIcon icon="fas fa-file-excel" />}
-              disabled={loading}
+              disabled={blocked}
               onClick={() => void runCompare()}
             >
               Excel ile Karşılaştır
@@ -358,7 +363,9 @@ export function ProcurementLinesModal({
             }}
             extraData={compare}
             withColumnBorders
-            emptyMessage={loading ? 'Yükleniyor...' : 'Satır yok'}
+            emptyMessage={
+              loading ? 'Yükleniyor...' : loadFailed ? 'Satırlar yüklenemedi' : 'Satır yok'
+            }
           />
         </ApplyExcelContext.Provider>
       </Stack>

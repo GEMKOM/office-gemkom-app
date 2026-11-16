@@ -137,3 +137,33 @@ it('edits the lines of a job order and submits the ones with a description', asy
   );
   expect(callsTo('/projects/job-orders/shipping_pending/').length).toBeGreaterThan(1);
 });
+
+it('does not replace saved shipping lines when the editor failed to load them', async () => {
+  fetchMock.mockImplementation((url, init) => {
+    const path = new URL(String(url)).pathname;
+    if (path === '/projects/job-orders/shipping_pending/') {
+      return json({ count: 1, next: null, previous: null, results: PENDING });
+    }
+    if (path === '/projects/job-orders/has_shipping/') {
+      return json({ count: 1, next: null, previous: null, results: HAS });
+    }
+    if (path === '/projects/shipping-cost-lines/') return json({ detail: 'boom' }, 500);
+    if (path === '/projects/shipping-cost-lines/submit/' && init?.method === 'POST')
+      return json([]);
+    return json({ detail: 'not mocked' }, 404);
+  });
+  renderWithProviders(<ShippingCostLinesPage />, { route: '/logistics/cost-lines/' });
+  await screen.findByText('254-01');
+  fireEvent.click(screen.getByRole('button', { name: 'Satırları Aç' }));
+  const dialog = await screen.findByRole('dialog', { name: /Sevkiyat Maliyet Satırları — 254-01/ });
+  await waitFor(() =>
+    expect(notify.error).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 500 }),
+      expect.anything(),
+    ),
+  );
+  expect(within(dialog).getByRole('button', { name: 'Kaydet' })).toBeDisabled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  fireEvent.submit(dialog.querySelector('form')!);
+  expect(calls().filter((c) => c.method === 'POST')).toHaveLength(0);
+});
