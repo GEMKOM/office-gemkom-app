@@ -19,6 +19,7 @@ import {
   type RowAction,
 } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
+import { CutBreakdownModal } from './CutBreakdownModal';
 import {
   applyExcelToLine,
   compareStats,
@@ -29,6 +30,7 @@ import {
   formatPriceDate,
   formatPriceSource,
   fromPreviewLines,
+  hasCutBreakdown,
   fromSavedLines,
   isFieldChanged,
   isLineChanged,
@@ -119,6 +121,7 @@ export function ProcurementLinesModal({
   // ---- Excel compare ----
   const [file, setFile] = useState<File | null>(null);
   const [compare, setCompare] = useState<ExcelCompare | null>(null);
+  const [breakdown, setBreakdown] = useState<EditLine | null>(null);
   const stats = useMemo(() => compareStats(compare, rows), [compare, rows]);
 
   const runCompare = async () => {
@@ -358,37 +361,66 @@ export function ProcurementLinesModal({
         ) : null}
 
         <ApplyExcelContext.Provider value={applyExcel}>
-          <DataTable
-            data={rows}
-            columns={columns}
-            getRowId={(row) => row.key}
-            loading={loading}
-            onCellEdit={onCellEdit}
-            isCellDirty={isFieldChanged}
-            rowActions={rowActions}
-            actionsHeader=""
-            rowStyle={(line) => {
-              const match = excelMatchFor(compare, line);
-              if (!match) return undefined;
-              return {
-                backgroundColor: excelDiff(line, match).amountMismatch
-                  ? 'var(--mantine-color-red-light)'
-                  : 'var(--mantine-color-green-light)',
-              };
-            }}
-            extraData={compare}
-            withColumnBorders
-            emptyMessage={
-              loading ? 'Yükleniyor...' : loadFailed ? 'Satırlar yüklenemedi' : 'Satır yok'
-            }
-          />
+          <BreakdownContext.Provider value={setBreakdown}>
+            <DataTable
+              data={rows}
+              columns={columns}
+              getRowId={(row) => row.key}
+              loading={loading}
+              onCellEdit={onCellEdit}
+              isCellDirty={isFieldChanged}
+              rowActions={rowActions}
+              actionsHeader=""
+              rowStyle={(line) => {
+                const match = excelMatchFor(compare, line);
+                if (!match) return undefined;
+                return {
+                  backgroundColor: excelDiff(line, match).amountMismatch
+                    ? 'var(--mantine-color-red-light)'
+                    : 'var(--mantine-color-green-light)',
+                };
+              }}
+              extraData={compare}
+              withColumnBorders
+              emptyMessage={
+                loading ? 'Yükleniyor...' : loadFailed ? 'Satırlar yüklenemedi' : 'Satır yok'
+              }
+            />
+          </BreakdownContext.Provider>
         </ApplyExcelContext.Provider>
+        {breakdown ? (
+          <CutBreakdownModal
+            jobNo={jobNo}
+            item={breakdown.item}
+            label={breakdown.item_code || breakdown.item_description || 'Sac kartı yok'}
+            onClose={() => setBreakdown(null)}
+          />
+        ) : null}
       </Stack>
     </FormModal>
   );
 }
 
 const ApplyExcelContext = createContext<(key: string) => void>(() => {});
+const BreakdownContext = createContext<(line: EditLine) => void>(() => {});
+
+/** Döküm: the cuts and parts behind a plate line's kg. */
+function BreakdownButton({ line }: { line: EditLine }) {
+  const open = useContext(BreakdownContext);
+  return (
+    <Button
+      size="compact-xs"
+      variant="light"
+      leftSection={<FaIcon icon="fas fa-list" />}
+      onClick={(event) => {
+        event.stopPropagation();
+        open(line);
+      }}
+    >
+      Döküm
+    </Button>
+  );
+}
 
 /** Uygula: take the differing values of one line from Excel. */
 function ApplyExcelButton({ lineKey }: { lineKey: string }) {
@@ -427,7 +459,22 @@ function buildColumns(compare: ExcelCompare | null): DataTableColumn<EditLine>[]
     {
       key: 'item_code',
       header: 'Malzeme Kodu',
-      render: (line) => <span className={uiClasses.code}>{line.item_code || '–'}</span>,
+      render: (line) =>
+        hasCutBreakdown(line) ? (
+          <Stack gap={2} align="flex-start">
+            <span className={uiClasses.code}>{line.item_code || '–'}</span>
+            <Group gap={4}>
+              <BreakdownButton line={line} />
+              {line.from_cuts ? (
+                <Text size="xs" c="dimmed">
+                  {`${line.cut_count ?? 0} kesim${line.fire_estimated ? ' · fire tahmini' : ''}`}
+                </Text>
+              ) : null}
+            </Group>
+          </Stack>
+        ) : (
+          <span className={uiClasses.code}>{line.item_code || '–'}</span>
+        ),
     },
     { key: 'item_name', header: 'Malzeme Adı', render: (line) => muted(line.item_name || '–') },
     {

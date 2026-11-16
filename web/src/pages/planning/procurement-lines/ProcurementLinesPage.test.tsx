@@ -510,3 +510,76 @@ describe('line model', () => {
     expect(applyExcelToLine({ ...emptyLine(), quantity: '0' }, zero.rows[0]!)).toBeNull();
   });
 });
+
+it('plate comes as a line per card from the cuts, with the breakdown behind its kg', async () => {
+  savedLines = [];
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    const u = new URL(String(url));
+    if (u.pathname === '/projects/procurement-lines/preview/')
+      return json([
+        ...PREVIEW,
+        {
+          item: 12,
+          item_code: '0100 0000 0010 000 000',
+          item_name: '10 mm ST 37-2 SAC',
+          item_unit: 'kg',
+          item_description: '10 mm ST 37-2 SAC',
+          quantity: '226.08',
+          unit_price_eur: null,
+          planning_request_item: null,
+          order: 1,
+          price_source: 'none',
+          price_date: null,
+          source: 'cuts',
+          cut_count: 1,
+          fire_estimated: false,
+        },
+      ]);
+    if (u.pathname === '/projects/procurement-lines/cut-breakdown/')
+      return json([
+        {
+          cnc_task: 'CNC-1',
+          nesting_id: 'N-1',
+          finished_on: '2026-11-16',
+          item: 12,
+          item_code: '0100 0000 0010 000 000',
+          item_name: '10 mm ST 37-2 SAC',
+          material: '10 mm ST 37-2 SAC',
+          lot: '#4 1500 × 3000',
+          part: 1,
+          image_no: 'R1',
+          position_no: 'P1',
+          parts_kg: '200.000',
+          fire_kg: '26.080',
+          kg: '226.080',
+          fire_estimated: false,
+          unit_price_eur: null,
+          original_unit_price: null,
+          original_currency: null,
+          price_source: 'none',
+          price_date: null,
+        },
+      ]);
+    return base(url, init);
+  });
+  renderPage({ route: '/planning/procurement-lines' });
+  await screen.findByText('254-01');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Satırları Aç' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: /254-01/ });
+  expect(await within(dialog).findByText('0100 0000 0010 000 000')).toBeInTheDocument();
+  expect(within(dialog).getByText('1 kesim')).toBeInTheDocument();
+  // No price: planning types it in (0 until then).
+  expect(lineCell(dialog, 1, 'amount')).toHaveTextContent('0.00');
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Döküm' }));
+  const breakdown = await screen.findByRole('dialog', { name: /Kesim Dökümü/ });
+  expect(await within(breakdown).findByText('CNC-1 · N-1')).toBeInTheDocument();
+  expect(within(breakdown).getByText('#4 1500 × 3000')).toBeInTheDocument();
+  expect(within(breakdown).getByText('Toplam: 226,08 kg')).toBeInTheDocument();
+  expect(paramsOf(callsTo('/projects/procurement-lines/cut-breakdown/')[0])).toEqual({
+    job_order: '254-01',
+    item: '12',
+  });
+});
+

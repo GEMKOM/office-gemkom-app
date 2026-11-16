@@ -31,6 +31,10 @@ export interface EditLine {
   order: number;
   price_source: string | null;
   price_date: string | null;
+  /** A plate card's kg from the job's finished cuts (preview); the breakdown shows them. */
+  from_cuts?: boolean;
+  cut_count?: number | null;
+  fire_estimated?: boolean;
   /** Lines added in the modal have no snapshot. */
   orig?: LineSnapshot;
 }
@@ -94,7 +98,24 @@ export function fromPreviewLines(preview: ProcurementLinePreview[]): EditLine[] 
     order: p.order ?? idx,
     price_source: p.price_source ?? null,
     price_date: p.price_date ?? null,
+    from_cuts: p.source === 'cuts',
+    cut_count: p.cut_count ?? null,
+    fire_estimated: Boolean(p.fire_estimated),
   }));
+}
+
+/**
+ * Has the line a cut breakdown? Preview lines from cuts; saved lines that look
+ * like one (a card, kg, no planning line), since saved lines keep no source.
+ */
+export function hasCutBreakdown(line: EditLine): boolean {
+  if (line.from_cuts) return true;
+  return (
+    line.id !== undefined &&
+    line.planning_request_item === null &&
+    line.item !== null &&
+    line.item_unit.toLowerCase() === 'kg'
+  );
 }
 
 /** snapshotOriginalLines */
@@ -448,6 +469,8 @@ export const PRICE_SOURCE_LABELS: Record<string, string> = {
   recommended_offer: 'Önerilen tedarikçi teklifi',
   any_offer: 'Herhangi bir tedarikçi teklifi',
   historical_po: 'Aynı katalog kalemi, son PO (herhangi bir iş)',
+  cut_lot: 'Kesilen sac partisinin PO satırı',
+  cuts_mixed: 'Kesimlerin kg ağırlıklı ortalaması (farklı fiyatlar)',
   none: 'Fiyat yok (serbest metin veya hiç satın alınmamış)',
 };
 
