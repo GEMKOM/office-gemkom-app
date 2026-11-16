@@ -115,8 +115,8 @@ export async function seedSession(
     if (sessionStorage.getItem('__e2eSessionSeeded')) return;
     if (neoHintSeen) {
       localStorage.setItem(`gk.neoHintSeen.${String(s.user.id)}`, '1');
-      // The "Neo yenilendi" note (neo/NeoEntry.tsx newsKey; bump with NEWS_VERSION).
-      localStorage.setItem(`gk.neoNews.2026-11.${String(s.user.id)}`, '1');
+      // The one-time "what's new" note (neo/NeoEntry.tsx newsKey; bump with NEWS_VERSION).
+      localStorage.setItem(`gk.neoNews.2026-11-actions.${String(s.user.id)}`, '1');
     }
     localStorage.setItem('accessToken', s.accessToken);
     localStorage.setItem('refreshToken', s.refreshToken);

@@ -4,11 +4,12 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { hasSectionAccess } from '@/auth/accessControl';
 import { FaIcon, Panel } from '@/ui';
 import classes from './neo.module.css';
-import { suggestionsFor } from './NeoChat';
+import { ACTION_SUGGESTIONS, suggestionsFor } from './NeoChat';
 import { askNeo, openNeo, useNeo } from './neoStore';
 import { useNeoAccess } from './queries';
 
-const HOME_SUGGESTIONS = 3;
+/** Questions, then one opener for a write Neo prepares. */
+const HOME_SUGGESTIONS = 2;
 
 /**
  * Neo on the home page: a question box that asks at once (the panel opens with
@@ -86,6 +87,16 @@ export function NeoHomePanel() {
               onClick={() => ask(question)}
             >
               {question}
+            </UnstyledButton>
+          ))}
+          {ACTION_SUGGESTIONS.slice(0, 1).map((opener) => (
+            <UnstyledButton
+              key={opener}
+              className={`${classes.suggestion} ${classes.actionSuggestion}`}
+              disabled={streaming}
+              onClick={() => ask(opener)}
+            >
+              <FaIcon icon="fas fa-pen-to-square" size={11} /> {opener}
             </UnstyledButton>
           ))}
         </div>
