@@ -12,8 +12,8 @@ export const UNREAD_TITLE = 'Bugünün özeti okunmadı';
 export const NEO_HINT = "Neo'ya her sayfadan soru sorabilirsiniz";
 /** Shown once to users who already saw NEO_HINT; bump NEWS_VERSION for the next one. */
 export const NEO_NEWS =
-  "Neo yenilendi: tablolar ve Excel'e aktarma, kayıtlara bağlantılar, önerilen sorular. Kayıt ekranlarındaki “Neo'ya sor” ile o kayıt hakkında sorabilirsiniz.";
-const NEWS_VERSION = '2026-11';
+  'Neo artık kayıt da hazırlıyor: tartışma konusu ve yorum, hata bildirimi, izin talebi. Kartı kontrol edip Onayla demeden hiçbir şey kaydedilmez.';
+const NEWS_VERSION = '2026-11-actions';
 export const newsKey = (userId: number) => `gk.neoNews.${NEWS_VERSION}.${userId}`;
 
 function hintSeen(key: string): boolean {

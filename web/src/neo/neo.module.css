@@ -519,6 +519,24 @@
   color: var(--gk-red-700);
 }
 
+/* Openers for the writes Neo prepares: tinted, so they read as "do", not "ask". */
+.actionSuggestion {
+  border-color: rgba(139, 0, 0, 0.25);
+  background: var(--gk-red-050);
+  color: var(--gk-red-700);
+}
+
+.emptyActionsTitle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 14px 0 6px;
+  color: var(--gk-ink-2);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
 .notice {
   display: flex;
   gap: 10px;

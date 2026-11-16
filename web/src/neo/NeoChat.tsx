@@ -110,6 +110,24 @@ export const CAPABILITIES = [
   'Süreç rehberleri',
 ];
 
+/**
+ * Writes Neo can prepare (gemkom-backend assistant/tools/actions.py), as
+ * openers: Neo asks for whatever is missing, then shows a card to confirm.
+ */
+export const ACTION_SUGGESTIONS = [
+  // First: it applies to everyone, so the home card shows it.
+  'İzin talebi oluşturmak istiyorum',
+  'Bir işe tartışma konusu açmak istiyorum',
+  'Bir hata bildirmek istiyorum',
+];
+
+/** The same writes, for the "what can Neo do" list. */
+export const ACTION_CAPABILITIES = [
+  'Tartışma konusu açma ve yorum yazma',
+  'Hata ve öneri bildirimi',
+  'Kendi izin talebiniz',
+];
+
 const MAX_SUGGESTIONS = 6;
 
 export function suggestionsFor(canOpen: (section: string) => boolean): string[] {
@@ -394,14 +412,35 @@ function EmptyState({ onPick }: { onPick: Ask }) {
           </UnstyledButton>
         ))}
       </div>
+      <p className={classes.emptyActionsTitle}>
+        <FaIcon icon="fas fa-pen-to-square" size={11} />
+        Sizin için kayıt da hazırlar, onayınızla kaydeder:
+      </p>
+      <div className={classes.suggestions}>
+        {ACTION_SUGGESTIONS.map((text) => (
+          <UnstyledButton
+            key={text}
+            className={`${classes.suggestion} ${classes.actionSuggestion}`}
+            onClick={() => onPick(text, 'suggestion')}
+          >
+            {text}
+          </UnstyledButton>
+        ))}
+      </div>
       <details className={classes.capabilities}>
-        <summary>Neo nelere bakabilir?</summary>
+        <summary>Neo neler yapabilir?</summary>
         <ul>
           {CAPABILITIES.map((text) => (
             <li key={text}>{text}</li>
           ))}
         </ul>
-        <p>Yalnızca sizin yetkiniz olan verileri görür.</p>
+        <p>Hazırlayabildikleri (siz Onayla demeden kaydedilmez):</p>
+        <ul>
+          {ACTION_CAPABILITIES.map((text) => (
+            <li key={text}>{text}</li>
+          ))}
+        </ul>
+        <p>Yalnızca sizin yetkiniz olan verileri görür ve işlemleri yapar.</p>
       </details>
     </div>
   );
