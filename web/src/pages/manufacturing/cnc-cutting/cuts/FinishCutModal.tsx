@@ -1,4 +1,4 @@
-import { Alert, Button, Checkbox, Group, Modal, NumberInput, Stack, Text } from '@mantine/core';
+import { Alert, Button, Group, Modal, NumberInput, Stack, Text } from '@mantine/core';
 import { useDebouncedValue } from '@mantine/hooks';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
@@ -31,7 +31,7 @@ import {
 import { pieceText } from './PlateSource';
 
 // Finishing a cut ("Kesimi Bitir"). The operator enters the remnants the cut
-// left, or confirms it left none. On finish the backend issues the reserved
+// left; none entered means it left none. On finish the backend issues the reserved
 // sheets, brings the remnants back to stock as pieces of the same card and
 // stores the fire: consumed − parts − remnants. Totals are previewed live.
 
@@ -276,11 +276,11 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   const reservation = t?.piece_reservations?.[0] ?? null;
   const [rows, setRows] = useState<RemnantDraft[]>(() => [newRemnant()]);
   const [card, setCard] = useState<string | null>(null);
-  const [none, setNone] = useState(false);
-  const remnants = useMemo(() => (none ? [] : remnantInputs(rows, card)), [none, rows, card]);
+  const remnants = useMemo(() => remnantInputs(rows, card), [rows, card]);
   const preview = useFinishPreview(cutKey, { remnants }, Boolean(t));
   const finish = useMutation({
-    mutationFn: () => finishCncTask(cutKey, { remnants, no_remnant: none }),
+    // No rows = the cut left no remnant (recorded as entered: the dialog was used).
+    mutationFn: () => finishCncTask(cutKey, { remnants, no_remnant: remnants.length === 0 }),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: cncTaskKeys.all }),
@@ -289,7 +289,6 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   });
   const result = preview.data;
   const previewError = preview.isError ? errorMessage(preview.error, 'Hesaplanamadı') : '';
-  const ready = none || remnants.length > 0;
 
   const save = async () => {
     try {
@@ -325,16 +324,9 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
               <Text size="xs" c="dimmed" mb="xs">
                 Kesimden artan dikdörtgen saclar. Kısa kenarı {MIN_REMNANT_SIDE_MM} mm ve üstü
                 olanlar aynı sac kartıyla Hammadde deposuna döner; daha kısası fireye sayılır.
+                Kullanılabilir fire kalmadıysa boş bırakın.
               </Text>
-              {none ? null : (
-                <RemnantRows rows={rows} onChange={setRows} card={card} onCard={setCard} />
-              )}
-              <Checkbox
-                mt="sm"
-                label="Kullanılabilir fire sac kalmadı"
-                checked={none}
-                onChange={(event) => setNone(event.currentTarget.checked)}
-              />
+              <RemnantRows rows={rows} onChange={setRows} card={card} onCard={setCard} />
             </ModalSection>
 
             {previewError ? (
@@ -368,8 +360,7 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
               </Button>
               <Button
                 leftSection={<FaIcon icon="fas fa-check" />}
-                disabled={!ready || Boolean(previewError) || preview.isFetching}
-                title={ready ? undefined : 'Fire sacları girin ya da fire kalmadığını işaretleyin'}
+                disabled={Boolean(previewError) || preview.isFetching}
                 loading={finish.isPending}
                 onClick={() => void save()}
               >

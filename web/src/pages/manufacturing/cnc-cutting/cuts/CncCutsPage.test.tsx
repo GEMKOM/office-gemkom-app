@@ -297,8 +297,6 @@ it('finishing a cut asks for its remnants, then books it', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'CNC-7 durumunu değiştir' }));
   const dialog = await screen.findByRole('dialog', { name: /Kesimi Bitir/ });
   const finish = await within(dialog).findByRole('button', { name: 'Kesimi Bitir' });
-  // Nothing entered yet: remnants, or "none left", first.
-  expect(finish).toBeDisabled();
   fireEvent.change(within(dialog).getByLabelText('Fire sac eni 1'), { target: { value: '600' } });
   fireEvent.change(within(dialog).getByLabelText('Fire sac boyu 1'), { target: { value: '1500' } });
   await waitFor(() =>
@@ -521,4 +519,18 @@ it('a cut takes sheets from a stock lot: the picker lists free sheets, the pick 
   fireEvent.change(used, { target: { value: '5' } });
   expect(notify.warning).toHaveBeenCalledWith('Maksimum 2 adet kullanılabilir');
   await waitFor(() => expect(used).toHaveValue('2'));
+});
+
+it('a cut may finish with no remnant rows: it left none', async () => {
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'CNC-7 durumunu değiştir' }));
+  const dialog = await screen.findByRole('dialog', { name: /Kesimi Bitir/ });
+  const finish = await within(dialog).findByRole('button', { name: 'Kesimi Bitir' });
+  await waitFor(() => expect(finish).toBeEnabled());
+  fireEvent.click(finish);
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith('Kesim tamamlandı olarak işaretlendi'),
+  );
+  const post = calls().find((c) => c.url.pathname === '/cnc_cutting/tasks/mark-completed/')!;
+  expect(post.body).toEqual({ key: 'CNC-7', remnants: [], no_remnant: true });
 });
