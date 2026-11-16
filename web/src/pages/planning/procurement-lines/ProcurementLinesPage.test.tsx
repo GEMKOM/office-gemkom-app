@@ -342,6 +342,34 @@ it('removes a row and opens the preview from Önizle or when nothing is saved', 
   });
 });
 
+it('does not replace saved lines when the editor failed to load them', async () => {
+  fetchMock.mockImplementation((url, init) => {
+    const path = new URL(String(url)).pathname;
+    if (path === '/projects/job-orders/procurement_pending/')
+      return json({ count: 1, next: null, previous: null, results: PENDING });
+    if (path === '/projects/job-orders/has_procurement/')
+      return json({ count: 2, next: null, previous: null, results: HAS });
+    if (path === '/projects/procurement-lines/') return json({ detail: 'boom' }, 500);
+    if (path === '/projects/procurement-lines/preview/') return json(PREVIEW);
+    if (path === '/projects/procurement-lines/submit/' && init?.method === 'POST') return json([]);
+    return json({ detail: 'not mocked' }, 404);
+  });
+  renderPage({ route: '/planning/procurement-lines' });
+  await screen.findByText('254-01');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Satırları Aç' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: /254-01/ });
+  await waitFor(() =>
+    expect(notify.error).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 500 }),
+      expect.anything(),
+    ),
+  );
+  expect(within(dialog).getByRole('button', { name: 'Kaydet' })).toBeDisabled();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  fireEvent.submit(dialog.querySelector('form')!);
+  expect(callsTo('/projects/procurement-lines/submit/')).toHaveLength(0);
+});
+
 function excelFile(rows: unknown[][], name = 'siparis.xlsx'): File {
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet(rows), 'Sayfa1');

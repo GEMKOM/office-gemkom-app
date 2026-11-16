@@ -79,7 +79,9 @@ export function FormModal({
         noValidate
         onSubmit={(event) => {
           event.preventDefault();
-          if (!submitting) onSubmit(event);
+          // Disabled Kaydet must also block Enter in a field; the native
+          // submit button being disabled is not enough for this handler.
+          if (!submitting && !submitDisabled) onSubmit(event);
         }}
       >
         <ModalBody>

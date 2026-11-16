@@ -587,6 +587,16 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-exchange-alt',
         children: {},
       },
+      '/warehouse/pieces': {
+        label: 'Sac ve Boy Stoğu',
+        icon: 'fas fa-layer-group',
+        children: {},
+      },
+      '/warehouse/piece-counts': {
+        label: 'Sac ve Boy Sayımı',
+        icon: 'fas fa-ruler-combined',
+        children: {},
+      },
     },
   },
   '/logistics': {

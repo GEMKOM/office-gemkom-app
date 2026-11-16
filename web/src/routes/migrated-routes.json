@@ -191,5 +191,7 @@
   "/warehouse/counts",
   "/warehouse/production-slips",
   "/warehouse/transfers",
-  "/warehouse/goods-receipts"
+  "/warehouse/goods-receipts",
+  "/warehouse/pieces",
+  "/warehouse/piece-counts"
 ]
