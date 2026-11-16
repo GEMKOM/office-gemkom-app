@@ -183,6 +183,21 @@ beforeEach(() => {
           ],
         });
     }
+    if (method === 'POST' && path === '/cnc_cutting/tasks/CNC-7/finish-preview/')
+      return json({
+        key: 'CNC-7',
+        sheets: 1,
+        consumed: [],
+        consumed_kg: '400.000',
+        consumed_estimated: true,
+        parts_kg: '300.000',
+        parts_without_weight: 0,
+        remnants: [],
+        remnant_kg: '70.650',
+        fire_kg: '29.350',
+        parts: [],
+      });
+    if (method === 'POST' && path.endsWith('-completed/')) return json({ status: 'ok' });
     if (method === 'POST' && path === '/cnc_cutting/parts/bulk-create/')
       return json([{ id: 90 }], 201);
     if (method === 'POST') return json({ key: 'CNC-9' }, 201);
@@ -277,20 +292,46 @@ it('a missing ?cut reports it and cleans the URL', async () => {
   expect(location().has('mode')).toBe(false);
 });
 
-it('the status badge asks, then marks the cut completed', async () => {
+it('finishing a cut asks for its remnants, then books it', async () => {
   renderPage();
   fireEvent.click(await screen.findByRole('button', { name: 'CNC-7 durumunu değiştir' }));
-  expect(
-    await screen.findByText('Durumu değiştirmek istediğinize emin misiniz?'),
-  ).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Evet, Değiştir' }));
+  const dialog = await screen.findByRole('dialog', { name: /Kesimi Bitir/ });
+  const finish = await within(dialog).findByRole('button', { name: 'Kesimi Bitir' });
+  // Nothing entered yet: remnants, or "none left", first.
+  expect(finish).toBeDisabled();
+  fireEvent.change(within(dialog).getByLabelText('Fire sac eni 1'), { target: { value: '600' } });
+  fireEvent.change(within(dialog).getByLabelText('Fire sac boyu 1'), { target: { value: '1500' } });
+  await waitFor(() =>
+    expect(
+      calls()
+        .filter((c) => c.url.pathname === '/cnc_cutting/tasks/CNC-7/finish-preview/')
+        .at(-1)?.body,
+    ).toEqual({ remnants: [{ width_mm: '600', length_mm: '1500', quantity: 1 }] }),
+  );
+  await waitFor(() => expect(finish).toBeEnabled());
+  fireEvent.click(finish);
   await waitFor(() =>
     expect(notify.success).toHaveBeenCalledWith('Kesim tamamlandı olarak işaretlendi'),
   );
+  const post = calls().find((c) => c.url.pathname === '/cnc_cutting/tasks/mark-completed/')!;
+  expect(post.body).toEqual({
+    key: 'CNC-7',
+    remnants: [{ width_mm: '600', length_mm: '1500', quantity: 1 }],
+    no_remnant: false,
+  });
+});
+
+it('reopening a finished cut asks first', async () => {
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'CNC-8 durumunu değiştir' }));
+  expect(await screen.findByText(/Kesim yeniden açılır/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Evet, Değiştir' }));
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith('Kesim tamamlanmadı olarak işaretlendi'),
+  );
   const post = calls().find((c) => c.method === 'POST')!;
-  expect(post.url.pathname).toBe('/cnc_cutting/tasks/mark-completed/');
-  expect(post.body).toEqual({ key: 'CNC-7' });
-  await waitFor(() => expect(listCalls().length).toBeGreaterThan(1));
+  expect(post.url.pathname).toBe('/cnc_cutting/tasks/unmark-completed/');
+  expect(post.body).toEqual({ key: 'CNC-8' });
 });
 
 it('deletes a cut after the confirm', async () => {

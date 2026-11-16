@@ -68,7 +68,7 @@ export interface PlateSourceValue {
   quantityUsed: number;
   planningItem: PlanningItem | null;
   markConsumed: boolean;
-  /** The warehouse has processed the cut: its source is fixed. */
+  /** The cut is finished (its sheets are booked): its source is fixed until it is reopened. */
   locked: boolean;
 }
 
@@ -101,7 +101,7 @@ export function plateSourceFromTask(task: CncTask): PlateSourceValue {
     quantityUsed: used !== undefined && used !== null ? parseInt(String(used), 10) : 1,
     planningItem: task.plate_item ?? null,
     markConsumed: task.plate_item ? Boolean(task.plate_item.is_consumed) : false,
-    locked: Boolean(task.processed_by_warehouse),
+    locked: Boolean(task.completion_date),
   };
 }
 
@@ -204,7 +204,8 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
                 : 'Sac partisi seçilmeden işlendi.'}
         </Text>
         <Text size="xs" c="dimmed">
-          Kesim depoda işlendi (Ağırlık Düşüşü); sac kaynağı artık değiştirilemez.
+          Kesim tamamlandı ve sacı stoktan düşüldü; sac kaynağını değiştirmek için önce kesimi
+          yeniden açın.
         </Text>
       </ModalSection>
     );

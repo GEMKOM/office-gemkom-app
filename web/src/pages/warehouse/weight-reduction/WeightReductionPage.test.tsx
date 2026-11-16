@@ -45,17 +45,25 @@ const CUT = {
   completion_date: 1_763_280_000_000,
   has_piece: true,
   processed_by_warehouse: false,
+  remnants_entered: true,
+  fire_kg: '135.850',
 };
 const DETAIL = {
   ...CUT,
+  consumed_kg: '706.500',
+  consumed_estimated: false,
+  parts_kg: '500.000',
+  remnant_kg: '70.650',
+  fire_kg: '135.850',
+  remnants_entered: true,
+  piece_issues: [{ piece: 9, quantity: 2, unit_kg: '353.250', piece_details: LOT }],
+  remnant_pieces: [{ ...LOT, id: 15, width_mm: '600.0', length_mm: '1500.0', quantity: 1 }],
   parts: [
     { id: 1, job_no: '254-01', image_no: 'R1', position_no: 'P1', weight_kg: '100', quantity: 2 },
     { id: 2, job_no: '254-02', image_no: 'R2', position_no: 'P2', weight_kg: '50', quantity: 1 },
   ],
-  piece_reservations: [
-    { id: 4, piece: 9, quantity: 2, available_quantity: 3, piece_details: LOT },
-  ],
 };
+let detail: Record<string, unknown> = DETAIL;
 
 /** What the backend previews for the body: consumed 706.5, parts 500, remnants as sent. */
 function preview(body: { remnants?: { width_mm: string; length_mm: string; quantity: number }[] }) {
@@ -110,17 +118,18 @@ function calls(): Call[] {
 }
 
 beforeEach(() => {
+  detail = DETAIL;
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
     const u = new URL(String(url), 'https://api.test');
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
     if (method === 'GET' && u.pathname === '/cnc_cutting/tasks/') return json({ count: 1, results: [CUT] });
-    if (method === 'GET' && u.pathname === '/cnc_cutting/tasks/CNC-7/') return json(DETAIL);
-    if (method === 'POST' && u.pathname === '/cnc_cutting/tasks/CNC-7/warehouse-preview/')
+    if (method === 'GET' && u.pathname === '/cnc_cutting/tasks/CNC-7/') return json(detail);
+    if (method === 'POST' && u.pathname === '/cnc_cutting/tasks/CNC-7/finish-preview/')
       return json(preview(body));
-    if (method === 'POST' && u.pathname === '/cnc_cutting/tasks/CNC-7/warehouse-process/')
-      return json(preview(body));
+    if (method === 'POST' && u.pathname === '/cnc_cutting/tasks/warehouse-process/')
+      return json({ status: 'ok' });
     return json({ detail: 'not mocked' }, 404);
   });
   vi.spyOn(notify, 'success');
@@ -143,6 +152,7 @@ it('lists the finished cuts the warehouse has not processed', async () => {
   render();
   expect(await screen.findByText('CNC-7')).toBeInTheDocument();
   expect(screen.getByText('Stok Sac')).toBeInTheDocument();
+  expect(screen.getByText('Girildi')).toBeInTheDocument();
   const list = calls().find((c) => c.url.pathname === '/cnc_cutting/tasks/')!;
   expect(Object.fromEntries(list.url.searchParams)).toEqual({
     page: '1',
@@ -153,29 +163,16 @@ it('lists the finished cuts the warehouse has not processed', async () => {
   });
 });
 
-it('processes a cut: the reserved lot, a remnant back to stock, the fire and the Mikro file', async () => {
+it('shows a finished cut as booked, exports the Mikro file and records the deduction', async () => {
   render('/warehouse/weight-reduction?kesim=CNC-7');
   const dialog = await screen.findByRole('dialog', { name: /Ağırlık Düşüşü/ });
   expect(
-    await within(dialog).findByText('0100-10 · 1500 × 3000 mm × 2 sac stoktan düşülecek.'),
+    await within(dialog).findByText('Stoktan düşülen: 0100-10 · 1500 × 3000 mm × 2'),
   ).toBeInTheDocument();
-  await waitFor(() => expect(dialog).toHaveTextContent('206,50 kg'));
-
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Fire Sac Ekle' }));
-  fireEvent.change(within(dialog).getByLabelText('Fire sac eni 1'), { target: { value: '600' } });
-  fireEvent.change(within(dialog).getByLabelText('Fire sac boyu 1'), { target: { value: '1500' } });
-  // 600 x 1500 x 10 mm = 70,65 kg back to stock; fire 706,5 - 500 - 70,65.
-  await waitFor(() => expect(dialog).toHaveTextContent('135,85 kg'));
-  const previews = calls().filter((c) => c.url.pathname.endsWith('/warehouse-preview/'));
-  expect(previews.at(-1)!.body).toEqual({
-    remnants: [{ width_mm: '600', length_mm: '1500', quantity: 1 }],
-  });
-
-  // A remnant too narrow for stock is fire.
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Fire Sac Ekle' }));
-  fireEvent.change(within(dialog).getByLabelText('Fire sac eni 2'), { target: { value: '300' } });
-  fireEvent.change(within(dialog).getByLabelText('Fire sac boyu 2'), { target: { value: '2000' } });
-  expect(await within(dialog).findByText('Fire (stoğa alınmaz)')).toBeInTheDocument();
+  expect(within(dialog).getByText('Stoğa dönen fire sac: 0100-10 · 600 × 1500 mm × 1')).toBeInTheDocument();
+  expect(dialog).toHaveTextContent('135,85 kg');
+  // Booked at finish: nothing is previewed.
+  expect(calls().some((c) => c.url.pathname.endsWith('/finish-preview/'))).toBe(false);
 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Mikro CSV' }));
   expect(saveBlob).toHaveBeenCalledTimes(1);
@@ -188,31 +185,28 @@ it('processes a cut: the reserved lot, a remnant back to stock, the fire and the
     ';C;"127,17";;254-02;2',
   ]);
 
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Depoda İşle' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Evet, İşle' }));
-  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('CNC-7 depoda işlendi'));
-  const processed = calls().find((c) => c.url.pathname.endsWith('/warehouse-process/'))!;
-  expect(processed.body).toEqual({
-    remnants: [
-      { width_mm: '600', length_mm: '1500', quantity: 1 },
-      { width_mm: '300', length_mm: '2000', quantity: 1 },
-    ],
-  });
+  fireEvent.click(within(dialog).getByRole('button', { name: "Mikro'ya İşlendi" }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Evet, İşaretle' }));
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith("CNC-7 Mikro'ya işlendi olarak işaretlendi"),
+  );
+  const marked = calls().find((c) => c.url.pathname === '/cnc_cutting/tasks/warehouse-process/')!;
+  expect(marked.body).toEqual({ key: 'CNC-7' });
 });
 
-it('without the reserved lot the kg is estimated, or another lot is named', async () => {
+it('a cut finished before booking shows the estimate from its own size', async () => {
+  detail = { ...DETAIL, consumed_kg: null, parts_kg: null, remnant_kg: null, fire_kg: null,
+    remnants_entered: false, piece_issues: [], remnant_pieces: [] };
   render('/warehouse/weight-reduction?kesim=CNC-7');
   const dialog = await screen.findByRole('dialog', { name: /Ağırlık Düşüşü/ });
-  await within(dialog).findByText(/stoktan düşülecek/);
-  fireEvent.click(within(dialog).getByText('Parti yok (tahmin)'));
+  expect(await within(dialog).findByText(/ağırlıklar kesimin ölçüsünden tahmindir/)).toBeInTheDocument();
   await waitFor(() =>
-    expect(
-      calls()
-        .filter((c) => c.url.pathname.endsWith('/warehouse-preview/'))
-        .at(-1)!.body,
-    ).toEqual({ consumed: [], remnants: [] }),
+    expect(calls().find((c) => c.url.pathname.endsWith('/finish-preview/'))!.body).toEqual({
+      consumed: [],
+      remnants: [],
+    }),
   );
-  expect(within(dialog).getByText(/Stoktan sac düşülmez/)).toBeInTheDocument();
+  expect(within(dialog).getByText('Operatör fire sac girmedi.')).toBeInTheDocument();
 });
 
 describe('Mikro file', () => {

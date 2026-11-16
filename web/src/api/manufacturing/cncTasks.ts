@@ -119,6 +119,8 @@ export interface CncTask {
   parts_kg?: string | null;
   remnant_kg?: string | null;
   fire_kg?: string | null;
+  /** The operator entered the cut's remnants at finish, or confirmed it left none. */
+  remnants_entered?: boolean | null;
   // Detail payload.
   parts?: CncPart[];
   files?: CncTaskFile[];
@@ -256,7 +258,7 @@ export function updateCncTask(key: string, input: CncTaskInput) {
   return apiFetch<CncTask>(taskPath(key), { method: 'PATCH', body: form });
 }
 
-// ---- warehouse processing (Ağırlık Düşüşü) ----
+// ---- finishing a cut: its sheets are booked, remnants back to stock ----
 
 export interface ProcessConsumedInput {
   piece: number;
@@ -271,7 +273,7 @@ export interface ProcessRemnantInput {
   heat_number?: string;
 }
 
-/** consumed omitted = the lot the cut reserved; [] = no lot (kg estimated from the cut). */
+/** Preview input. consumed omitted = the lot the cut reserved; [] = no lot (kg estimated from the cut). */
 export interface ProcessInput {
   consumed?: ProcessConsumedInput[];
   remnants: ProcessRemnantInput[];
@@ -328,21 +330,39 @@ export interface ProcessResult {
   parts: ProcessPart[];
 }
 
-/** What processing would book; nothing is written. */
-export function previewCncProcessing(key: string, input: ProcessInput) {
-  return apiFetch<ProcessResult>(`${taskPath(key)}warehouse-preview/`, { method: 'POST', body: input });
+/** What finishing the cut would book; nothing is written. */
+export function previewCncFinish(key: string, input: ProcessInput) {
+  return apiFetch<ProcessResult>(`${taskPath(key)}finish-preview/`, { method: 'POST', body: input });
 }
 
-/** Issue the cut's sheets, bring remnants back as pieces, store the kg. */
-export function processCncTask(key: string, input: ProcessInput) {
-  return apiFetch<ProcessResult>(`${taskPath(key)}warehouse-process/`, { method: 'POST', body: input });
+/**
+ * Finish the cut: its reserved sheets leave stock, the remnants come back as
+ * pieces, the fire is stored. remnants, or no_remnant to confirm it left none.
+ */
+export function finishCncTask(
+  key: string,
+  input: { remnants: ProcessRemnantInput[]; no_remnant: boolean },
+) {
+  return apiFetch<{ status: string; booked?: ProcessResult }>(`${BASE}/tasks/mark-completed/`, {
+    method: 'POST',
+    body: { key, ...input },
+  });
+}
+
+/** Ağırlık Düşüşü: the cut's kg was deducted in Mikro (the stock was booked at finish). */
+export function markCncTaskDeducted(key: string) {
+  return apiFetch<unknown>(`${BASE}/tasks/warehouse-process/`, { method: 'POST', body: { key } });
 }
 
 export function deleteCncTask(key: string) {
   return apiFetch<void>(taskPath(key), { method: 'DELETE' });
 }
 
-/** apis/tasks.js markTaskCompleted / unmarkTaskCompleted with module 'cnc_cutting'. */
+/**
+ * apis/tasks.js markTaskCompleted / unmarkTaskCompleted with module 'cnc_cutting'.
+ * Reopening a cut puts its sheets back and takes its remnants out of stock;
+ * finishing one goes through finishCncTask (with its remnants).
+ */
 export function setCncTaskCompleted(key: string, completed: boolean) {
   return apiFetch<unknown>(`${BASE}/tasks/${completed ? 'mark' : 'unmark'}-completed/`, {
     method: 'POST',
