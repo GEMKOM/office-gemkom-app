@@ -42,6 +42,12 @@ export interface PlanningRequestItem {
   item_specifications?: string | null;
   is_converted?: boolean;
   is_deletable?: boolean;
+  item_material_class?: string | null;
+  size_mode?: SizeMode | null;
+  piece_width_mm?: string | null;
+  piece_length_mm?: string | null;
+  piece_count?: number | null;
+  size_label?: string | null;
   files?: PlanningRequestFile[];
   purchase_request_info?: PurchaseRequestInfo[] | null;
   [key: string]: unknown;
@@ -87,6 +93,27 @@ export interface PlanningRequestItemInput {
   specifications?: string;
   /** The department request row a line came from. */
   source_item_index?: number;
+  /** Plate / boy lines in sizes: standard / custom size + count, or any size. */
+  size_mode?: SizeMode;
+  piece_width_mm?: string | null;
+  piece_length_mm?: string | null;
+  piece_count?: number | null;
+}
+
+export type SizeMode = '' | 'standard' | 'custom' | 'any';
+
+/** GET /planning/standard-sizes/: what plate / boy lines pick from. */
+export interface StandardSizes {
+  plate: { width_mm: number; length_mm: number; label: string }[];
+  bar: { length_mm: number; label: string }[];
+}
+
+export function standardSizesQueryOptions() {
+  return queryOptions({
+    queryKey: ['planning', 'standard-sizes'] as const,
+    queryFn: ({ signal }) => apiFetch<StandardSizes>('/planning/standard-sizes/', { signal }),
+    staleTime: Infinity,
+  });
 }
 
 /** A new upload (`file`) or an existing asset (`asset_id`), with its targets. */

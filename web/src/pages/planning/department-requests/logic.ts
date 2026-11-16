@@ -5,6 +5,7 @@ import type {
   PlanningRequestFileInput,
   PlanningRequestInput,
   PlanningRequestItemInput,
+  SizeMode,
 } from '@/api/planning/planningRequests';
 import type { StatusFamily } from '@/ui';
 import { UNIT_CHOICES } from '../../general/department-requests/list/constants';
@@ -146,6 +147,19 @@ export interface ItemRow {
   inventoryLocked?: boolean;
   /** Tied to an active purchase request. */
   prLocked?: boolean;
+  /** The card's class when it holds pieces: plate / boy lines are asked for in sizes. */
+  kind?: 'plate' | 'boy' | null;
+  /** The card's id when known (for the weight preview of a sized line). */
+  item_id?: number | null;
+  size_mode?: SizeMode;
+  piece_width?: number | string;
+  piece_length?: number | string;
+  piece_count?: number | string;
+}
+
+/** 'plate' / 'boy' for a card class that holds pieces, else null. */
+export function pieceKindOf(materialClass: unknown): 'plate' | 'boy' | null {
+  return materialClass === 'plate' || materialClass === 'boy' ? materialClass : null;
 }
 
 let nextKey = 1;
@@ -199,6 +213,12 @@ export function rowsFromPlanningRequest(request: PlanningRequest): ItemRow[] {
       deletable: item.is_deletable !== undefined ? item.is_deletable !== false : !converted,
       inventoryLocked: (Number.parseFloat(str(item.quantity_from_inventory)) || 0) > 0,
       prLocked: (Number.parseFloat(str(item.quantity_in_active_prs)) || 0) > 0,
+      kind: pieceKindOf(item.item_material_class),
+      item_id: typeof item.item === 'number' ? item.item : (item.item_id ?? null),
+      size_mode: (item.size_mode ?? '') as SizeMode,
+      piece_width: item.piece_width_mm ? Number(item.piece_width_mm) : '',
+      piece_length: item.piece_length_mm ? Number(item.piece_length_mm) : '',
+      piece_count: item.piece_count ?? '',
     });
   });
 }
@@ -379,6 +399,43 @@ export function originalFiles(request: PlanningRequest): NormalizedFile[] {
 export type Built<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
+ * The size fields of a plate / boy row. A new line must say its size (or
+ * "any size"); an older line without one is left as it was.
+ */
+export function sizeOf(row: ItemRow): Built<Partial<PlanningRequestItemInput>> {
+  const mode = row.size_mode ?? '';
+  const label = row.item_code.trim() || 'Sac / boy satırı';
+  if (!mode) {
+    if (row.id === undefined) {
+      return { ok: false, error: `${label}: ölçü seçin (standart, özel ya da herhangi ölçü)` };
+    }
+    return { ok: true, value: {} };
+  }
+  if (mode === 'any') return { ok: true, value: { size_mode: 'any' } };
+  const width = Number(row.piece_width);
+  const length = Number(row.piece_length);
+  const count = Number(row.piece_count);
+  if (!(length > 0) || (row.kind === 'plate' && !(width > 0))) {
+    return {
+      ok: false,
+      error: `${label}: ${row.kind === 'plate' ? 'en ve boy' : 'boy'} (mm) girilmeli`,
+    };
+  }
+  if (!Number.isInteger(count) || count < 1) {
+    return { ok: false, error: `${label}: adet girilmeli` };
+  }
+  return {
+    ok: true,
+    value: {
+      size_mode: mode,
+      piece_width_mm: row.kind === 'plate' ? String(width) : null,
+      piece_length_mm: String(length),
+      piece_count: count,
+    },
+  };
+}
+
+/**
  * The `items` of a save, in row order, with legacy's checks: an İş No, a
  * positive quantity and a code on every row. A numeric code goes as item_id.
  */
@@ -412,6 +469,11 @@ export function buildItems(
     if (specifications) item.specifications = specifications;
     if (options.fromDepartmentRequest && row.sourceIndex !== undefined) {
       item.source_item_index = row.sourceIndex;
+    }
+    if (row.kind) {
+      const size = sizeOf(row);
+      if (!size.ok) return size;
+      Object.assign(item, size.value);
     }
     if (options.editing && row.id !== undefined) item.id = row.id;
     items.push(item);

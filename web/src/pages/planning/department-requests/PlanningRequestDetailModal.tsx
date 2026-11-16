@@ -75,7 +75,14 @@ function ItemsTable({ request }: { request: PlanningRequest }) {
                 <Table.Td>
                   <PriorityBadge priority={item.priority || 'normal'} />
                 </Table.Td>
-                <Table.Td>{item.specifications || '-'}</Table.Td>
+                <Table.Td>
+                  {item.specifications || '-'}
+                  {item.size_label ? (
+                    <Text size="xs" c="dimmed">
+                      {item.size_label}
+                    </Text>
+                  ) : null}
+                </Table.Td>
                 <Table.Td>
                   <PurchaseRequests info={item.purchase_request_info} />
                 </Table.Td>
