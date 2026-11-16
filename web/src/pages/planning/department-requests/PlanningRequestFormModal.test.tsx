@@ -90,16 +90,16 @@ beforeEach(() => {
     if (method === 'GET' && path === '/planning/standard-sizes/') {
       return json({
         plate: [
-          { width_mm: 1500, length_mm: 3000, label: '1500 × 3000 mm' },
-          { width_mm: 2000, length_mm: 6000, label: '2000 × 6000 mm' },
+          { width_mm: 1500, length_mm: 6000, label: '1500 × 6000 mm' },
+          { width_mm: 2000, length_mm: 12000, label: '2000 × 12000 mm' },
         ],
         bar: [{ length_mm: 6000, label: '6000 mm' }],
       });
     }
     if (method === 'POST' && path === '/warehouse/pieces/weight-preview/') {
       return json({
-        unit_kg: '353.250',
-        total_kg: '353.250',
+        unit_kg: '706.500',
+        total_kg: '706.500',
         density_g_cm3: '7.850',
         plate_thickness_mm: '10.00',
         kg_per_m: null,
@@ -196,8 +196,8 @@ it('a plate line is asked for in sizes and its kg follows the pieces', async () 
         quantity: '706.50',
         size_mode: 'standard' as const,
         piece_width_mm: '1500.0',
-        piece_length_mm: '3000.0',
-        piece_count: 2,
+        piece_length_mm: '6000.0',
+        piece_count: 1,
       },
     ],
   };
@@ -207,7 +207,7 @@ it('a plate line is asked for in sizes and its kg follows the pieces', async () 
   expect(await screen.findByText('Sac ölçüsü')).toBeInTheDocument();
   expect(await screen.findByText('= 706,50 kg')).toBeInTheDocument();
 
-  fireEvent.change(screen.getByLabelText('Parça adedi 1'), { target: { value: '4' } });
+  fireEvent.change(screen.getByLabelText('Parça adedi 1'), { target: { value: '2' } });
   expect(await screen.findByText('= 1.413,00 kg')).toBeInTheDocument();
   await waitFor(() => expect(screen.getByLabelText('Miktar 1')).toHaveValue('1413'));
 
@@ -220,8 +220,8 @@ it('a plate line is asked for in sizes and its kg follows the pieces', async () 
         quantity: 1413,
         size_mode: 'standard' as const,
         piece_width_mm: '1500',
-        piece_length_mm: '3000',
-        piece_count: 4,
+        piece_length_mm: '6000',
+        piece_count: 2,
       },
     ],
   });

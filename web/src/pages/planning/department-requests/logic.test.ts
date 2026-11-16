@@ -346,14 +346,14 @@ describe('plate / boy sizes', () => {
   it('sends the size and checks it', () => {
     expect(
       sizeOf(
-        plate({ size_mode: 'standard', piece_width: 1500, piece_length: 3000, piece_count: 4 }),
+        plate({ size_mode: 'standard', piece_width: 1500, piece_length: 6000, piece_count: 4 }),
       ),
     ).toEqual({
       ok: true,
       value: {
         size_mode: 'standard',
         piece_width_mm: '1500',
-        piece_length_mm: '3000',
+        piece_length_mm: '6000',
         piece_count: 4,
       },
     });
