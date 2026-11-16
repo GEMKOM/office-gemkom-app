@@ -10,7 +10,7 @@ import {
   Textarea,
 } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { stockKeys } from '@/api/procurement/stock';
 import { countErrorMessage } from '@/api/warehouse/counts';
 import {
@@ -23,7 +23,9 @@ import {
   searchReceivableOrders,
   type GoodsReceipt,
   type OrderLineState,
+  type ReceiptPieceInput,
 } from '@/api/warehouse/goodsReceipts';
+import { pieceKeys, sizeLabel } from '@/api/warehouse/pieces';
 import { hasPerm, isAdmin } from '@/auth/authService';
 import { formatDate, formatDateTime, formatNumber } from '@/lib/format';
 import {
@@ -41,6 +43,13 @@ import {
   type DataTableColumn,
   type FilterConfig,
 } from '@/ui';
+import {
+  emptyPiece,
+  isBlankPiece,
+  pieceInput,
+  ReceiptPiecesEditor,
+  type PieceDraft,
+} from './ReceiptPiecesEditor';
 
 const PAGE_SIZE = 20;
 const URL_DEFAULTS = { status: '', search: '', mk: '', page: '1' };
@@ -119,10 +128,14 @@ function OrderLinesTable({
   lines,
   quantities,
   onChange,
+  pieces,
+  onPiecesChange,
 }: {
   lines: OrderLineState[];
   quantities: Record<number, string | number>;
   onChange: (poLine: number, value: string | number) => void;
+  pieces: Record<number, PieceDraft[]>;
+  onPiecesChange: (poLine: number, rows: PieceDraft[]) => void;
 }) {
   return (
     <Table withTableBorder verticalSpacing={4}>
@@ -140,49 +153,64 @@ function OrderLinesTable({
         {lines.map((line) => {
           const max = num(line.receivable);
           const value = quantities[line.po_line] ?? line.receivable;
+          const takesPieces = !!line.piece_kind && max > 0 && num(value) > 0;
           return (
-            <Table.Tr key={line.po_line}>
-              <Table.Td>
-                <Text size="sm" fw={500}>
-                  {line.item_code}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  {line.item_name}
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <Text size="sm">{line.destination || '-'}</Text>
-                {line.planning_item ? null : (
+            <Fragment key={line.po_line}>
+              <Table.Tr>
+                <Table.Td>
+                  <Text size="sm" fw={500}>
+                    {line.item_code}
+                  </Text>
                   <Text size="xs" c="dimmed">
-                    Planlama kalemi yok
+                    {line.item_name}
                   </Text>
-                )}
-              </Table.Td>
-              <Table.Td ta="right">{formatNumber(line.ordered, 2)}</Table.Td>
-              <Table.Td ta="right">{formatNumber(line.received, 2)}</Table.Td>
-              <Table.Td ta="right">
-                {formatNumber(line.outstanding, 2)} {line.item_unit}
-              </Table.Td>
-              <Table.Td>
-                {max > 0 ? (
-                  <NumberInput
-                    size="xs"
-                    min={0}
-                    max={max}
-                    decimalScale={2}
-                    hideControls
-                    aria-label={`Bu teslimat ${line.item_code}`}
-                    error={num(value) > max ? `En fazla ${formatNumber(max, 2)}` : undefined}
-                    value={value}
-                    onChange={(v) => onChange(line.po_line, v)}
-                  />
-                ) : (
-                  <Text size="xs" c={line.reason ? 'red.8' : 'dimmed'}>
-                    {line.reason || 'Tamamı alındı'}
-                  </Text>
-                )}
-              </Table.Td>
-            </Table.Tr>
+                </Table.Td>
+                <Table.Td>
+                  <Text size="sm">{line.destination || '-'}</Text>
+                  {line.planning_item ? null : (
+                    <Text size="xs" c="dimmed">
+                      Planlama kalemi yok
+                    </Text>
+                  )}
+                </Table.Td>
+                <Table.Td ta="right">{formatNumber(line.ordered, 2)}</Table.Td>
+                <Table.Td ta="right">{formatNumber(line.received, 2)}</Table.Td>
+                <Table.Td ta="right">
+                  {formatNumber(line.outstanding, 2)} {line.item_unit}
+                </Table.Td>
+                <Table.Td>
+                  {max > 0 ? (
+                    <NumberInput
+                      size="xs"
+                      min={0}
+                      max={max}
+                      decimalScale={2}
+                      hideControls
+                      aria-label={`Bu teslimat ${line.item_code}`}
+                      error={num(value) > max ? `En fazla ${formatNumber(max, 2)}` : undefined}
+                      value={value}
+                      onChange={(v) => onChange(line.po_line, v)}
+                    />
+                  ) : (
+                    <Text size="xs" c={line.reason ? 'red.8' : 'dimmed'}>
+                      {line.reason || 'Tamamı alındı'}
+                    </Text>
+                  )}
+                </Table.Td>
+              </Table.Tr>
+              {takesPieces ? (
+                <Table.Tr>
+                  <Table.Td colSpan={6}>
+                    <ReceiptPiecesEditor
+                      line={line}
+                      quantity={num(value)}
+                      rows={pieces[line.po_line] ?? [emptyPiece()]}
+                      onChange={(rows) => onPiecesChange(line.po_line, rows)}
+                    />
+                  </Table.Td>
+                </Table.Tr>
+              ) : null}
+            </Fragment>
           );
         })}
       </Table.Tbody>
@@ -195,6 +223,8 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
   const [order, setOrder] = useState<string | null>(null);
   // Only what the user changed; untouched lines take everything receivable.
   const [quantities, setQuantities] = useState<Record<number, string | number>>({});
+  // Plate / boy lines: the pieces that came, per PO line.
+  const [pieces, setPieces] = useState<Record<number, PieceDraft[]>>({});
   const [irsaliyeNo, setIrsaliyeNo] = useState('');
   const [irsaliyeDate, setIrsaliyeDate] = useState(today);
   const [note, setNote] = useState('');
@@ -207,6 +237,7 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
       void queryClient.invalidateQueries({ queryKey: stockKeys.all });
       void queryClient.invalidateQueries({ queryKey: ['procurementItems'] });
       void queryClient.invalidateQueries({ queryKey: ['planningItems'] });
+      void queryClient.invalidateQueries({ queryKey: pieceKeys.all });
     },
   });
 
@@ -232,13 +263,37 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
       notify.warning(`${over.line.item_code}: en fazla ${formatNumber(over.line.receivable, 2)}`);
       return;
     }
+    // Plate / boy lines need the pieces that came.
+    const pieceRows: Record<number, ReceiptPieceInput[]> = {};
+    for (const { line } of picked) {
+      if (!line.piece_kind) continue;
+      const kind = line.piece_kind;
+      const rows = (pieces[line.po_line] ?? [])
+        .filter((row) => !isBlankPiece(row))
+        .map((row) => pieceInput(kind, row));
+      if (rows.length === 0) {
+        notify.warning(`${line.item_code}: gelen parçaları (ölçü ve adet) girin`);
+        return;
+      }
+      const complete = rows.filter((row): row is ReceiptPieceInput => row !== null);
+      if (complete.length !== rows.length) {
+        const what = kind === 'plate' ? 'en, boy' : 'boy';
+        notify.warning(`${line.item_code}: her parça satırında ${what} ve adet girilmeli`);
+        return;
+      }
+      pieceRows[line.po_line] = complete;
+    }
     try {
       const receipt = await create.mutateAsync({
         purchase_order: orderId,
         irsaliye_no: irsaliyeNo.trim(),
         irsaliye_date: irsaliyeDate || null,
         note,
-        lines: picked.map((r) => ({ po_line: r.line.po_line, quantity: String(r.qty) })),
+        lines: picked.map((r) => ({
+          po_line: r.line.po_line,
+          quantity: String(r.qty),
+          ...(pieceRows[r.line.po_line] ? { pieces: pieceRows[r.line.po_line] } : {}),
+        })),
       });
       notify.success(`${receipt.number} işlendi`);
       onClose();
@@ -274,6 +329,7 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
           onChange={(value) => {
             setOrder(value);
             setQuantities({});
+            setPieces({});
           }}
         />
         <Group grow align="flex-start">
@@ -301,6 +357,8 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
               lines={lines.data}
               quantities={quantities}
               onChange={(poLine, value) => setQuantities((prev) => ({ ...prev, [poLine]: value }))}
+              pieces={pieces}
+              onPiecesChange={(poLine, rows) => setPieces((prev) => ({ ...prev, [poLine]: rows }))}
             />
           </>
         ) : orderId ? (
@@ -312,6 +370,16 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
       </Stack>
     </FormModal>
   );
+}
+
+function pieceText(p: {
+  width_mm: string | null;
+  length_mm: string;
+  quantity: number;
+  heat_number: string;
+}) {
+  const heat = p.heat_number ? ` (döküm ${p.heat_number})` : '';
+  return `${sizeLabel(p)} × ${p.quantity}${heat}`;
 }
 
 function ReceiptDetail({ receipt, onClose }: { receipt: GoodsReceipt; onClose: () => void }) {
@@ -392,14 +460,29 @@ function ReceiptDetail({ receipt, onClose }: { receipt: GoodsReceipt; onClose: (
               </Table.Thead>
               <Table.Tbody>
                 {receipt.lines.map((l) => (
-                  <Table.Tr key={l.id}>
-                    <Table.Td>{l.item_code}</Table.Td>
-                    <Table.Td>{l.item_name}</Table.Td>
-                    <Table.Td>{l.job_no ?? '-'}</Table.Td>
-                    <Table.Td ta="right">
-                      {formatNumber(l.quantity, 2)} {l.item_unit}
-                    </Table.Td>
-                  </Table.Tr>
+                  <Fragment key={l.id}>
+                    <Table.Tr>
+                      <Table.Td>{l.item_code}</Table.Td>
+                      <Table.Td>{l.item_name}</Table.Td>
+                      <Table.Td>{l.job_no ?? '-'}</Table.Td>
+                      <Table.Td ta="right">
+                        {formatNumber(l.quantity, 2)} {l.item_unit}
+                      </Table.Td>
+                    </Table.Tr>
+                    {l.pieces?.length ? (
+                      <Table.Tr>
+                        <Table.Td colSpan={4}>
+                          <Text size="xs" c="dimmed">
+                            {'Parçalar: '}
+                            {l.pieces.map((p) => pieceText(p)).join(' · ')}
+                            {l.pieces_kg !== null
+                              ? ` — ${formatNumber(l.pieces_kg, 2)} kg`
+                              : ' — ağırlık yok'}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ) : null}
+                  </Fragment>
                 ))}
               </Table.Tbody>
             </Table>

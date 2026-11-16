@@ -6,6 +6,30 @@ import { extractResults, toPaginated } from '../types';
 // purchase order, with the irsaliye. A PO line with a planning line books the
 // receipt there; one without posts the stock by its job allocations. Job
 // numbers for general work (1000, 5715) land in Hammadde. Cancelling undoes it.
+// Plate / boy lines (piece-level stock) are received with their pieces: size,
+// count, heat number, certificate; they become lots where the line lands.
+
+/** A piece lot a receipt line brought. */
+export interface ReceiptPiece {
+  id: number;
+  width_mm: string | null;
+  length_mm: string;
+  /** How many arrived (the receipt movement). */
+  quantity: number;
+  /** What of them is still in that lot. */
+  in_stock: number;
+  unit_kg: string | null;
+  heat_number: string;
+  certificate_no: string;
+}
+
+export interface ReceiptPieceInput {
+  width_mm?: string | null;
+  length_mm: string;
+  quantity: number;
+  heat_number?: string;
+  certificate_no?: string;
+}
 
 export interface GoodsReceiptLine {
   id: number;
@@ -17,6 +41,9 @@ export interface GoodsReceiptLine {
   job_no: string | null;
   delivery: number | null;
   note: string;
+  pieces: ReceiptPiece[];
+  /** Weight of the pieces that arrived; null when none, or some weigh nothing. */
+  pieces_kg: string | null;
 }
 
 export interface GoodsReceipt {
@@ -65,6 +92,12 @@ export interface OrderLineState {
   /** "İş Emri · 254-01", "Hammadde", or both for a split direct line. */
   destination: string;
   reason: string;
+  /** Plate / boy lines are received with their pieces; null for other cards. */
+  piece_kind?: 'plate' | 'boy' | null;
+  plate_thickness_mm?: string | null;
+  kg_per_m?: string | null;
+  /** What the card lacks for its pieces to weigh something ('' if nothing). */
+  weight_missing?: string;
 }
 
 export interface GoodsReceiptsParams {
@@ -79,7 +112,7 @@ export interface GoodsReceiptInput {
   irsaliye_no: string;
   irsaliye_date: string | null;
   note?: string;
-  lines: { po_line: number; quantity: string }[];
+  lines: { po_line: number; quantity: string; pieces?: ReceiptPieceInput[] }[];
 }
 
 const BASE = '/warehouse/goods-receipts/';
