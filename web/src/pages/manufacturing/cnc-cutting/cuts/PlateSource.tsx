@@ -3,23 +3,20 @@ import {
   Button,
   Checkbox,
   CloseButton,
-  Grid,
   Group,
   Modal,
   NumberInput,
   Stack,
   Text,
-  TextInput,
 } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import type { CncTask, CncTaskInput, RemnantChoice } from '@/api/manufacturing/cncTasks';
-import {
-  fetchRemnantPlate,
-  remnantKeys,
-  remnantPlatesQueryOptions,
-  useCreateRemnantPlate,
-} from '@/api/manufacturing/remnants';
+import type {
+  CncPieceDetails,
+  CncTask,
+  CncTaskInput,
+  RemnantChoice,
+} from '@/api/manufacturing/cncTasks';
 import {
   markPlanningItemConsumed,
   planningItemKeys,
@@ -28,55 +25,83 @@ import {
   type PlanningItemsParams,
 } from '@/api/planning/planningItems';
 import {
+  piecesQueryOptions,
+  placeLabel,
+  sizeLabel,
+  type MaterialPiece,
+  type PiecesParams,
+} from '@/api/warehouse/pieces';
+import { formatNumber } from '@/lib/format';
+import {
   confirm,
   DataTable,
-  DetailModal,
   FaIcon,
   FilterBar,
-  fromOrdering,
   ModalBody,
   ModalHeader,
   ModalSection,
   modalClassNames,
   notify,
   StatusBadge,
-  toOrdering,
   type DataTableColumn,
   type FilterConfig,
   type RowAction,
 } from '@/ui';
-import { DIMENSIONS_ERROR, normalizeDimensions } from '../remnants/dimensions';
 
 // The "Plaka Kaynağı" section of the create and edit modals. Every cut uses
-// exactly one plate source: a remnant plate (fire plaka) or a planning request
-// item (plaka kalemi); picking one clears the other.
+// exactly one plate source: sheets from piece stock (a plate lot on the Sac &
+// Boy Stoğu page) or a planning request item (plaka kalemi); picking one
+// clears the other. The sheets are reserved for the cut and leave stock when
+// the warehouse processes it (Ağırlık Düşüşü). Cuts made before piece stock
+// may still show their old remnant plate (fire plaka); it can be kept or
+// replaced, not picked anew.
+
+/** A plate lot as a plate source (available: its free sheets for this cut). */
+export interface PieceChoice extends CncPieceDetails {
+  available: number | null;
+}
 
 export interface PlateSourceValue {
+  piece: PieceChoice | null;
+  /** Old remnant plate source (cuts from before piece stock). */
   remnant: RemnantChoice | null;
   quantityUsed: number;
   planningItem: PlanningItem | null;
   markConsumed: boolean;
+  /** The warehouse has processed the cut: its source is fixed. */
+  locked: boolean;
 }
 
 export const EMPTY_PLATE_SOURCE: PlateSourceValue = {
+  piece: null,
   remnant: null,
   quantityUsed: 1,
   planningItem: null,
   markConsumed: false,
+  locked: false,
 };
 
-/** The saved source from the GET payload (plate_usage_records / plate_item). */
+/** The saved source from the GET payload (piece_reservations / plate_usage_records / plate_item). */
 export function plateSourceFromTask(task: CncTask): PlateSourceValue {
+  const reservation = task.piece_reservations?.[0] ?? null;
+  const issue = task.piece_issues?.[0] ?? null;
   const usage = task.plate_usage_records?.[0] ?? null;
   const remnant: RemnantChoice | null = usage
     ? (usage.remnant_plate_details ?? { id: usage.remnant_plate, dimensions: '-', material: '-' })
     : null;
-  const used = usage?.quantity_used;
+  const piece: PieceChoice | null = reservation
+    ? { ...reservation.piece_details, available: reservation.available_quantity }
+    : issue
+      ? { ...issue.piece_details, available: null }
+      : null;
+  const used = reservation?.quantity ?? issue?.quantity ?? usage?.quantity_used;
   return {
+    piece,
     remnant,
     quantityUsed: used !== undefined && used !== null ? parseInt(String(used), 10) : 1,
     planningItem: task.plate_item ?? null,
     markConsumed: task.plate_item ? Boolean(task.plate_item.is_consumed) : false,
+    locked: Boolean(task.processed_by_warehouse),
   };
 }
 
@@ -84,33 +109,41 @@ export function plateSourceInput(
   value: PlateSourceValue,
 ): Pick<
   CncTaskInput,
-  'selected_plate_id' | 'quantity_used' | 'planning_request_item_id' | 'mark_item_consumed'
+  | 'selected_plate_id'
+  | 'selected_piece_id'
+  | 'quantity_used'
+  | 'planning_request_item_id'
+  | 'mark_item_consumed'
+  | 'keepSource'
 > {
   return {
+    selected_piece_id: value.piece ? value.piece.id : null,
     selected_plate_id: value.remnant ? value.remnant.id : null,
-    quantity_used: value.remnant ? value.quantityUsed : null,
+    quantity_used: value.piece || value.remnant ? value.quantityUsed : null,
     planning_request_item_id: value.planningItem ? value.planningItem.id : null,
     mark_item_consumed: value.planningItem ? value.markConsumed : undefined,
+    keepSource: value.locked,
   };
 }
 
-function availableOf(remnant: RemnantChoice | null): number | null {
-  const raw = remnant?.available_quantity;
+/** Has the cut a plate source? */
+export function hasPlateSource(value: PlateSourceValue) {
+  return Boolean(value.piece || value.remnant || value.planningItem);
+}
+
+function availableOf(value: PlateSourceValue): number | null {
+  if (value.piece) return value.piece.available;
+  const raw = value.remnant?.available_quantity;
   return raw !== undefined && raw !== null ? parseInt(String(raw), 10) : null;
 }
 
-/** Selecting a remnant: 1 to use, unless less than one is left. */
-function pickRemnant(
-  remnant: RemnantChoice,
-  fallbackAvailable: number | null = null,
-): PlateSourceValue {
-  const available = availableOf(remnant) ?? fallbackAvailable;
-  return {
-    remnant,
-    quantityUsed: available !== null && available < 1 ? available : 1,
-    planningItem: null,
-    markConsumed: false,
-  };
+export function pieceText(p: Pick<CncPieceDetails, 'item_code' | 'width_mm' | 'length_mm'>) {
+  return `${p.item_code} · ${sizeLabel(p)}`;
+}
+
+export function remnantText(r: RemnantChoice) {
+  const thickness = r.thickness_mm ? `${r.thickness_mm} mm ` : '';
+  return `#${r.id} ${thickness}${r.dimensions || ''} ${r.material || ''}`.trim();
 }
 
 function deliveryText(item: PlanningItem) {
@@ -131,11 +164,10 @@ export interface PlateSourceSectionProps {
 }
 
 export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps) {
-  const [picking, setPicking] = useState<'remnant' | 'item' | null>(null);
-  const [remnantDetails, setRemnantDetails] = useState<number | null>(null);
+  const [picking, setPicking] = useState<'piece' | 'item' | null>(null);
   const [quantityError, setQuantityError] = useState('');
-  const { remnant, planningItem } = value;
-  const available = availableOf(remnant);
+  const { piece, remnant, planningItem, locked } = value;
+  const available = availableOf(value);
 
   const setQuantity = (raw: string | number) => {
     const entered = parseInt(String(raw), 10) || 0;
@@ -159,6 +191,25 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
   const delivery = planningItem ? deliveryText(planningItem) : null;
   const usageCount = planningItem?.cnc_cuts_count ?? 0;
 
+  if (locked) {
+    return (
+      <ModalSection title="Plaka Kaynağı" icon="fas fa-layer-group">
+        <Text size="sm">
+          {piece
+            ? `Stoktan sac: ${pieceText(piece)} × ${value.quantityUsed}`
+            : planningItem
+              ? `Plaka kalemi: ${itemLabel}`
+              : remnant
+                ? `Fire plaka: ${remnantText(remnant)}`
+                : 'Sac partisi seçilmeden işlendi.'}
+        </Text>
+        <Text size="xs" c="dimmed">
+          Kesim depoda işlendi (Ağırlık Düşüşü); sac kaynağı artık değiştirilemez.
+        </Text>
+      </ModalSection>
+    );
+  }
+
   return (
     <ModalSection title="Plaka Kaynağı" icon="fas fa-layer-group">
       <Group gap="xs" mb="xs">
@@ -166,9 +217,9 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
           variant="outline"
           color="cyan"
           leftSection={<FaIcon icon="fas fa-layer-group" />}
-          onClick={() => setPicking('remnant')}
+          onClick={() => setPicking('piece')}
         >
-          {remnant ? 'Fire Plaka Değiştir' : 'Fire Plaka Seç'}
+          {piece ? 'Stoktan Sacı Değiştir' : 'Stoktan Sac Seç'}
         </Button>
         <Button
           variant="outline"
@@ -177,16 +228,25 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
         >
           {planningItem ? 'Plaka Kalemi Değiştir' : 'Plaka Kalemi Seç'}
         </Button>
+        {piece ? (
+          <Group gap={4}>
+            <Badge color="green" leftSection={<FaIcon icon="fas fa-check" />}>
+              Seçili: {pieceText(piece)}
+            </Badge>
+            <CloseButton
+              size="sm"
+              aria-label="Sacı kaldır"
+              onClick={() => {
+                setQuantityError('');
+                onChange({ ...value, piece: null, quantityUsed: 1 });
+              }}
+            />
+          </Group>
+        ) : null}
         {remnant ? (
           <Group gap={4}>
-            <Badge
-              color="green"
-              leftSection={<FaIcon icon="fas fa-check" />}
-              style={{ cursor: 'pointer' }}
-              title="Fire plaka detayları"
-              onClick={() => setRemnantDetails(remnant.id)}
-            >
-              Seçili: ID: {remnant.id}
+            <Badge color="gray" leftSection={<FaIcon icon="fas fa-history" />}>
+              Eski fire plaka: {remnantText(remnant)}
             </Badge>
             <CloseButton
               size="sm"
@@ -212,8 +272,9 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
         ) : null}
       </Group>
       <Text size="xs" c="dimmed" mb="xs">
-        Her kesim için fire plaka veya plaka kalemi seçilmelidir; malzeme ve kalınlık seçilen
-        kaynaktan otomatik alınır.
+        Her kesim için stoktan sac veya plaka kalemi seçilmelidir; malzeme, kalınlık ve ölçü
+        seçilen kaynaktan otomatik alınır. Stoktan seçilen saclar kesime ayrılır ve depo kesimi
+        işleyince stoktan düşer.
       </Text>
 
       {planningItem && delivery ? (
@@ -234,7 +295,7 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
         </Stack>
       ) : null}
 
-      {remnant ? (
+      {piece || remnant ? (
         <NumberInput
           label="Kullanılacak Adet"
           min={1}
@@ -247,20 +308,25 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
           error={quantityError || undefined}
           description={
             available !== null
-              ? `Bu plakadan kaç adet kullanılacak (Maksimum: ${available})`
-              : 'Bu plakadan kaç adet kullanılacak (varsayılan: 1)'
+              ? `Bu partiden kaç sac kullanılacak (Maksimum: ${available})`
+              : 'Kaç sac kullanılacak (varsayılan: 1)'
           }
           maw={320}
         />
       ) : null}
 
-      {picking === 'remnant' ? (
-        <RemnantPickerModal
+      {picking === 'piece' ? (
+        <PieceLotPickerModal
           onClose={() => setPicking(null)}
-          onPick={(picked, fallback) => {
+          onPick={(picked) => {
             setQuantityError('');
-            onChange(pickRemnant(picked, fallback));
+            onChange({
+              ...EMPTY_PLATE_SOURCE,
+              piece: picked,
+              quantityUsed: 1,
+            });
             setPicking(null);
+            notify.success('Sac seçildi');
           }}
         />
       ) : null}
@@ -270,8 +336,7 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
           onPick={(item) => {
             setQuantityError('');
             onChange({
-              remnant: null,
-              quantityUsed: 1,
+              ...EMPTY_PLATE_SOURCE,
               planningItem: item,
               markConsumed: item.is_consumed === true,
             });
@@ -280,294 +345,146 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
           }}
         />
       ) : null}
-      {remnantDetails !== null ? (
-        <RemnantDetailsModal id={remnantDetails} onClose={() => setRemnantDetails(null)} />
-      ) : null}
     </ModalSection>
   );
 }
 
-// ---- remnant plate details (the selected badge) ----
+// ---- "Stoktan Sac Seç": plate lots with free sheets ----
 
-function RemnantDetailsModal({ id, onClose }: { id: number; onClose: () => void }) {
-  const remnant = useQuery({
-    queryKey: remnantKeys.detail(id),
-    queryFn: () => fetchRemnantPlate(id),
-  });
-  useEffect(() => {
-    if (!remnant.isError) return;
-    notify.error('Fire plaka detayları yüklenirken hata oluştu');
-    onClose();
-  }, [remnant.isError, onClose]);
-  const data = remnant.data;
-  return (
-    <DetailModal
-      opened
-      onClose={onClose}
-      title="Fire Plaka Detayları"
-      icon="fas fa-layer-group"
-      loading={remnant.isPending}
-      sections={[
-        {
-          title: 'Temel Bilgiler',
-          icon: 'fas fa-info-circle',
-          fields: [
-            { label: 'ID', value: data?.id ?? '-' },
-            { label: 'Kalınlık', value: data?.thickness_mm ? `${data.thickness_mm} mm` : '-' },
-            { label: 'Boyutlar', value: data?.dimensions || '-' },
-            { label: 'Adet', value: data?.quantity ? String(data.quantity) : '-' },
-            { label: 'Malzeme', value: data?.material || '-', span: 12 },
-          ],
-        },
-      ]}
-    />
-  );
-}
+type PieceFilters = { search: string; thickness_mm: string };
+const EMPTY_PIECE_FILTERS: PieceFilters = { search: '', thickness_mm: '' };
 
-// ---- "Fire Plaka Seç" ----
-
-type RemnantFilters = { thickness_mm: string; dimensions: string; material: string };
-const EMPTY_REMNANT_FILTERS: RemnantFilters = { thickness_mm: '', dimensions: '', material: '' };
-
-const REMNANT_FILTERS: FilterConfig<keyof RemnantFilters>[] = [
+const PIECE_FILTERS: FilterConfig<keyof PieceFilters>[] = [
+  { type: 'text', key: 'search', label: 'Kart / Şarj / İş Emri', placeholder: 'örn. ST 37' },
   { type: 'text', key: 'thickness_mm', label: 'Kalınlık (mm)', placeholder: 'örn. 10' },
-  { type: 'text', key: 'dimensions', label: 'Boyutlar', placeholder: 'örn. 1200x800' },
-  { type: 'text', key: 'material', label: 'Malzeme', placeholder: 'Malzeme türü' },
 ];
 
-const REMNANT_COLUMNS: DataTableColumn<RemnantChoice>[] = [
-  { key: 'id', header: 'ID', width: '8%' },
+const kgText = (value: string | null) => (value === null ? '-' : `${formatNumber(Number(value), 2)} kg`);
+
+const PIECE_COLUMNS: DataTableColumn<MaterialPiece>[] = [
   {
-    key: 'thickness_mm',
-    header: 'Kalınlık (mm)',
-    width: '12%',
-    render: (r) => (r.thickness_mm ? `${r.thickness_mm} mm` : '-'),
+    key: 'item_code',
+    header: 'Sac Kartı',
+    width: '30%',
+    render: (p) => (
+      <Stack gap={0}>
+        <Text size="sm" fw={600}>
+          {p.item_code}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {p.item_name}
+        </Text>
+      </Stack>
+    ),
   },
-  { key: 'dimensions', header: 'Boyutlar', width: '15%' },
+  {
+    key: 'plate_thickness_mm',
+    header: 'Kalınlık',
+    width: '9%',
+    render: (p) => (p.plate_thickness_mm ? `${Number(p.plate_thickness_mm)} mm` : '-'),
+  },
+  { key: 'width_mm', header: 'Ölçü', width: '15%', render: (p) => sizeLabel(p) },
   {
     key: 'available_quantity',
-    header: 'Adet',
+    header: 'Boş / Adet',
     width: '10%',
-    render: (r) =>
-      r.available_quantity !== undefined && r.available_quantity !== null
-        ? String(r.available_quantity)
-        : '-',
+    render: (p) => `${p.available_quantity ?? p.quantity} / ${p.quantity}`,
   },
-  { key: 'material', header: 'Malzeme', width: '15%' },
+  { key: 'warehouse_code', header: 'Yer', width: '14%', render: (p) => placeLabel(p) },
+  { key: 'heat_number', header: 'Şarj No', width: '10%', render: (p) => p.heat_number || '-' },
+  { key: 'unit_kg', header: 'kg / adet', width: '12%', render: (p) => kgText(p.unit_kg) },
 ];
 
-const EMPTY_REMNANTS: RemnantChoice[] = [];
+const EMPTY_PIECES: MaterialPiece[] = [];
 
-interface RemnantPickerProps {
-  onClose: () => void;
-  /** `fallbackAvailable`: the created quantity when the backend sends no available_quantity. */
-  onPick: (remnant: RemnantChoice, fallbackAvailable?: number | null) => void;
+export function pieceChoice(p: MaterialPiece): PieceChoice {
+  return {
+    id: p.id,
+    item: p.item,
+    item_code: p.item_code,
+    item_name: p.item_name,
+    width_mm: p.width_mm,
+    length_mm: p.length_mm,
+    heat_number: p.heat_number,
+    warehouse_code: p.warehouse_code,
+    job_no: p.job_no,
+    unit_kg: p.unit_kg,
+    available: p.available_quantity ?? p.quantity,
+  };
 }
 
-export function RemnantPickerModal({ onClose, onPick }: RemnantPickerProps) {
-  // Legacy loads nothing until the filters are applied (or cleared).
-  const [applied, setApplied] = useState<RemnantFilters | null>(null);
+export function PieceLotPickerModal({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (piece: PieceChoice) => void;
+}) {
+  const [filters, setFilters] = useState<PieceFilters>(EMPTY_PIECE_FILTERS);
   const [page, setPage] = useState(1);
-  const [ordering, setOrdering] = useState('id');
-  const sort = fromOrdering(ordering);
-
-  const params = {
+  const params: PiecesParams = {
+    kind: 'plate',
+    available: 'true',
     page,
     page_size: 20,
-    ordering,
-    thickness_mm: applied?.thickness_mm.trim() || undefined,
-    dimensions: applied?.dimensions.trim() || undefined,
-    material: applied?.material.trim() || undefined,
+    search: filters.search.trim() || undefined,
+    thickness_mm: filters.thickness_mm.trim().replace(',', '.') || undefined,
   };
-  const list = useQuery({
-    ...remnantPlatesQueryOptions(params),
-    enabled: applied !== null,
-    placeholderData: keepPreviousData,
-  });
+  const list = useQuery({ ...piecesQueryOptions(params), placeholderData: keepPreviousData });
   useEffect(() => {
-    if (list.isError) notify.error('Fire plakalar yüklenirken hata oluştu');
+    if (list.isError) notify.error('Sac stoğu yüklenirken hata oluştu');
   }, [list.isError, list.errorUpdatedAt]);
 
-  const [creating, setCreating] = useState(false);
-  const [draft, setDraft] = useState({
-    thickness: '',
-    dimensions: '',
-    quantity: '1',
-    material: '',
-  });
-  const create = useCreateRemnantPlate();
-
-  const toggleCreate = () => {
-    if (!creating) {
-      // Prefill empty fields from the search: likely the very plate to create.
-      const filters = applied ?? EMPTY_REMNANT_FILTERS;
-      setDraft((d) => ({
-        thickness: d.thickness || filters.thickness_mm.trim(),
-        dimensions: d.dimensions || filters.dimensions.trim(),
-        quantity: d.quantity,
-        material: d.material || filters.material.trim(),
-      }));
-    }
-    setCreating(!creating);
-  };
-
-  const submitCreate = async () => {
-    const thickness = draft.thickness.trim();
-    const dimensions = draft.dimensions.trim();
-    const material = draft.material.trim();
-    const quantityRaw = draft.quantity.trim();
-    if (!thickness || !dimensions || !quantityRaw || !material) {
-      notify.warning('Kalınlık, boyutlar, adet ve malzeme alanları zorunludur');
-      return;
-    }
-    const quantity = parseInt(quantityRaw, 10);
-    if (!Number.isFinite(quantity) || quantity < 1) {
-      notify.warning('Adet en az 1 olmalıdır');
-      return;
-    }
-    const normalized = normalizeDimensions(dimensions);
-    if (!normalized) {
-      notify.warning(DIMENSIONS_ERROR);
-      return;
-    }
-    try {
-      const created = await create.mutateAsync({
-        thickness_mm: thickness,
-        dimensions: normalized,
-        quantity,
-        material,
-      });
-      onPick(created as RemnantChoice, quantity);
-      notify.success('Fire plaka oluşturuldu ve seçildi');
-    } catch {
-      notify.error('Fire plaka oluşturulurken hata oluştu');
-    }
-  };
-
-  const rowActions = (): RowAction<RemnantChoice>[] => [
+  const rowActions = (): RowAction<MaterialPiece>[] => [
     {
       key: 'select',
       label: 'Seç',
       icon: 'fas fa-check',
       color: 'success',
+      // Lots at a supplier (Fasonda) can't go to a cut.
       onClick: (row) => {
-        onPick(row);
-        notify.success('Fire plaka seçildi');
+        if (!row.warehouse_code) {
+          notify.warning('Fasoncudaki sac kesime ayrılamaz; önce depoya dönmeli.');
+          return;
+        }
+        onPick(pieceChoice(row));
       },
     },
   ];
 
   return (
     <Modal opened onClose={onClose} size="xl" withCloseButton={false} classNames={modalClassNames}>
-      <ModalHeader title="Fire Plaka Seç" icon="fas fa-layer-group" />
+      <ModalHeader title="Stoktan Sac Seç" icon="fas fa-layer-group" />
       <ModalBody>
-        <ModalSection title="Fire Plakalar" icon="fas fa-table">
+        <ModalSection title="Sac Stoğu" icon="fas fa-table">
           <DataTable
-            title="Fire Plakalar Listesi"
+            title="Boş sacı olan partiler"
             filters={
               <FilterBar
                 inline
-                filters={REMNANT_FILTERS}
-                values={applied ?? EMPTY_REMNANT_FILTERS}
+                filters={PIECE_FILTERS}
+                values={filters}
                 onApply={(next) => {
                   setPage(1);
-                  setApplied(next);
+                  setFilters(next);
                 }}
                 onClear={() => {
                   setPage(1);
-                  setApplied(EMPTY_REMNANT_FILTERS);
+                  setFilters(EMPTY_PIECE_FILTERS);
                 }}
               />
             }
-            data={list.data?.results ?? EMPTY_REMNANTS}
-            columns={REMNANT_COLUMNS}
+            data={list.data?.results ?? EMPTY_PIECES}
+            columns={PIECE_COLUMNS}
             getRowId={(row) => String(row.id)}
             loading={list.isFetching}
-            sortable
-            sort={{
-              sortBy: sort.sortBy,
-              sortDir: sort.sortDir,
-              onSortChange: (by, dir) => {
-                setOrdering(toOrdering(by, dir) ?? 'id');
-                setPage(1);
-              },
-            }}
             pagination={{ page, pageSize: 20, total: list.data?.count ?? 0, onPageChange: setPage }}
             rowActions={rowActions}
-            emptyMessage="Fire plaka bulunamadı"
+            emptyMessage="Boş sacı olan parti bulunamadı"
           />
-        </ModalSection>
-
-        <ModalSection title="Yeni Fire Plaka Oluştur" icon="fas fa-plus-circle">
-          <Button
-            variant="outline"
-            color="green"
-            size="xs"
-            mb="xs"
-            leftSection={<FaIcon icon="fas fa-plus" />}
-            onClick={toggleCreate}
-          >
-            Aradığınız fire plaka yok mu? Yeni oluşturun
-          </Button>
-          {creating ? (
-            <>
-              <Grid align="flex-end">
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <TextInput
-                    label="Kalınlık (mm)*"
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    placeholder="örn. 10"
-                    value={draft.thickness}
-                    onChange={(e) => setDraft({ ...draft, thickness: e.currentTarget.value })}
-                    data-autofocus
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <TextInput
-                    label="Boyutlar*"
-                    placeholder="örn. 1200x800"
-                    value={draft.dimensions}
-                    onChange={(e) => setDraft({ ...draft, dimensions: e.currentTarget.value })}
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 2 }}>
-                  <TextInput
-                    label="Adet*"
-                    type="number"
-                    step="1"
-                    min={1}
-                    value={draft.quantity}
-                    onChange={(e) => setDraft({ ...draft, quantity: e.currentTarget.value })}
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <TextInput
-                    label="Malzeme*"
-                    placeholder="örn. ST 37-2"
-                    value={draft.material}
-                    onChange={(e) => setDraft({ ...draft, material: e.currentTarget.value })}
-                  />
-                </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 1 }}>
-                  <Button
-                    color="green"
-                    fullWidth
-                    title="Oluştur ve seç"
-                    aria-label="Oluştur ve seç"
-                    loading={create.isPending}
-                    onClick={() => void submitCreate()}
-                  >
-                    <FaIcon icon="fas fa-check" />
-                  </Button>
-                </Grid.Col>
-              </Grid>
-              <Text size="xs" c="dimmed" mt={4}>
-                Oluşturulan fire plaka otomatik olarak bu kesim için seçilir.
-              </Text>
-            </>
-          ) : null}
+          <Text size="xs" c="dimmed" mt={4}>
+            Listede olmayan sac (fire sac dahil) önce Sac &amp; Boy Stoğu sayfasından girilir.
+          </Text>
         </ModalSection>
         <Group justify="flex-end" mt="md">
           <Button variant="default" onClick={onClose} leftSection={<FaIcon icon="fas fa-times" />}>

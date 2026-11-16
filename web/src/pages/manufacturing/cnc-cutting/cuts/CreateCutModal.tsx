@@ -18,7 +18,12 @@ import { cncTaskKeys, createCncTask, type CncPartInput } from '@/api/manufacturi
 import { FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 import { CutBasicFields, cutInput, cutSchema, EMPTY_CUT_FORM, useJobOrderChoices } from './cutForm';
 import { parsePartsFromText } from './partsPaste';
-import { EMPTY_PLATE_SOURCE, PlateSourceSection, type PlateSourceValue } from './PlateSource';
+import {
+  EMPTY_PLATE_SOURCE,
+  hasPlateSource,
+  PlateSourceSection,
+  type PlateSourceValue,
+} from './PlateSource';
 
 export const PASTE_HELP =
   'İlk satır: İş No  Resim No  Pozisyon No. Sonraki satırlar: genişlik (mm), yükseklik (mm), alan (m²), ağırlık (kg), malzeme, kalınlık (mm), proje, talep eden, not.';
@@ -84,8 +89,8 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
 
   const save = async (values: typeof form.values) => {
     // Every cut needs exactly one plate source.
-    if (!plate.remnant && !plate.planningItem) {
-      notify.error('Fire plaka veya plaka kalemi seçmelisiniz');
+    if (!hasPlateSource(plate)) {
+      notify.error('Stoktan sac veya plaka kalemi seçmelisiniz');
       return;
     }
     const parts = draftsToParts(rows);
@@ -132,7 +137,7 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
       <ModalSection title="Temel Bilgiler" icon="fas fa-info-circle">
         <CutBasicFields
           form={form}
-          dimensionsHelp="Plaka boyutları (opsiyonel; fire plaka seçilirse otomatik alınır)"
+          dimensionsHelp="Plaka boyutları (opsiyonel; stoktan sac seçilirse otomatik alınır)"
         />
         <FileDropInput
           mt="sm"

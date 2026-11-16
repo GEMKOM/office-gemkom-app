@@ -85,9 +85,12 @@ export function openLinearTasksPageQueryOptions(pageSize: number) {
   );
 }
 
-/** Remnant plates with plates left (the remnants page's default list); `unassigned` = never used. */
-export function remnantCountQueryOptions(unassigned?: boolean) {
-  return listCountQueryOptions(['remnantPlates'], '/cnc_cutting/remnants/', { unassigned });
+/** Remnant sheets in stock (plate lots that came back from a cut), as lots. */
+export function remnantPieceCountQueryOptions() {
+  return listCountQueryOptions(['pieces', 'list'], '/warehouse/pieces/', {
+    kind: 'plate',
+    origin: 'remnant',
+  });
 }
 
 /** Open (active or on hold) top-level job orders, optionally by termin. */

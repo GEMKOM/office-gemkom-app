@@ -120,8 +120,8 @@ beforeEach(() => {
           },
         ]),
       );
-    if (pathname === '/cnc_cutting/remnants/')
-      return json(page(searchParams.get('unassigned') === 'true' ? 17 : 42));
+    if (pathname === '/warehouse/pieces/')
+      return json(page(searchParams.get('origin') === 'remnant' ? 42 : 0));
     if (pathname === '/projects/job-orders/') {
       if (searchParams.has('target_completion_date__gte')) return json(page(6));
       if (searchParams.has('target_completion_date__lte')) return json(page(4));
@@ -230,7 +230,7 @@ it('shows a lane per area with its live figures', async () => {
   );
   // A machine with nothing in its plan and no timer is left out.
   expect(within(cnc).queryByText('Su Jeti')).not.toBeInTheDocument();
-  await waitFor(() => expect(cnc).toHaveTextContent('17 kullanılmamış42'));
+  await waitFor(() => expect(cnc).toHaveTextContent('Stoktaki fire sac partisi42'));
   const plans = calls().filter((url) => url.pathname === '/cnc_cutting/planning/list/');
   expect(plans.map((url) => url.searchParams.get('machine_fk')).sort()).toEqual([
     '3',

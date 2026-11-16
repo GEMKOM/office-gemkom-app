@@ -9,6 +9,7 @@ const SLIPS = '/warehouse/production-slips';
 const TRANSFERS = '/warehouse/transfers';
 const PIECES = '/warehouse/pieces';
 const PIECE_COUNTS = '/warehouse/piece-counts';
+const WEIGHT_REDUCTION = '/warehouse/weight-reduction';
 const CARDS = '/planning/inventory/cards';
 const PULLS = '/manufacturing/material-tracking/pull-requests';
 
@@ -68,6 +69,14 @@ export function WarehouseHubPage() {
       icon: 'fas fa-ruler-combined',
       iconColor: 'primary',
       link: PIECE_COUNTS,
+    },
+    {
+      title: 'Ağırlık Düşüşü',
+      description:
+        'Biten CNC kesimleri: kullanılan sac stoktan düşer, fire saclar döner, fire hesaplanır; Mikro dosyası.',
+      icon: 'fas fa-weight-hanging',
+      iconColor: 'orange',
+      link: WEIGHT_REDUCTION,
     },
     {
       title: 'Stok Kartları',

@@ -13,20 +13,20 @@ test('old CNC grants open the moved pages and their hubs, nothing more', async (
 }) => {
   const session = await seedSession(page, {
     admin: false,
-    grants: ['/manufacturing/cnc-cutting/', '/manufacturing/cnc-cutting/remnants/'],
+    grants: ['/manufacturing/cnc-cutting/', '/manufacturing/cnc-cutting/cuts/'],
   });
   await mockBackend(page, {}, { session });
 
-  await page.goto('/manufacturing/cnc-cutting/remnants/?thickness_mm=10');
-  await expect(page).toHaveURL(/\/planning\/cnc-cutting\/remnants\/\?thickness_mm=10$/);
+  await page.goto('/manufacturing/cnc-cutting/cuts/?status=pending');
+  await expect(page).toHaveURL(/\/planning\/cnc-cutting\/cuts\/\?status=pending$/);
   const main = page.getByRole('main');
-  await expect(main.getByRole('heading', { name: 'Fire Plakalar', level: 1 })).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'CNC Kesim Kesimler', level: 1 })).toBeVisible();
 
   // One level up at a time, by the menu: CNC Kesim, then Planlama.
   await main.getByRole('link', { name: 'CNC Kesim sayfasına dön' }).click();
   await expect(page).toHaveURL(/\/planning\/cnc-cutting\/?$/);
   await expect(main.getByRole('heading', { name: 'CNC Kesim', level: 1 })).toBeVisible();
-  expect(await cardTitles(page)).toEqual(['Fire Plakalar']);
+  expect(await cardTitles(page)).toEqual(['Kesimler']);
 
   await main.getByRole('link', { name: 'Planlama sayfasına dön' }).click();
   await expect(page).toHaveURL(/\/planning\/?$/);
@@ -34,8 +34,8 @@ test('old CNC grants open the moved pages and their hubs, nothing more', async (
   const regions = main.getByRole('region');
   await expect(regions).toHaveCount(1);
   const cnc = main.getByRole('region', { name: 'CNC Kesim' });
-  await expect(cnc.getByRole('navigation').getByRole('link')).toHaveText(['Fire Plakalar']);
-  await expect(cnc).toContainText('Kullanılabilir fire plaka');
+  await expect(cnc.getByRole('navigation').getByRole('link')).toHaveText(['Kesimler']);
+  await expect(cnc).toContainText('Açık kesim');
   // A section's own hub is the top: no arrow.
   await expect(main.getByRole('link', { name: /sayfasına dön$/ })).toHaveCount(0);
 
@@ -43,6 +43,26 @@ test('old CNC grants open the moved pages and their hubs, nothing more', async (
   for (const url of ['/planning/cnc-cutting/capacity/', '/planning/linear-cutting/cuts/']) {
     await page.goto(url);
     await expect(main.getByRole('heading', { name: 'Erişim yetkiniz yok' })).toBeVisible();
+  }
+  consoleErrors.expectNone();
+});
+
+test('the retired Fire Plakalar page forwards to Sac ve Boy Stoğu, for its old grant', async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, {
+    admin: false,
+    grants: ['/manufacturing/cnc-cutting/remnants/'],
+  });
+  await mockBackend(page, {}, { session });
+
+  for (const url of ['/manufacturing/cnc-cutting/remnants/', '/planning/cnc-cutting/remnants/']) {
+    await page.goto(url);
+    await expect(page).toHaveURL(/\/warehouse\/pieces\/$/);
+    await expect(
+      page.getByRole('main').getByRole('heading', { name: 'Sac ve Boy Stoğu', level: 1 }),
+    ).toBeVisible();
   }
   consoleErrors.expectNone();
 });

@@ -1,4 +1,4 @@
-import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@/routes/movedRoutes';
+import { MOVED_ROUTES, REPLACED_HUB_ROUTES, RETIRED_ROUTES } from '@/routes/movedRoutes';
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
@@ -246,6 +246,13 @@ export const appRoutes: RouteObject[] = [
     path: '/warehouse/piece-counts',
     lazy: async () => ({
       Component: (await import('@/pages/warehouse/piece-counts/PieceCountsPage')).PieceCountsPage,
+    }),
+  },
+  {
+    path: '/warehouse/weight-reduction',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/weight-reduction/WeightReductionPage'))
+        .WeightReductionPage,
     }),
   },
   {
@@ -699,13 +706,6 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/planning/cnc-cutting/remnants',
-    lazy: async () => ({
-      Component: (await import('@/pages/manufacturing/cnc-cutting/remnants/RemnantsPage'))
-        .RemnantsPage,
-    }),
-  },
-  {
     path: '/planning/cnc-cutting/reports/parts-search',
     lazy: async () => ({
       Component: (
@@ -738,7 +738,7 @@ export const appRoutes: RouteObject[] = [
   ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
     mergedInto(path, to, preset),
   ),
-  ...Object.entries({ ...MOVED_ROUTES, ...REPLACED_HUB_ROUTES }).map(([path, to]) =>
+  ...Object.entries({ ...MOVED_ROUTES, ...REPLACED_HUB_ROUTES, ...RETIRED_ROUTES }).map(([path, to]) =>
     movedTo(path, to),
   ),
   // Manufacturing shop-floor lists and reports (Phase 3b).

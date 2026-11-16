@@ -19,9 +19,16 @@ export interface MaterialPiece {
   item_is_active: boolean;
   category_code: string | null;
   kind: PieceKind | null;
+  plate_thickness_mm?: string | null;
   width_mm: string | null;
   length_mm: string;
   quantity: number;
+  /** Sheets CNC cuts have reserved of the lot (they leave stock when the cut is processed). */
+  reserved_quantity?: number;
+  available_quantity?: number;
+  reservations?: { cnc_task: string; quantity: number }[];
+  /** The CNC cut a remnant came back from. */
+  cnc_task?: string | null;
   unit_kg: string | null;
   total_kg: string | null;
   heat_number: string;
@@ -97,6 +104,10 @@ export interface PiecesParams {
   origin?: string;
   include_empty?: 'true';
   ordering?: string;
+  /** Plate cards of this thickness. */
+  thickness_mm?: string;
+  /** Lots with sheets no CNC cut has reserved. */
+  available?: 'true';
 }
 
 export interface PieceCardsParams {
@@ -201,15 +212,19 @@ export function previewWeight(data: {
 const seenCards = new Map<string, PieceCard>();
 
 /** A card the piece-card search returned earlier (value = its id as text). */
+/** Plate cards only (a remnant goes back to a sheet card). */
+export function searchPlateCards(term: string, signal?: AbortSignal) {
+  return searchPieceCards(term, signal, 'plate');
+}
+
 export function pieceCardFromSearch(value: string): PieceCard | undefined {
   return seenCards.get(value);
 }
 
 /** Plate / boy cards for the piece entry, inactive ones too. */
-export async function searchPieceCards(term: string, signal?: AbortSignal) {
-  const rows = extractResults<PieceCard>(
-    await apiFetch<unknown>(`${BASE}cards/`, { params: { search: term, page_size: 30 }, signal }),
-  );
+export async function searchPieceCards(term: string, signal?: AbortSignal, kind?: PieceKind) {
+  const params = { search: term, page_size: 30, ...(kind ? { kind } : {}) };
+  const rows = extractResults<PieceCard>(await apiFetch<unknown>(`${BASE}cards/`, { params, signal }));
   return rows.map((card) => {
     seenCards.set(String(card.id), card);
     return { value: String(card.id), label: `${card.code} — ${card.name}` };

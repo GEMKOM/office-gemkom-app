@@ -13,6 +13,7 @@ export type PlateSourceRow = { id?: unknown } & Pick<
   | 'plate_item_delivered_quantity'
   | 'plate_item_is_delivered'
   | 'has_remnant_plate'
+  | 'has_piece'
 >;
 
 /**
@@ -53,6 +54,13 @@ export function plateSource(row: PlateSourceRow): PlateSource {
       : `${name}${row.plate_item_code ? ` (${row.plate_item_code})` : ''}`;
     return { name, badge, tooltip };
   }
+  if (row.has_piece) {
+    return {
+      name: plateInfoText(row),
+      badge: { label: 'Stok Sac', color: 'blue' },
+      tooltip: 'Sac stoğundan ayrılan sac kullanılıyor',
+    };
+  }
   if (row.has_remnant_plate) {
     return {
       name: plateInfoText(row),
@@ -67,6 +75,9 @@ export function plateSource(row: PlateSourceRow): PlateSource {
 export function plateSourceText(row: PlateSourceRow): string {
   const source = plateSource(row);
   if (!source.badge) return source.name;
+  if (row.has_piece && !row.planning_request_item) {
+    return source.name ? `${source.name} (Stok Sac)` : 'Stok Sac';
+  }
   if (row.has_remnant_plate && !row.planning_request_item) {
     return source.name ? `${source.name} (Fire Plaka)` : 'Fire Plaka';
   }

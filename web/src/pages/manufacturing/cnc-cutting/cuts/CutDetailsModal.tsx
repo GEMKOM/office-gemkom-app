@@ -1,14 +1,37 @@
 import { useQuery } from '@tanstack/react-query';
 import { cncTaskQueryOptions, type CncTask } from '@/api/manufacturing/cncTasks';
+import { formatNumber } from '@/lib/format';
 import { DataTable, DetailModal, FileAttachments, type DetailField } from '@/ui';
 import { toAttachment } from './cutForm';
 import { PART_COLUMNS } from './PartsManager';
+import { pieceText } from './PlateSource';
+
+const kg = (value: string | null | undefined) =>
+  value === null || value === undefined ? '-' : `${formatNumber(Number(value), 2)} kg`;
 
 const or = (value: unknown, fallback = '-') =>
   value === null || value === undefined || value === '' ? fallback : String(value);
 
-/** "Plaka Kalemi" / "Fire Plaka" line of the details. */
+/** "Stoktan Sac" / "Plaka Kalemi" / "Fire Plaka" line of the details. */
 export function plateSourceField(task: CncTask): DetailField | null {
+  const reservation = task.piece_reservations?.[0];
+  if (reservation) {
+    const p = reservation.piece_details;
+    const heat = p.heat_number ? ` · Şarj ${p.heat_number}` : '';
+    return {
+      label: 'Stoktan Sac',
+      value: `${pieceText(p)} · ${reservation.quantity} adet ayrıldı${heat}`,
+      span: 6,
+    };
+  }
+  const issued = task.piece_issues ?? [];
+  if (issued.length) {
+    return {
+      label: 'Stoktan Sac',
+      value: `${issued.map((i) => `${pieceText(i.piece_details)} × ${i.quantity}`).join(', ')} · stoktan düşüldü`,
+      span: 6,
+    };
+  }
   const item = task.plate_item;
   if (item) {
     const delivered = item.is_delivered
@@ -33,6 +56,36 @@ export function plateSourceField(task: CncTask): DetailField | null {
     };
   }
   return null;
+}
+
+/** The "Depo İşlemi" fields once the warehouse processed the cut (Ağırlık Düşüşü). */
+export function processingFields(task: CncTask): DetailField[] {
+  if (!task.processed_by_warehouse) return [];
+  const remnants = task.remnant_pieces ?? [];
+  return [
+    {
+      label: 'Depo İşlemi',
+      value: `${task.processed_warehouse_date || '-'} · ${task.processed_by_username || '-'}`,
+      span: 3,
+    },
+    {
+      label: task.consumed_estimated ? 'Kullanılan Sac (tahmini)' : 'Kullanılan Sac',
+      value: kg(task.consumed_kg),
+      span: 3,
+    },
+    { label: 'Parçalar', value: kg(task.parts_kg), span: 2 },
+    { label: 'Fire Sac Dönüşü', value: kg(task.remnant_kg), span: 2 },
+    { label: 'Fire', value: kg(task.fire_kg), span: 2 },
+    ...(remnants.length
+      ? [
+          {
+            label: 'Stoğa Dönen Fire Saclar',
+            value: remnants.map((r) => `${pieceText(r)} × ${r.quantity ?? 1}`).join(', '),
+            span: 12,
+          },
+        ]
+      : []),
+  ];
 }
 
 /** "Kesim Detayları" for ?cut=KEY. */
@@ -82,6 +135,12 @@ export function CutDetailsModal({ cutKey, onClose }: { cutKey: string; onClose: 
                   { label: 'Makine', value: or(t.machine_name), span: 3 },
                   ...(source ? [source] : []),
                 ],
+              },
+              {
+                title: 'Depo İşlemi',
+                icon: 'fas fa-weight-hanging',
+                hidden: !t.processed_by_warehouse,
+                fields: processingFields(t),
               },
               {
                 title: 'Ekler',

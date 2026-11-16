@@ -275,11 +275,6 @@ export const NAVIGATION_STRUCTURE: NavTree = {
             icon: 'fas fa-scissors',
             children: {},
           },
-          '/planning/cnc-cutting/remnants': {
-            label: 'Fire Plakalar',
-            icon: 'fas fa-layer-group',
-            children: {},
-          },
           '/planning/cnc-cutting/reports': {
             label: 'Raporlar',
             icon: 'fas fa-chart-bar',
@@ -595,6 +590,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       '/warehouse/piece-counts': {
         label: 'Sac ve Boy Sayımı',
         icon: 'fas fa-ruler-combined',
+        children: {},
+      },
+      '/warehouse/weight-reduction': {
+        label: 'Ağırlık Düşüşü',
+        icon: 'fas fa-weight-hanging',
         children: {},
       },
     },

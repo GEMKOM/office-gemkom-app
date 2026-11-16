@@ -158,16 +158,27 @@ beforeEach(() => {
           { job_no: '114-10', title: 'Tank' },
         ]);
       if (path === '/planning/items/') return json({ count: 1, results: PLANNING_ITEMS });
-      if (path === '/cnc_cutting/remnants/')
+      if (path === '/warehouse/pieces/')
         return json({
           count: 1,
           results: [
             {
-              id: 7,
-              thickness_mm: '10.00',
-              dimensions: '1200x800',
-              material: 'S235',
-              available_quantity: 3,
+              id: 9,
+              item: 12,
+              item_code: '0100-10',
+              item_name: '10 mm S235',
+              kind: 'plate',
+              plate_thickness_mm: '10.00',
+              width_mm: '1500.0',
+              length_mm: '3000.0',
+              quantity: 3,
+              reserved_quantity: 1,
+              available_quantity: 2,
+              unit_kg: '353.250',
+              heat_number: 'H-1',
+              warehouse_code: 'HAMMADDE',
+              job_no: '',
+              supplier_name: null,
             },
           ],
         });
@@ -313,7 +324,7 @@ it('create needs a plate source and a part, then posts the multipart body', asyn
   fireEvent.change(within(dialog).getByLabelText(/^Nesting ID/), { target: { value: 'N-9' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kesim Oluştur' }));
   await waitFor(() =>
-    expect(notify.error).toHaveBeenCalledWith('Fire plaka veya plaka kalemi seçmelisiniz'),
+    expect(notify.error).toHaveBeenCalledWith('Stoktan sac veya plaka kalemi seçmelisiniz'),
   );
 
   // Pick a planning item.
@@ -422,8 +433,9 @@ it('edit keeps the plate source, saves with PATCH and updates pasted parts toget
   expect(body.get('name')).toBe('Kazan 2');
   expect(body.get('machine_fk')).toBe('3');
   expect(body.get('estimated_hours')).toBe('1.5');
-  // Both source keys go out so switching clears the other one.
+  // Every source key goes out so switching clears the others.
   expect(body.get('selected_plate_id')).toBe('');
+  expect(body.get('selected_piece_id')).toBe('');
   expect(body.get('planning_request_item_id')).toBe('12');
   expect(body.get('mark_item_consumed')).toBe('false');
   await waitFor(() => expect(location().has('cut')).toBe(false));
@@ -445,32 +457,27 @@ it('a refused part delete shows the backend reason', async () => {
   );
 });
 
-it('the remnant picker loads after a filter, and the pick caps the quantity used', async () => {
+it('a cut takes sheets from a stock lot: the picker lists free sheets, the pick caps the count', async () => {
   renderPage();
   await screen.findByText('CNC-7');
   fireEvent.click(screen.getByRole('button', { name: 'Yeni Kesim' }));
   const dialog = await screen.findByRole('dialog', { name: 'Yeni Kesim Oluştur' });
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Fire Plaka Seç' }));
-  const picker = await screen.findByRole('dialog', { name: 'Fire Plaka Seç' });
-  const remnantCalls = () => calls().filter((c) => c.url.pathname === '/cnc_cutting/remnants/');
-  // Legacy waits for the filters before loading.
-  expect(remnantCalls()).toHaveLength(0);
-
-  fireEvent.change(within(picker).getByLabelText('Kalınlık (mm)'), { target: { value: '10' } });
-  fireEvent.keyDown(within(picker).getByLabelText('Kalınlık (mm)'), { key: 'Enter' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Stoktan Sac Seç' }));
+  const picker = await screen.findByRole('dialog', { name: 'Stoktan Sac Seç' });
   fireEvent.click(await within(picker).findByRole('button', { name: 'Seç' }));
-  expect(Object.fromEntries(remnantCalls()[0]!.url.searchParams)).toEqual({
-    thickness_mm: '10',
-    ordering: 'id',
+  const pieceCall = calls().find((c) => c.url.pathname === '/warehouse/pieces/')!;
+  expect(Object.fromEntries(pieceCall.url.searchParams)).toEqual({
+    kind: 'plate',
+    available: 'true',
     page: '1',
     page_size: '20',
   });
-  expect(notify.success).toHaveBeenCalledWith('Fire plaka seçildi');
-  expect(await within(dialog).findByText('Seçili: ID: 7')).toBeInTheDocument();
+  expect(notify.success).toHaveBeenCalledWith('Sac seçildi');
+  expect(await within(dialog).findByText('Seçili: 0100-10 · 1500 × 3000 mm')).toBeInTheDocument();
 
   const used = within(dialog).getByLabelText('Kullanılacak Adet');
   expect(used).toHaveValue('1');
   fireEvent.change(used, { target: { value: '5' } });
-  expect(notify.warning).toHaveBeenCalledWith('Maksimum 3 adet kullanılabilir');
-  await waitFor(() => expect(used).toHaveValue('3'));
+  expect(notify.warning).toHaveBeenCalledWith('Maksimum 2 adet kullanılabilir');
+  await waitFor(() => expect(used).toHaveValue('2'));
 });
