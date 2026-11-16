@@ -117,9 +117,63 @@ function renderPage(route = '/warehouse/goods-receipts') {
 }
 
 let cancelled = false;
+let plateOrder = false;
+
+// A plate line: received with its pieces.
+const PLATE_LINE = {
+  po_line: 401,
+  item: 12,
+  item_code: '0100 0000 0010 000 000',
+  item_name: '10 mm ST 37-2 SAC',
+  item_unit: 'kg',
+  ordered: '1000.00',
+  received: '0.00',
+  outstanding: '1000.00',
+  receivable: '1000.00',
+  planning_item: 91,
+  job_no: '254-01',
+  destination: 'İş Emri · 254-01',
+  reason: '',
+  piece_kind: 'plate',
+  plate_thickness_mm: '10.00',
+  kg_per_m: null,
+  weight_missing: '',
+};
+const PLATE_RECEIPT = {
+  ...RECEIPT,
+  id: 3,
+  number: 'MK-2026-0003',
+  lines: [
+    {
+      id: 6,
+      po_line: 401,
+      item_code: PLATE_LINE.item_code,
+      item_name: PLATE_LINE.item_name,
+      item_unit: 'kg',
+      quantity: '706.50',
+      job_no: '254-01',
+      delivery: 10,
+      note: '',
+      pieces: [
+        {
+          id: 70,
+          width_mm: '1500.0',
+          length_mm: '3000.0',
+          quantity: 2,
+          in_stock: 2,
+          unit_kg: '353.250',
+          heat_number: 'H-1',
+          certificate_no: '',
+        },
+      ],
+      pieces_kg: '706.500',
+    },
+  ],
+};
 
 beforeEach(() => {
   cancelled = false;
+  plateOrder = false;
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
@@ -130,7 +184,9 @@ beforeEach(() => {
     if (method === 'GET' && u.pathname === '/warehouse/goods-receipts/') {
       return json({ count: 1, results: [current] });
     }
-    if (method === 'POST' && u.pathname === '/warehouse/goods-receipts/') return json(RECEIPT, 201);
+    if (method === 'POST' && u.pathname === '/warehouse/goods-receipts/') {
+      return json(plateOrder ? PLATE_RECEIPT : RECEIPT, 201);
+    }
     if (u.pathname === '/warehouse/goods-receipts/orders/') {
       return json({
         count: 1,
@@ -148,7 +204,21 @@ beforeEach(() => {
         ],
       });
     }
-    if (u.pathname === '/warehouse/goods-receipts/order-lines/') return json(ORDER_LINES);
+    if (u.pathname === '/warehouse/goods-receipts/order-lines/') {
+      return json(plateOrder ? [PLATE_LINE] : ORDER_LINES);
+    }
+    if (method === 'POST' && u.pathname === '/warehouse/pieces/weight-preview/') {
+      return json({
+        unit_kg: '353.250',
+        total_kg: '353.250',
+        density_g_cm3: '7.850',
+        plate_thickness_mm: '10.00',
+        kg_per_m: null,
+        missing: '',
+      });
+    }
+    if (method === 'GET' && u.pathname === '/warehouse/goods-receipts/3/')
+      return json(PLATE_RECEIPT);
     if (method === 'POST' && u.pathname === '/warehouse/goods-receipts/2/cancel/') {
       cancelled = true;
       return json({ ...RECEIPT, status: 'cancelled' });
@@ -215,4 +285,73 @@ it('opens a receipt from the link and cancels it after the confirm', async () =>
   await waitFor(() => expect(notify.success).toHaveBeenCalledWith('MK-2026-0002 geri alındı'));
   expect(calls().some((c) => c.url.pathname === '/warehouse/goods-receipts/2/cancel/')).toBe(true);
   await waitFor(() => expect(screen.getByText('İptal Edildi')).toBeInTheDocument());
+});
+
+it('receives a plate line with the pieces that came', async () => {
+  plateOrder = true;
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'Yeni Mal Kabul' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Yeni Mal Kabul' });
+  const order = within(dialog).getByLabelText(/Sipariş/);
+  order.focus();
+  fireEvent.change(order, { target: { value: 'Tedarik' } });
+  fireEvent.click(await screen.findByRole('option', { name: /#41 · Tedarikçi A/, hidden: true }));
+  fireEvent.change(within(dialog).getByLabelText(/İrsaliye No/), { target: { value: 'IRS-9' } });
+  fireEvent.change(await within(dialog).findByLabelText('Bu teslimat 0100 0000 0010 000 000'), {
+    target: { value: '706.5' },
+  });
+
+  // No pieces yet: not saved.
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet ve İşle' }));
+  expect(notify.warning).toHaveBeenCalledWith(
+    '0100 0000 0010 000 000: gelen parçaları (ölçü ve adet) girin',
+  );
+
+  const piece = (field: string) =>
+    within(dialog).getByLabelText(`0100 0000 0010 000 000 parça 1 ${field}`);
+  fireEvent.change(piece('en'), { target: { value: '1500' } });
+  fireEvent.change(piece('boy'), { target: { value: '3000' } });
+  fireEvent.change(piece('adet'), { target: { value: '2' } });
+  fireEvent.change(piece('döküm no'), { target: { value: 'H-1' } });
+  // The weight comes from the backend preview.
+  expect(await within(dialog).findByText('2 parça · 706,50 kg')).toBeInTheDocument();
+  expect(within(dialog).queryByText(/İrsaliyedeki miktar/)).not.toBeInTheDocument();
+  // An irsaliye kg far from what the pieces weigh is flagged.
+  fireEvent.change(within(dialog).getByLabelText('Bu teslimat 0100 0000 0010 000 000'), {
+    target: { value: '500' },
+  });
+  expect(await within(dialog).findByText(/İrsaliyedeki miktar \(500,00 kg\)/)).toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('Bu teslimat 0100 0000 0010 000 000'), {
+    target: { value: '706.5' },
+  });
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet ve İşle' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('MK-2026-0003 işlendi'));
+  const create = calls().find(
+    (c) => c.method === 'POST' && c.url.pathname === '/warehouse/goods-receipts/',
+  )!;
+  expect(create.body).toMatchObject({
+    lines: [
+      {
+        po_line: 401,
+        quantity: '706.5',
+        pieces: [
+          {
+            width_mm: '1500',
+            length_mm: '3000',
+            quantity: 2,
+            heat_number: 'H-1',
+            certificate_no: '',
+          },
+        ],
+      },
+    ],
+  });
+});
+
+it('shows the pieces a receipt brought', async () => {
+  renderPage('/warehouse/goods-receipts?mk=3');
+  expect(
+    await screen.findByText('Parçalar: 1500 × 3000 mm × 2 (döküm H-1) — 706,50 kg'),
+  ).toBeInTheDocument();
 });
