@@ -62,7 +62,10 @@ export function cutInput(values: CutFormValues, plate: PlateSourceValue): CncTas
     dimensions: values.dimensions,
     machine_fk: values.machine_fk ? parseInt(values.machine_fk, 10) : null,
     estimated_hours: toNumber(values.estimated_hours, parseFloat),
-    quantity: toNumber(values.quantity, (s) => parseInt(s, 10)),
+    // A cut on a stock lot cuts as many sheets as it reserves (the backend checks).
+    quantity: plate.piece && !plate.locked
+      ? plate.quantityUsed
+      : toNumber(values.quantity, (s) => parseInt(s, 10)),
     ...plateSourceInput(plate),
   };
 }
@@ -95,9 +98,12 @@ export function useJobOrderChoices(extra: readonly string[] = []) {
 export function CutBasicFields({
   form,
   dimensionsHelp,
+  sheets,
 }: {
   form: UseFormReturnType<CutFormValues>;
   dimensionsHelp: string;
+  /** Sheets reserved from a stock lot: the cut's Adet follows them. */
+  sheets?: number | null;
 }) {
   const machineOptions = useCuttingMachineOptions();
   return (
@@ -152,15 +158,24 @@ export function CutBasicFields({
         />
       </Grid.Col>
       <Grid.Col span={{ base: 12, md: 6 }}>
-        <NumberInput
-          label="Adet"
-          placeholder="1"
-          description="Aynı kesim kaç kez yapılacak (varsayılan: 1)"
-          step={1}
-          min={1}
-          allowDecimal={false}
-          {...form.getInputProps('quantity')}
-        />
+        {sheets ? (
+          <NumberInput
+            label="Adet"
+            description="Stoktan ayrılan sac adedi kadar (Plaka Kaynağı'ndan değiştirilir)"
+            value={sheets}
+            disabled
+          />
+        ) : (
+          <NumberInput
+            label="Adet"
+            placeholder="1"
+            description="Aynı kesim kaç kez yapılacak (varsayılan: 1)"
+            step={1}
+            min={1}
+            allowDecimal={false}
+            {...form.getInputProps('quantity')}
+          />
+        )}
       </Grid.Col>
     </Grid>
   );

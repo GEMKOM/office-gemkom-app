@@ -138,6 +138,7 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
         <CutBasicFields
           form={form}
           dimensionsHelp="Plaka boyutları (opsiyonel; stoktan sac seçilirse otomatik alınır)"
+          sheets={plate.piece ? plate.quantityUsed : null}
         />
         <FileDropInput
           mt="sm"

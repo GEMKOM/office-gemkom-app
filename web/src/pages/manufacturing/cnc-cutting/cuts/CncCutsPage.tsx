@@ -238,8 +238,11 @@ export function CncCutsPage() {
       title: 'Durum Değişikliği Onayı',
       icon: 'fas fa-exchange-alt',
       message: 'Durumu değiştirmek istediğinize emin misiniz?',
-      description:
-        'Kesim yeniden açılır: kullanılan saclar partisine geri döner, kesimden dönen fire saclar stoktan çıkar.',
+      description: `Kesim yeniden açılır: kullanılan saclar partisine geri döner, kesimden dönen fire saclar stoktan çıkar.${
+        row.processed_by_warehouse
+          ? " Kesim Mikro'ya işlendi olarak işaretliydi: işaret kalkar, Mikro'daki düşüm ayrıca düzeltilmeli."
+          : ''
+      }`,
       details: (
         <span>
           <strong>Kesim:</strong> {row.key}
