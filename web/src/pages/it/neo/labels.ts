@@ -104,6 +104,8 @@ export const TOOL_LABELS: Record<string, string> = {
   propose_discussion_comment: 'Yorum önerisi',
   propose_report: 'Bildirim önerisi',
   propose_leave_request: 'İzin talebi önerisi',
+  propose_planning_request: 'Planlama talebi önerisi',
+  propose_purchase_request: 'Satın alma talebi önerisi',
 };
 
 /** DailySummary.status → [label, badge family]; no yellow by house rule. */
