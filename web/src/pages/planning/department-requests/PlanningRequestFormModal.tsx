@@ -53,6 +53,7 @@ import { ItemFormModal } from '../inventory/cards/ItemFormModal';
 import { UNIT_CHOICES } from '../../general/department-requests/list/constants';
 import { shiftAttachTargets } from '../../general/department-requests/list/fileItemMapping';
 import { ExcelImportModal } from './ExcelImportModal';
+import { RowSizeEditor } from './RowSizeEditor';
 import {
   attachmentsFromDepartmentRequest,
   attachmentsFromPlanningRequest,
@@ -62,6 +63,7 @@ import {
   isClearProtected,
   itemRow,
   lockReason,
+  pieceKindOf,
   newAttachment,
   normalizePriority,
   originalData,
@@ -192,6 +194,13 @@ export function PlanningRequestFormModal({
       form.setFieldValue(`items.${index}.item_name`, picked.name);
       if (picked.unit) form.setFieldValue(`items.${index}.item_unit`, picked.unit.toLowerCase());
     }
+    // Plate / boy cards are asked for in sizes; a new card starts the size over.
+    form.setFieldValue(`items.${index}.kind`, pieceKindOf(picked?.material_class));
+    form.setFieldValue(`items.${index}.item_id`, picked?.id ?? null);
+    form.setFieldValue(`items.${index}.size_mode`, '');
+    form.setFieldValue(`items.${index}.piece_width`, '');
+    form.setFieldValue(`items.${index}.piece_length`, '');
+    form.setFieldValue(`items.${index}.piece_count`, '');
   };
   const removeRow = (index: number) => {
     form.removeListItem('items', index);
@@ -641,6 +650,24 @@ export function PlanningRequestFormModal({
                       </Tooltip>
                     )}
                   </Grid.Col>
+                  {row.kind ? (
+                    <Grid.Col span={24}>
+                      <RowSizeEditor
+                        row={row}
+                        itemId={row.item_id ?? cardFromSearch(row.item_code)?.id ?? null}
+                        index={index}
+                        disabled={locked}
+                        onChange={(patch) => {
+                          for (const [field, value] of Object.entries(patch)) {
+                            form.setFieldValue(`items.${index}.${field}`, value);
+                          }
+                        }}
+                        onQuantity={(quantity) =>
+                          form.setFieldValue(`items.${index}.quantity`, quantity)
+                        }
+                      />
+                    </Grid.Col>
+                  ) : null}
                 </Grid>
               );
             })}

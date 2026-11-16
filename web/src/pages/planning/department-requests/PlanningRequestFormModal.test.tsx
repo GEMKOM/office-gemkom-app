@@ -87,6 +87,25 @@ beforeEach(() => {
       ]);
     }
     if (method === 'PATCH' && path === '/planning/requests/7/') return json({ id: 7 });
+    if (method === 'GET' && path === '/planning/standard-sizes/') {
+      return json({
+        plate: [
+          { width_mm: 1500, length_mm: 3000, label: '1500 × 3000 mm' },
+          { width_mm: 2000, length_mm: 6000, label: '2000 × 6000 mm' },
+        ],
+        bar: [{ length_mm: 6000, label: '6000 mm' }],
+      });
+    }
+    if (method === 'POST' && path === '/warehouse/pieces/weight-preview/') {
+      return json({
+        unit_kg: '353.250',
+        total_kg: '353.250',
+        density_g_cm3: '7.850',
+        plate_thickness_mm: '10.00',
+        kg_per_m: null,
+        missing: '',
+      });
+    }
     return json({ detail: 'not mocked' }, 404);
   });
   vi.spyOn(notify, 'success');
@@ -160,4 +179,50 @@ it('Tümünü Temizle does not drop a request that is only locked lines', async 
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
   await waitFor(() => expect(notify.info).toHaveBeenCalledWith('Değişiklik yapılmadı'));
   expect(patches()).toHaveLength(0);
+});
+
+it('a plate line is asked for in sizes and its kg follows the pieces', async () => {
+  const request = {
+    ...MIXED,
+    items: [
+      {
+        id: 201,
+        item: 12,
+        item_code: '0100 0000 0010 000 000',
+        item_name: '10 mm ST 37-2 SAC',
+        item_unit: 'kg',
+        item_material_class: 'plate',
+        job_no: '254-01',
+        quantity: '706.50',
+        size_mode: 'standard' as const,
+        piece_width_mm: '1500.0',
+        piece_length_mm: '3000.0',
+        piece_count: 2,
+      },
+    ],
+  };
+  renderWithProviders(
+    <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
+  );
+  expect(await screen.findByText('Sac ölçüsü')).toBeInTheDocument();
+  expect(await screen.findByText('= 706,50 kg')).toBeInTheDocument();
+
+  fireEvent.change(screen.getByLabelText('Parça adedi 1'), { target: { value: '4' } });
+  expect(await screen.findByText('= 1.413,00 kg')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByLabelText('Miktar 1')).toHaveValue('1413'));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(patches()).toHaveLength(1));
+  expect(patches()[0]!.body).toMatchObject({
+    items: [
+      {
+        id: 201,
+        quantity: 1413,
+        size_mode: 'standard' as const,
+        piece_width_mm: '1500',
+        piece_length_mm: '3000',
+        piece_count: 4,
+      },
+    ],
+  });
 });

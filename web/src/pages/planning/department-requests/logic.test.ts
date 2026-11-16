@@ -5,6 +5,7 @@ import {
   attachmentsFromPlanningRequest,
   buildFiles,
   buildItems,
+  sizeOf,
   changedFields,
   csvFileName,
   detectColumnMapping,
@@ -321,4 +322,68 @@ it('collects rejection comments from the latest approval', () => {
       ],
     } as DepartmentRequest),
   ).toEqual([{ approver: 'Ali', stage: 'Müdür', comment: 'Bütçe yok', date: '2026-01-01' }]);
+});
+
+describe('plate / boy sizes', () => {
+  const plate = (fill: Partial<ReturnType<typeof itemRow>> = {}) =>
+    itemRow({
+      item_code: '0100 0000 0010 000 000',
+      job_no: '254-01',
+      quantity: 1,
+      kind: 'plate',
+      ...fill,
+    });
+
+  it('a new plate line must say its size; an older line without one is left alone', () => {
+    expect(sizeOf(plate())).toEqual({
+      ok: false,
+      error: '0100 0000 0010 000 000: ölçü seçin (standart, özel ya da herhangi ölçü)',
+    });
+    expect(sizeOf(plate({ id: 5 }))).toEqual({ ok: true, value: {} });
+    expect(sizeOf(plate({ size_mode: 'any' }))).toEqual({ ok: true, value: { size_mode: 'any' } });
+  });
+
+  it('sends the size and checks it', () => {
+    expect(
+      sizeOf(
+        plate({ size_mode: 'standard', piece_width: 1500, piece_length: 3000, piece_count: 4 }),
+      ),
+    ).toEqual({
+      ok: true,
+      value: {
+        size_mode: 'standard',
+        piece_width_mm: '1500',
+        piece_length_mm: '3000',
+        piece_count: 4,
+      },
+    });
+    expect(sizeOf(plate({ size_mode: 'custom', piece_length: 3000, piece_count: 1 })).ok).toBe(
+      false,
+    );
+    expect(
+      sizeOf(plate({ size_mode: 'custom', piece_width: 1000, piece_length: 2000, piece_count: '' }))
+        .ok,
+    ).toBe(false);
+    const bar = sizeOf(
+      itemRow({
+        item_code: 'B',
+        kind: 'boy',
+        size_mode: 'standard',
+        piece_length: 6000,
+        piece_count: 3,
+      }),
+    );
+    expect(bar).toEqual({
+      ok: true,
+      value: {
+        size_mode: 'standard',
+        piece_width_mm: null,
+        piece_length_mm: '6000',
+        piece_count: 3,
+      },
+    });
+    const built = buildItems([plate({ size_mode: 'any', quantity: 600 })]);
+    expect(built.ok && built.value[0]).toMatchObject({ size_mode: 'any', quantity: 600 });
+    expect(buildItems([plate()]).ok).toBe(false);
+  });
 });
