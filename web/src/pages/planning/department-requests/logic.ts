@@ -399,19 +399,19 @@ export function originalFiles(request: PlanningRequest): NormalizedFile[] {
 export type Built<T> = { ok: true; value: T } | { ok: false; error: string };
 
 /**
- * The size fields of a plate / boy row. A new line must say its size (or
- * "any size"); an older line without one is left as it was.
+ * The size fields of a plate / boy row. A new line must give a standard or
+ * custom size and a count; an older line without one (or with the retired
+ * "any size") is left as it was.
  */
 export function sizeOf(row: ItemRow): Built<Partial<PlanningRequestItemInput>> {
   const mode = row.size_mode ?? '';
   const label = row.item_code.trim() || 'Sac / boy satırı';
-  if (!mode) {
+  if (!mode || mode === 'any') {
     if (row.id === undefined) {
-      return { ok: false, error: `${label}: ölçü seçin (standart, özel ya da herhangi ölçü)` };
+      return { ok: false, error: `${label}: ölçü (standart ya da özel) ve adet girin` };
     }
     return { ok: true, value: {} };
   }
-  if (mode === 'any') return { ok: true, value: { size_mode: 'any' } };
   const width = Number(row.piece_width);
   const length = Number(row.piece_length);
   const count = Number(row.piece_count);
@@ -916,6 +916,8 @@ export function parseQuantity(value: string): number {
 }
 
 export interface ImportedItem {
+  /** The row's line in the file (for messages). */
+  line?: number;
   item_code: string;
   item_name: string;
   job_no: string;
@@ -951,6 +953,7 @@ export function processRows(
       return;
     }
     const item: ImportedItem = {
+      line: index + 2,
       item_code: cell(row, mapping.item_code),
       item_name: cell(row, mapping.item_name),
       job_no: cell(row, mapping.job_no),

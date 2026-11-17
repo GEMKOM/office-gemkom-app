@@ -53,14 +53,26 @@ type Stage =
       detected: ColumnMapping;
     };
 
-/** Whether a row's code is a stock card: found and active, found but inactive, or none. */
-type CardStatus = 'ok' | 'inactive' | 'missing' | 'unchecked';
+/**
+ * Whether a row's code is a stock card: found and active, found but inactive,
+ * or none. A plate / bar card is not taken from Excel ('piece'): those lines
+ * need a size and a count, entered in the form.
+ */
+type CardStatus = 'ok' | 'inactive' | 'missing' | 'unchecked' | 'piece';
 
 function cardStatus(code: string, cards: Map<string, Item> | null): CardStatus {
   if (!cards) return 'unchecked';
   const card = cards.get(code.trim());
   if (!card) return 'missing';
+  if (card.material_class === 'plate' || card.material_class === 'boy') return 'piece';
   return card.is_active === false ? 'inactive' : 'ok';
+}
+
+/** "Satır 4 (0100 …), Satır 7 (0010 …)" for the refused plate / bar rows. */
+export function pieceRowsText(items: readonly ImportedItem[]) {
+  return items
+    .map((item, index) => `Satır ${item.line ?? index + 1} (${item.item_code})`)
+    .join(', ');
 }
 
 const STATUS_BADGE: Record<CardStatus, { color: string; label: string; title: string }> = {
@@ -79,6 +91,11 @@ const STATUS_BADGE: Record<CardStatus, { color: string; label: string; title: st
     color: 'gray',
     label: 'Kontrol edilemedi',
     title: 'Stok kartları kontrol edilemedi',
+  },
+  piece: {
+    color: 'orange',
+    label: 'Sac / boy: alınmaz',
+    title: "Sac ve boy satırları Excel'den alınmaz: formda ölçü ve adetle girin",
   },
 };
 
@@ -169,15 +186,28 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
     notify.success('Satır başarıyla silindi');
   };
 
+  const pieceRows = (preview ?? []).filter(
+    (item) => cardStatus(item.item_code, cards) === 'piece',
+  );
+
   const importItems = () => {
     if (!preview || preview.length === 0) return;
+    // Plate / bar rows stay out: the form asks their size and count.
+    const kept = preview.filter((item) => cardStatus(item.item_code, cards) !== 'piece');
     // A code with no stock card comes in empty: the planner picks the card.
-    const items = preview.map((item) =>
+    const items = kept.map((item) =>
       cardStatus(item.item_code, cards) === 'missing' ? { ...item, item_code: '' } : item,
     );
-    const missing = preview.length - items.filter((item) => item.item_code).length;
-    onImport(items);
-    notify.success(`${preview.length} ürün başarıyla içe aktarıldı`);
+    const missing = items.length - items.filter((item) => item.item_code).length;
+    if (items.length > 0) {
+      onImport(items);
+      notify.success(`${items.length} ürün başarıyla içe aktarıldı`);
+    }
+    if (pieceRows.length > 0) {
+      notify.warning(
+        `Sac / boy satırları içe aktarılmadı, formda ölçü ve adetle girin: ${pieceRowsText(pieceRows)}`,
+      );
+    }
     if (missing > 0) {
       notify.warning(`${missing} satırın kodu stok kartlarında yok; bu satırlar için kartı seçin`);
     }
@@ -334,6 +364,17 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
                 </Alert>
               ) : null}
 
+              {preview && pieceRows.length > 0 ? (
+                <Alert
+                  color="orange"
+                  variant="light"
+                  title="Sac / boy satırları içe aktarılmayacak"
+                  icon={<FaIcon icon="fas fa-ruler-combined" />}
+                >
+                  Sac ve boy kalemleri ölçü (standart ya da özel) ve adetle istenir; bu satırları
+                  formda girin: {pieceRowsText(pieceRows)}. Diğer satırlar aktarılır.
+                </Alert>
+              ) : null}
               {preview ? (
                 <>
                   <Text fw={600}>Önizleme ({count} ürün)</Text>
