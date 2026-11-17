@@ -100,11 +100,11 @@ test('admin: the planning hub leads with its queue, then a lane per area; financ
     .getByRole('region')
     .evaluateAll((regions) => regions.map((r) => r.getAttribute('aria-label')));
   expect(lanes).toEqual(['Planlamayı Bekleyenler', 'CNC Kesim', 'Lineer Kesim', 'Projeler']);
-  // Requests, materials, cost lines and stock are one group; project planning
-  // and the task templates sit under Projeler.
+  // Requests, materials and cost lines are one group (stock is in Depo now);
+  // project planning and the task templates sit under Projeler.
   await expect(
     main.getByRole('navigation', { name: 'Planlamayı Bekleyenler sayfaları' }).getByRole('link'),
-  ).toHaveText(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları', 'Stok']);
+  ).toHaveText(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları']);
   await expect(
     main.getByRole('navigation', { name: 'Projeler sayfaları' }).getByRole('link'),
   ).toHaveText(['Görevler', 'Proje Planlama', 'Görev Şablonları']);

@@ -1,6 +1,7 @@
 import {
   BAR_STOCK_ROUTE,
   MOVED_ROUTES,
+  PIECES_FORWARD,
   PIECES_ROUTE,
   PLATE_STOCK_ROUTE,
   REPLACED_HUB_ROUTES,
@@ -282,7 +283,8 @@ export const appRoutes: RouteObject[] = [
     path: PIECES_ROUTE,
     loader: ({ request }) => {
       const url = new URL(request.url);
-      const target = url.searchParams.get('kind') === 'boy' ? BAR_STOCK_ROUTE : PLATE_STOCK_ROUTE;
+      const target =
+        url.searchParams.get('kind') === 'boy' ? BAR_STOCK_ROUTE : PIECES_FORWARD[PIECES_ROUTE]!;
       url.searchParams.delete('kind');
       const query = url.searchParams.toString();
       return redirect(`${target}/${query ? `?${query}` : ''}${url.hash || addressBarHash(request)}`);

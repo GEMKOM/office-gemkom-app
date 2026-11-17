@@ -35,10 +35,14 @@ export const RETIRED_ROUTES: Record<string, string> = {
 };
 
 // Sac ve Boy Stoğu split into Sac Stoğu and Boy Stoğu (the same page, one kind
-// each). Its old URL forwards by ?kind= (router.tsx); boy only when asked for.
+// each). Its old URL forwards by ?kind= (router.tsx): to Boy Stoğu for
+// ?kind=boy, else to the page listed here.
 export const PIECES_ROUTE = '/warehouse/pieces';
 export const PLATE_STOCK_ROUTE = '/warehouse/plate-stock';
 export const BAR_STOCK_ROUTE = '/warehouse/bar-stock';
+export const PIECES_FORWARD: Record<string, string> = {
+  '/warehouse/pieces': '/warehouse/plate-stock',
+};
 
 // Hubs that held one card, old route -> that card's page. Forward only: a grant
 // on the hub never opened the page, so it does not open it now either.
