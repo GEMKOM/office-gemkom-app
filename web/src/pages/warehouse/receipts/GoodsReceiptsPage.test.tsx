@@ -46,6 +46,51 @@ const RECEIPT = {
   ],
 };
 
+const PENDING = [
+  {
+    po_line: 301,
+    purchase_order: 41,
+    supplier: 7,
+    supplier_name: 'Tedarikçi A',
+    pr_number: 'PR-2026-0100',
+    ordered_at: '2026-11-01',
+    item: 11,
+    item_code: '0018 0012 0040 000 001',
+    item_name: 'CİVATA M12x40',
+    item_unit: 'adet',
+    ordered: '10.00',
+    received: '4.00',
+    remaining: '6.00',
+    delivery_days: 5,
+    expected_date: '2026-11-06',
+    overdue: true,
+    job_no: '254-01',
+    destination: 'İş Emri · 254-01',
+    piece_kind: null,
+  },
+  {
+    po_line: 302,
+    purchase_order: 41,
+    supplier: 7,
+    supplier_name: 'Tedarikçi A',
+    pr_number: 'PR-2026-0100',
+    ordered_at: '2026-11-01',
+    item: 12,
+    item_code: '0003 0012 0000 000 001',
+    item_name: 'SOMUN M12',
+    item_unit: 'adet',
+    ordered: '20.00',
+    received: '0.00',
+    remaining: '20.00',
+    delivery_days: null,
+    expected_date: null,
+    overdue: false,
+    job_no: '',
+    destination: 'Hammadde',
+    piece_kind: null,
+  },
+];
+
 const ORDER_LINES = [
   {
     po_line: 301,
@@ -187,6 +232,14 @@ beforeEach(() => {
     if (method === 'POST' && u.pathname === '/warehouse/goods-receipts/') {
       return json(plateOrder ? PLATE_RECEIPT : RECEIPT, 201);
     }
+    if (u.pathname === '/warehouse/goods-receipts/pending-lines/') {
+      return json({
+        count: 2,
+        overdue_count: 1,
+        suppliers: [{ id: 7, name: 'Tedarikçi A', lines: 2 }],
+        results: PENDING,
+      });
+    }
     if (u.pathname === '/warehouse/goods-receipts/orders/') {
       return json({
         count: 1,
@@ -232,8 +285,55 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-it('receives a purchase order with the irsaliye, line by line', async () => {
+it('opens on Bekleyen Siparişler and receives one line from it', async () => {
   renderPage();
+  expect(await screen.findByText('0003 0012 0000 000 001')).toBeInTheDocument();
+  expect(screen.getByText('2 satır · 1 geciken')).toBeInTheDocument();
+  expect(screen.getByText(/gün gecikti/)).toBeInTheDocument();
+  expect(screen.getByText('Teslim süresi yok')).toBeInTheDocument();
+  // The default shows the last 3 months' orders.
+  const pending = calls().find(
+    (c) => c.url.pathname === '/warehouse/goods-receipts/pending-lines/',
+  )!;
+  expect(pending.url.searchParams.get('ordered_since')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+  fireEvent.click(screen.getAllByRole('button', { name: 'Kabul Et' })[1]!);
+  const dialog = await screen.findByRole('dialog', { name: 'Yeni Mal Kabul' });
+  // The order is chosen; only that line starts filled.
+  expect(await within(dialog).findByLabelText('Bu teslimat 0003 0012 0000 000 001')).toHaveValue(
+    '20.00',
+  );
+  expect(within(dialog).getByLabelText('Bu teslimat 0018 0012 0040 000 001')).toHaveValue('0');
+  fireEvent.change(within(dialog).getByLabelText(/İrsaliye No/), { target: { value: 'IRS-80' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet ve İşle' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalled());
+  const create = calls().find(
+    (c) => c.method === 'POST' && c.url.pathname === '/warehouse/goods-receipts/',
+  )!;
+  expect(create.body).toMatchObject({
+    purchase_order: 41,
+    lines: [{ po_line: 302, quantity: '20' }],
+  });
+});
+
+it('switches to the posted receipts', async () => {
+  renderPage();
+  fireEvent.click(await screen.findByText('Mal Kabuller'));
+  expect(await screen.findByText('MK-2026-0002')).toBeInTheDocument();
+});
+
+it('dates: days since, days late', async () => {
+  const { sinceDate, daysLate } = await import('./GoodsReceiptsPage');
+  const now = new Date(2026, 10, 17);
+  expect(sinceDate('30', now)).toBe('2026-10-18');
+  expect(sinceDate('all', now)).toBeUndefined();
+  expect(daysLate('2026-11-10', now)).toBe(7);
+  expect(daysLate('2026-11-20', now)).toBe(0);
+  expect(daysLate(null, now)).toBe(0);
+});
+
+it('receives a purchase order with the irsaliye, line by line', async () => {
+  renderPage('/warehouse/goods-receipts?view=kabuller');
   expect(await screen.findByText('MK-2026-0002')).toBeInTheDocument();
   expect(screen.getByText('IRS-77 · 09.11.2026')).toBeInTheDocument();
 
@@ -277,7 +377,7 @@ it('receives a purchase order with the irsaliye, line by line', async () => {
 });
 
 it('opens a receipt from the link and cancels it after the confirm', async () => {
-  renderPage('/warehouse/goods-receipts?mk=2');
+  renderPage('/warehouse/goods-receipts?view=kabuller&mk=2');
   expect(await screen.findByText('CİVATA M12x40')).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole('button', { name: 'Geri Al' }));
