@@ -3,11 +3,7 @@ import { useForm } from '@mantine/form';
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState, type ReactNode } from 'react';
 import { apiFetch, isApiError } from '@/api/client';
-import {
-  createJobOrder,
-  updateJobOrder,
-  type JobOrder,
-} from '@/api/projects/jobOrders';
+import { createJobOrder, updateJobOrder, type JobOrder } from '@/api/projects/jobOrders';
 import { customersQueryOptions, getCustomerById } from '@/api/reference/customers';
 import { extractResults } from '@/api/types';
 import { FormModal, ModalSection, notify, SelectRemote, type RemoteOption } from '@/ui';
@@ -18,12 +14,12 @@ import classes from './ProjectTracking.module.css';
 // their createJobOrder / updateJobOrder savers).
 
 export type JobOrderFormMode =
-  | { kind: 'create' }
-  | { kind: 'child'; parent: JobOrder }
-  | { kind: 'edit'; jobOrder: JobOrder };
+  { kind: 'create' } | { kind: 'child'; parent: JobOrder } | { kind: 'edit'; jobOrder: JobOrder };
 
 interface FormValues {
   customer: string;
+  /** Edit only: the full number; changing it renames the job order. */
+  job_no: string;
   job_no_extension: string;
   title: string;
   description: string;
@@ -52,6 +48,7 @@ function dateOnly(value: string | null | undefined): string {
 function initialValues(mode: JobOrderFormMode): FormValues {
   const empty: FormValues = {
     customer: '',
+    job_no: '',
     job_no_extension: '',
     title: '',
     description: '',
@@ -80,6 +77,7 @@ function initialValues(mode: JobOrderFormMode): FormValues {
     return {
       ...empty,
       customer: job.customer ? String(job.customer) : '',
+      job_no: job.job_no,
       title: job.title || '',
       description: job.description || '',
       customer_order_no: job.customer_order_no || '',
@@ -138,6 +136,7 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
     initialValues: initialValues(mode),
     validate: {
       customer: (v) => ((isCreate || (isEdit && !editedChild)) && !v ? REQUIRED : null),
+      job_no: (v) => (isEdit && !v.trim() ? REQUIRED : null),
       job_no_extension: (v) => (!isEdit && !v.trim() ? REQUIRED : null),
       title: (v) => (!v.trim() ? REQUIRED : null),
       general_expenses_rate: (v) => (!String(v).trim() ? REQUIRED : null),
@@ -154,7 +153,10 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
     ...customersQueryOptions({ is_active: true, ordering: 'code', page_size: 20 }),
     enabled: isCreate,
   });
-  const firstOptions = useMemo(() => (firstPage.data?.results ?? []).map(customerOption), [firstPage.data]);
+  const firstOptions = useMemo(
+    () => (firstPage.data?.results ?? []).map(customerOption),
+    [firstPage.data],
+  );
   const codeOf = (id: string): string | null =>
     searchedCodes.get(id) ?? firstPage.data?.results.find((c) => String(c.id) === id)?.code ?? null;
 
@@ -181,7 +183,8 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
         const job = mode.jobOrder;
         const quantity = Number.parseInt(values.quantity, 10);
         const data: Record<string, unknown> = {
-          job_no: job.job_no,
+          // The backend renames the job order (and what refers to it) when this changes.
+          job_no: values.job_no.trim(),
           title: values.title,
           description: values.description,
           customer: values.customer ? Number.parseInt(values.customer, 10) : values.customer,
@@ -206,7 +209,8 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
         general_expenses_rate: values.general_expenses_rate,
       };
       // Empty dates and numbers are left out rather than sent as ''.
-      if (values.target_completion_date) data.target_completion_date = values.target_completion_date;
+      if (values.target_completion_date)
+        data.target_completion_date = values.target_completion_date;
       if (values.incoterms.trim()) data.incoterms = values.incoterms;
       if (mode.kind === 'child') {
         data.parent = mode.parent.job_no;
@@ -241,20 +245,26 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
     }
   };
 
-  const prefix = isChild ? `${mode.parent.job_no}-` : isCreate ? (customerCode ? `${customerCode}-` : null) : null;
+  const prefix = isChild
+    ? `${mode.parent.job_no}-`
+    : isCreate
+      ? customerCode
+        ? `${customerCode}-`
+        : null
+      : null;
   const jobNoField = isEdit ? (
     <TextInput
       label="İş Emri No"
-      description="Benzersiz iş emri numarası"
+      description="Benzersiz iş emri numarası. Değiştirirseniz iş emri ve bağlı kayıtları yeni numaraya taşınır."
       withAsterisk
-      value={mode.jobOrder.job_no}
-      disabled
-      readOnly
+      {...form.getInputProps('job_no')}
     />
   ) : (
     <TextInput
       label="İş Emri No"
-      description={isChild ? 'Alt iş emri uzantısı (örn: 01, 02)' : 'İş emri uzantısı (örn: 01, 02)'}
+      description={
+        isChild ? 'Alt iş emri uzantısı (örn: 01, 02)' : 'İş emri uzantısı (örn: 01, 02)'
+      }
       placeholder="01"
       withAsterisk
       // Legacy kept the field disabled until a customer gave the prefix.
@@ -287,7 +297,10 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
                   {
                     value: String(editCustomer.customer),
                     label:
-                      [editCustomer.customer_code, editCustomer.customer_short_name || editCustomer.customer_name || '']
+                      [
+                        editCustomer.customer_code,
+                        editCustomer.customer_short_name || editCustomer.customer_name || '',
+                      ]
                         .filter(Boolean)
                         .join(' - ') || `#${editCustomer.customer}`,
                   },
@@ -311,7 +324,9 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
       ? `Alt iş emri: ${mode.parent.job_no}`
       : undefined;
 
-  const col = (span: number, node: ReactNode) => <Grid.Col span={{ base: 12, sm: span }}>{node}</Grid.Col>;
+  const col = (span: number, node: ReactNode) => (
+    <Grid.Col span={{ base: 12, sm: span }}>{node}</Grid.Col>
+  );
 
   return (
     <FormModal
@@ -338,7 +353,13 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
             <TextInput
               label="Başlık"
               description={isChild ? 'Alt iş emri başlığı' : 'İş emri başlığı'}
-              placeholder={isChild ? 'Alt iş emri başlığını girin' : isCreate ? 'İş emri başlığını girin' : undefined}
+              placeholder={
+                isChild
+                  ? 'Alt iş emri başlığını girin'
+                  : isCreate
+                    ? 'İş emri başlığını girin'
+                    : undefined
+              }
               withAsterisk
               {...form.getInputProps('title')}
             />,
@@ -420,7 +441,12 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
             )}
             {col(
               12,
-              <Textarea label="ERP Ürün Kodları" description={ERP_HELP} rows={3} {...form.getInputProps('erp_product_codes')} />,
+              <Textarea
+                label="ERP Ürün Kodları"
+                description={ERP_HELP}
+                rows={3}
+                {...form.getInputProps('erp_product_codes')}
+              />,
             )}
             {col(
               6,
@@ -433,7 +459,14 @@ export function JobOrderFormModal({ mode, onClose, onSaved }: JobOrderFormModalP
                 {...form.getInputProps('quantity')}
               />,
             )}
-            {col(6, <TextInput label="Teslim Şekli" description="Teslim şekli bilgisi" {...form.getInputProps('incoterms')} />)}
+            {col(
+              6,
+              <TextInput
+                label="Teslim Şekli"
+                description="Teslim şekli bilgisi"
+                {...form.getInputProps('incoterms')}
+              />,
+            )}
           </Grid>
         </ModalSection>
       ) : (
