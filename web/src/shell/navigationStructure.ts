@@ -587,6 +587,11 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-layer-group',
         children: {},
       },
+      '/warehouse/mikro-comparison': {
+        label: 'Sac ve Boy · Mikro Karşılaştırması',
+        icon: 'fas fa-balance-scale',
+        children: {},
+      },
       '/warehouse/piece-counts': {
         label: 'Sac ve Boy Sayımı',
         icon: 'fas fa-ruler-combined',

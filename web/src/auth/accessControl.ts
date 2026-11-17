@@ -84,6 +84,7 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
     '/planning/cnc-cutting/remnants',
     '/manufacturing/cnc-cutting/remnants',
   ],
+  '/warehouse/mikro-comparison': ['/warehouse'],
   '/warehouse/piece-counts': ['/warehouse'],
   '/warehouse/weight-reduction': ['/warehouse'],
   // Depo Çekme Talepleri lists what Malzeme Takibi creates — same audience.
