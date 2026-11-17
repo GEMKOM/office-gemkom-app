@@ -569,16 +569,33 @@ export function changedFields(
     if (before.length !== after.length) {
       changed.items = next.items;
     } else if (before.length > 0) {
-      const normalize = (item: Comparable) => ({
-        job_no: str(item.job_no).trim(),
-        quantity: Number.parseFloat(str(item.quantity)) || 0,
-        item_id: item.item_id !== undefined && item.item_id !== null ? Number(item.item_id) : null,
-        item_code: str(item.item_code).trim(),
-        item_name: str(item.item_name).trim(),
-        item_description: str(item.item_description).trim(),
-        item_unit: str(item.item_unit).trim(),
-        specifications: str(item.specifications).trim(),
-      });
+      const mm = (value: unknown) => {
+        if (value === undefined || value === null || value === '') return '';
+        const n = Number(value);
+        return Number.isFinite(n) ? String(n) : '';
+      };
+      const normalize = (item: Comparable) => {
+        // Standard / custom size is on the PATCH; retired "any" and omitted
+        // size (an older line left as it was) both compare as no size, so
+        // opening and saving without a size edit is not a false change.
+        const sizeMode = str(item.size_mode).trim();
+        const sized = sizeMode === 'standard' || sizeMode === 'custom';
+        return {
+          job_no: str(item.job_no).trim(),
+          quantity: Number.parseFloat(str(item.quantity)) || 0,
+          item_id:
+            item.item_id !== undefined && item.item_id !== null ? Number(item.item_id) : null,
+          item_code: str(item.item_code).trim(),
+          item_name: str(item.item_name).trim(),
+          item_description: str(item.item_description).trim(),
+          item_unit: str(item.item_unit).trim(),
+          specifications: str(item.specifications).trim(),
+          size_mode: sized ? sizeMode : '',
+          piece_width_mm: sized ? mm(item.piece_width_mm) : '',
+          piece_length_mm: sized ? mm(item.piece_length_mm) : '',
+          piece_count: sized ? Number.parseInt(str(item.piece_count), 10) || 0 : null,
+        };
+      };
       const key = (list: Comparable[]) =>
         JSON.stringify(
           list.map(normalize).sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),

@@ -216,6 +216,55 @@ describe('changedFields', () => {
     const upload = [...same, { file: new File(['x'], 'b.pdf'), attach_to: ['request' as const] }];
     expect(changedFields(original, { ...base, files: upload })).toEqual({ files: upload });
   });
+
+  it('sends the item list when only a plate / bar size changed', () => {
+    // Adet lines keep quantity = piece_count, so a size-only edit used to
+    // look unchanged and Kaydet either no-op'd or dropped the new ölçüler.
+    const request: PlanningRequest = {
+      ...PLANNING,
+      items: [
+        {
+          id: 201,
+          item_code: '0100 0000 0010 000 000',
+          item_name: 'Sac',
+          item_unit: 'adet',
+          job_no: '254-01',
+          quantity: 4,
+          item_material_class: 'plate',
+          size_mode: 'standard',
+          piece_width_mm: '1500.0',
+          piece_length_mm: '6000.0',
+          piece_count: 4,
+        },
+      ],
+    };
+    const sizedOriginal = originalData(request);
+    const header = {
+      title: 'Rulman',
+      description: '',
+      priority: 'normal',
+      needed_date: '2026-12-01',
+      check_inventory: false,
+    };
+    const same = buildItems(rowsFromPlanningRequest(request), { editing: true });
+    expect(same.ok).toBe(true);
+    if (!same.ok) return;
+    expect(changedFields(sizedOriginal, { ...header, items: same.value })).toEqual({});
+
+    const resized = buildItems(
+      rowsFromPlanningRequest(request).map((row) => ({
+        ...row,
+        piece_width: 2000,
+        piece_length: 12000,
+      })),
+      { editing: true },
+    );
+    expect(resized.ok).toBe(true);
+    if (!resized.ok) return;
+    expect(changedFields(sizedOriginal, { ...header, items: resized.value })).toEqual({
+      items: resized.value,
+    });
+  });
 });
 
 it('writes the ERP CSV: G for expense codes, the quantity to purchase, DD.MM.YYYY', () => {
