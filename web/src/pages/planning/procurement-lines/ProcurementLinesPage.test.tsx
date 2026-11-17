@@ -9,6 +9,9 @@ import {
   buildExcelCompare,
   clampDecimals,
   emptyLine,
+  fromPreviewLines,
+  fromSavedLines,
+  hasCutBreakdown,
   linesForSubmit,
   parseExcelComparisonRows,
 } from './lines';
@@ -510,3 +513,130 @@ describe('line model', () => {
     expect(applyExcelToLine({ ...emptyLine(), quantity: '0' }, zero.rows[0]!)).toBeNull();
   });
 });
+
+it('plate comes as a line per card from the cuts, with the breakdown behind its kg', async () => {
+  savedLines = [];
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    const u = new URL(String(url));
+    if (u.pathname === '/projects/procurement-lines/preview/')
+      return json([
+        ...PREVIEW,
+        {
+          item: 12,
+          item_code: '0100 0000 0010 000 000',
+          item_name: '10 mm ST 37-2 SAC',
+          item_unit: 'kg',
+          item_description: '10 mm ST 37-2 SAC',
+          quantity: '226.08',
+          unit_price_eur: null,
+          planning_request_item: null,
+          order: 1,
+          price_source: 'none',
+          price_date: null,
+          source: 'cuts',
+          cut_group: 'item:12',
+          cut_count: 1,
+          fire_estimated: false,
+          unpriced_kg: '226.08',
+          flags: ['fire_unknown'],
+        },
+      ]);
+    if (u.pathname === '/projects/procurement-lines/cut-breakdown/')
+      return json([
+        {
+          cnc_task: 'CNC-1',
+          nesting_id: 'N-1',
+          finished_on: '2026-11-16',
+          item: 12,
+          item_code: '0100 0000 0010 000 000',
+          item_name: '10 mm ST 37-2 SAC',
+          group: 'item:12',
+          material: '10 mm ST 37-2 SAC',
+          thickness_mm: '10.00',
+          lot: '#4 1500 × 3000',
+          lot_id: 4,
+          lot_share: '1.0000',
+          part: 1,
+          image_no: 'R1',
+          position_no: 'P1',
+          parts_kg: '200.000',
+          fire_kg: '26.080',
+          kg: '226.080',
+          fire_estimated: false,
+          flags: ['fire_unknown'],
+          unit_price_eur: null,
+          original_unit_price: null,
+          original_currency: null,
+          price_source: 'none',
+          price_date: null,
+        },
+      ]);
+    return base(url, init);
+  });
+  renderPage({ route: '/planning/procurement-lines' });
+  await screen.findByText('254-01');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Satırları Aç' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: /254-01/ });
+  expect(await within(dialog).findByText('0100 0000 0010 000 000')).toBeInTheDocument();
+  expect(within(dialog).getByText('1 kesim')).toBeInTheDocument();
+  // Fully unpriced: no "kg fiyatsız" note, only the flag.
+  expect(within(dialog).getByText('fire bilinmiyor')).toBeInTheDocument();
+  // No price: planning types it in (0 until then).
+  expect(lineCell(dialog, 1, 'amount')).toHaveTextContent('0.00');
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Döküm' }));
+  const breakdown = await screen.findByRole('dialog', { name: /Kesim Dökümü/ });
+  expect(await within(breakdown).findByText('CNC-1 · N-1')).toBeInTheDocument();
+  expect(within(breakdown).getByText('#4 1500 × 3000')).toBeInTheDocument();
+  expect(within(breakdown).getByText('Toplam: 226,08 kg')).toBeInTheDocument();
+  expect(within(breakdown).getByText('fire bilinmiyor')).toBeInTheDocument();
+  expect(paramsOf(callsTo('/projects/procurement-lines/cut-breakdown/')[0])).toEqual({
+    job_order: '254-01',
+    group: 'item:12',
+  });
+});
+
+describe('cut lines', () => {
+  const saved = (extra: Record<string, unknown>) =>
+    fromSavedLines([
+      {
+        id: 1,
+        item: 12,
+        item_code: '0100',
+        item_unit: 'kg',
+        quantity: '10',
+        unit_price: '1',
+        planning_request_item: null,
+        ...extra,
+      },
+    ])[0]!;
+
+  it('shows the breakdown only on lines from cuts, card-less ones too', () => {
+    expect(hasCutBreakdown(saved({}))).toBe(false); // a manual kg line
+    expect(hasCutBreakdown(saved({ source: '', cut_group: '' }))).toBe(false);
+    expect(hasCutBreakdown(saved({ source: 'cuts', cut_group: 'item:12' }))).toBe(true);
+    expect(
+      hasCutBreakdown(saved({ item: null, source: 'cuts', cut_group: 'material:7 mm ST37' })),
+    ).toBe(true);
+  });
+
+  it('saves a cut line with its source and group, other lines without', () => {
+    const [cut, plain] = fromPreviewLines([
+      {
+        item: null,
+        item_description: '7 mm ST37 (sac kartı yok)',
+        quantity: '40',
+        source: 'cuts',
+        cut_group: 'material:7 mm ST37',
+        order: 0,
+      },
+      { item: 3, item_description: 'CİVATA', quantity: '4', source: 'planning', order: 1 },
+    ]);
+    const payload = linesForSubmit([cut!, plain!]);
+    expect(payload[0]).toMatchObject({ source: 'cuts', cut_group: 'material:7 mm ST37' });
+    expect(payload[1]).not.toHaveProperty('source');
+    expect(payload[1]).not.toHaveProperty('cut_group');
+  });
+});
+

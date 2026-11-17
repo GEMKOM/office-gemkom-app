@@ -31,7 +31,14 @@ export interface ProcurementJobOrdersParams {
 
 /** price_source values of saved and preview lines. */
 export type PriceSource =
-  'po_line' | 'recommended_offer' | 'any_offer' | 'historical_po' | 'none' | (string & {});
+  | 'po_line'
+  | 'recommended_offer'
+  | 'any_offer'
+  | 'historical_po'
+  | 'cut_lot'
+  | 'cuts_mixed'
+  | 'none'
+  | (string & {});
 
 /** One saved line (GET /projects/procurement-lines/?job_order=). */
 export interface ProcurementLine {
@@ -48,7 +55,18 @@ export interface ProcurementLine {
   order?: number | null;
   price_source?: PriceSource | null;
   price_date?: string | null;
+  /** 'cuts': saved from a preview line from cuts; '' otherwise (older lines too). */
+  source?: string | null;
+  /** The breakdown key of a cut line (?group=). */
+  cut_group?: string | null;
 }
+
+/**
+ * Flags of a cut line or breakdown row: fire_unknown (no fire share charged),
+ * no_weight (a part without weight), cut_no_weight (no part on the cut has a
+ * weight), partly_priced (lines: some kg has no price).
+ */
+export type CutFlag = 'fire_unknown' | 'no_weight' | 'cut_no_weight' | 'partly_priced' | (string & {});
 
 /** One preview line (pre-filled from planning and purchase history, not saved). */
 export interface ProcurementLinePreview {
@@ -63,6 +81,50 @@ export interface ProcurementLinePreview {
   order?: number | null;
   price_source?: PriceSource | null;
   price_date?: string | null;
+  /**
+   * 'cuts': a plate card's kg from the job's finished CNC cuts (its parts + their
+   * share of the fire); plate is not suggested from the plates bought for the job.
+   */
+  source?: 'planning' | 'cuts';
+  cut_count?: number | null;
+  /** Some cut was finished before its fire was booked: the fire is estimated from its size. */
+  fire_estimated?: boolean;
+  /** 'cuts' only: the breakdown key ('item:<id>', or 'material:<label>' without a card). */
+  cut_group?: string | null;
+  /** 'cuts' only: kg with no price (the unit price averages the priced kg). */
+  unpriced_kg?: Decimal | null;
+  flags?: CutFlag[];
+}
+
+/** One part of the job on a finished CNC cut, behind a plate line's kg. */
+export interface CutBreakdownRow {
+  cnc_task: string;
+  nesting_id: string | null;
+  finished_on: string | null;
+  item: number | null;
+  item_code: string | null;
+  item_name: string | null;
+  group: string;
+  material: string;
+  thickness_mm: string | null;
+  lot: string;
+  /** The lot the sheet came from; a cut on several lots has one row per lot. */
+  lot_id: number | null;
+  /** This lot's share of the cut (1 for a single lot). */
+  lot_share: string;
+  part: number;
+  image_no: string | null;
+  position_no: string | null;
+  parts_kg: string;
+  fire_kg: string;
+  kg: string;
+  fire_estimated: boolean;
+  flags: CutFlag[];
+  unit_price_eur: string | null;
+  original_unit_price: string | null;
+  original_currency: string | null;
+  price_source: PriceSource;
+  price_date: string | null;
 }
 
 /** One line as submit/ takes it: item or item_description is required. */
@@ -73,6 +135,9 @@ export interface ProcurementLineInput {
   unit_price: string;
   planning_request_item?: number;
   order: number;
+  /** A line from cuts keeps its source and breakdown key. */
+  source?: 'cuts';
+  cut_group?: string;
 }
 
 export const procurementLineKeys = {
@@ -131,6 +196,20 @@ export async function fetchProcurementLinesPreview(
       params: { job_order: jobNo },
     }),
   );
+}
+
+/** The cuts and parts behind a plate line, by its cut_group. */
+export function cutBreakdownQueryOptions(jobNo: string, group: string) {
+  return queryOptions({
+    queryKey: [...procurementLineKeys.all, 'cut-breakdown', jobNo, group] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<CutBreakdownRow>(
+        await apiFetch<unknown>('/projects/procurement-lines/cut-breakdown/', {
+          params: { job_order: jobNo, group },
+          signal,
+        }),
+      ),
+  });
 }
 
 /** Replaces every procurement line of the job order (submitProcurementLines); [] clears them. */
