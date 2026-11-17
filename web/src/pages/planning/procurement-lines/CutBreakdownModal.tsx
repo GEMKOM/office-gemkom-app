@@ -11,7 +11,7 @@ import {
   modalClassNames,
   type DataTableColumn,
 } from '@/ui';
-import { formatPriceDate, formatPriceSource } from './lines';
+import { cutFlagText, formatPriceDate, formatPriceSource } from './lines';
 
 // What a plate line's kg is made of: the job's parts on each finished CNC cut,
 // each part's share of the cut's fire, the lot the sheet came from and the
@@ -26,7 +26,12 @@ const COLUMNS: DataTableColumn<CutBreakdownRow>[] = [
     render: (r) => `${r.cnc_task}${r.nesting_id ? ` · ${r.nesting_id}` : ''}`,
   },
   { key: 'finished_on', header: 'Bitiş', render: (r) => formatPriceDate(r.finished_on) },
-  { key: 'lot', header: 'Sac Partisi', render: (r) => r.lot || '–' },
+  {
+    key: 'lot',
+    header: 'Sac Partisi',
+    render: (r) =>
+      `${r.lot || '–'}${Number(r.lot_share) < 1 ? ` (%${formatNumber(Number(r.lot_share) * 100, 0)})` : ''}`,
+  },
   {
     key: 'image_no',
     header: 'Parça',
@@ -51,23 +56,35 @@ const COLUMNS: DataTableColumn<CutBreakdownRow>[] = [
     header: 'Fiyat Kaynağı',
     render: (r) => formatPriceSource(r.price_source),
   },
+  {
+    key: 'flags',
+    header: 'Not',
+    render: (r) =>
+      r.flags.length ? (
+        <Text size="xs" c="orange">
+          {cutFlagText(r.flags)}
+        </Text>
+      ) : (
+        '–'
+      ),
+  },
 ];
 
 const EMPTY: CutBreakdownRow[] = [];
 
 export function CutBreakdownModal({
   jobNo,
-  item,
+  group,
   label,
   onClose,
 }: {
   jobNo: string;
-  /** The card id, or null for cuts without a card. */
-  item: number | null;
+  /** The line's cut_group: 'item:<id>', or 'material:<label>' for cuts without a card. */
+  group: string;
   label: string;
   onClose: () => void;
 }) {
-  const rows = useQuery(cutBreakdownQueryOptions(jobNo, item));
+  const rows = useQuery(cutBreakdownQueryOptions(jobNo, group));
   const data = rows.data ?? EMPTY;
   const total = data.reduce((sum, r) => sum + Number(r.kg), 0);
   const fire = data.reduce((sum, r) => sum + Number(r.fire_kg), 0);
@@ -87,7 +104,7 @@ export function CutBreakdownModal({
         <DataTable
           data={data}
           columns={COLUMNS}
-          getRowId={(r) => `${r.cnc_task}-${r.part}`}
+          getRowId={(r) => `${r.cnc_task}-${r.part}-${r.lot_id ?? 'x'}`}
           loading={rows.isFetching}
           striped
           verticalSpacing="xs"

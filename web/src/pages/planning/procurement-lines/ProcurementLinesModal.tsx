@@ -18,6 +18,7 @@ import {
   type DataTableColumn,
   type RowAction,
 } from '@/ui';
+import { formatNumber } from '@/lib/format';
 import uiClasses from '@/ui/ui.module.css';
 import { CutBreakdownModal } from './CutBreakdownModal';
 import {
@@ -31,6 +32,7 @@ import {
   formatPriceSource,
   fromPreviewLines,
   hasCutBreakdown,
+  cutFlagText,
   fromSavedLines,
   isFieldChanged,
   isLineChanged,
@@ -391,7 +393,7 @@ export function ProcurementLinesModal({
         {breakdown ? (
           <CutBreakdownModal
             jobNo={jobNo}
-            item={breakdown.item}
+            group={breakdown.cut_group ?? ''}
             label={breakdown.item_code || breakdown.item_description || 'Sac kartı yok'}
             onClose={() => setBreakdown(null)}
           />
@@ -465,12 +467,24 @@ function buildColumns(compare: ExcelCompare | null): DataTableColumn<EditLine>[]
             <span className={uiClasses.code}>{line.item_code || '–'}</span>
             <Group gap={4}>
               <BreakdownButton line={line} />
-              {line.from_cuts ? (
+              {line.cut_count != null ? (
                 <Text size="xs" c="dimmed">
-                  {`${line.cut_count ?? 0} kesim${line.fire_estimated ? ' · fire tahmini' : ''}`}
+                  {`${line.cut_count} kesim${line.fire_estimated ? ' · fire tahmini' : ''}`}
                 </Text>
               ) : null}
             </Group>
+            {line.flags?.length ? (
+              <Text size="xs" c="orange">
+                {[
+                  cutFlagText(line.flags?.filter((f) => f !== 'partly_priced')),
+                  line.flags?.includes('partly_priced') && line.unpriced_kg
+                    ? `${formatNumber(Number(line.unpriced_kg), 2)} kg fiyatsız`
+                    : '',
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </Text>
+            ) : null}
           </Stack>
         ) : (
           <span className={uiClasses.code}>{line.item_code || '–'}</span>

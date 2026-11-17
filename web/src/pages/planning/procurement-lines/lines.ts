@@ -31,10 +31,15 @@ export interface EditLine {
   order: number;
   price_source: string | null;
   price_date: string | null;
-  /** A plate card's kg from the job's finished cuts (preview); the breakdown shows them. */
+  /** A plate card's kg from the job's finished cuts (preview, or saved from one). */
   from_cuts?: boolean;
+  /** Its breakdown key (cut-breakdown ?group=). */
+  cut_group?: string | null;
   cut_count?: number | null;
   fire_estimated?: boolean;
+  /** Preview only: kg without a price, and the line's flags (see CutFlag). */
+  unpriced_kg?: string | null;
+  flags?: string[];
   /** Lines added in the modal have no snapshot. */
   orig?: LineSnapshot;
 }
@@ -78,6 +83,8 @@ export function fromSavedLines(lines: ProcurementLine[]): EditLine[] {
     order: line.order ?? idx,
     price_source: line.price_source ?? null,
     price_date: line.price_date ?? null,
+    from_cuts: line.source === 'cuts',
+    cut_group: line.cut_group || null,
   }));
 }
 
@@ -99,23 +106,33 @@ export function fromPreviewLines(preview: ProcurementLinePreview[]): EditLine[] 
     price_source: p.price_source ?? null,
     price_date: p.price_date ?? null,
     from_cuts: p.source === 'cuts',
+    cut_group: p.cut_group || null,
     cut_count: p.cut_count ?? null,
     fire_estimated: Boolean(p.fire_estimated),
+    unpriced_kg:
+      p.unpriced_kg != null && Number(p.unpriced_kg) > 0 ? String(p.unpriced_kg) : null,
+    flags: p.flags ?? [],
   }));
 }
 
 /**
- * Has the line a cut breakdown? Preview lines from cuts; saved lines that look
- * like one (a card, kg, no planning line), since saved lines keep no source.
+ * Has the line a cut breakdown? Only lines from cuts (preview, or saved from
+ * one, card-less ones too), never a manual kg line that only looks like one.
  */
 export function hasCutBreakdown(line: EditLine): boolean {
-  if (line.from_cuts) return true;
-  return (
-    line.id !== undefined &&
-    line.planning_request_item === null &&
-    line.item !== null &&
-    line.item_unit.toLowerCase() === 'kg'
-  );
+  return Boolean(line.from_cuts && line.cut_group);
+}
+
+/** Turkish notes for a cut line's / row's flags. */
+export const CUT_FLAG_LABELS: Record<string, string> = {
+  fire_unknown: 'fire bilinmiyor',
+  no_weight: 'ağırlıksız parça',
+  cut_no_weight: 'parça ağırlığı yok (sac kimseye yazılmadı)',
+  partly_priced: 'kısmen fiyatlı',
+};
+
+export function cutFlagText(flags: string[] | undefined): string {
+  return (flags ?? []).map((f) => CUT_FLAG_LABELS[f] || f).join(' · ');
 }
 
 /** snapshotOriginalLines */
@@ -197,6 +214,9 @@ export function linesForSubmit(lines: EditLine[]): ProcurementLineInput[] {
       unit_price: line.unit_price !== '' ? clampDecimals(line.unit_price, 6) : '0',
       planning_request_item: planningRequestItem || undefined,
       order: typeof line.order === 'number' ? line.order : idx,
+      ...(line.from_cuts && line.cut_group
+        ? { source: 'cuts' as const, cut_group: line.cut_group }
+        : {}),
     });
   });
   return payload;
