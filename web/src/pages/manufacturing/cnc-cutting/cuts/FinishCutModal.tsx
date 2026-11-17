@@ -35,7 +35,7 @@ import {
   StatusBadge,
   type DataTableColumn,
 } from '@/ui';
-import { pieceText, SHEETS_WAITING_FINISH } from './PlateSource';
+import { isOrderedLine, pieceText, SHEETS_WAITING_FINISH } from './PlateSource';
 
 // Finishing a cut ("Kesimi Bitir"). The operator enters the remnants the cut
 // left; none entered means it left none. On finish the backend issues the reserved
@@ -361,7 +361,9 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   const [card, setCard] = useState<string | null>(null);
   const remnants = useMemo(() => remnantInputs(rows, card), [rows, card]);
   // A cut on a plate line without a lot: the line's sheets picked here.
-  const lineId = !reservation && t?.plate_item ? t.plate_item.id : null;
+  // (Not a Talep Edilen Sac line: its sheets are reserved, never named here.)
+  const lineId =
+    !reservation && t?.plate_item && !isOrderedLine(t.plate_item) ? t.plate_item.id : null;
   const [picks, setPicks] = useState<Record<number, number>>({});
   const consumed = useMemo(() => (lineId ? consumedInputs(picks) : []), [lineId, picks]);
   const input = useMemo<ProcessInput>(
@@ -386,7 +388,7 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   const result = preview.data;
   // Talep Edilen Sac still on order: no finish until Mal kabul posts the sheets
   // (unless the line's received sheets are picked here).
-  const waiting = Number(t?.sheets_waiting || 0) > 0 && consumed.length === 0;
+  const waiting = Number(t?.sheets_waiting || 0) > 0;
   const previewError = preview.isError ? errorMessage(preview.error, 'Hesaplanamadı') : '';
 
   const save = async () => {

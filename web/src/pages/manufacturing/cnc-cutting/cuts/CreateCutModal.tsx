@@ -19,6 +19,7 @@ import { FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
 import { CutBasicFields, cutInput, cutSchema, EMPTY_CUT_FORM, useJobOrderChoices } from './cutForm';
 import { parsePartsFromText } from './partsPaste';
 import {
+  adetFollowsLot,
   EMPTY_PLATE_SOURCE,
   hasPlateSource,
   PlateSourceSection,
@@ -138,7 +139,7 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
         <CutBasicFields
           form={form}
           dimensionsHelp="Plaka boyutları (opsiyonel; stoktan sac seçilirse otomatik alınır)"
-          sheets={plate.piece ? plate.quantityUsed : null}
+          sheets={adetFollowsLot(plate) ? plate.quantityUsed : null}
         />
         <FileDropInput
           mt="sm"

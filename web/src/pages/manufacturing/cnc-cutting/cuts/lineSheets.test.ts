@@ -5,9 +5,20 @@ import type { PlanningItem } from '@/api/planning/planningItems';
 
 describe("a cut on a plate line and the line's received sheets", () => {
   it('sends the line and its lot together', () => {
-    const lot = { id: 7, item_code: 'S', width_mm: '1500', length_mm: '3000', available: 3 } as PieceChoice;
+    const lot = {
+      id: 7,
+      item_code: 'S',
+      width_mm: '1500',
+      length_mm: '3000',
+      available: 3,
+    } as PieceChoice;
     const line = { id: 42 } as PlanningItem;
-    const input = plateSourceInput({ ...EMPTY_PLATE_SOURCE, planningItem: line, piece: lot, quantityUsed: 2 });
+    const input = plateSourceInput({
+      ...EMPTY_PLATE_SOURCE,
+      planningItem: line,
+      piece: lot,
+      quantityUsed: 2,
+    });
     expect(input).toMatchObject({
       selected_piece_id: 7,
       planning_request_item_id: 42,

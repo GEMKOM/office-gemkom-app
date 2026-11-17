@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { plateSource, plateSourceText } from '../reports/parts-search/plateSource';
-import { EMPTY_PLATE_SOURCE, isOrderedLine, lineSizeText, plateSourceInput } from './PlateSource';
+import {
+  adetFollowsLot,
+  EMPTY_PLATE_SOURCE,
+  isOrderedLine,
+  lineSizeText,
+  plateSourceFromTask,
+  plateSourceInput,
+  samePlateSource,
+  type PieceChoice,
+} from './PlateSource';
+import type { CncTask } from '@/api/manufacturing/cncTasks';
 import type { PlanningItem } from '@/api/planning/planningItems';
 
 describe('Talep Edilen Sac', () => {
@@ -38,5 +48,36 @@ describe('Talep Edilen Sac', () => {
     expect(source.tooltip).toContain('2 sac');
     expect(plateSourceText(row)).toBe('10 mm ST 37-2 SAC (Sac bekleniyor)');
     expect(plateSource({ ...row, sheets_waiting: 0 }).badge?.label).toBe('Malzeme Bekliyor');
+  });
+
+  it("keeps a cut's reserved lots out of the form, and knows when the source changed", () => {
+    const task = {
+      key: 'CNC-1',
+      plate_item: { ...sized, ordered_line: true },
+      piece_reservations: [
+        { id: 1, piece: 81, quantity: 1, available_quantity: 1, piece_details: { id: 81 } },
+        { id: 2, piece: 82, quantity: 1, available_quantity: 1, piece_details: { id: 82 } },
+      ],
+    } as unknown as CncTask;
+    const opened = plateSourceFromTask(task);
+    expect(opened.piece).toBeNull();
+    expect(opened.reserved).toHaveLength(2);
+    expect(samePlateSource(opened, { ...opened })).toBe(true);
+    const lot = { id: 90, available: 2 } as PieceChoice;
+    const picked = { ...opened, piece: lot, quantityUsed: 1 };
+    expect(samePlateSource(opened, picked)).toBe(false);
+    // A lot given to a Talep cut by hand never changes its Adet.
+    expect(adetFollowsLot(picked)).toBe(false);
+    expect(adetFollowsLot({ ...EMPTY_PLATE_SOURCE, piece: lot, quantityUsed: 2 })).toBe(true);
+  });
+
+  it('flags a waiting cut whose sheets came in another size', () => {
+    const row = {
+      planning_request_item: 42,
+      plate_item_name: '10 mm ST 37-2 SAC',
+      sheets_waiting: 1,
+      plate_mismatch: [{ piece: 90 }],
+    };
+    expect(plateSource(row).badge).toEqual({ label: 'Farklı ölçüde geldi', color: 'red' });
   });
 });

@@ -473,12 +473,62 @@ it('edit keeps the plate source, saves with PATCH and updates pasted parts toget
   expect(body.get('name')).toBe('Kazan 2');
   expect(body.get('machine_fk')).toBe('3');
   expect(body.get('estimated_hours')).toBe('1.5');
-  // Every source key goes out so switching clears the others.
-  expect(body.get('selected_plate_id')).toBe('');
-  expect(body.get('selected_piece_id')).toBe('');
-  expect(body.get('planning_request_item_id')).toBe('12');
-  expect(body.get('mark_item_consumed')).toBe('false');
+  // The plate source was left alone: it isn't sent (a changed one sends every key).
+  expect(body.has('selected_plate_id')).toBe(false);
+  expect(body.has('selected_piece_id')).toBe(false);
+  expect(body.has('planning_request_item_id')).toBe(false);
+  expect(body.has('mark_item_consumed')).toBe(false);
   await waitFor(() => expect(location().has('cut')).toBe(false));
+});
+
+it('a Talep Edilen Sac cut holding two lots can be renamed and resized: its sheets are not resent', async () => {
+  const base = fetchMock.getMockImplementation()!;
+  const lot = (id: number) => ({
+    id,
+    piece: id,
+    quantity: 1,
+    available_quantity: 1,
+    piece_details: { id, item_code: '0100-20', width_mm: '1500.0', length_mm: '3000.0' },
+  });
+  fetchMock.mockImplementation((url, init) => {
+    const path = new URL(String(url), 'http://x').pathname;
+    if ((!init?.method || init.method === 'GET') && path === '/cnc_cutting/tasks/CNC-7/')
+      return json({
+        ...DETAIL,
+        quantity: 3,
+        plate_item: {
+          ...DETAIL.plate_item,
+          ordered_line: true,
+          piece_count: 5,
+          piece_width_mm: '1500.0',
+          piece_length_mm: '3000.0',
+          sheets_free: 0,
+        },
+        piece_reservations: [lot(81), lot(82)],
+        sheets_waiting: 1,
+        plate_mismatch: [
+          { piece: 90, width_mm: '1250.0', length_mm: '2500.0', available_quantity: 2 },
+        ],
+      });
+    return base(url, init);
+  });
+  renderPage('/planning/cnc-cutting/cuts/?cut=CNC-7&mode=edit');
+  const dialog = await screen.findByRole('dialog', { name: 'Kesim Düzenle' });
+  expect(await within(dialog).findByText(/Ayrılan saclar:/)).toBeInTheDocument();
+  expect(within(dialog).getByText('Sac bekleniyor: 1 sac')).toBeInTheDocument();
+  expect(within(dialog).getByText(/farklı ölçüde sac geldi/)).toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText(/^Kesim Adı/), { target: { value: 'Yeni ad' } });
+  fireEvent.change(within(dialog).getByLabelText(/^Adet/), { target: { value: '4' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Değişiklikleri Kaydet' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Kesim başarıyla güncellendi'));
+  const body = calls().find(
+    (c) => c.method === 'PATCH' && c.url.pathname === '/cnc_cutting/tasks/CNC-7/',
+  )!.body as FormData;
+  expect(body.get('name')).toBe('Yeni ad');
+  expect(body.get('quantity')).toBe('4');
+  expect(body.has('selected_piece_id')).toBe(false);
+  expect(body.has('quantity_used')).toBe(false);
+  expect(body.has('planning_request_item_id')).toBe(false);
 });
 
 it('a refused part delete shows the backend reason', async () => {

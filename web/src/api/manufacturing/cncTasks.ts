@@ -67,6 +67,14 @@ export interface CncPieceDetails {
 }
 
 /** Sheets of a lot the cut has set aside; issued when the warehouse processes it. */
+/** A lot of the cut's plate line in another size, with free sheets. */
+export interface CncPlateMismatch {
+  piece: number;
+  width_mm: string;
+  length_mm: string;
+  available_quantity: number;
+}
+
 export interface CncPieceReservation {
   id: number;
   piece: number;
@@ -115,6 +123,8 @@ export interface CncTask {
    * While above 0 the cut can't be started or finished ("Sac bekleniyor").
    */
   sheets_waiting?: number | null;
+  /** Waiting, and sheets of another size arrived for its line ("farklı ölçüde geldi"). */
+  plate_mismatch?: CncPlateMismatch[];
   // Warehouse processing (Ağırlık Düşüşü).
   processed_by_warehouse?: boolean | null;
   processed_warehouse_date?: string | null;

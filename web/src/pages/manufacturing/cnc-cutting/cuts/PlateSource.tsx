@@ -13,6 +13,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { useEffect, useState, type ReactNode } from 'react';
 import type {
   CncPieceDetails,
+  CncPieceReservation,
+  CncPlateMismatch,
   CncTask,
   CncTaskInput,
   RemnantChoice,
@@ -89,6 +91,8 @@ export interface PlateSourceValue {
   markConsumed: boolean;
   /** The cut is finished (its sheets are booked): its source is fixed until it is reopened. */
   locked: boolean;
+  /** Talep Edilen Sac: the sheets the backend reserved for the cut (shown, never sent). */
+  reserved?: CncPieceReservation[];
 }
 
 export const EMPTY_PLATE_SOURCE: PlateSourceValue = {
@@ -102,6 +106,16 @@ export const EMPTY_PLATE_SOURCE: PlateSourceValue = {
 
 /** The saved source from the GET payload (piece_reservations / plate_usage_records / plate_item). */
 export function plateSourceFromTask(task: CncTask): PlateSourceValue {
+  // A Talep Edilen Sac cut's sheets are reserved by the backend (one lot or several):
+  // the form shows them but keeps no lot of its own, so an edit never resends them.
+  if (isOrderedLine(task.plate_item) && !task.completion_date) {
+    return {
+      ...EMPTY_PLATE_SOURCE,
+      planningItem: task.plate_item ?? null,
+      markConsumed: Boolean(task.plate_item?.is_consumed),
+      reserved: task.piece_reservations ?? [],
+    };
+  }
   const reservation = task.piece_reservations?.[0] ?? null;
   const issue = task.piece_issues?.[0] ?? null;
   const usage = task.plate_usage_records?.[0] ?? null;
@@ -145,6 +159,22 @@ export function plateSourceInput(
   };
 }
 
+/** The plate source as the user left it equals the one the cut was opened with. */
+export function samePlateSource(a: PlateSourceValue, b: PlateSourceValue) {
+  return (
+    (a.piece?.id ?? null) === (b.piece?.id ?? null) &&
+    (a.remnant?.id ?? null) === (b.remnant?.id ?? null) &&
+    (a.planningItem?.id ?? null) === (b.planningItem?.id ?? null) &&
+    a.markConsumed === b.markConsumed &&
+    (a.piece || a.remnant ? a.quantityUsed === b.quantityUsed : true)
+  );
+}
+
+/** The cut's Adet follows the sheets taken from a stock lot (not on a Talep Edilen Sac line). */
+export function adetFollowsLot(value: PlateSourceValue) {
+  return Boolean(value.piece && !value.locked && !isOrderedLine(value.planningItem));
+}
+
 /** Has the cut a plate source? */
 export function hasPlateSource(value: PlateSourceValue) {
   return Boolean(value.piece || value.remnant || value.planningItem);
@@ -182,9 +212,16 @@ export interface PlateSourceSectionProps {
   onChange: (value: PlateSourceValue) => void;
   /** The saved cut's sheets still waiting for Mal kabul (edit modal). */
   sheetsWaiting?: number | null;
+  /** Lots of the cut's line that arrived in another size (edit modal). */
+  mismatch?: CncPlateMismatch[];
 }
 
-export function PlateSourceSection({ value, onChange, sheetsWaiting }: PlateSourceSectionProps) {
+export function PlateSourceSection({
+  value,
+  onChange,
+  sheetsWaiting,
+  mismatch,
+}: PlateSourceSectionProps) {
   const [picking, setPicking] = useState<'piece' | 'item' | 'ordered' | null>(null);
   const [quantityError, setQuantityError] = useState('');
   const { piece, remnant, planningItem, locked } = value;
@@ -314,16 +351,26 @@ export function PlateSourceSection({ value, onChange, sheetsWaiting }: PlateSour
         <OrderedLineInfo
           item={planningItem}
           sheetsWaiting={sheetsWaiting ?? null}
+          reserved={value.reserved ?? []}
+          mismatch={mismatch ?? []}
           lots={
-            <LineLots
-              planningItemId={planningItem.id}
-              selectedId={piece?.id ?? null}
-              hideEmpty
-              onPick={(lot) => {
-                setQuantityError('');
-                onChange({ ...value, piece: lot, remnant: null, quantityUsed: 1 });
-              }}
-            />
+            sheetsWaiting ? (
+              <LineLots
+                planningItemId={planningItem.id}
+                selectedId={piece?.id ?? null}
+                hideEmpty
+                pickLabel="Bu kesime ayır"
+                onPick={(lot) => {
+                  setQuantityError('');
+                  onChange({
+                    ...value,
+                    piece: lot,
+                    remnant: null,
+                    quantityUsed: Math.max(1, Math.min(lot.available ?? 1, sheetsWaiting)),
+                  });
+                }}
+              />
+            ) : null
           }
         />
       ) : null}
@@ -424,10 +471,14 @@ export function PlateSourceSection({ value, onChange, sheetsWaiting }: PlateSour
 function OrderedLineInfo({
   item,
   sheetsWaiting,
+  reserved,
+  mismatch,
   lots,
 }: {
   item: PlanningItem;
   sheetsWaiting: number | null;
+  reserved: CncPieceReservation[];
+  mismatch: CncPlateMismatch[];
   lots: ReactNode;
 }) {
   const free = item.sheets_free;
@@ -445,10 +496,24 @@ function OrderedLineInfo({
         kesime kendiliğinden ayrılır. Sac Mal Kabul&apos;den geçmeden kesim başlatılamaz ve
         bitirilemez.
       </Text>
+      {reserved.length > 0 ? (
+        <Text size="xs">
+          Ayrılan saclar:{' '}
+          {reserved.map((r) => `${pieceText(r.piece_details)} × ${r.quantity}`).join(' · ')}
+        </Text>
+      ) : null}
       {sheetsWaiting ? (
         <Badge color="orange" variant="light" leftSection={<FaIcon icon="fas fa-hourglass-half" />}>
           Sac bekleniyor: {sheetsWaiting} sac
         </Badge>
+      ) : null}
+      {mismatch.length > 0 ? (
+        <Text size="xs" c="red">
+          Bu kaleme farklı ölçüde sac geldi (
+          {mismatch.map((m) => `${sizeLabel(m)} · boş ${m.available_quantity}`).join(', ')}).
+          Aşağıdan bu kesime ayırabilir ya da doğru ölçüyü bekleyebilirsiniz; kesimin adedi ve
+          ölçüsü değişmez.
+        </Text>
       ) : null}
       {lots}
     </Stack>
@@ -618,12 +683,14 @@ export function LineLots({
   selectedId,
   onPick,
   hideEmpty = false,
+  pickLabel = 'Bu sacı kullan',
 }: {
   planningItemId: number;
   selectedId: number | null;
   onPick: (lot: PieceChoice) => void;
   /** Talep Edilen Sac: arrivals are reserved by themselves; say nothing while none came. */
   hideEmpty?: boolean;
+  pickLabel?: string;
 }) {
   const lots = useQuery(
     piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }),
@@ -664,7 +731,7 @@ export function LineLots({
                 disabled={free < 1 || !lot.warehouse_code}
                 onClick={() => onPick(pieceChoice(lot))}
               >
-                Bu sacı kullan
+                {pickLabel}
               </Button>
             )}
           </Group>

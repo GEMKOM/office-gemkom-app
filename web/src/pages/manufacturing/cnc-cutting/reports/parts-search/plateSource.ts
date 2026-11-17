@@ -17,6 +17,7 @@ export type PlateSourceRow = { id?: unknown } & Pick<
 > & {
     /** Cuts table only: Talep Edilen Sac sheets still waiting for Mal kabul. */
     sheets_waiting?: number | null;
+    plate_mismatch?: unknown[] | null;
   };
 
 /**
@@ -46,6 +47,13 @@ export function plateSource(row: PlateSourceRow): PlateSource {
   const waiting = Number(row.sheets_waiting || 0);
   if (row.planning_request_item && waiting > 0) {
     const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
+    if (row.plate_mismatch && row.plate_mismatch.length > 0) {
+      return {
+        name,
+        badge: { label: 'Farklı ölçüde geldi', color: 'red' },
+        tooltip: `${waiting} sac bekleniyor; bu kaleme farklı ölçüde sac geldi. Kesimi düzenleyip o sacı ayırın ya da doğru ölçüyü bekleyin.`,
+      };
+    }
     return {
       name,
       badge: { label: 'Sac bekleniyor', color: 'orange' },
