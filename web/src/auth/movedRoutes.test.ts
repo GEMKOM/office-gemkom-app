@@ -50,10 +50,10 @@ describe('moved pages', () => {
     }
   });
 
-  it('puts the moved pages under Planlama in the menu', () => {
+  it('puts each moved page in its new section of the menu (cutting under Planlama, stock under Depo)', () => {
     for (const [oldRoute, newRoute] of moved) {
       expect(findTrail(NAVIGATION_STRUCTURE, newRoute).at(-1)?.path).toBe(newRoute);
-      expect(findTrail(NAVIGATION_STRUCTURE, newRoute)[0]?.path).toBe('/planning');
+      expect(findTrail(NAVIGATION_STRUCTURE, newRoute)[0]?.path).toBe(`/${newRoute.split('/')[1]}`);
       expect(findTrail(NAVIGATION_STRUCTURE, oldRoute).map((s) => s.path)).not.toContain(oldRoute);
     }
   });
@@ -65,17 +65,35 @@ describe('moved pages', () => {
     expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning']);
     const planning = tree['/planning']!.children;
     expect(Object.keys(planning)).toEqual(['/planning/cnc-cutting']);
+    // A CNC planner also sees Sac Stoğu, the Depo page under CNC Kesim.
     expect(Object.keys(planning['/planning/cnc-cutting']!.children)).toEqual([
       '/planning/cnc-cutting/cuts',
+      '/planning/cnc-cutting/plate-stock',
     ]);
   });
 
-  it('a Fire Plakalar grant (retired page) opens Sac ve Boy Stoğu, which took its remnants', () => {
-    for (const grant of Object.keys(RETIRED_ROUTES)) {
+  it('an old Stok Kartları grant shows Ana Stok under Depo › Stoklar', () => {
+    legacy.grantedPages = new Set(['/planning/inventory/cards']);
+    const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
+    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/warehouse']);
+    expect(Object.keys(tree['/warehouse']!.children)).toEqual(['/warehouse#stoklar']);
+    expect(Object.keys(tree['/warehouse']!.children['/warehouse#stoklar']!.children)).toEqual([
+      '/warehouse/stock',
+    ]);
+  });
+
+  it('a Fire Plakalar grant (retired page) opens Sac Stoğu, which took its remnants', () => {
+    for (const grant of ['/planning/cnc-cutting/remnants', '/manufacturing/cnc-cutting/remnants']) {
+      expect(RETIRED_ROUTES[grant]).toBe('/warehouse/plate-stock');
       legacy.grantedPages = new Set([grant]);
       const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
-      expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/warehouse']);
-      expect(Object.keys(tree['/warehouse']!.children)).toEqual(['/warehouse/pieces']);
+      expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning', '/warehouse']);
+      expect(Object.keys(tree['/warehouse']!.children['/warehouse#stoklar']!.children)).toEqual([
+        '/warehouse/plate-stock',
+      ]);
+      expect(Object.keys(tree['/planning']!.children['/planning/cnc-cutting']!.children)).toEqual([
+        '/planning/cnc-cutting/plate-stock',
+      ]);
     }
     expect(
       findTrail(NAVIGATION_STRUCTURE, '/planning/cnc-cutting/remnants').map((s) => s.path),

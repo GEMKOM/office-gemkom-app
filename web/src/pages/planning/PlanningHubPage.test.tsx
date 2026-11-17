@@ -1,7 +1,6 @@
 import { authedFetch } from '@/auth/authService';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
-import { InventoryHubPage } from './InventoryHubPage';
 import { PlanningHubPage } from './PlanningHubPage';
 
 vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
@@ -145,7 +144,7 @@ it('leads with what waits on planning: its tasks, the request flow and the reque
     within(within(waiting).getByRole('navigation'))
       .getAllByRole('link')
       .map((link) => link.textContent),
-  ).toEqual(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları', 'Stok']);
+  ).toEqual(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları']);
 
   // The active tasks first, then the steps in the order a request passes them.
   const figure = (name: RegExp) => within(waiting).getByRole('link', { name });
@@ -290,15 +289,4 @@ it('a cutting planner sees the CNC lane and its load, nothing else', async () =>
   expect(new Set(calls().map((url) => url.pathname))).toEqual(
     new Set(['/cnc_cutting/tasks/', '/machines/', '/cnc_cutting/planning/list/']),
   );
-});
-
-it('Stok: counts stock cards and active equipment', async () => {
-  renderWithProviders(<InventoryHubPage />, { route: '/planning/inventory/' });
-
-  const card = (title: string) =>
-    screen.getByRole('heading', { level: 3, name: title }).closest('article')!;
-  await waitFor(() => expect(card('Stok Kartları')).toHaveTextContent('1.240 stok kartı'));
-  await waitFor(() => expect(card('Ekipman')).toHaveTextContent('87 aktif ekipman'));
-  const items = calls().find((url) => url.pathname === '/procurement/items/')!;
-  expect(items.searchParams.get('item_type')).toBe('stock');
 });

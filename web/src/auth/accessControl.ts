@@ -77,13 +77,21 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
   '/warehouse/production-slips': ['/warehouse'],
   '/warehouse/transfers': ['/warehouse'],
   '/warehouse/goods-receipts': ['/warehouse'],
-  // Sac ve boy stoğu holds the old Fire Plakalar too (retired, its URLs forward
-  // there): whoever could open that page (CNC planning) sees the pieces.
-  '/warehouse/pieces': [
+  // Ana Stok and Ekipman moved here from Planlama › Stok: their old grants
+  // still open them (movedRoutes.ts), and the warehouse grant opens them too.
+  '/warehouse/stock': ['/warehouse'],
+  '/warehouse/equipment': ['/warehouse'],
+  // Sac Stoğu holds the old Fire Plakalar too (retired, its URLs forward
+  // there): whoever could open that page (CNC planning) sees the plates.
+  '/warehouse/plate-stock': [
     '/warehouse',
     '/planning/cnc-cutting/remnants',
     '/manufacturing/cnc-cutting/remnants',
   ],
+  '/warehouse/bar-stock': ['/warehouse'],
+  // The same pages under Planlama: CNC Kesim / Lineer Kesim planners see them.
+  '/planning/cnc-cutting/plate-stock': ['/warehouse/plate-stock', '/planning/cnc-cutting/cuts'],
+  '/planning/linear-cutting/bar-stock': ['/warehouse/bar-stock', '/planning/linear-cutting/cuts'],
   '/warehouse/mikro-comparison': ['/warehouse'],
   '/warehouse/piece-counts': ['/warehouse'],
   '/warehouse/weight-reduction': ['/warehouse'],

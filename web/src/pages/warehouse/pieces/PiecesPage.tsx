@@ -62,30 +62,16 @@ const MIKRO_COMPARISON = '/warehouse/mikro-comparison';
 const URL_DEFAULTS = {
   view: 'pieces',
   search: '',
-  kind: '',
   place: '',
   job_no: '',
   item: '',
   piece: '',
   page: '1',
 };
-type FilterKeys = 'search' | 'kind' | 'place' | 'job_no';
-
-const KIND_OPTIONS = [
-  { value: 'plate', label: 'Sac' },
-  { value: 'boy', label: 'Boy (profil, boru, çubuk)' },
-];
+type FilterKeys = 'search' | 'place' | 'job_no';
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'text', key: 'search', label: 'Arama', placeholder: 'Kod, ad, döküm no, iş no…' },
-  {
-    type: 'select',
-    key: 'kind',
-    label: 'Tür',
-    placeholder: 'Tümü',
-    searchable: false,
-    options: KIND_OPTIONS,
-  },
   {
     type: 'select',
     key: 'place',
@@ -379,7 +365,7 @@ function WeightPreviewLine({
   );
 }
 
-function NewPiecesModal({ onClose }: { onClose: () => void }) {
+function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKind }) {
   const invalidate = useInvalidatePieces();
   const [cardId, setCardId] = useState<string | null>(null);
   const [width, setWidth] = useState<string | number>('');
@@ -436,10 +422,10 @@ function NewPiecesModal({ onClose }: { onClose: () => void }) {
         <SelectRemote
           label="Stok kartı"
           aria-label="Stok kartı"
-          placeholder="Sac / boy kartı: kod veya ad ile ara…"
+          placeholder={`${KIND_LABELS[kind]} kartı: kod veya ad ile ara…`}
           minSearchLength={2}
-          queryKey={pieceKeys.cardSearch}
-          search={searchPieceCards}
+          queryKey={[...pieceKeys.cardSearch, kind]}
+          search={(term, signal) => searchPieceCards(term, signal, kind)}
           value={cardId}
           onChange={setCardId}
         />
@@ -724,7 +710,48 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
 const EMPTY_PIECES: MaterialPiece[] = [];
 const EMPTY_CARDS: PieceCard[] = [];
 /** Sac & boy stoğu: plate and boy material in pieces, by lot or by stock card. */
-export function PiecesPage() {
+/** Where a stock page sits: Depo, or the planning cutting section of its kind. */
+interface StockPageProps {
+  kind: PieceKind;
+  title: string;
+  subtitle: string;
+  backTo: string;
+}
+
+const PAGE_TEXT: Record<PieceKind, { title: string; subtitle: string }> = {
+  plate: {
+    title: 'Sac Stoğu',
+    subtitle: 'Sac parçaları ve fire saclar: stok kartına bağlı, ölçüleri, ağırlıkları ve yerleri',
+  },
+  boy: {
+    title: 'Boy Stoğu',
+    subtitle:
+      'Profil, boru ve çubuk parçaları: stok kartına bağlı, boyları, ağırlıkları ve yerleri',
+  },
+};
+
+/** Depo › Stoklar › Sac Stoğu. */
+export function WarehousePlateStockPage() {
+  return <PiecesPage kind="plate" {...PAGE_TEXT.plate} backTo="/warehouse" />;
+}
+
+/** Depo › Stoklar › Boy Stoğu. */
+export function WarehouseBarStockPage() {
+  return <PiecesPage kind="boy" {...PAGE_TEXT.boy} backTo="/warehouse" />;
+}
+
+/** Planlama › CNC Kesim › Sac Stoğu: the same page under the planning URL. */
+export function CncPlateStockPage() {
+  return <PiecesPage kind="plate" {...PAGE_TEXT.plate} backTo="/planning/cnc-cutting" />;
+}
+
+/** Planlama › Lineer Kesim › Boy Stoğu: the same page under the planning URL. */
+export function LinearBarStockPage() {
+  return <PiecesPage kind="boy" {...PAGE_TEXT.boy} backTo="/planning/linear-cutting" />;
+}
+
+/** Plate or boy pieces: one kind per page (Sac Stoğu / Boy Stoğu). */
+export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const navigate = useNavigate();
   useEffect(() => {
@@ -733,11 +760,10 @@ export function PiecesPage() {
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
   const [creating, setCreating] = useState(false);
   const view = values.view === 'cards' ? 'cards' : 'pieces';
-  const kind = values.kind === 'plate' || values.kind === 'boy' ? values.kind : '';
 
-  // Every card that holds pieces, for the band's figures and the Kartlar view.
+  // Every card of this kind that holds pieces, for the band's figures and the Kartlar view.
   const cards = useQuery({
-    ...pieceCardsQueryOptions({ in_stock: 'true', page_size: 1000 }),
+    ...pieceCardsQueryOptions({ in_stock: 'true', kind, page_size: 1000 }),
     placeholderData: keepPreviousData,
   });
   const list = useQuery({
@@ -745,7 +771,7 @@ export function PiecesPage() {
       page,
       page_size: PAGE_SIZE,
       ...(values.search ? { search: values.search } : {}),
-      ...(kind ? { kind } : {}),
+      kind,
       ...(values.place === 'FASON'
         ? { at_supplier: 'true' as const }
         : values.place
@@ -777,8 +803,7 @@ export function PiecesPage() {
     const term = values.search.trim().toLocaleUpperCase('tr');
     return allCards.filter(
       (c) =>
-        (!kind || c.kind === kind) &&
-        (!term || `${c.code} ${c.name}`.toLocaleUpperCase('tr').includes(term)),
+        c.kind === kind && (!term || `${c.code} ${c.name}`.toLocaleUpperCase('tr').includes(term)),
     );
   }, [allCards, kind, values.search]);
 
@@ -801,25 +826,24 @@ export function PiecesPage() {
   const filters = (
     <FilterBar
       inline
-      filters={view === 'pieces' ? filterConfig : filterConfig.slice(0, 2)}
+      filters={view === 'pieces' ? filterConfig : filterConfig.slice(0, 1)}
       values={{
         search: values.search,
-        kind: values.kind,
         place: values.place,
         job_no: values.job_no,
       }}
       onApply={(next) => apply({ ...next, page: '1' })}
-      onClear={() => apply({ search: '', kind: '', place: '', job_no: '', item: '', page: '1' })}
+      onClear={() => apply({ search: '', place: '', job_no: '', item: '', page: '1' })}
     />
   );
 
   return (
     <>
       <PageHeader
-        title="Sac ve Boy Stoğu"
-        subtitle="Sac, profil, boru ve çubuk: stok kartına bağlı parçalar, ölçüleri ve yerleri"
-        icon="layer-group"
-        backTo="/warehouse"
+        title={title}
+        subtitle={subtitle}
+        icon={kind === 'plate' ? 'layer-group' : 'ruler-horizontal'}
+        backTo={backTo}
         stats={[
           { id: 'cards', label: 'Kart', value: cards.isSuccess ? figures.cards : '–' },
           { id: 'pieces', label: 'Parça', value: cards.isSuccess ? figures.pieces : '–' },
@@ -897,7 +921,7 @@ export function PiecesPage() {
           emptyMessage="Parçası olan kart yok"
         />
       )}
-      {creating ? <NewPiecesModal onClose={() => setCreating(false)} /> : null}
+      {creating ? <NewPiecesModal kind={kind} onClose={() => setCreating(false)} /> : null}
       {open ? (
         <PieceDetail key={open.id} piece={open} onClose={() => apply({ piece: '' })} />
       ) : null}

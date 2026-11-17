@@ -18,6 +18,9 @@ export const MOVED_ROUTES: Record<string, string> = {
   '/manufacturing/linear-cutting/cuts': '/planning/linear-cutting/cuts',
   '/manufacturing/linear-cutting/tasks': '/planning/linear-cutting/tasks',
   '/manufacturing/linear-cutting/capacity/planning': '/planning/linear-cutting/capacity',
+  // The stock pages moved from Planlama › Stok to Depo › Stoklar.
+  '/planning/inventory/cards': '/warehouse/stock',
+  '/planning/inventory/equipment': '/warehouse/equipment',
 };
 
 // Retired pages, old route -> the page that does their work now. Forward
@@ -25,9 +28,17 @@ export const MOVED_ROUTES: Record<string, string> = {
 // inherits the old Fire Plakalar grants in accessControl.ts). Fire Plakalar's
 // remnant plates live on as plate pieces.
 export const RETIRED_ROUTES: Record<string, string> = {
-  '/planning/cnc-cutting/remnants': '/warehouse/pieces',
-  '/manufacturing/cnc-cutting/remnants': '/warehouse/pieces',
+  '/planning/cnc-cutting/remnants': '/warehouse/plate-stock',
+  '/manufacturing/cnc-cutting/remnants': '/warehouse/plate-stock',
+  // Planlama › Stok held Stok Kartları and Ekipman, both now in Depo.
+  '/planning/inventory': '/warehouse',
 };
+
+// Sac ve Boy Stoğu split into Sac Stoğu and Boy Stoğu (the same page, one kind
+// each). Its old URL forwards by ?kind= (router.tsx); boy only when asked for.
+export const PIECES_ROUTE = '/warehouse/pieces';
+export const PLATE_STOCK_ROUTE = '/warehouse/plate-stock';
+export const BAR_STOCK_ROUTE = '/warehouse/bar-stock';
 
 // Hubs that held one card, old route -> that card's page. Forward only: a grant
 // on the hub never opened the page, so it does not open it now either.

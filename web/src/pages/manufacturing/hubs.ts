@@ -409,10 +409,10 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
       },
       {
         title: 'Sac Stoğu',
-        description: 'Kesime ayrılabilecek saclar ve fire saclar (Sac ve Boy Stoğu)',
+        description: 'Kesime ayrılabilecek saclar ve fire saclar',
         icon: 'fas fa-layer-group',
         iconColor: 'info',
-        link: '/warehouse/pieces/?kind=plate',
+        link: '/planning/cnc-cutting/plate-stock',
       },
       {
         title: 'Raporlar',
@@ -476,6 +476,13 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         icon: 'fas fa-calendar-alt',
         iconColor: 'primary',
         link: '/planning/linear-cutting/capacity',
+      },
+      {
+        title: 'Boy Stoğu',
+        description: 'Profil, boru ve çubuk parçaları: boyları, ağırlıkları ve yerleri',
+        icon: 'fas fa-ruler-horizontal',
+        iconColor: 'info',
+        link: '/planning/linear-cutting/bar-stock',
       },
     ],
   },

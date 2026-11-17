@@ -44,20 +44,20 @@ import css from './PlanningHubPage.module.css';
 
 // /planning: one lane per area in the İmalat hub's lane view. First what
 // waits on planning (the active tasks and the steps a request passes, next to
-// the requests, materials, cost lines and stock pages), then CNC and linear
+// the requests, materials and cost lines), then CNC and linear
 // cutting, then Projeler with project planning and the task templates. A lane,
 // a figure and its request exist only when the user can open the page behind.
 
 const REQUESTS = '/planning/department-requests';
 const ITEMS = '/planning/items';
 const PROCUREMENT_LINES = '/planning/procurement-lines';
-const INVENTORY = '/planning/inventory';
 const PROJECTS = '/planning/projects';
 const PURCHASE_CREATE = '/procurement/purchase-requests/create';
 const CNC = '/planning/cnc-cutting';
 const CNC_CUTS = '/planning/cnc-cutting/cuts';
 const CNC_CAPACITY = '/planning/cnc-cutting/capacity';
-const PIECES = '/warehouse/pieces';
+const PLATE_STOCK = '/planning/cnc-cutting/plate-stock';
+const BAR_STOCK = '/planning/linear-cutting/bar-stock';
 const CNC_DASHBOARD = '/planning/cnc-cutting/dashboard';
 const LINEAR = '/planning/linear-cutting';
 const LINEAR_TASKS = '/planning/linear-cutting/tasks';
@@ -66,17 +66,16 @@ const TRACKING = '/projects/project-tracking';
 const TRACKING_OPEN = `${TRACKING}?status=active&status=on_hold&ordering=target_completion_date`;
 
 const LINKS = {
-  // Requests, materials, cost lines and stock: one group on the hub.
+  // Requests, materials and cost lines: one group on the hub (stock is in Depo).
   waiting: [
     { label: 'Departman Talepleri', link: REQUESTS },
     { label: 'Planlama Kalemleri', link: ITEMS },
     { label: 'Malzeme Maliyeti Satırları', link: PROCUREMENT_LINES },
-    { label: 'Stok', link: INVENTORY },
   ],
   cnc: [
     { label: 'Kesimler', link: CNC_CUTS },
     { label: 'Kapasite Planlayıcı', link: CNC_CAPACITY },
-    { label: 'Sac Stoğu', link: PIECES },
+    { label: 'Sac Stoğu', link: PLATE_STOCK },
     { label: 'Raporlar', link: '/planning/cnc-cutting/reports' },
     { label: 'Dashboard', link: CNC_DASHBOARD },
   ],
@@ -84,6 +83,7 @@ const LINKS = {
     { label: 'Kesimler', link: '/planning/linear-cutting/cuts' },
     { label: 'Görevler', link: LINEAR_TASKS },
     { label: 'Kapasite Planlayıcı', link: LINEAR_CAPACITY },
+    { label: 'Boy Stoğu', link: BAR_STOCK },
     { label: 'Dashboard', link: '/planning/linear-cutting/dashboard' },
   ],
   // Projeler holds project planning and the task templates.
@@ -311,7 +311,7 @@ function CncLane() {
   const shown = links.length > 0;
   const canCuts = hasRouteAccess(CNC_CUTS);
   const canPlan = hasRouteAccess(CNC_CAPACITY);
-  const canRemnants = shown && hasRouteAccess(PIECES);
+  const canRemnants = shown && hasRouteAccess(PLATE_STOCK);
   // Running timers, as İmalat shows machining's: only with the dashboard.
   const live = shown && hasRouteAccess(CNC_DASHBOARD);
   const timers = useQuery({
@@ -407,7 +407,7 @@ function CncLane() {
             id: 'remnants',
             label: 'Stoktaki fire sac partisi',
             value: countValue(remnants),
-            link: `${PIECES}?kind=plate`,
+            link: PLATE_STOCK,
           },
         ]
       : []),
