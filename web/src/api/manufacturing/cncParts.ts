@@ -20,6 +20,8 @@ export interface CncPartSearchRow {
   plate_item_delivered_quantity?: string | number | null;
   plate_item_is_delivered?: boolean | null;
   has_remnant_plate?: boolean | null;
+  /** The cut takes its sheets from piece stock. */
+  has_piece?: boolean | null;
   planned_start_ms?: number | null;
   planned_end_ms?: number | null;
   completion_date?: string | number | null;

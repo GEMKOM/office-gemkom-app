@@ -18,7 +18,7 @@ import {
   openLinearTasksPageQueryOptions,
   planningRequestCountQueryOptions,
   procurementLinesPendingCountQueryOptions,
-  remnantCountQueryOptions,
+  remnantPieceCountQueryOptions,
   requestablePlanningItemCountQueryOptions,
   unplannedCncCutCountQueryOptions,
 } from '@/api/planning/hubs';
@@ -57,7 +57,7 @@ const PURCHASE_CREATE = '/procurement/purchase-requests/create';
 const CNC = '/planning/cnc-cutting';
 const CNC_CUTS = '/planning/cnc-cutting/cuts';
 const CNC_CAPACITY = '/planning/cnc-cutting/capacity';
-const REMNANTS = '/planning/cnc-cutting/remnants';
+const PIECES = '/warehouse/pieces';
 const CNC_DASHBOARD = '/planning/cnc-cutting/dashboard';
 const LINEAR = '/planning/linear-cutting';
 const LINEAR_TASKS = '/planning/linear-cutting/tasks';
@@ -76,7 +76,7 @@ const LINKS = {
   cnc: [
     { label: 'Kesimler', link: CNC_CUTS },
     { label: 'Kapasite Planlayıcı', link: CNC_CAPACITY },
-    { label: 'Fire Plakalar', link: REMNANTS },
+    { label: 'Sac Stoğu', link: PIECES },
     { label: 'Raporlar', link: '/planning/cnc-cutting/reports' },
     { label: 'Dashboard', link: CNC_DASHBOARD },
   ],
@@ -311,7 +311,7 @@ function CncLane() {
   const shown = links.length > 0;
   const canCuts = hasRouteAccess(CNC_CUTS);
   const canPlan = hasRouteAccess(CNC_CAPACITY);
-  const canRemnants = shown && hasRouteAccess(REMNANTS);
+  const canRemnants = shown && hasRouteAccess(PIECES);
   // Running timers, as İmalat shows machining's: only with the dashboard.
   const live = shown && hasRouteAccess(CNC_DASHBOARD);
   const timers = useQuery({
@@ -321,8 +321,7 @@ function CncLane() {
   });
   const open = useQuery({ ...pendingCncCutCountQueryOptions(), enabled: canCuts });
   const unplanned = useQuery({ ...unplannedCncCutCountQueryOptions(), enabled: canPlan });
-  const remnants = useQuery({ ...remnantCountQueryOptions(), enabled: canRemnants });
-  const unused = useQuery({ ...remnantCountQueryOptions(true), enabled: canRemnants });
+  const remnants = useQuery({ ...remnantPieceCountQueryOptions(), enabled: canRemnants });
   const machines = useQuery({ ...machinesQueryOptions({ used_in: 'cutting' }), enabled: canPlan });
   const list = (machines.data?.results ?? []).filter((m) => m.is_active !== false);
   // One in-plan list per machine, as the planner reads it.
@@ -406,11 +405,9 @@ function CncLane() {
       ? [
           {
             id: 'remnants',
-            label: 'Kullanılabilir fire plaka',
-            hint:
-              unused.data !== undefined ? `${formatNumber(unused.data)} kullanılmamış` : undefined,
+            label: 'Stoktaki fire sac partisi',
             value: countValue(remnants),
-            link: REMNANTS,
+            link: `${PIECES}?kind=plate`,
           },
         ]
       : []),

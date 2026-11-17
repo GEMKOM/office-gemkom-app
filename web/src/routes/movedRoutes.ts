@@ -10,7 +10,6 @@ export const MOVED_ROUTES: Record<string, string> = {
   '/manufacturing/cnc-cutting': '/planning/cnc-cutting',
   '/manufacturing/cnc-cutting/dashboard': '/planning/cnc-cutting/dashboard',
   '/manufacturing/cnc-cutting/cuts': '/planning/cnc-cutting/cuts',
-  '/manufacturing/cnc-cutting/remnants': '/planning/cnc-cutting/remnants',
   '/manufacturing/cnc-cutting/reports': '/planning/cnc-cutting/reports',
   '/manufacturing/cnc-cutting/reports/parts-search': '/planning/cnc-cutting/reports/parts-search',
   '/manufacturing/cnc-cutting/capacity/planning': '/planning/cnc-cutting/capacity',
@@ -19,6 +18,15 @@ export const MOVED_ROUTES: Record<string, string> = {
   '/manufacturing/linear-cutting/cuts': '/planning/linear-cutting/cuts',
   '/manufacturing/linear-cutting/tasks': '/planning/linear-cutting/tasks',
   '/manufacturing/linear-cutting/capacity/planning': '/planning/linear-cutting/capacity',
+};
+
+// Retired pages, old route -> the page that does their work now. Forward
+// only; the page they forward to says who may open it (Sac ve Boy Stoğu
+// inherits the old Fire Plakalar grants in accessControl.ts). Fire Plakalar's
+// remnant plates live on as plate pieces.
+export const RETIRED_ROUTES: Record<string, string> = {
+  '/planning/cnc-cutting/remnants': '/warehouse/pieces',
+  '/manufacturing/cnc-cutting/remnants': '/warehouse/pieces',
 };
 
 // Hubs that held one card, old route -> that card's page. Forward only: a grant

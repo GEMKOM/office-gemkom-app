@@ -2,7 +2,6 @@ import { queryOptions } from '@tanstack/react-query';
 import { apiFetch, apiUpload, cleanParams, type QueryParams } from '../client';
 import type { PlanningItem } from '../planning/planningItems';
 import { extractResults, toPaginated } from '../types';
-import type { RemnantPlate } from './remnants';
 
 // Port of apis/cnc_cutting/crud.js, parts.js and files.js (the CNC Kesimler
 // page): CNC cutting tasks ("kesim"), their parts and files.
@@ -29,14 +28,61 @@ export interface CncTaskFile {
   [key: string]: unknown;
 }
 
-/** A remnant plate as a cut's plate source (available_quantity: what is left of it). */
-export type RemnantChoice = RemnantPlate & { available_quantity?: number | string | null };
+/**
+ * An old remnant plate (cnc_cutting.RemnantPlate) as a cut's plate source; cuts
+ * from before piece stock still carry one. New cuts take sheets from piece stock.
+ */
+export interface RemnantChoice {
+  id: number;
+  thickness_mm?: string | number | null;
+  dimensions?: string | null;
+  quantity?: number | string | null;
+  /** quantity minus what cuts have used. */
+  available_quantity?: number | string | null;
+  material?: string | null;
+  heat_number?: string | null;
+  [key: string]: unknown;
+}
 
 export interface PlateUsageRecord {
   remnant_plate: number;
   remnant_plate_details?: RemnantChoice | null;
   quantity_used?: number | string | null;
   [key: string]: unknown;
+}
+
+/** A plate lot as the cut sees it (warehouse.MaterialPiece, trimmed). */
+export interface CncPieceDetails {
+  id: number;
+  item: number;
+  item_code: string;
+  item_name: string;
+  width_mm: string | null;
+  length_mm: string;
+  heat_number: string;
+  warehouse_code: string | null;
+  job_no: string;
+  unit_kg: string | null;
+  quantity?: number;
+}
+
+/** Sheets of a lot the cut has set aside; issued when the warehouse processes it. */
+export interface CncPieceReservation {
+  id: number;
+  piece: number;
+  quantity: number;
+  /** Free sheets of the lot for this cut (its own reservation counted back in). */
+  available_quantity: number;
+  piece_details: CncPieceDetails;
+}
+
+export interface CncPieceIssue {
+  id: number;
+  piece: number;
+  quantity: number;
+  unit_kg: string | null;
+  created_at: string;
+  piece_details: CncPieceDetails;
 }
 
 export interface CncTask {
@@ -62,6 +108,19 @@ export interface CncTask {
   plate_item_delivered_quantity?: Decimal | null;
   plate_item_is_delivered?: boolean | null;
   has_remnant_plate?: boolean | null;
+  /** The cut takes sheets from piece stock. */
+  has_piece?: boolean | null;
+  // Warehouse processing (Ağırlık Düşüşü).
+  processed_by_warehouse?: boolean | null;
+  processed_warehouse_date?: string | null;
+  processed_by_username?: string | null;
+  consumed_kg?: string | null;
+  consumed_estimated?: boolean | null;
+  parts_kg?: string | null;
+  remnant_kg?: string | null;
+  fire_kg?: string | null;
+  /** The operator entered the cut's remnants at finish, or confirmed it left none. */
+  remnants_entered?: boolean | null;
   // Detail payload.
   parts?: CncPart[];
   files?: CncTaskFile[];
@@ -69,6 +128,9 @@ export interface CncTask {
   plate_usage_records?: PlateUsageRecord[];
   /** The planning-item link. */
   plate_item?: PlanningItem | null;
+  piece_reservations?: CncPieceReservation[];
+  piece_issues?: CncPieceIssue[];
+  remnant_pieces?: CncPieceDetails[];
   [key: string]: unknown;
 }
 
@@ -83,6 +145,7 @@ export type CncTasksParams = QueryParams & {
   machine_fk?: string;
   thickness_mm?: string;
   completion_date__isnull?: 'true' | 'false';
+  processed_by_warehouse?: 'true' | 'false';
 };
 
 export const cncTaskKeys = {
@@ -128,8 +191,12 @@ export interface CncTaskInput {
   selected_plate_id: number | null;
   quantity_used: number | null;
   planning_request_item_id: number | null;
+  /** A plate lot from piece stock; quantity_used sheets of it are reserved. */
+  selected_piece_id: number | null;
   /** Sent only with a planning item. */
   mark_item_consumed?: boolean;
+  /** Leave the plate source as it is (a processed cut's source is fixed). */
+  keepSource?: boolean;
 }
 
 export interface CncTaskCreateInput extends CncTaskInput {
@@ -160,6 +227,7 @@ export function createCncTask(input: CncTaskCreateInput) {
   appendIf(form, 'selected_plate_id', input.selected_plate_id);
   appendIf(form, 'quantity_used', input.quantity_used);
   appendIf(form, 'planning_request_item_id', input.planning_request_item_id);
+  appendIf(form, 'selected_piece_id', input.selected_piece_id);
   appendConsumed(form, input.mark_item_consumed);
   for (const file of input.files) form.append('files', file);
   if (input.parts_data.length) form.append('parts_data', JSON.stringify(input.parts_data));
@@ -167,8 +235,9 @@ export function createCncTask(input: CncTaskCreateInput) {
 }
 
 /**
- * updateCncTask: multipart PATCH. Both plate-source keys always go out ('' clears)
- * so switching sources works; machine, hours and quantity only when set (legacy).
+ * updateCncTask: multipart PATCH. The plate-source keys always go out ('' clears)
+ * so switching sources works, unless keepSource; machine, hours and quantity
+ * only when set (legacy).
  */
 export function updateCncTask(key: string, input: CncTaskInput) {
   const form = new FormData();
@@ -178,24 +247,122 @@ export function updateCncTask(key: string, input: CncTaskInput) {
   appendIf(form, 'machine_fk', input.machine_fk);
   appendIf(form, 'estimated_hours', input.estimated_hours);
   appendIf(form, 'quantity', input.quantity);
-  form.append(
-    'selected_plate_id',
-    input.selected_plate_id === null ? '' : String(input.selected_plate_id),
-  );
-  appendIf(form, 'quantity_used', input.quantity_used);
-  form.append(
-    'planning_request_item_id',
-    input.planning_request_item_id === null ? '' : String(input.planning_request_item_id),
-  );
-  appendConsumed(form, input.mark_item_consumed);
+  if (!input.keepSource) {
+    const id = (value: number | null) => (value === null ? '' : String(value));
+    form.append('selected_plate_id', id(input.selected_plate_id));
+    appendIf(form, 'quantity_used', input.quantity_used);
+    form.append('planning_request_item_id', id(input.planning_request_item_id));
+    form.append('selected_piece_id', id(input.selected_piece_id));
+    appendConsumed(form, input.mark_item_consumed);
+  }
   return apiFetch<CncTask>(taskPath(key), { method: 'PATCH', body: form });
+}
+
+// ---- finishing a cut: its sheets are booked, remnants back to stock ----
+
+export interface ProcessConsumedInput {
+  piece: number;
+  quantity: number;
+}
+
+export interface ProcessRemnantInput {
+  width_mm: string;
+  length_mm: string;
+  quantity: number;
+  item?: number | null;
+  heat_number?: string;
+}
+
+/** Preview input. consumed omitted = the lot the cut reserved; [] = no lot (kg estimated from the cut). */
+export interface ProcessInput {
+  consumed?: ProcessConsumedInput[];
+  remnants: ProcessRemnantInput[];
+}
+
+export interface ProcessPart {
+  id: number;
+  job_no: string;
+  image_no: string | null;
+  position_no: string | null;
+  weight_kg: string | null;
+  quantity: number | null;
+  /** The part's kg over all sheets of the cut. */
+  parts_kg: string;
+  /** Its share of the fire, by weight. */
+  fire_kg: string;
+  /** What Mikro deducts for it: parts_kg + fire_kg. */
+  deduct_kg: string;
+}
+
+export interface ProcessResult {
+  key: string;
+  sheets: number;
+  consumed: {
+    piece: number;
+    item: number;
+    item_code: string;
+    item_name: string;
+    width_mm: string | null;
+    length_mm: string;
+    heat_number: string;
+    quantity: number;
+    unit_kg: string | null;
+    total_kg: string | null;
+  }[];
+  consumed_kg: string | null;
+  consumed_estimated: boolean;
+  parts_kg: string;
+  parts_without_weight: number;
+  remnants: {
+    item: number;
+    item_code: string;
+    width_mm: string;
+    length_mm: string;
+    quantity: number;
+    heat_number: string;
+    /** false: shorter than 500 mm on its short side; it is fire, not stock. */
+    kept: boolean;
+    unit_kg: string | null;
+    total_kg: string | null;
+  }[];
+  remnant_kg: string | null;
+  fire_kg: string | null;
+  parts: ProcessPart[];
+}
+
+/** What finishing the cut would book; nothing is written. */
+export function previewCncFinish(key: string, input: ProcessInput) {
+  return apiFetch<ProcessResult>(`${taskPath(key)}finish-preview/`, { method: 'POST', body: input });
+}
+
+/**
+ * Finish the cut: its reserved sheets leave stock, the remnants come back as
+ * pieces, the fire is stored. remnants, or no_remnant to confirm it left none.
+ */
+export function finishCncTask(
+  key: string,
+  input: { remnants: ProcessRemnantInput[]; no_remnant: boolean },
+) {
+  return apiFetch<{ status: string; booked?: ProcessResult }>(`${BASE}/tasks/mark-completed/`, {
+    method: 'POST',
+    body: { key, ...input },
+  });
+}
+
+/** Ağırlık Düşüşü: the cut's kg was deducted in Mikro (the stock was booked at finish). */
+export function markCncTaskDeducted(key: string) {
+  return apiFetch<unknown>(`${BASE}/tasks/warehouse-process/`, { method: 'POST', body: { key } });
 }
 
 export function deleteCncTask(key: string) {
   return apiFetch<void>(taskPath(key), { method: 'DELETE' });
 }
 
-/** apis/tasks.js markTaskCompleted / unmarkTaskCompleted with module 'cnc_cutting'. */
+/**
+ * apis/tasks.js markTaskCompleted / unmarkTaskCompleted with module 'cnc_cutting'.
+ * Reopening a cut puts its sheets back and takes its remnants out of stock;
+ * finishing one goes through finishCncTask (with its remnants).
+ */
 export function setCncTaskCompleted(key: string, completed: boolean) {
   return apiFetch<unknown>(`${BASE}/tasks/${completed ? 'mark' : 'unmark'}-completed/`, {
     method: 'POST',

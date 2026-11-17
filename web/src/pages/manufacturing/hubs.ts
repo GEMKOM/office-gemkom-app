@@ -408,11 +408,11 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         figure: 'cncPendingCuts',
       },
       {
-        title: 'Fire Plakalar',
-        description: 'CNC kesim fire plakalarını görüntüleyin ve yönetin',
+        title: 'Sac Stoğu',
+        description: 'Kesime ayrılabilecek saclar ve fire saclar (Sac ve Boy Stoğu)',
         icon: 'fas fa-layer-group',
         iconColor: 'info',
-        link: '/planning/cnc-cutting/remnants/',
+        link: '/warehouse/pieces/?kind=plate',
       },
       {
         title: 'Raporlar',

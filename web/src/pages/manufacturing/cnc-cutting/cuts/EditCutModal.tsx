@@ -89,7 +89,11 @@ export function EditCutModal({ cutKey, onClose }: { cutKey: string; onClose: () 
         <>
           <PlateSourceSection value={plate} onChange={setPlate} />
           <ModalSection title="Temel Bilgiler" icon="fas fa-info-circle">
-            <CutBasicFields form={form} dimensionsHelp="Plaka boyutları (opsiyonel)" />
+            <CutBasicFields
+              form={form}
+              dimensionsHelp="Plaka boyutları (opsiyonel)"
+              sheets={plate.piece && !plate.locked ? plate.quantityUsed : null}
+            />
           </ModalSection>
           <PartsManager taskKey={cutKey} parts={loaded.parts ?? []} />
           <ModalSection>

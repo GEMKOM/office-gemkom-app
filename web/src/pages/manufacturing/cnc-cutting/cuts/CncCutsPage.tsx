@@ -31,6 +31,7 @@ import { CreateCutModal } from './CreateCutModal';
 import { useCuttingMachineOptions } from './cutForm';
 import { CutDetailsModal } from './CutDetailsModal';
 import { EditCutModal } from './EditCutModal';
+import { FinishCutModal } from './FinishCutModal';
 
 // Applied filters, page and sort live in the URL under the legacy
 // applyUrlFilters names; its hyphenated aliases are rewritten on load.
@@ -224,13 +225,24 @@ export function CncCutsPage() {
   }, [cutParam, deepLinked.isError]);
 
   // ---- status toggle (legacy editable-status button) ----
+  // Finishing asks for the cut's remnants (FinishCutModal): its sheets are
+  // booked then. Reopening puts them back.
+  const [finishing, setFinishing] = useState<string | null>(null);
   const toggleStatus = async (row: CncTask) => {
     const completed = Boolean(row.completion_date);
+    if (!completed) {
+      setFinishing(row.key);
+      return;
+    }
     const ok = await confirm({
       title: 'Durum Değişikliği Onayı',
       icon: 'fas fa-exchange-alt',
       message: 'Durumu değiştirmek istediğinize emin misiniz?',
-      description: 'Kesim durumu güncellenecektir.',
+      description: `Kesim yeniden açılır: kullanılan saclar partisine geri döner, kesimden dönen fire saclar stoktan çıkar.${
+        row.processed_by_warehouse
+          ? " Kesim Mikro'ya işlendi olarak işaretliydi: işaret kalkar, Mikro'daki düşüm ayrıca düzeltilmeli."
+          : ''
+      }`,
       details: (
         <span>
           <strong>Kesim:</strong> {row.key}
@@ -470,6 +482,16 @@ export function CncCutsPage() {
       />
 
       {creating ? <CreateCutModal onClose={() => setCreating(false)} /> : null}
+      {finishing ? (
+        <FinishCutModal
+          key={finishing}
+          cutKey={finishing}
+          onClose={() => {
+            setFinishing(null);
+            void reload();
+          }}
+        />
+      ) : null}
       {cutParam && !deepLinked.isError ? (
         mode === 'edit' ? (
           <EditCutModal key={`edit-${cutParam}`} cutKey={cutParam} onClose={() => closeCut()} />

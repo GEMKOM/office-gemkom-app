@@ -11,6 +11,7 @@ import {
   Text,
   TextInput,
   Textarea,
+  Tooltip,
 } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
@@ -166,7 +167,28 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
     render: (row) => (row.kind ? <KindBadge kind={row.kind} /> : null),
   },
   { key: 'size', header: 'Ölçü', render: (row) => <span style={mono}>{sizeLabel(row)}</span> },
-  { key: 'quantity', header: 'Adet', align: 'right', render: (row) => row.quantity },
+  {
+    key: 'quantity',
+    header: 'Adet',
+    align: 'right',
+    render: (row) =>
+      row.reserved_quantity ? (
+        <Tooltip
+          label={`CNC kesimine ayrılmış: ${(row.reservations ?? [])
+            .map((r) => `${r.cnc_task} (${r.quantity})`)
+            .join(', ')}`}
+        >
+          <span>
+            {row.quantity}{' '}
+            <Text span size="xs" c="orange.8">
+              ({row.reserved_quantity} ayrılmış)
+            </Text>
+          </span>
+        </Tooltip>
+      ) : (
+        row.quantity
+      ),
+  },
   {
     key: 'unit_kg',
     header: 'Birim',

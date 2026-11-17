@@ -1,5 +1,5 @@
 import { filterNavigationByAccess, hasRouteAccess } from '@/auth/accessControl';
-import { MOVED_ROUTES, REPLACED_HUB_ROUTES } from '@/routes/movedRoutes';
+import { MOVED_ROUTES, REPLACED_HUB_ROUTES, RETIRED_ROUTES } from '@/routes/movedRoutes';
 import { NAVIGATION_STRUCTURE } from '@/shell/navigationStructure';
 import migratedRoutes from '@/routes/migrated-routes.json';
 import { findTrail } from '@/shell/navModel';
@@ -28,9 +28,9 @@ describe('moved pages', () => {
   });
 
   it('opens no other moved page through one grant', () => {
-    legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/remnants']);
+    legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/cuts']);
     const open = moved.filter(([, newRoute]) => hasRouteAccess(newRoute)).map(([, n]) => n);
-    expect(open).toEqual(['/planning/cnc-cutting/remnants']);
+    expect(open).toEqual(['/planning/cnc-cutting/cuts']);
   });
 
   it('keeps a capacity hub grant from opening the planner it now forwards to', () => {
@@ -40,7 +40,11 @@ describe('moved pages', () => {
   });
 
   it('serves every new URL and keeps every old one forwarding', () => {
-    for (const [oldRoute, newRoute] of [...moved, ...Object.entries(REPLACED_HUB_ROUTES)]) {
+    for (const [oldRoute, newRoute] of [
+      ...moved,
+      ...Object.entries(REPLACED_HUB_ROUTES),
+      ...Object.entries(RETIRED_ROUTES),
+    ]) {
       expect(migratedRoutes).toContain(oldRoute);
       expect(migratedRoutes).toContain(newRoute);
     }
@@ -55,16 +59,26 @@ describe('moved pages', () => {
   });
 
   it('shows the menu entries an old grant opens', () => {
-    legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/remnants']);
+    legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/cuts']);
     const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
     // '/', '/quiz' and '/general' are open to everyone.
-    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning', '/warehouse']);
+    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning']);
     const planning = tree['/planning']!.children;
     expect(Object.keys(planning)).toEqual(['/planning/cnc-cutting']);
     expect(Object.keys(planning['/planning/cnc-cutting']!.children)).toEqual([
-      '/planning/cnc-cutting/remnants',
+      '/planning/cnc-cutting/cuts',
     ]);
-    // Sac ve Boy Stoğu holds the remnants too, so the same grant opens it.
-    expect(Object.keys(tree['/warehouse']!.children)).toEqual(['/warehouse/pieces']);
+  });
+
+  it('a Fire Plakalar grant (retired page) opens Sac ve Boy Stoğu, which took its remnants', () => {
+    for (const grant of Object.keys(RETIRED_ROUTES)) {
+      legacy.grantedPages = new Set([grant]);
+      const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
+      expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/warehouse']);
+      expect(Object.keys(tree['/warehouse']!.children)).toEqual(['/warehouse/pieces']);
+    }
+    expect(
+      findTrail(NAVIGATION_STRUCTURE, '/planning/cnc-cutting/remnants').map((s) => s.path),
+    ).not.toContain('/planning/cnc-cutting/remnants');
   });
 });
