@@ -7,16 +7,15 @@ import { formatNumber } from '@/lib/format';
 import type { ItemRow } from './logic';
 
 // The size of a plate / boy planning line: a standard sheet size or bar
-// length, a custom size, or "any size" (supplier's choice). With a size the
-// quantity follows from the pieces (backend weight for kg, length for metre,
-// count for adet); the backend computes the same when it saves.
+// length, or a custom size, and a count. The quantity follows from the pieces
+// (backend weight for kg, length for metre, count for adet); the backend
+// computes the same when it saves. Bars also show their kg (the card's kg/m).
 
 type Patch = Partial<Pick<ItemRow, 'size_mode' | 'piece_width' | 'piece_length' | 'piece_count'>>;
 
 const MODES: { value: SizeMode; label: string }[] = [
   { value: 'standard', label: 'Standart ölçü' },
   { value: 'custom', label: 'Özel ölçü' },
-  { value: 'any', label: 'Herhangi ölçü' },
 ];
 
 export function RowSizeEditor({
@@ -53,7 +52,7 @@ export function RowSizeEditor({
         length_mm: String(length),
         quantity: 1,
       }),
-    enabled: complete && unit === 'kg' && itemId !== null,
+    enabled: complete && itemId !== null && (unit === 'kg' || kind === 'boy'),
     staleTime: Infinity,
   });
 
@@ -70,6 +69,11 @@ export function RowSizeEditor({
         : unit === 'adet'
           ? count
           : null;
+  // A bar line in metres / adet: its kg too (null without the card's kg/m).
+  const barKg =
+    complete && kind === 'boy' && unit !== 'kg' && unitKg !== null
+      ? Math.round(unitKg * count * 100) / 100
+      : null;
   const current = Number(row.quantity) || 0;
   useEffect(() => {
     if (computed !== null && computed !== current) onQuantity(computed);
@@ -169,15 +173,14 @@ export function RowSizeEditor({
         />
       ) : null}
       <Text size="xs" c="dimmed">
-        {mode === 'any'
-          ? 'Tedarikçi ölçüyü seçer; miktarı kg olarak girin.'
-          : computed !== null
-            ? `= ${formatNumber(computed, unit === 'adet' ? 0 : 2)} ${unit}`
-            : complete && unit === 'kg' && weight.data && unitKg === null
-              ? `Kartta ağırlık bilgisi yok (${weight.data.missing}); miktarı kg olarak girin.`
-              : !mode
-                ? 'Sac / boy kalemleri ölçüyle istenir.'
-                : ''}
+        {computed !== null
+          ? `= ${formatNumber(computed, unit === 'adet' ? 0 : 2)} ${unit}` +
+            (barKg !== null ? ` · ${formatNumber(barKg, 2)} kg` : '')
+          : complete && unit === 'kg' && weight.data && unitKg === null
+            ? `Kartta ağırlık bilgisi yok (${weight.data.missing}); miktarı kg olarak girin.`
+            : mode === 'standard' || mode === 'custom'
+              ? ''
+              : 'Sac / boy kalemleri ölçü ve adetle istenir.'}
       </Text>
     </Group>
   );

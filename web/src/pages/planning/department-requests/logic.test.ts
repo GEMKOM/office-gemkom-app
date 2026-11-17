@@ -281,6 +281,7 @@ describe('Excel import', () => {
     );
     expect(result.items).toEqual([
       {
+        line: 2,
         item_code: 'K-1',
         item_name: 'Vida',
         job_no: 'J1',
@@ -337,10 +338,12 @@ describe('plate / boy sizes', () => {
   it('a new plate line must say its size; an older line without one is left alone', () => {
     expect(sizeOf(plate())).toEqual({
       ok: false,
-      error: '0100 0000 0010 000 000: ölçü seçin (standart, özel ya da herhangi ölçü)',
+      error: '0100 0000 0010 000 000: ölçü (standart ya da özel) ve adet girin',
     });
     expect(sizeOf(plate({ id: 5 }))).toEqual({ ok: true, value: {} });
-    expect(sizeOf(plate({ size_mode: 'any' }))).toEqual({ ok: true, value: { size_mode: 'any' } });
+    // "Any size" is retired: refused on a new line, left alone on an old one.
+    expect(sizeOf(plate({ size_mode: 'any' })).ok).toBe(false);
+    expect(sizeOf(plate({ id: 5, size_mode: 'any' }))).toEqual({ ok: true, value: {} });
   });
 
   it('sends the size and checks it', () => {
@@ -382,8 +385,19 @@ describe('plate / boy sizes', () => {
         piece_count: 3,
       },
     });
-    const built = buildItems([plate({ size_mode: 'any', quantity: 600 })]);
-    expect(built.ok && built.value[0]).toMatchObject({ size_mode: 'any', quantity: 600 });
+    expect(buildItems([plate({ size_mode: 'any', quantity: 600 })]).ok).toBe(false);
     expect(buildItems([plate()]).ok).toBe(false);
+  });
+});
+
+describe('Excel import of plate / bar rows', () => {
+  it('names the refused rows by their line in the file', async () => {
+    const { pieceRowsText } = await import('./ExcelImportModal');
+    expect(
+      pieceRowsText([
+        { line: 4, item_code: '0100 0000 0010 000 000' } as never,
+        { line: 7, item_code: '0010 0114 0015 000 000' } as never,
+      ]),
+    ).toBe('Satır 4 (0100 0000 0010 000 000), Satır 7 (0010 0114 0015 000 000)');
   });
 });
