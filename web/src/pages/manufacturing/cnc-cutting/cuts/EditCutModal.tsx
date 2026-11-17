@@ -87,7 +87,11 @@ export function EditCutModal({ cutKey, onClose }: { cutKey: string; onClose: () 
     >
       {loaded ? (
         <>
-          <PlateSourceSection value={plate} onChange={setPlate} />
+          <PlateSourceSection
+            value={plate}
+            onChange={setPlate}
+            sheetsWaiting={loaded.sheets_waiting ?? null}
+          />
           <ModalSection title="Temel Bilgiler" icon="fas fa-info-circle">
             <CutBasicFields
               form={form}

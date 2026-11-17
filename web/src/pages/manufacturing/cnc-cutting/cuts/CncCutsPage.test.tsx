@@ -380,6 +380,7 @@ it('create needs a plate source and a part, then posts the multipart body', asyn
   const itemCall = calls().find((c) => c.url.pathname === '/planning/items/')!;
   expect(Object.fromEntries(itemCall.url.searchParams)).toEqual({
     is_plate: 'true',
+    sized: 'false',
     is_consumed: 'false',
     mine: 'true',
     fields: 'simple',

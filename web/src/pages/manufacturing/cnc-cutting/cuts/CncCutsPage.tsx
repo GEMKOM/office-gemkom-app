@@ -27,6 +27,7 @@ import {
   type RowAction,
 } from '@/ui';
 import { plateSource, plateSourceText } from '../reports/parts-search/plateSource';
+import { SHEETS_WAITING_FINISH } from './PlateSource';
 import { CreateCutModal } from './CreateCutModal';
 import { useCuttingMachineOptions } from './cutForm';
 import { CutDetailsModal } from './CutDetailsModal';
@@ -230,6 +231,10 @@ export function CncCutsPage() {
   const [finishing, setFinishing] = useState<string | null>(null);
   const toggleStatus = async (row: CncTask) => {
     const completed = Boolean(row.completion_date);
+    if (!completed && Number(row.sheets_waiting || 0) > 0) {
+      notify.warning(SHEETS_WAITING_FINISH);
+      return;
+    }
     if (!completed) {
       setFinishing(row.key);
       return;

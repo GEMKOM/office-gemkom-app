@@ -110,6 +110,11 @@ export interface CncTask {
   has_remnant_plate?: boolean | null;
   /** The cut takes sheets from piece stock. */
   has_piece?: boolean | null;
+  /**
+   * Talep Edilen Sac: sheets the cut still waits for from Mal kabul (0 = none).
+   * While above 0 the cut can't be started or finished ("Sac bekleniyor").
+   */
+  sheets_waiting?: number | null;
   // Warehouse processing (Ağırlık Düşüşü).
   processed_by_warehouse?: boolean | null;
   processed_warehouse_date?: string | null;
@@ -332,7 +337,10 @@ export interface ProcessResult {
 
 /** What finishing the cut would book; nothing is written. */
 export function previewCncFinish(key: string, input: ProcessInput) {
-  return apiFetch<ProcessResult>(`${taskPath(key)}finish-preview/`, { method: 'POST', body: input });
+  return apiFetch<ProcessResult>(`${taskPath(key)}finish-preview/`, {
+    method: 'POST',
+    body: input,
+  });
 }
 
 /**
@@ -343,7 +351,11 @@ export function previewCncFinish(key: string, input: ProcessInput) {
  */
 export function finishCncTask(
   key: string,
-  input: { remnants: ProcessRemnantInput[]; no_remnant: boolean; consumed?: ProcessConsumedInput[] },
+  input: {
+    remnants: ProcessRemnantInput[];
+    no_remnant: boolean;
+    consumed?: ProcessConsumedInput[];
+  },
 ) {
   return apiFetch<{ status: string; booked?: ProcessResult }>(`${BASE}/tasks/mark-completed/`, {
     method: 'POST',

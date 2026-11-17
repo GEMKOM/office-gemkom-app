@@ -10,7 +10,7 @@ import {
   Text,
 } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type {
   CncPieceDetails,
   CncTask,
@@ -57,6 +57,23 @@ import {
 // the warehouse processes it (Ağırlık Düşüşü). Cuts made before piece stock
 // may still show their old remnant plate (fire plaka); it can be kept or
 // replaced, not picked anew.
+
+/** Talep Edilen Sac: the cut can't start or finish before its sheets pass Mal kabul. */
+export const SHEETS_WAITING_FINISH =
+  "Bu kesimin sacı henüz Mal Kabul'den geçmedi; sac gelince bitirilebilir.";
+
+/** A sized plate line (size + sheet count): its cuts take the line's own sheets. */
+export function isOrderedLine(item: PlanningItem | null | undefined) {
+  if (!item) return false;
+  if (item.ordered_line !== undefined) return item.ordered_line;
+  return Boolean(item.piece_count && item.piece_width_mm && item.piece_length_mm);
+}
+
+const mm = (value: unknown) => formatNumber(Number(value), 0);
+
+export function lineSizeText(item: PlanningItem) {
+  return `${mm(item.piece_width_mm)} × ${mm(item.piece_length_mm)} mm`;
+}
 
 /** A plate lot as a plate source (available: its free sheets for this cut). */
 export interface PieceChoice extends CncPieceDetails {
@@ -163,10 +180,12 @@ function deliveryText(item: PlanningItem) {
 export interface PlateSourceSectionProps {
   value: PlateSourceValue;
   onChange: (value: PlateSourceValue) => void;
+  /** The saved cut's sheets still waiting for Mal kabul (edit modal). */
+  sheetsWaiting?: number | null;
 }
 
-export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps) {
-  const [picking, setPicking] = useState<'piece' | 'item' | null>(null);
+export function PlateSourceSection({ value, onChange, sheetsWaiting }: PlateSourceSectionProps) {
+  const [picking, setPicking] = useState<'piece' | 'item' | 'ordered' | null>(null);
   const [quantityError, setQuantityError] = useState('');
   const { piece, remnant, planningItem, locked } = value;
   const available = availableOf(value);
@@ -192,6 +211,7 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
     : '';
   const delivery = planningItem ? deliveryText(planningItem) : null;
   const usageCount = planningItem?.cnc_cuts_count ?? 0;
+  const ordered = isOrderedLine(planningItem);
 
   if (locked) {
     return (
@@ -228,10 +248,18 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
         </Button>
         <Button
           variant="outline"
+          color="grape"
+          leftSection={<FaIcon icon="fas fa-truck-loading" />}
+          onClick={() => setPicking('ordered')}
+        >
+          Talep Edilen Sac Seç
+        </Button>
+        <Button
+          variant="outline"
           leftSection={<FaIcon icon="fas fa-box-open" />}
           onClick={() => setPicking('item')}
         >
-          {planningItem ? 'Plaka Kalemi Değiştir' : 'Plaka Kalemi Seç'}
+          {planningItem && !ordered ? 'Plaka Kalemi Değiştir' : 'Plaka Kalemi Seç'}
         </Button>
         {piece ? (
           <Group gap={4}>
@@ -277,12 +305,30 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
         ) : null}
       </Group>
       <Text size="xs" c="dimmed" mb="xs">
-        Her kesim için stoktan sac veya plaka kalemi seçilmelidir; malzeme, kalınlık ve ölçü
-        seçilen kaynaktan otomatik alınır. Stoktan seçilen saclar kesime ayrılır ve depo kesimi
-        işleyince stoktan düşer.
+        Her kesim için stoktan sac veya plaka kalemi seçilmelidir; malzeme, kalınlık ve ölçü seçilen
+        kaynaktan otomatik alınır. Stoktan seçilen saclar kesime ayrılır ve depo kesimi işleyince
+        stoktan düşer.
       </Text>
 
-      {planningItem && delivery ? (
+      {planningItem && ordered ? (
+        <OrderedLineInfo
+          item={planningItem}
+          sheetsWaiting={sheetsWaiting ?? null}
+          lots={
+            <LineLots
+              planningItemId={planningItem.id}
+              selectedId={piece?.id ?? null}
+              hideEmpty
+              onPick={(lot) => {
+                setQuantityError('');
+                onChange({ ...value, piece: lot, remnant: null, quantityUsed: 1 });
+              }}
+            />
+          }
+        />
+      ) : null}
+
+      {planningItem && delivery && !ordered ? (
         <Stack gap={4} mb="xs">
           <Text size="xs">
             {usageCount > 0
@@ -343,6 +389,17 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
           }}
         />
       ) : null}
+      {picking === 'ordered' ? (
+        <OrderedLinePickerModal
+          onClose={() => setPicking(null)}
+          onPick={(item) => {
+            setQuantityError('');
+            onChange({ ...EMPTY_PLATE_SOURCE, planningItem: { ...item, ordered_line: true } });
+            setPicking(null);
+            notify.success('Talep edilen sac seçildi');
+          }}
+        />
+      ) : null}
       {picking === 'item' ? (
         <PlanningItemPickerModal
           onClose={() => setPicking(null)}
@@ -362,6 +419,195 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
   );
 }
 
+// ---- Talep Edilen Sac: a sized plate line's sheets ----
+
+function OrderedLineInfo({
+  item,
+  sheetsWaiting,
+  lots,
+}: {
+  item: PlanningItem;
+  sheetsWaiting: number | null;
+  lots: ReactNode;
+}) {
+  const free = item.sheets_free;
+  return (
+    <Stack gap={4} mb="xs">
+      <Text size="xs">
+        Talep: {item.piece_count ?? '-'} sac · {lineSizeText(item)}
+        {item.sheets_received !== undefined && item.sheets_received !== null
+          ? ` · Mal Kabul'den geçen: ${item.sheets_received}`
+          : ''}
+        {free !== undefined && free !== null ? ` · boş: ${free}` : ''}
+      </Text>
+      <Text size="xs" c="dimmed">
+        Kesimin adedi kadar sac bu kalemden ayrılır; ölçü ve kalınlık kalemden alınır. Gelen saclar
+        kesime kendiliğinden ayrılır. Sac Mal Kabul&apos;den geçmeden kesim başlatılamaz ve
+        bitirilemez.
+      </Text>
+      {sheetsWaiting ? (
+        <Badge color="orange" variant="light" leftSection={<FaIcon icon="fas fa-hourglass-half" />}>
+          Sac bekleniyor: {sheetsWaiting} sac
+        </Badge>
+      ) : null}
+      {lots}
+    </Stack>
+  );
+}
+
+const ORDERED_COLUMNS: DataTableColumn<PlanningItem>[] = [
+  {
+    key: 'item_code',
+    header: 'Sac',
+    width: '28%',
+    render: (r) => (
+      <Stack gap={0}>
+        <Text size="sm" fw={600}>
+          {r.item_code}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {r.item_name}
+        </Text>
+      </Stack>
+    ),
+  },
+  { key: 'piece_width_mm', header: 'Ölçü', width: '14%', render: (r) => lineSizeText(r) },
+  { key: 'job_no', header: 'İş Emri', width: '10%' },
+  {
+    key: 'piece_count',
+    header: 'Talep',
+    width: '8%',
+    render: (r) => `${r.piece_count ?? '-'} sac`,
+  },
+  {
+    key: 'sheets_received',
+    header: 'Gelen',
+    width: '8%',
+    render: (r) => String(r.sheets_received ?? 0),
+  },
+  {
+    key: 'cnc_cuts_count',
+    header: 'Kesimde',
+    width: '8%',
+    render: (r) => String(r.cnc_cuts_count ?? 0),
+  },
+  {
+    key: 'sheets_free',
+    header: 'Boş',
+    width: '8%',
+    render: (r) => (
+      <StatusBadge color={(r.sheets_free ?? 0) > 0 ? 'green' : 'grey'}>
+        {String(r.sheets_free ?? 0)}
+      </StatusBadge>
+    ),
+  },
+  { key: 'planning_request_number', header: 'Talep No', width: '12%' },
+];
+
+type OrderedFilters = { job_no: string; search: string };
+const EMPTY_ORDERED_FILTERS: OrderedFilters = { job_no: '', search: '' };
+const ORDERED_FILTERS: FilterConfig<keyof OrderedFilters>[] = [
+  {
+    type: 'text',
+    key: 'job_no',
+    label: 'İş Emri No',
+    placeholder: 'örn. 270-01',
+    suggestions: 'jobOrders',
+  },
+  { type: 'text', key: 'search', label: 'Kart / Kalınlık', placeholder: 'örn. 10 mm' },
+];
+const EMPTY_ORDERED: PlanningItem[] = [];
+
+/** "Talep Edilen Sac Seç": sized plate lines, whether their sheets arrived or not. */
+export function OrderedLinePickerModal({
+  onClose,
+  onPick,
+}: {
+  onClose: () => void;
+  onPick: (item: PlanningItem) => void;
+}) {
+  const [filters, setFilters] = useState<OrderedFilters>(EMPTY_ORDERED_FILTERS);
+  const [page, setPage] = useState(1);
+  const params: PlanningItemsParams = {
+    is_plate: 'true',
+    sized: 'true',
+    is_consumed: 'false',
+    fields: 'simple',
+    ordering: '-id',
+    page,
+    page_size: 20,
+    job_no: filters.job_no.trim() || undefined,
+    search: filters.search.trim() || undefined,
+  };
+  const list = useQuery({
+    ...planningItemsQueryOptions(params),
+    placeholderData: keepPreviousData,
+  });
+  useEffect(() => {
+    if (list.isError) notify.error('Talep edilen saclar yüklenirken hata oluştu');
+  }, [list.isError, list.errorUpdatedAt]);
+
+  const rowActions = (): RowAction<PlanningItem>[] => [
+    {
+      key: 'select',
+      label: 'Seç',
+      icon: 'fas fa-check',
+      color: 'success',
+      onClick: (row) => {
+        if ((row.sheets_free ?? 0) < 1) {
+          notify.warning('Bu kalemin bütün sacları kesimlere ayrılmış.');
+          return;
+        }
+        onPick(row);
+      },
+    },
+  ];
+
+  return (
+    <Modal opened onClose={onClose} size="xl" withCloseButton={false} classNames={modalClassNames}>
+      <ModalHeader title="Talep Edilen Sac Seç" icon="fas fa-truck-loading" />
+      <ModalBody>
+        <ModalSection title="Ölçülü sac talepleri" icon="fas fa-table">
+          <DataTable
+            title="Siparişteki ve gelen saclar"
+            filters={
+              <FilterBar
+                inline
+                filters={ORDERED_FILTERS}
+                values={filters}
+                onApply={(next) => {
+                  setPage(1);
+                  setFilters(next);
+                }}
+                onClear={() => {
+                  setPage(1);
+                  setFilters(EMPTY_ORDERED_FILTERS);
+                }}
+              />
+            }
+            data={list.data?.results ?? EMPTY_ORDERED}
+            columns={ORDERED_COLUMNS}
+            getRowId={(row) => String(row.id)}
+            loading={list.isFetching}
+            pagination={{ page, pageSize: 20, total: list.data?.count ?? 0, onPageChange: setPage }}
+            rowActions={rowActions}
+            emptyMessage="Ölçülü sac talebi bulunamadı"
+          />
+          <Text size="xs" c="dimmed" mt={4}>
+            Henüz gelmemiş sac için de kesim planlanabilir; kesim, sac Mal Kabul&apos;den geçince
+            başlatılabilir.
+          </Text>
+        </ModalSection>
+        <Group justify="flex-end" mt="md">
+          <Button variant="default" onClick={onClose} leftSection={<FaIcon icon="fas fa-times" />}>
+            İptal
+          </Button>
+        </Group>
+      </ModalBody>
+    </Modal>
+  );
+}
+
 // ---- The sheets received for a plaka kalemi ----
 
 const EMPTY_LINE_LOTS: MaterialPiece[] = [];
@@ -371,10 +617,13 @@ export function LineLots({
   planningItemId,
   selectedId,
   onPick,
+  hideEmpty = false,
 }: {
   planningItemId: number;
   selectedId: number | null;
   onPick: (lot: PieceChoice) => void;
+  /** Talep Edilen Sac: arrivals are reserved by themselves; say nothing while none came. */
+  hideEmpty?: boolean;
 }) {
   const lots = useQuery(
     piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }),
@@ -382,6 +631,7 @@ export function LineLots({
   const rows = lots.data?.results ?? EMPTY_LINE_LOTS;
   if (lots.isLoading) return null;
   if (rows.length === 0) {
+    if (hideEmpty) return null;
     return (
       <Text size="xs" c="dimmed">
         Bu kaleme mal kabulde henüz sac girilmedi. Sac gelince kesimi düzenleyip seçebilir ya da
@@ -434,7 +684,8 @@ const PIECE_FILTERS: FilterConfig<keyof PieceFilters>[] = [
   { type: 'text', key: 'thickness_mm', label: 'Kalınlık (mm)', placeholder: 'örn. 10' },
 ];
 
-const kgText = (value: string | null) => (value === null ? '-' : `${formatNumber(Number(value), 2)} kg`);
+const kgText = (value: string | null) =>
+  value === null ? '-' : `${formatNumber(Number(value), 2)} kg`;
 
 const PIECE_COLUMNS: DataTableColumn<MaterialPiece>[] = [
   {
@@ -648,6 +899,8 @@ export function PlanningItemPickerModal({
   // Unconsumed plate lines of the user's own planning requests (superusers: all).
   const params: PlanningItemsParams = {
     is_plate: 'true',
+    // Sized lines are picked as Talep Edilen Sac.
+    sized: 'false',
     is_consumed: 'false',
     mine: 'true',
     fields: 'simple',
