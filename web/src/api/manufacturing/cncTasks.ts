@@ -338,10 +338,12 @@ export function previewCncFinish(key: string, input: ProcessInput) {
 /**
  * Finish the cut: its reserved sheets leave stock, the remnants come back as
  * pieces, the fire is stored. remnants, or no_remnant to confirm it left none.
+ * consumed: for a cut on a plate line with no lot, the line's received sheets
+ * it was cut from.
  */
 export function finishCncTask(
   key: string,
-  input: { remnants: ProcessRemnantInput[]; no_remnant: boolean },
+  input: { remnants: ProcessRemnantInput[]; no_remnant: boolean; consumed?: ProcessConsumedInput[] },
 ) {
   return apiFetch<{ status: string; booked?: ProcessResult }>(`${BASE}/tasks/mark-completed/`, {
     method: 'POST',

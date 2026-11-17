@@ -108,6 +108,8 @@ export interface PiecesParams {
   thickness_mm?: string;
   /** Lots with sheets no CNC cut has reserved. */
   available?: 'true';
+  /** The lots received for this planning line in Mal kabul (and split off them). */
+  planning_item?: number;
 }
 
 export interface PieceCardsParams {

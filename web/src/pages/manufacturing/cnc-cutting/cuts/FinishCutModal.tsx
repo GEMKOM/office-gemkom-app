@@ -8,11 +8,18 @@ import {
   finishCncTask,
   previewCncFinish,
   type CncTask,
+  type ProcessConsumedInput,
   type ProcessInput,
   type ProcessPart,
   type ProcessRemnantInput,
 } from '@/api/manufacturing/cncTasks';
-import { pieceKeys, searchPlateCards } from '@/api/warehouse/pieces';
+import {
+  pieceKeys,
+  piecesQueryOptions,
+  placeLabel,
+  searchPlateCards,
+  type MaterialPiece,
+} from '@/api/warehouse/pieces';
 import { formatNumber } from '@/lib/format';
 import {
   DataTable,
@@ -34,6 +41,8 @@ import { pieceText } from './PlateSource';
 // left; none entered means it left none. On finish the backend issues the reserved
 // sheets, brings the remnants back to stock as pieces of the same card and
 // stores the fire: consumed − parts − remnants. Totals are previewed live.
+// A cut on a plate line with no lot can name the line's sheets that arrived
+// in Mal kabul after the cut was made; otherwise its kg is estimated.
 
 /** The minimum short side of a remnant that goes back to stock (backend: MIN_REMNANT_SIDE_MM). */
 export const MIN_REMNANT_SIDE_MM = 500;
@@ -268,6 +277,69 @@ export function useFinishPreview(key: string, input: ProcessInput | null, enable
   });
 }
 
+const EMPTY_LOTS: MaterialPiece[] = [];
+
+/** {piece id: sheets} → the consumed rows (sheets > 0). */
+export function consumedInputs(picks: Record<number, number>): ProcessConsumedInput[] {
+  return Object.entries(picks)
+    .map(([piece, quantity]) => ({ piece: Number(piece), quantity }))
+    .filter((row) => row.quantity > 0);
+}
+
+/** The plate line's received lots, each with the sheets the cut used. */
+function LineSheets({
+  planningItemId,
+  sheets,
+  picks,
+  onChange,
+}: {
+  planningItemId: number;
+  sheets: number;
+  picks: Record<number, number>;
+  onChange: (picks: Record<number, number>) => void;
+}) {
+  const lots = useQuery(piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }));
+  const rows = lots.data?.results ?? EMPTY_LOTS;
+  if (lots.isLoading || rows.length === 0) return null;
+  const chosen = Object.values(picks).reduce((sum, n) => sum + n, 0);
+  return (
+    <Stack gap={4} mt="xs">
+      <Text size="sm" fw={600}>
+        Bu kesimin plaka kaleminin gelen sacları
+      </Text>
+      <Text size="xs" c="dimmed">
+        Kesimde kullanılan sacları girin ({sheets} sac); stoktan düşülür ve ağırlık tahmin
+        edilmez. Boş bırakılırsa ağırlık kesimin ölçüsünden tahmin edilir.
+      </Text>
+      {rows.map((lot) => {
+        const free = lot.available_quantity ?? lot.quantity;
+        return (
+          <Group key={lot.id} gap="xs">
+            <Text size="sm" w={360}>
+              {pieceText(lot)} · {placeLabel(lot)} · boş {free}
+            </Text>
+            <NumberInput
+              size="xs"
+              w={90}
+              min={0}
+              max={free}
+              allowDecimal={false}
+              aria-label={`Kullanılan sac ${lot.id}`}
+              value={picks[lot.id] ?? 0}
+              onChange={(value) => onChange({ ...picks, [lot.id]: Math.max(0, Number(value) || 0) })}
+            />
+          </Group>
+        );
+      })}
+      {chosen > 0 && chosen !== sheets ? (
+        <Text size="xs" c="red">
+          Kesim {sheets} sac; {chosen} sac seçildi.
+        </Text>
+      ) : null}
+    </Stack>
+  );
+}
+
 /** "Kesimi Bitir": the remnants, the live totals, then finish. */
 export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: () => void }) {
   const queryClient = useQueryClient();
@@ -277,10 +349,23 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   const [rows, setRows] = useState<RemnantDraft[]>(() => [newRemnant()]);
   const [card, setCard] = useState<string | null>(null);
   const remnants = useMemo(() => remnantInputs(rows, card), [rows, card]);
-  const preview = useFinishPreview(cutKey, { remnants }, Boolean(t));
+  // A cut on a plate line without a lot: the line's sheets picked here.
+  const lineId = !reservation && t?.plate_item ? t.plate_item.id : null;
+  const [picks, setPicks] = useState<Record<number, number>>({});
+  const consumed = useMemo(() => (lineId ? consumedInputs(picks) : []), [lineId, picks]);
+  const input = useMemo<ProcessInput>(
+    () => (consumed.length > 0 ? { remnants, consumed } : { remnants }),
+    [remnants, consumed],
+  );
+  const preview = useFinishPreview(cutKey, input, Boolean(t));
   const finish = useMutation({
     // No rows = the cut left no remnant (recorded as entered: the dialog was used).
-    mutationFn: () => finishCncTask(cutKey, { remnants, no_remnant: remnants.length === 0 }),
+    mutationFn: () =>
+      finishCncTask(cutKey, {
+        remnants,
+        no_remnant: remnants.length === 0,
+        ...(consumed.length > 0 ? { consumed } : {}),
+      }),
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: cncTaskKeys.all }),
@@ -316,8 +401,18 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
               <Text size="sm" c="dimmed">
                 {reservation
                   ? `${pieceText(reservation.piece_details)} × ${reservation.quantity} sac stoktan düşülecek.`
-                  : 'Kesime ayrılmış sac partisi yok; kullanılan sacın ağırlığı kesimin ölçüsünden tahmin edilir.'}
+                  : consumed.length > 0
+                    ? 'Seçilen saclar stoktan düşülecek.'
+                    : 'Kesime ayrılmış sac partisi yok; kullanılan sacın ağırlığı kesimin ölçüsünden tahmin edilir.'}
               </Text>
+              {lineId ? (
+                <LineSheets
+                  planningItemId={lineId}
+                  sheets={t.quantity ?? 1}
+                  picks={picks}
+                  onChange={setPicks}
+                />
+              ) : null}
             </ModalSection>
 
             <ModalSection title="Fire Saclar" icon="fas fa-undo">
