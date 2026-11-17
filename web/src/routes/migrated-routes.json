@@ -193,6 +193,7 @@
   "/warehouse/transfers",
   "/warehouse/goods-receipts",
   "/warehouse/pieces",
+  "/warehouse/mikro-comparison",
   "/warehouse/piece-counts",
   "/warehouse/weight-reduction"
 ]

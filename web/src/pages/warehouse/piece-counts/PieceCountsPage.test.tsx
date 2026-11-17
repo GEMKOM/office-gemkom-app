@@ -3,7 +3,7 @@ import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { PiecesPage } from '../pieces/PiecesPage';
+import { MikroComparisonPage } from '../mikro-comparison/MikroComparisonPage';
 import { PieceCountsPage } from './PieceCountsPage';
 
 vi.mock('@/auth/authService', () => ({
@@ -270,12 +270,8 @@ it('counts lots, adds pieces the system did not know, and posts', async () => {
 });
 
 it('compares the piece stock with Mikro, each card in its own unit', async () => {
-  renderWithProviders(
-    <ModalsProvider>
-      <PiecesPage />
-    </ModalsProvider>,
-    { route: '/warehouse/pieces?view=mikro' },
-  );
+  // Its own page now (it was Sac ve Boy Stoğu's "Mikro ile" view).
+  renderWithProviders(<MikroComparisonPage />, { route: '/warehouse/mikro-comparison' });
   expect(await screen.findByText('10 mm ST 37-2 SAC')).toBeInTheDocument();
   const [, plate, unweighed, missing] = screen.getAllByRole('row');
   expect(within(plate!).getByText('1.413,00 kg')).toBeInTheDocument();

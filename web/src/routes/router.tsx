@@ -243,6 +243,13 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/warehouse/mikro-comparison',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/mikro-comparison/MikroComparisonPage'))
+        .MikroComparisonPage,
+    }),
+  },
+  {
     path: '/warehouse/piece-counts',
     lazy: async () => ({
       Component: (await import('@/pages/warehouse/piece-counts/PieceCountsPage')).PieceCountsPage,

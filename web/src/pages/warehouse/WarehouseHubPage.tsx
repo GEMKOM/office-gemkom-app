@@ -9,6 +9,7 @@ const SLIPS = '/warehouse/production-slips';
 const TRANSFERS = '/warehouse/transfers';
 const PIECES = '/warehouse/pieces';
 const PIECE_COUNTS = '/warehouse/piece-counts';
+const MIKRO_COMPARISON = '/warehouse/mikro-comparison';
 const WEIGHT_REDUCTION = '/warehouse/weight-reduction';
 const CARDS = '/planning/inventory/cards';
 const PULLS = '/manufacturing/material-tracking/pull-requests';
@@ -62,6 +63,13 @@ export function WarehouseHubPage() {
       icon: 'fas fa-layer-group',
       iconColor: 'red',
       link: PIECES,
+    },
+    {
+      title: 'Sac ve Boy · Mikro Karşılaştırması',
+      description: "Parça stoğumuz Mikro'daki bakiyeyle kart kart: ağırlık, toplam boy ya da adet.",
+      icon: 'fas fa-balance-scale',
+      iconColor: 'grey',
+      link: MIKRO_COMPARISON,
     },
     {
       title: 'Sac ve Boy Sayımı',
