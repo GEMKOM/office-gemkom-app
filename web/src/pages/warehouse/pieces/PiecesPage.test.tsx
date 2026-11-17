@@ -3,7 +3,7 @@ import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { PiecesPage } from './PiecesPage';
+import { CncPlateStockPage, WarehouseBarStockPage, WarehousePlateStockPage } from './PiecesPage';
 
 let warehouseUser = true;
 vi.mock('@/auth/authService', () => ({
@@ -113,13 +113,8 @@ function calls(): Call[] {
   }));
 }
 
-function renderPage(route = '/warehouse/pieces') {
-  return renderWithProviders(
-    <ModalsProvider>
-      <PiecesPage />
-    </ModalsProvider>,
-    { route },
-  );
+function renderPage(route = '/warehouse/plate-stock', page = <WarehousePlateStockPage />) {
+  return renderWithProviders(<ModalsProvider>{page}</ModalsProvider>, { route });
 }
 
 beforeEach(() => {
@@ -246,7 +241,7 @@ it('adds plate pieces with the backend weight preview', async () => {
 });
 
 it('sends a lot to a supplier (fason) from its detail', async () => {
-  renderPage('/warehouse/pieces?piece=2');
+  renderPage('/warehouse/plate-stock?piece=2');
   expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Taşı / Fasona Gönder' }));
   const dialog = await screen.findByRole('dialog', { name: /Taşı \/ Fasona Gönder/ });
@@ -264,15 +259,65 @@ it('sends a lot to a supplier (fason) from its detail', async () => {
 });
 
 it('lists the cards with what each is missing', async () => {
-  renderPage('/warehouse/pieces?view=cards');
+  renderPage('/warehouse/plate-stock?view=cards');
   expect(await screen.findByText('Kartta sac kalınlığı yok.')).toBeInTheDocument();
   expect(screen.getByText('8,00 mm')).toBeInTheDocument();
 });
 
 it('is read-only without the warehouse grant', async () => {
   warehouseUser = false;
-  renderPage('/warehouse/pieces?piece=2');
+  renderPage('/warehouse/plate-stock?piece=2');
   expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Parça Ekle' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Taşı / Fasona Gönder' })).not.toBeInTheDocument();
+});
+
+it('Sac Stoğu asks only for plates: pieces, cards and the card picker', async () => {
+  renderPage();
+  expect(await screen.findByRole('heading', { name: 'Sac Stoğu' })).toBeInTheDocument();
+  await waitFor(() =>
+    expect(calls().some((c) => c.url.pathname === '/warehouse/pieces/')).toBe(true),
+  );
+  for (const path of ['/warehouse/pieces/', '/warehouse/pieces/cards/']) {
+    const call = calls().find((c) => c.url.pathname === path)!;
+    expect(call.url.searchParams.get('kind')).toBe('plate');
+  }
+  // No Tür filter: the page is one kind.
+  expect(screen.queryByLabelText('Tür')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Parça Ekle' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Parça Ekle' });
+  const picker = within(dialog).getByLabelText('Stok kartı');
+  picker.focus();
+  fireEvent.change(picker, { target: { value: 'hardox' } });
+  await screen.findByRole('option', { name: /8 mm HARDOX 400 SAC/, hidden: true });
+  const search = calls().find(
+    (c) => c.url.pathname === '/warehouse/pieces/cards/' && c.url.searchParams.get('search'),
+  )!;
+  expect(search.url.searchParams.get('kind')).toBe('plate');
+});
+
+it('Boy Stoğu asks only for bars', async () => {
+  renderPage('/warehouse/bar-stock', <WarehouseBarStockPage />);
+  expect(await screen.findByRole('heading', { name: 'Boy Stoğu' })).toBeInTheDocument();
+  await waitFor(() =>
+    expect(calls().some((c) => c.url.pathname === '/warehouse/pieces/')).toBe(true),
+  );
+  for (const path of ['/warehouse/pieces/', '/warehouse/pieces/cards/']) {
+    expect(
+      calls()
+        .find((c) => c.url.pathname === path)!
+        .url.searchParams.get('kind'),
+    ).toBe('boy');
+  }
+});
+
+it('the planning Sac Stoğu is the same page, back to CNC Kesim', async () => {
+  renderPage('/planning/cnc-cutting/plate-stock', <CncPlateStockPage />);
+  expect(await screen.findByRole('heading', { name: 'Sac Stoğu' })).toBeInTheDocument();
+  expect(
+    screen
+      .getAllByRole('link')
+      .some((a) => a.getAttribute('href')?.startsWith('/planning/cnc-cutting')),
+  ).toBe(true);
 });

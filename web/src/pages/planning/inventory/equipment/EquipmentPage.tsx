@@ -198,7 +198,7 @@ export function EquipmentPage() {
         title="Ekipman Yönetimi"
         subtitle="Ekipman envanteri ve durum yönetimi"
         icon="fas fa-toolbox"
-        backTo="/planning/inventory/"
+        backTo="/warehouse"
         stats={[
           { id: 'total-equipment', label: 'Toplam Ekipman', value: figure(total) },
           { id: 'active-equipment', label: 'Aktif', value: figure(stats.active) },

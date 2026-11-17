@@ -1,4 +1,12 @@
-import { MOVED_ROUTES, REPLACED_HUB_ROUTES, RETIRED_ROUTES } from '@/routes/movedRoutes';
+import {
+  BAR_STOCK_ROUTE,
+  MOVED_ROUTES,
+  PIECES_FORWARD,
+  PIECES_ROUTE,
+  PLATE_STOCK_ROUTE,
+  REPLACED_HUB_ROUTES,
+  RETIRED_ROUTES,
+} from '@/routes/movedRoutes';
 import { createBrowserRouter, redirect, type RouteObject } from 'react-router';
 import type { RouteAccessHandle } from '@/auth/RequireRoute';
 import { NotFound } from '@/pages/NotFound';
@@ -204,13 +212,6 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/planning/inventory',
-    handle: hub,
-    lazy: async () => ({
-      Component: (await import('@/pages/planning/InventoryHubPage')).InventoryHubPage,
-    }),
-  },
-  {
     path: '/warehouse',
     handle: hub,
     lazy: async () => ({
@@ -236,11 +237,58 @@ export const appRoutes: RouteObject[] = [
       Component: (await import('@/pages/warehouse/transfers/TransfersPage')).TransfersPage,
     }),
   },
+  // Ana Stok and Ekipman (moved from Planlama › Stok; movedRoutes.ts).
   {
-    path: '/warehouse/pieces',
+    path: '/warehouse/stock',
     lazy: async () => ({
-      Component: (await import('@/pages/warehouse/pieces/PiecesPage')).PiecesPage,
+      Component: (await import('@/pages/planning/inventory/cards/InventoryCardsPage'))
+        .InventoryCardsPage,
     }),
+  },
+  {
+    path: '/warehouse/equipment',
+    lazy: async () => ({
+      Component: (await import('@/pages/planning/inventory/equipment/EquipmentPage')).EquipmentPage,
+    }),
+  },
+  // Sac Stoğu / Boy Stoğu: one page, one kind each, under Depo and under the
+  // planning cutting sections (CNC Kesim / Lineer Kesim).
+  {
+    path: PLATE_STOCK_ROUTE,
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/pieces/PiecesPage')).WarehousePlateStockPage,
+    }),
+  },
+  {
+    path: BAR_STOCK_ROUTE,
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/pieces/PiecesPage')).WarehouseBarStockPage,
+    }),
+  },
+  {
+    path: '/planning/cnc-cutting/plate-stock',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/pieces/PiecesPage')).CncPlateStockPage,
+    }),
+  },
+  {
+    path: '/planning/linear-cutting/bar-stock',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/pieces/PiecesPage')).LinearBarStockPage,
+    }),
+  },
+  {
+    // The old Sac ve Boy Stoğu: Boy Stoğu for ?kind=boy, else Sac Stoğu; the
+    // rest of the query (?piece=, ?item=) and the hash carry over.
+    path: PIECES_ROUTE,
+    loader: ({ request }) => {
+      const url = new URL(request.url);
+      const target =
+        url.searchParams.get('kind') === 'boy' ? BAR_STOCK_ROUTE : PIECES_FORWARD[PIECES_ROUTE]!;
+      url.searchParams.delete('kind');
+      const query = url.searchParams.toString();
+      return redirect(`${target}/${query ? `?${query}` : ''}${url.hash || addressBarHash(request)}`);
+    },
   },
   {
     path: '/warehouse/mikro-comparison',
@@ -834,19 +882,6 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   // Phase 3b: planning and procurement lists.
-  {
-    path: '/planning/inventory/cards',
-    lazy: async () => ({
-      Component: (await import('@/pages/planning/inventory/cards/InventoryCardsPage'))
-        .InventoryCardsPage,
-    }),
-  },
-  {
-    path: '/planning/inventory/equipment',
-    lazy: async () => ({
-      Component: (await import('@/pages/planning/inventory/equipment/EquipmentPage')).EquipmentPage,
-    }),
-  },
   {
     path: '/planning/items',
     lazy: async () => ({

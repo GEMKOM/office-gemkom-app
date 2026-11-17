@@ -277,7 +277,7 @@ export function InventoryCardsPage() {
         title="Stok Kartları"
         subtitle="Stok kartları listesi ve yönetimi"
         icon="boxes"
-        backTo="/planning/inventory"
+        backTo="/warehouse"
         actions={
           canManage ? (
             <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating(true)}>

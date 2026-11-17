@@ -195,5 +195,11 @@
   "/warehouse/pieces",
   "/warehouse/mikro-comparison",
   "/warehouse/piece-counts",
-  "/warehouse/weight-reduction"
+  "/warehouse/weight-reduction",
+  "/warehouse/stock",
+  "/warehouse/equipment",
+  "/warehouse/plate-stock",
+  "/warehouse/bar-stock",
+  "/planning/cnc-cutting/plate-stock",
+  "/planning/linear-cutting/bar-stock"
 ]

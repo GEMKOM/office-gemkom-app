@@ -26,15 +26,16 @@ test('old CNC grants open the moved pages and their hubs, nothing more', async (
   await main.getByRole('link', { name: 'CNC Kesim sayfasına dön' }).click();
   await expect(page).toHaveURL(/\/planning\/cnc-cutting\/?$/);
   await expect(main.getByRole('heading', { name: 'CNC Kesim', level: 1 })).toBeVisible();
-  expect(await cardTitles(page)).toEqual(['Kesimler']);
+  // Kesimler, and Sac Stoğu (the Depo page), which a cuts grant opens too.
+  expect(await cardTitles(page)).toEqual(['Kesimler', 'Sac Stoğu']);
 
   await main.getByRole('link', { name: 'Planlama sayfasına dön' }).click();
   await expect(page).toHaveURL(/\/planning\/?$/);
-  // The Planlama hub: only the CNC lane, with the one page the grants open.
+  // The Planlama hub: only the CNC lane, with the pages the grants open.
   const regions = main.getByRole('region');
   await expect(regions).toHaveCount(1);
   const cnc = main.getByRole('region', { name: 'CNC Kesim' });
-  await expect(cnc.getByRole('navigation').getByRole('link')).toHaveText(['Kesimler']);
+  await expect(cnc.getByRole('navigation').getByRole('link')).toHaveText(['Kesimler', 'Sac Stoğu']);
   await expect(cnc).toContainText('Açık kesim');
   // A section's own hub is the top: no arrow.
   await expect(main.getByRole('link', { name: /sayfasına dön$/ })).toHaveCount(0);
@@ -47,7 +48,7 @@ test('old CNC grants open the moved pages and their hubs, nothing more', async (
   consoleErrors.expectNone();
 });
 
-test('the retired Fire Plakalar page forwards to Sac ve Boy Stoğu, for its old grant', async ({
+test('the retired Fire Plakalar page forwards to Sac Stoğu, for its old grant', async ({
   page,
   consoleErrors,
 }) => {
@@ -59,9 +60,9 @@ test('the retired Fire Plakalar page forwards to Sac ve Boy Stoğu, for its old 
 
   for (const url of ['/manufacturing/cnc-cutting/remnants/', '/planning/cnc-cutting/remnants/']) {
     await page.goto(url);
-    await expect(page).toHaveURL(/\/warehouse\/pieces\/$/);
+    await expect(page).toHaveURL(/\/warehouse\/plate-stock\/$/);
     await expect(
-      page.getByRole('main').getByRole('heading', { name: 'Sac ve Boy Stoğu', level: 1 }),
+      page.getByRole('main').getByRole('heading', { name: 'Sac Stoğu', level: 1 }),
     ).toBeVisible();
   }
   consoleErrors.expectNone();
@@ -84,6 +85,7 @@ test('admin: the menu puts the cutting pages under Planlama', async ({ page, con
     'Kesimler',
     'Görevler',
     'Kapasite Planlayıcı',
+    'Boy Stoğu',
   ]);
 
   // İmalat no longer carries them: no lane for either.
@@ -95,5 +97,23 @@ test('admin: the menu puts the cutting pages under Planlama', async ({ page, con
   expect(lanes).toContain('Talaşlı İmalat');
   expect(lanes).not.toContain('CNC Kesim');
   expect(lanes).not.toContain('Lineer Kesim');
+  consoleErrors.expectNone();
+});
+
+test('Planlama › Stok moved to Depo: the old Stok Kartları URL opens Ana Stok', async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: false, grants: ['/planning/inventory/cards/'] });
+  await mockBackend(page, {}, { session });
+
+  await page.goto('/planning/inventory/cards/');
+  await expect(page).toHaveURL(/\/warehouse\/stock\/$/);
+  const main = page.getByRole('main');
+  await expect(main.getByRole('navigation', { name: 'Konum' })).toHaveText('Depo/Stoklar/Ana Stok');
+
+  // The old Sac ve Boy Stoğu URL picks the page by kind.
+  await page.goto('/warehouse/pieces/?kind=boy');
+  await expect(page).toHaveURL(/\/warehouse\/bar-stock\/$/);
   consoleErrors.expectNone();
 });

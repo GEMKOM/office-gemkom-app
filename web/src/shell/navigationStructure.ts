@@ -223,22 +223,6 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-shopping-cart',
         children: {},
       },
-      '/planning/inventory': {
-        label: 'Stok',
-        icon: 'fas fa-warehouse',
-        children: {
-          '/planning/inventory/cards': {
-            label: 'Stok Kartları',
-            icon: 'fas fa-boxes',
-            children: {},
-          },
-          '/planning/inventory/equipment': {
-            label: 'Ekipman',
-            icon: 'fas fa-toolbox',
-            children: {},
-          },
-        },
-      },
       '/planning/projects': {
         label: 'Projeler',
         icon: 'fas fa-project-diagram',
@@ -291,6 +275,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
             icon: 'fas fa-calendar-alt',
             children: {},
           },
+          // The Depo's Sac Stoğu page, under its own planning URL.
+          '/planning/cnc-cutting/plate-stock': {
+            label: 'Sac Stoğu',
+            icon: 'fas fa-layer-group',
+            children: {},
+          },
         },
       },
       '/planning/linear-cutting': {
@@ -315,6 +305,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
           '/planning/linear-cutting/capacity': {
             label: 'Kapasite Planlayıcı',
             icon: 'fas fa-calendar-alt',
+            children: {},
+          },
+          // The Depo's Boy Stoğu page, under its own planning URL.
+          '/planning/linear-cutting/bar-stock': {
+            label: 'Boy Stoğu',
+            icon: 'fas fa-ruler-horizontal',
             children: {},
           },
         },
@@ -558,49 +554,96 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       },
     },
   },
+  // Depo in four groups. A group key is a heading only (no page of its own),
+  // like the Projeler group under Planlama.
   '/warehouse': {
     label: 'Depo',
     icon: 'fas fa-warehouse',
     children: {
-      '/warehouse/goods-receipts': {
-        label: 'Mal Kabul',
-        icon: 'fas fa-truck-loading',
-        children: {},
+      '/warehouse#stoklar': {
+        label: 'Stoklar',
+        icon: 'fas fa-boxes',
+        children: {
+          '/warehouse/stock': {
+            label: 'Ana Stok',
+            icon: 'fas fa-boxes',
+            children: {},
+          },
+          '/warehouse/plate-stock': {
+            label: 'Sac Stoğu',
+            icon: 'fas fa-layer-group',
+            children: {},
+          },
+          '/warehouse/bar-stock': {
+            label: 'Boy Stoğu',
+            icon: 'fas fa-ruler-horizontal',
+            children: {},
+          },
+          '/warehouse/equipment': {
+            label: 'Ekipman',
+            icon: 'fas fa-toolbox',
+            children: {},
+          },
+          '/warehouse/mikro-comparison': {
+            label: 'Mikro Karşılaştırması',
+            icon: 'fas fa-balance-scale',
+            children: {},
+          },
+        },
       },
-      '/warehouse/counts': {
+      '/warehouse#giris-cikis': {
+        label: 'Giriş / Çıkış',
+        icon: 'fas fa-exchange-alt',
+        children: {
+          '/warehouse/goods-receipts': {
+            label: 'Mal Kabul',
+            icon: 'fas fa-truck-loading',
+            children: {},
+          },
+          // Also under İmalat, where Malzeme Takibi creates them.
+          '/manufacturing/material-tracking/pull-requests': {
+            label: 'Depo Çekme Talepleri',
+            icon: 'fas fa-dolly',
+            children: {},
+          },
+          '/warehouse/production-slips': {
+            label: 'İmalata Çıkış / İade',
+            icon: 'fas fa-dolly-flatbed',
+            children: {},
+          },
+          '/warehouse/transfers': {
+            label: 'Depo Transferi',
+            icon: 'fas fa-exchange-alt',
+            children: {},
+          },
+        },
+      },
+      '/warehouse#sayim': {
         label: 'Sayım',
         icon: 'fas fa-clipboard-check',
-        children: {},
+        children: {
+          '/warehouse/counts': {
+            label: 'Ana Stok Sayımı',
+            icon: 'fas fa-clipboard-check',
+            children: {},
+          },
+          '/warehouse/piece-counts': {
+            label: 'Sac ve Boy Sayımı',
+            icon: 'fas fa-ruler-combined',
+            children: {},
+          },
+        },
       },
-      '/warehouse/production-slips': {
-        label: 'İmalata Çıkış / İade',
-        icon: 'fas fa-dolly-flatbed',
-        children: {},
-      },
-      '/warehouse/transfers': {
-        label: 'Depo Transferi',
-        icon: 'fas fa-exchange-alt',
-        children: {},
-      },
-      '/warehouse/pieces': {
-        label: 'Sac ve Boy Stoğu',
-        icon: 'fas fa-layer-group',
-        children: {},
-      },
-      '/warehouse/mikro-comparison': {
-        label: 'Sac ve Boy · Mikro Karşılaştırması',
-        icon: 'fas fa-balance-scale',
-        children: {},
-      },
-      '/warehouse/piece-counts': {
-        label: 'Sac ve Boy Sayımı',
-        icon: 'fas fa-ruler-combined',
-        children: {},
-      },
-      '/warehouse/weight-reduction': {
-        label: 'Ağırlık Düşüşü',
-        icon: 'fas fa-weight-hanging',
-        children: {},
+      '/warehouse#raporlar': {
+        label: 'Raporlar',
+        icon: 'fas fa-chart-bar',
+        children: {
+          '/warehouse/weight-reduction': {
+            label: 'Ağırlık Düşüşü',
+            icon: 'fas fa-weight-hanging',
+            children: {},
+          },
+        },
       },
     },
   },

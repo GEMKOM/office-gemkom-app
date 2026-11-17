@@ -1,111 +1,106 @@
 import { useQuery } from '@tanstack/react-query';
+import { equipmentCountQueryOptions, stockCardCountQueryOptions } from '@/api/planning/hubs';
 import { stockCountsQueryOptions } from '@/api/warehouse/counts';
 import { hasRouteAccess } from '@/auth/accessControl';
+import { BAR_STOCK_ROUTE, PLATE_STOCK_ROUTE } from '@/routes/movedRoutes';
 import { MenuCards, visibleMenuCards, type MenuCard } from '@/ui';
+import { countValue } from '../hubCount';
 
+const STOCK = '/warehouse/stock';
+const EQUIPMENT = '/warehouse/equipment';
+const MIKRO_COMPARISON = '/warehouse/mikro-comparison';
 const RECEIPTS = '/warehouse/goods-receipts';
-const COUNTS = '/warehouse/counts';
+const PULLS = '/manufacturing/material-tracking/pull-requests';
 const SLIPS = '/warehouse/production-slips';
 const TRANSFERS = '/warehouse/transfers';
-const PIECES = '/warehouse/pieces';
+const COUNTS = '/warehouse/counts';
 const PIECE_COUNTS = '/warehouse/piece-counts';
-const MIKRO_COMPARISON = '/warehouse/mikro-comparison';
 const WEIGHT_REDUCTION = '/warehouse/weight-reduction';
-const CARDS = '/planning/inventory/cards';
-const PULLS = '/manufacturing/material-tracking/pull-requests';
 
-/** Depo: the warehouse's own screens, plus the stock pages it works with. */
+/**
+ * Depo in the menu's four groups: Stoklar, Giriş / Çıkış, Sayım and Raporlar.
+ * A card is a group and lists its pages; a user sees only the pages they can
+ * open, and a group with none of them is left out.
+ */
 export function WarehouseHubPage() {
-  const canCounts = hasRouteAccess(COUNTS);
+  const stockCards = useQuery({
+    ...stockCardCountQueryOptions(),
+    enabled: hasRouteAccess(STOCK),
+  });
+  const equipment = useQuery({
+    ...equipmentCountQueryOptions(),
+    enabled: hasRouteAccess(EQUIPMENT),
+  });
   const drafts = useQuery({
     ...stockCountsQueryOptions({ status: 'draft', page_size: 1 }),
-    enabled: canCounts,
+    enabled: hasRouteAccess(COUNTS),
   });
 
   const cards: MenuCard[] = [
     {
-      title: 'Mal Kabul',
+      title: 'Stoklar',
       description:
-        'Siparişe karşı gelen malzeme, irsaliyesiyle; stoğa ve planlama kalemlerine işlenir.',
-      icon: 'fas fa-truck-loading',
+        'Ana stok (kartlar ve Hammadde / İş Emri / Mamul bakiyeleri), sac ve boy parçaları, ekipman.',
+      icon: 'fas fa-boxes',
+      iconColor: 'blue',
+      stat: hasRouteAccess(STOCK)
+        ? { value: countValue(stockCards), label: 'stok kartı' }
+        : hasRouteAccess(EQUIPMENT)
+          ? { value: countValue(equipment), label: 'aktif ekipman' }
+          : undefined,
+      features: [
+        { label: 'Ana Stok', icon: 'fas fa-boxes', link: STOCK },
+        { label: 'Sac Stoğu', icon: 'fas fa-layer-group', link: PLATE_STOCK_ROUTE },
+        { label: 'Boy Stoğu', icon: 'fas fa-ruler-horizontal', link: BAR_STOCK_ROUTE },
+        { label: 'Ekipman', icon: 'fas fa-toolbox', link: EQUIPMENT },
+        { label: 'Mikro Karşılaştırması', icon: 'fas fa-balance-scale', link: MIKRO_COMPARISON },
+      ],
+    },
+    {
+      title: 'Giriş / Çıkış',
+      description:
+        'Gelen malzemenin kabulü, imalata teslim ve iade, depolar ve işler arası aktarım.',
+      icon: 'fas fa-exchange-alt',
       iconColor: 'teal',
-      link: RECEIPTS,
+      features: [
+        { label: 'Mal Kabul', icon: 'fas fa-truck-loading', link: RECEIPTS },
+        { label: 'Depo Çekme Talepleri', icon: 'fas fa-dolly', link: PULLS },
+        { label: 'İmalata Çıkış / İade', icon: 'fas fa-dolly-flatbed', link: SLIPS },
+        { label: 'Depo Transferi', icon: 'fas fa-exchange-alt', link: TRANSFERS },
+      ],
     },
     {
       title: 'Sayım',
-      description: 'Depo sayımı; işlenen farklar stoğa düzeltme olarak yansır.',
+      description:
+        'Sayım farkları stoğa düzeltme olarak yansır; sac ve boy parça adediyle sayılır.',
       icon: 'fas fa-clipboard-check',
       iconColor: 'primary',
-      link: COUNTS,
-      stat: {
-        value: drafts.isSuccess ? String(drafts.data.count) : '–',
-        label: 'açık sayım',
-      },
+      stat: hasRouteAccess(COUNTS)
+        ? {
+            value: drafts.isSuccess ? String(drafts.data.count) : undefined,
+            label: 'açık sayım',
+          }
+        : undefined,
+      features: [
+        { label: 'Ana Stok Sayımı', icon: 'fas fa-clipboard-check', link: COUNTS },
+        { label: 'Sac ve Boy Sayımı', icon: 'fas fa-ruler-combined', link: PIECE_COUNTS },
+      ],
     },
     {
-      title: 'İmalata Çıkış / İade',
-      description: 'Talep olmadan imalata verilen ve imalattan dönen malzeme, iş numarasıyla.',
-      icon: 'fas fa-dolly-flatbed',
-      iconColor: 'green',
-      link: SLIPS,
-    },
-    {
-      title: 'Depo Transferi',
-      description: 'Hammadde, İş Emri ve Mamul arasında, işler arasında stok aktarımı.',
-      icon: 'fas fa-exchange-alt',
-      iconColor: 'violet',
-      link: TRANSFERS,
-    },
-    {
-      title: 'Sac ve Boy Stoğu',
-      description:
-        'Sac, profil, boru ve çubuk parçaları: ölçü, adet, ağırlık ve yer; fasona gönderme.',
-      icon: 'fas fa-layer-group',
-      iconColor: 'red',
-      link: PIECES,
-    },
-    {
-      title: 'Sac ve Boy · Mikro Karşılaştırması',
-      description: "Parça stoğumuz Mikro'daki bakiyeyle kart kart: ağırlık, toplam boy ya da adet.",
-      icon: 'fas fa-balance-scale',
-      iconColor: 'grey',
-      link: MIKRO_COMPARISON,
-    },
-    {
-      title: 'Sac ve Boy Sayımı',
-      description: 'Sac ve boy parçalarının adet ve ölçüyle sayımı; ilk sayım açılış stoğu olur.',
-      icon: 'fas fa-ruler-combined',
-      iconColor: 'primary',
-      link: PIECE_COUNTS,
-    },
-    {
-      title: 'Ağırlık Düşüşü',
-      description:
-        'Biten CNC kesimleri: kullanılan sac stoktan düşer, fire saclar döner, fire hesaplanır; Mikro dosyası.',
-      icon: 'fas fa-weight-hanging',
+      title: 'Raporlar',
+      description: 'Biten CNC kesimleri: kullanılan sac, dönen fire saclar ve fire; Mikro dosyası.',
+      icon: 'fas fa-chart-bar',
       iconColor: 'orange',
-      link: WEIGHT_REDUCTION,
-    },
-    {
-      title: 'Stok Kartları',
-      description: 'Kartlar, Hammadde / İş Emri / Mamul bakiyeleri ve stok hareketleri.',
-      icon: 'fas fa-boxes',
-      iconColor: 'blue',
-      link: CARDS,
-    },
-    {
-      title: 'Depo Çekme Talepleri',
-      description: 'İmalata teslim edilecek malzeme talepleri.',
-      icon: 'fas fa-dolly',
-      iconColor: 'orange',
-      link: PULLS,
+      features: [
+        { label: 'Ağırlık Düşüşü', icon: 'fas fa-weight-hanging', link: WEIGHT_REDUCTION },
+      ],
     },
   ];
 
   return (
     <MenuCards
       title="Depo Modülü"
-      subtitle="Stok, sayım ve depo hareketleri"
+      subtitle="Stoklar, giriş ve çıkışlar, sayım ve raporlar"
       cards={visibleMenuCards(cards)}
     />
   );

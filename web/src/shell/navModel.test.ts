@@ -77,12 +77,11 @@ describe('the Planlama menu', () => {
   const planning = NAVIGATION_STRUCTURE;
   const any = () => true;
 
-  it('groups the request and stock pages and puts project planning under Projeler', () => {
+  it('groups the request pages and puts project planning under Projeler', () => {
     expect(Object.keys(planning['/planning']!.children)).toEqual([
       '/planning/department-requests',
       '/planning/items',
       '/planning/procurement-lines',
-      '/planning/inventory',
       '/planning/projects',
       '/planning/cnc-cutting',
       '/planning/linear-cutting',
