@@ -115,6 +115,54 @@ export interface GoodsReceiptInput {
   lines: { po_line: number; quantity: string; pieces?: ReceiptPieceInput[] }[];
 }
 
+/** Bekleyen Siparişler: a PO line still to arrive. Quantities are decimal strings. */
+export interface PendingLine {
+  po_line: number;
+  purchase_order: number;
+  supplier: number;
+  supplier_name: string;
+  pr_number: string;
+  /** Order date (YYYY-MM-DD). */
+  ordered_at: string;
+  item: number;
+  item_code: string;
+  item_name: string;
+  item_unit: string;
+  ordered: string;
+  received: string;
+  remaining: string;
+  delivery_days: number | null;
+  /** Order date + delivery days (YYYY-MM-DD), null without delivery days. */
+  expected_date: string | null;
+  overdue: boolean;
+  job_no: string;
+  destination: string;
+  piece_kind: 'plate' | 'boy' | null;
+}
+
+export interface PendingSupplier {
+  id: number;
+  name: string;
+  lines: number;
+}
+
+export interface PendingLinesPage {
+  count: number;
+  results: PendingLine[];
+  overdue_count: number;
+  suppliers: PendingSupplier[];
+}
+
+export interface PendingLinesParams {
+  page?: number;
+  page_size?: number;
+  supplier?: number;
+  search?: string;
+  overdue?: 'true' | 'false';
+  /** Orders placed on or after this day (YYYY-MM-DD). */
+  ordered_since?: string;
+}
+
 const BASE = '/warehouse/goods-receipts/';
 
 export const receiptKeys = {
@@ -123,7 +171,16 @@ export const receiptKeys = {
   detail: (id: number) => ['goodsReceipts', 'detail', id] as const,
   orders: ['goodsReceipts', 'orders'] as const,
   orderLines: (po: number) => ['goodsReceipts', 'orderLines', po] as const,
+  pending: (params: PendingLinesParams) => ['goodsReceipts', 'pending', params] as const,
 };
+
+export function pendingLinesQueryOptions(params: PendingLinesParams) {
+  return queryOptions({
+    queryKey: receiptKeys.pending(params),
+    queryFn: ({ signal }) =>
+      apiFetch<PendingLinesPage>(`${BASE}pending-lines/`, { params: { ...params }, signal }),
+  });
+}
 
 export function goodsReceiptsQueryOptions(params: GoodsReceiptsParams) {
   return queryOptions({

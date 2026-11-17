@@ -3,6 +3,7 @@ import {
   Button,
   Group,
   NumberInput,
+  SegmentedControl,
   Stack,
   Table,
   Text,
@@ -10,7 +11,7 @@ import {
   Textarea,
 } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { stockKeys } from '@/api/procurement/stock';
 import { countErrorMessage } from '@/api/warehouse/counts';
 import {
@@ -19,10 +20,12 @@ import {
   goodsReceiptQueryOptions,
   goodsReceiptsQueryOptions,
   orderLinesQueryOptions,
+  pendingLinesQueryOptions,
   receiptKeys,
   searchReceivableOrders,
   type GoodsReceipt,
   type OrderLineState,
+  type PendingLine,
   type ReceiptPieceInput,
 } from '@/api/warehouse/goodsReceipts';
 import { pieceKeys, sizeLabel } from '@/api/warehouse/pieces';
@@ -52,7 +55,19 @@ import {
 } from './ReceiptPiecesEditor';
 
 const PAGE_SIZE = 20;
-const URL_DEFAULTS = { status: '', search: '', mk: '', page: '1' };
+const URL_DEFAULTS = {
+  view: 'bekleyen',
+  status: '',
+  search: '',
+  mk: '',
+  page: '1',
+  // Bekleyen Siparişler
+  supplier: '',
+  psearch: '',
+  overdue: '',
+  since: '90',
+  ppage: '1',
+};
 type FilterKeys = 'search' | 'status';
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
@@ -218,11 +233,20 @@ function OrderLinesTable({
   );
 }
 
-function NewReceiptModal({ onClose }: { onClose: () => void }) {
+/** The order (and the one line, if any) "Kabul Et" opened the form for. */
+export interface ReceiveTarget {
+  order: number;
+  label: string;
+  line?: number;
+}
+
+function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: ReceiveTarget }) {
   const queryClient = useQueryClient();
-  const [order, setOrder] = useState<string | null>(null);
+  const [order, setOrder] = useState<string | null>(target ? String(target.order) : null);
   // Only what the user changed; untouched lines take everything receivable.
+  // Opened for one line: the order's other lines start at 0.
   const [quantities, setQuantities] = useState<Record<number, string | number>>({});
+  const lineOnly = target?.line;
   // Plate / boy lines: the pieces that came, per PO line.
   const [pieces, setPieces] = useState<Record<number, PieceDraft[]>>({});
   const [irsaliyeNo, setIrsaliyeNo] = useState('');
@@ -230,6 +254,15 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
   const [note, setNote] = useState('');
   const orderId = order ? Number(order) : 0;
   const lines = useQuery({ ...orderLinesQueryOptions(orderId), enabled: orderId > 0 });
+  const [primedFor, setPrimedFor] = useState<number | null>(null);
+  if (lineOnly && lines.data && primedFor !== orderId && orderId === target?.order) {
+    setPrimedFor(orderId);
+    setQuantities(
+      Object.fromEntries(
+        lines.data.filter((l) => l.po_line !== lineOnly).map((l) => [l.po_line, 0]),
+      ),
+    );
+  }
   const create = useMutation({
     mutationFn: createGoodsReceipt,
     onSuccess: () => {
@@ -325,6 +358,9 @@ function NewReceiptModal({ onClose }: { onClose: () => void }) {
           minSearchLength={2}
           queryKey={receiptKeys.orders}
           search={searchReceivableOrders}
+          initialOptions={
+            target ? [{ value: String(target.order), label: target.label }] : undefined
+          }
           value={order}
           onChange={(value) => {
             setOrder(value);
@@ -507,12 +543,263 @@ function ReceiptDetail({ receipt, onClose }: { receipt: GoodsReceipt; onClose: (
 }
 
 const EMPTY: GoodsReceipt[] = [];
+const EMPTY_PENDING: PendingLine[] = [];
 
-/** Mal kabul: the receipts, a new one against a purchase order, one receipt's lines. */
+const SINCE_OPTIONS = [
+  { value: '30', label: 'Son 30 gün' },
+  { value: '90', label: 'Son 3 ay' },
+  { value: '180', label: 'Son 6 ay' },
+  { value: 'all', label: 'Tümü' },
+];
+
+/** YYYY-MM-DD of `days` ago, or undefined for "all". */
+export function sinceDate(days: string, now = new Date()): string | undefined {
+  const n = Number.parseInt(days, 10);
+  if (!Number.isFinite(n)) return undefined;
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - n);
+  const pad = (x: number) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Days a line is late (0 when not late). */
+export function daysLate(expected: string | null, now = new Date()): number {
+  if (!expected) return 0;
+  const [y, m, d] = expected.split('-').map(Number);
+  const due = new Date(y!, m! - 1, d!);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return Math.max(0, Math.round((today.getTime() - due.getTime()) / 86_400_000));
+}
+
+const qty = (value: string, unit: string) => `${formatNumber(Number(value), 2)} ${unit}`;
+
+const pendingColumns: DataTableColumn<PendingLine>[] = [
+  {
+    key: 'supplier_name',
+    header: 'Tedarikçi',
+    render: (row) => (
+      <Stack gap={0}>
+        <Text size="sm" fw={500}>
+          {row.supplier_name}
+        </Text>
+        <Text size="xs" c="dimmed">
+          Sipariş #{row.purchase_order} · {row.pr_number}
+        </Text>
+      </Stack>
+    ),
+  },
+  {
+    key: 'item_code',
+    header: 'Malzeme',
+    render: (row) => (
+      <Stack gap={0}>
+        <Text size="sm" fw={600}>
+          {row.item_code}
+        </Text>
+        <Text size="xs" c="dimmed">
+          {row.item_name}
+        </Text>
+      </Stack>
+    ),
+  },
+  {
+    key: 'ordered',
+    header: 'Sipariş / Gelen',
+    align: 'right',
+    render: (row) =>
+      `${qty(row.ordered, row.item_unit)} / ${formatNumber(Number(row.received), 2)}`,
+  },
+  {
+    key: 'remaining',
+    header: 'Kalan',
+    align: 'right',
+    render: (row) => (
+      <Text size="sm" fw={600}>
+        {qty(row.remaining, row.item_unit)}
+      </Text>
+    ),
+  },
+  {
+    key: 'expected_date',
+    header: 'Beklenen',
+    render: (row) =>
+      row.expected_date ? (
+        <Stack gap={2}>
+          <Text size="sm">{formatDate(row.expected_date)}</Text>
+          {row.overdue ? (
+            <StatusBadge color="red">{daysLate(row.expected_date)} gün gecikti</StatusBadge>
+          ) : null}
+        </Stack>
+      ) : (
+        <Text size="xs" c="dimmed">
+          Teslim süresi yok
+        </Text>
+      ),
+  },
+  {
+    key: 'job_no',
+    header: 'İş / Yer',
+    render: (row) => (
+      <Stack gap={0}>
+        <Text size="sm">{row.job_no || '-'}</Text>
+        <Text size="xs" c="dimmed">
+          {row.destination}
+        </Text>
+      </Stack>
+    ),
+  },
+];
+
+/** Bekleyen Siparişler: PO lines still to arrive, across orders. */
+function PendingOrders({
+  values,
+  apply,
+  toolbar,
+  onReceive,
+}: {
+  values: typeof URL_DEFAULTS;
+  apply: (next: Partial<typeof URL_DEFAULTS>) => void;
+  toolbar: ReactNode;
+  onReceive: (target: ReceiveTarget) => void;
+}) {
+  const page = Math.max(1, Number.parseInt(values.ppage, 10) || 1);
+  const since = sinceDate(values.since);
+  const list = useQuery({
+    ...pendingLinesQueryOptions({
+      page,
+      page_size: PAGE_SIZE,
+      ...(values.supplier ? { supplier: Number(values.supplier) } : {}),
+      ...(values.psearch ? { search: values.psearch } : {}),
+      ...(values.overdue === 'true' || values.overdue === 'false'
+        ? { overdue: values.overdue }
+        : {}),
+      ...(since ? { ordered_since: since } : {}),
+    }),
+    placeholderData: keepPreviousData,
+  });
+  useEffect(() => {
+    if (list.isError)
+      notify.error(countErrorMessage(list.error, 'Bekleyen siparişler yüklenemedi'));
+  }, [list.isError, list.error]);
+  const suppliers = list.data?.suppliers ?? [];
+  const filters: FilterConfig<'psearch' | 'supplier' | 'overdue' | 'since'>[] = [
+    {
+      type: 'text',
+      key: 'psearch',
+      label: 'Arama',
+      placeholder: 'Sipariş no, talep no, malzeme, iş no…',
+    },
+    {
+      type: 'select',
+      key: 'supplier',
+      label: 'Tedarikçi',
+      placeholder: 'Tümü',
+      options: suppliers.map((s) => ({ value: String(s.id), label: `${s.name} (${s.lines})` })),
+    },
+    {
+      type: 'select',
+      key: 'overdue',
+      label: 'Gecikme',
+      placeholder: 'Tümü',
+      searchable: false,
+      options: [
+        { value: 'true', label: 'Gecikenler' },
+        { value: 'false', label: 'Gecikmeyenler' },
+      ],
+    },
+    {
+      type: 'select',
+      key: 'since',
+      label: 'Sipariş tarihi',
+      placeholder: 'Tümü',
+      searchable: false,
+      options: SINCE_OPTIONS,
+    },
+  ];
+  const label = (row: PendingLine) =>
+    `#${row.purchase_order} · ${row.supplier_name} · ${row.pr_number}`;
+  return (
+    <DataTable
+      title="Bekleyen Siparişler"
+      icon="fas fa-hourglass-half"
+      toolbar={
+        <Group gap="xs">
+          {list.data ? (
+            <Text size="xs" c="dimmed">
+              {list.data.count} satır · {list.data.overdue_count} geciken
+            </Text>
+          ) : null}
+          {toolbar}
+        </Group>
+      }
+      filters={
+        <FilterBar
+          inline
+          filters={filters}
+          values={{
+            psearch: values.psearch,
+            supplier: values.supplier,
+            overdue: values.overdue,
+            since: values.since,
+          }}
+          onApply={(next) => apply({ ...next, ppage: '1' })}
+          onClear={() => apply({ psearch: '', supplier: '', overdue: '', since: '90', ppage: '1' })}
+        />
+      }
+      data={list.data?.results ?? EMPTY_PENDING}
+      columns={pendingColumns}
+      getRowId={(row) => String(row.po_line)}
+      loading={list.isFetching}
+      rowActions={
+        canReceive()
+          ? () => [
+              {
+                key: 'line',
+                label: 'Kabul Et',
+                icon: 'fas fa-check',
+                color: 'success',
+                onClick: (row) =>
+                  onReceive({ order: row.purchase_order, label: label(row), line: row.po_line }),
+              },
+              {
+                key: 'order',
+                label: 'Siparişi Kabul Et',
+                icon: 'fas fa-truck-loading',
+                onClick: (row) => onReceive({ order: row.purchase_order, label: label(row) }),
+              },
+            ]
+          : undefined
+      }
+      pagination={{
+        page,
+        pageSize: PAGE_SIZE,
+        total: list.data?.count ?? 0,
+        onPageChange: (next) => apply({ ppage: String(next) }),
+      }}
+      emptyMessage="Bu filtrelerle bekleyen sipariş satırı yok"
+    />
+  );
+}
+
+/**
+ * Mal kabul: Bekleyen Siparişler (PO lines still to arrive; "Kabul Et" opens
+ * the receive form for that order) and Mal Kabuller (posted receipts).
+ */
 export function GoodsReceiptsPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<ReceiveTarget | 'new' | null>(null);
+  const view = values.view === 'kabuller' ? 'kabuller' : 'bekleyen';
+  const viewSwitch = (
+    <SegmentedControl
+      size="xs"
+      value={view}
+      onChange={(next) => apply({ view: next })}
+      data={[
+        { value: 'bekleyen', label: 'Bekleyen Siparişler' },
+        { value: 'kabuller', label: 'Mal Kabuller' },
+      ]}
+    />
+  );
   const list = useQuery({
     ...goodsReceiptsQueryOptions({
       page,
@@ -521,6 +808,8 @@ export function GoodsReceiptsPage() {
       ...(values.search ? { search: values.search } : {}),
     }),
     placeholderData: keepPreviousData,
+    // A receipt link (?mk=) finds its receipt in the list, whichever tab is shown.
+    enabled: view === 'kabuller' || Boolean(values.mk),
   });
   useEffect(() => {
     if (list.isError) notify.error(countErrorMessage(list.error, 'Mal kabuller yüklenemedi'));
@@ -545,38 +834,49 @@ export function GoodsReceiptsPage() {
         backTo="/warehouse"
         actions={
           canReceive() ? (
-            <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating(true)}>
+            <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating('new')}>
               Yeni Mal Kabul
             </Button>
           ) : undefined
         }
       />
-      <DataTable
-        title="Mal Kabuller"
-        icon="fas fa-truck-loading"
-        filters={
-          <FilterBar
-            inline
-            filters={filterConfig}
-            values={{ search: values.search, status: values.status }}
-            onApply={(next) => apply({ ...next, page: '1' })}
-            onClear={() => apply({ search: '', status: '', page: '1' })}
-          />
-        }
-        data={rows}
-        columns={columns}
-        getRowId={(row) => String(row.id)}
-        loading={list.isFetching}
-        onRowClick={(row) => apply({ mk: String(row.id) })}
-        pagination={{
-          page,
-          pageSize: PAGE_SIZE,
-          total: list.data?.count ?? 0,
-          onPageChange: (next) => apply({ page: String(next) }),
-        }}
-        emptyMessage="Henüz mal kabul yok"
-      />
-      {creating ? <NewReceiptModal onClose={() => setCreating(false)} /> : null}
+      {view === 'bekleyen' ? (
+        <PendingOrders values={values} apply={apply} toolbar={viewSwitch} onReceive={setCreating} />
+      ) : null}
+      {view === 'kabuller' ? (
+        <DataTable
+          title="Mal Kabuller"
+          icon="fas fa-truck-loading"
+          toolbar={viewSwitch}
+          filters={
+            <FilterBar
+              inline
+              filters={filterConfig}
+              values={{ search: values.search, status: values.status }}
+              onApply={(next) => apply({ ...next, page: '1' })}
+              onClear={() => apply({ search: '', status: '', page: '1' })}
+            />
+          }
+          data={rows}
+          columns={columns}
+          getRowId={(row) => String(row.id)}
+          loading={list.isFetching}
+          onRowClick={(row) => apply({ mk: String(row.id) })}
+          pagination={{
+            page,
+            pageSize: PAGE_SIZE,
+            total: list.data?.count ?? 0,
+            onPageChange: (next) => apply({ page: String(next) }),
+          }}
+          emptyMessage="Henüz mal kabul yok"
+        />
+      ) : null}
+      {creating ? (
+        <NewReceiptModal
+          target={creating === 'new' ? undefined : creating}
+          onClose={() => setCreating(null)}
+        />
+      ) : null}
       {open ? (
         <ReceiptDetail key={open.id} receipt={open} onClose={() => apply({ mk: '' })} />
       ) : null}
