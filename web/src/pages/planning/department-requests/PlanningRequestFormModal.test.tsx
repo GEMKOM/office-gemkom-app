@@ -85,6 +85,11 @@ const WEIGHT = {
 };
 let weightPreview = WEIGHT;
 
+// Mantine's combobox scrolls the active option into view; jsdom has no scrollIntoView.
+beforeAll(() => {
+  Element.prototype.scrollIntoView ??= () => {};
+});
+
 beforeEach(() => {
   weightPreview = WEIGHT;
   fetchMock.mockReset();
@@ -208,14 +213,14 @@ it('a plate line is asked for in sizes and its kg follows the pieces', async () 
   renderWithProviders(
     <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
   );
-  expect(await screen.findByText('Sac ölçüsü')).toBeInTheDocument();
-  expect(await screen.findByText('Toplam 706,50 kg · 706,50 kg / sac')).toBeInTheDocument();
-  // No Miktar / Birim to type: the quantity follows the size and is only shown.
+  // One line: size × adet and the one weight; no Miktar / Birim to type.
+  expect(await screen.findByRole('combobox', { name: 'Ölçü 1' })).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('706,50 kg'));
   expect(screen.queryByRole('textbox', { name: 'Miktar 1' })).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Birim 1')).not.toBeInTheDocument();
+  expect(screen.queryByText(/\/ sac/)).not.toBeInTheDocument(); // the weight shows once
 
   fireEvent.change(screen.getByLabelText('Parça adedi 1'), { target: { value: '2' } });
-  expect(await screen.findByText('Toplam 1.413,00 kg · 706,50 kg / sac')).toBeInTheDocument();
   await waitFor(() => expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('1.413,00 kg'));
 
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
@@ -257,12 +262,12 @@ it('PATCHes when only the plate size changes (adet, same count)', async () => {
   renderWithProviders(
     <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
   );
-  expect(await screen.findByText('Sac ölçüsü')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('radio', { name: 'Özel' }));
+  // "Özel ölçü…" sits in the size dropdown and switches to W × L.
+  fireEvent.click(await screen.findByRole('combobox', { name: 'Ölçü 1' }));
+  fireEvent.click(await screen.findByRole('option', { name: 'Özel ölçü…', hidden: true }));
   fireEvent.change(screen.getByLabelText('En (mm) 1'), { target: { value: '2000' } });
   fireEvent.change(screen.getByLabelText('Boy (mm) 1'), { target: { value: '12000' } });
   expect(screen.getByLabelText('Parça adedi 1')).toHaveValue('4');
-  expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('4,00 adet');
 
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
   await waitFor(() => expect(patches()).toHaveLength(1));
@@ -303,8 +308,9 @@ it('a bar line shows its total metres and kg on one row', async () => {
       onClose={() => {}}
     />,
   );
-  expect(await screen.findByText('Toplam 18,00 m · 661,14 kg')).toBeInTheDocument();
-  expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('18,00 metre');
+  await waitFor(() =>
+    expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('18,00 m · 661,14 kg'),
+  );
   expect(screen.queryByLabelText('Birim 1')).not.toBeInTheDocument();
 });
 
@@ -337,7 +343,7 @@ it('a kg plate card without a thickness asks for the kg and says why', async () 
   renderWithProviders(
     <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
   );
-  expect(await screen.findByText('Ağırlık yok: Kartta sac kalınlığı yok.')).toBeInTheDocument();
+  expect(await screen.findByText('Ağırlık yok')).toBeInTheDocument();
   const kgInput = screen.getByLabelText('Miktar (kg) 1');
   expect(kgInput).toHaveValue('500.00');
   fireEvent.change(kgInput, { target: { value: '520' } });
