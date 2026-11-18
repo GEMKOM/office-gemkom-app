@@ -119,6 +119,10 @@ export interface DepartmentTask {
   quantity?: number | string | null;
   delivered_quantity?: number | string | null;
   item_unit?: string | null;
+  /** A boy (bar) card: Teslim Al books its bars in the job's İş Emri. */
+  is_bar?: boolean;
+  /** The bar length of a line ordered in sizes; null: the lengths are asked. */
+  bar_length_mm?: number | null;
   // machining / cnc rows
   key?: string | null;
   machining_data?: {

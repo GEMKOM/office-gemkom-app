@@ -245,18 +245,26 @@ export interface DeliveryReceiptResult {
   [key: string]: unknown;
 }
 
+/** One length of bars that came with a Teslim Al. */
+export interface DeliveredBar {
+  length_mm: number;
+  quantity: number;
+}
+
 /**
  * Port of markPlanningRequestItemDelivered: each call appends a receipt
  * (quantity as a string; everything outstanding when omitted).
  */
 export function markPlanningRequestItemDelivered(
   itemId: number,
-  receipt: { quantity?: number; note?: string } = {},
+  receipt: { quantity?: number; note?: string; bars?: DeliveredBar[] } = {},
 ) {
-  const body: Record<string, string> = {};
+  const body: Record<string, unknown> = {};
   if (receipt.quantity !== undefined && receipt.quantity !== null)
     body.quantity = String(receipt.quantity);
   if (receipt.note) body.note = receipt.note;
+  // A boy line: the bars that came go into İş Emri on the job.
+  if (receipt.bars?.length) body.bars = receipt.bars;
   return apiFetch<DeliveryReceiptResult>(`/planning/items/${itemId}/mark_delivered/`, {
     method: 'POST',
     body,

@@ -43,13 +43,23 @@ const URL_DEFAULTS = {
   // holds stock of) are hidden unless asked for.
   is_active: 'true',
   category: '',
+  warehouse: '',
+  job_no: '',
   page: '1',
   ordering: 'code',
 };
 
 const PAGE_SIZE = 20;
 
-type FilterKeys = 'code' | 'code_lookup' | 'name' | 'item_type' | 'is_active' | 'category';
+type FilterKeys =
+  | 'code'
+  | 'code_lookup'
+  | 'name'
+  | 'item_type'
+  | 'is_active'
+  | 'category'
+  | 'warehouse'
+  | 'job_no';
 type FilterState = Record<FilterKeys, string>;
 
 const baseFilterConfig: FilterConfig<FilterKeys>[] = [
@@ -87,6 +97,20 @@ const baseFilterConfig: FilterConfig<FilterKeys>[] = [
       { value: 'false', label: 'Pasif' },
     ],
   },
+  // Where the stock is: free (Hammadde), set aside for jobs (İş Emri), finished (Mamul).
+  {
+    type: 'select',
+    key: 'warehouse',
+    label: 'Depo',
+    placeholder: 'Tümü',
+    searchable: false,
+    options: [
+      { value: 'HAMMADDE', label: 'Hammadde' },
+      { value: 'IS_EMRI', label: 'İş Emri' },
+      { value: 'MAMUL', label: 'Mamul' },
+    ],
+  },
+  { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'Örn. 293-17' },
 ];
 
 const EMPTY_FILTERS: FilterState = {
@@ -96,6 +120,8 @@ const EMPTY_FILTERS: FilterState = {
   item_type: '',
   is_active: '',
   category: '',
+  warehouse: '',
+  job_no: '',
 };
 const EMPTY_ROWS: Item[] = [];
 
@@ -112,6 +138,8 @@ function filterParams(values: FilterState): ItemsParams {
   if (values.is_active === 'true' || values.is_active === 'false')
     params.is_active = values.is_active;
   if (values.category) params.category = values.category;
+  if (values.warehouse) params.warehouse = values.warehouse;
+  if (values.job_no.trim()) params.job_no = values.job_no.trim();
   return params;
 }
 
@@ -133,6 +161,8 @@ export function InventoryCardsPage() {
       item_type: values.item_type,
       is_active: values.is_active,
       category: values.category,
+      warehouse: values.warehouse,
+      job_no: values.job_no,
     }),
     [
       values.code,
@@ -141,6 +171,8 @@ export function InventoryCardsPage() {
       values.item_type,
       values.is_active,
       values.category,
+      values.warehouse,
+      values.job_no,
     ],
   );
   const canManage = canManageStockCards();
