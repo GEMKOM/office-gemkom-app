@@ -51,6 +51,8 @@ export interface PlanningItemProcurement {
 /** One planning request item line as GET /planning/items/ returns it. */
 export interface PlanningItem {
   id: number;
+  /** The stock card's id. */
+  item?: number | null;
   item_code?: string | null;
   item_name?: string | null;
   item_unit?: string | null;

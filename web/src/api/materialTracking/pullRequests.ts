@@ -9,6 +9,16 @@ import { planningItemKeys } from '../planning/planningItems';
 export type PullRequestStatus = 'pending' | 'transferred' | 'cancelled';
 export type PullRequestDestinationType = 'subcontractor' | 'team';
 
+/** A bar line's bars picked from the job's İş Emri piece stock. */
+export interface MaterialPullPiece {
+  id?: number;
+  piece: number;
+  quantity: number;
+  width_mm?: string | null;
+  length_mm?: string;
+  heat_number?: string;
+}
+
 export interface MaterialPullRequestItem {
   id?: number;
   planning_item?: number;
@@ -23,6 +33,8 @@ export interface MaterialPullRequestItem {
   delivered_quantity?: string | number | null;
   pulled_quantity?: string | number | null;
   quantity_available_to_pull?: string | number | null;
+  /** A bar line: the bars picked from the job's İş Emri stock (what went out once handed over). */
+  pieces?: MaterialPullPiece[];
   /** Plate / bar lines: the size as one text ("1500×6000 mm × 2 adet · 1.413 kg"); '' otherwise. */
   size_summary?: string | null;
   [key: string]: unknown;
@@ -73,7 +85,14 @@ export interface MaterialPullRequestInput {
   subcontractor?: number;
   team?: number;
   note: string;
-  items: { planning_item: number; quantity: number }[];
+  /**
+   * A line by quantity, or a bar line by the bars picked from the job's İş Emri piece stock
+   * (its quantity then follows on the backend).
+   */
+  items: (
+    | { planning_item: number; quantity: number }
+    | { planning_item: number; pieces: { piece: number; quantity: number }[] }
+  )[];
 }
 
 export const pullRequestKeys = {
