@@ -35,6 +35,8 @@ export interface MaterialPullRequestItem {
   quantity_available_to_pull?: string | number | null;
   /** A bar line: the bars picked from the job's İş Emri stock (what went out once handed over). */
   pieces?: MaterialPullPiece[];
+  /** Brought back from production on İmalattan İade slips (counts back into Depoda Kalan). */
+  returned_quantity?: string | number | null;
   /** Plate / bar lines: the size as one text ("1500×6000 mm × 2 adet · 1.413 kg"); '' otherwise. */
   size_summary?: string | null;
   [key: string]: unknown;

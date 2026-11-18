@@ -607,8 +607,8 @@ export const NAVIGATION_STRUCTURE: NavTree = {
             children: {},
           },
           '/warehouse/production-slips': {
-            label: 'İmalata Çıkış / İade',
-            icon: 'fas fa-dolly-flatbed',
+            label: 'İmalattan İade',
+            icon: 'fas fa-undo',
             children: {},
           },
           '/warehouse/transfers': {
