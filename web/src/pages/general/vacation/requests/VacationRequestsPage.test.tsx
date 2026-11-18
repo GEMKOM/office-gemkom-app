@@ -238,6 +238,9 @@ it('mazeret izni needs both hours, in order, and sends a single day', async () =
   fireEvent.click(within(dialog).getByLabelText(/İzin Türü/));
   fireEvent.click(await screen.findByRole('option', { name: 'Mazeret İzni', hidden: true }));
   expect(within(dialog).queryByLabelText(/Bitiş Tarihi/)).not.toBeInTheDocument();
+  // The form opens on today as Yıllık İzin, which may ask for a preview of today:
+  // only the calls after picking Mazeret İzni count.
+  const callsBefore = calls().length;
   fireEvent.change(within(dialog).getByLabelText(/Başlangıç Tarihi/), {
     target: { value: '2026-11-18' },
   });
@@ -269,9 +272,9 @@ it('mazeret izni needs both hours, in order, and sends a single day', async () =
   });
   // No preview call for mazeret izni.
   expect(
-    calls().some(
-      (c) => c.url.pathname === '/vacation-requests/preview/' && c.url.search.includes('11-18'),
-    ),
+    calls()
+      .slice(callsBefore)
+      .some((c) => c.url.pathname === '/vacation-requests/preview/'),
   ).toBe(false);
 });
 
