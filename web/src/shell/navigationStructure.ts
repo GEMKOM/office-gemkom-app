@@ -548,7 +548,7 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         children: {},
       },
       '/manufacturing/material-tracking/pull-requests': {
-        label: 'Depo Çekme Talepleri',
+        label: 'İmalata Çıkış Talepleri',
         icon: 'fas fa-dolly',
         children: {},
       },
@@ -602,7 +602,7 @@ export const NAVIGATION_STRUCTURE: NavTree = {
           },
           // Also under İmalat, where Malzeme Takibi creates them.
           '/manufacturing/material-tracking/pull-requests': {
-            label: 'Depo Çekme Talepleri',
+            label: 'İmalata Çıkış Talepleri',
             icon: 'fas fa-dolly',
             children: {},
           },

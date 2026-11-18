@@ -451,7 +451,7 @@ export function ProductionSlipsPage() {
     <>
       <PageHeader
         title="İmalata Çıkış / İade"
-        subtitle="Depo çekme talebi olmadan imalata verilen ve imalattan dönen malzeme"
+        subtitle="İmalata çıkış talebi olmadan imalata verilen ve imalattan dönen malzeme"
         icon="dolly"
         backTo="/warehouse"
         actions={

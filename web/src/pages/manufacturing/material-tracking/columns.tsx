@@ -45,7 +45,7 @@ function pullQty(quantity: unknown, unit: string | undefined) {
 }
 
 /**
- * Depo Çekme column: the warehouse ledger of the line (received / pulled /
+ * İmalata Çıkış column: the warehouse ledger of the line (received / issued /
  * still available) above one chip per (non-cancelled) pull request the line
  * is on, orange while pending, green once handed over. A chip opens the
  * request detail.
@@ -59,7 +59,7 @@ function PullCell({ row, onOpen }: { row: PlanningItem; onOpen: (id: number) => 
         size="xs"
         c={total && done >= total ? 'green.7' : 'dimmed'}
         style={{ whiteSpace: 'nowrap' }}
-        title="Sac depodan çekilmez: CNC kesime gider, kesilip istasyona teslim edilir."
+        title="Sac imalata çıkış talebine alınmaz: CNC kesime gider, kesilip istasyona teslim edilir."
       >
         {plateCutText(row)}
       </Text>
@@ -78,10 +78,10 @@ function PullCell({ row, onOpen }: { row: PlanningItem; onOpen: (id: number) => 
         <Text
           size="xs"
           style={{ whiteSpace: 'nowrap' }}
-          title={`Teslim alınan ${fmtQty(received)} · çekilen ${fmtQty(pulled)} · depoda kalan ${fmtQty(available)} ${unit}`}
+          title={`Teslim alınan ${fmtQty(received)} · imalata çıkan ${fmtQty(pulled)} · depoda kalan ${fmtQty(available)} ${unit}`}
         >
           <Text span inherit c="dimmed">
-            Çekilen
+            Çıkan
           </Text>{' '}
           {fmtQty(pulled)} / {fmtQty(received)} ·{' '}
           <Text span inherit c={available > 0 ? 'green.7' : 'dimmed'}>
@@ -121,7 +121,7 @@ function pullCellText(row: PlanningItem): string {
   const parts: string[] = [];
   if (received > 0) {
     parts.push(
-      `Çekilen ${fmtQty(row.pulled_quantity ?? 0)} / ${fmtQty(received)} · kalan ${fmtQty(availableToPull(row))} ${unit}`.trim(),
+      `Çıkan ${fmtQty(row.pulled_quantity ?? 0)} / ${fmtQty(received)} · kalan ${fmtQty(availableToPull(row))} ${unit}`.trim(),
     );
   }
   for (const p of row.pull_requests ?? []) {
@@ -206,7 +206,7 @@ export function materialTrackingColumns({
     },
     {
       key: 'pull_requests',
-      header: 'Depo Çekme',
+      header: 'İmalata Çıkış',
       render: (row) => <PullCell row={row} onOpen={onOpenPullRequest} />,
       exportValue: pullCellText,
     },

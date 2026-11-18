@@ -5,9 +5,10 @@ import { materialTrackingErrorMessage } from '@/api/materialTracking/errors';
 import {
   materialPullRequestQueryOptions,
   useCancelMaterialPullRequest,
+  useMarkPullRequestTransferred,
   type MaterialPullRequest,
 } from '@/api/materialTracking/pullRequests';
-import type { AuthUser } from '@/auth/authService';
+import { hasPerm, type AuthUser } from '@/auth/authService';
 import { formatDateTime } from '@/lib/format';
 import {
   confirm,
@@ -22,9 +23,9 @@ import {
 import uiClasses from '@/ui/ui.module.css';
 import { DeliveryState, fmtQty, qty } from './deliveryState';
 
-// Pull request pieces shared by Malzeme takibi and Depo Çekme Talepleri: the
-// status pill, the destination cell, who may cancel, the cancel confirm and
-// the detail modal.
+// İmalata Çıkış Talebi pieces shared by Malzeme takibi and İmalata Çıkış Talepleri:
+// the status pill, the destination cell, who may cancel, the cancel confirm, the
+// warehouse hand-out (Teslim Et) and the detail modal.
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Beklemede',
@@ -69,14 +70,55 @@ export function canCancelPullRequest(
   return isAdmin || (Boolean(user) && user?.id === request.requested_by);
 }
 
+/** The warehouse hands a pending request out (the backend checks the same grant). */
+export function canHandOutPullRequest(
+  request: Pick<MaterialPullRequest, 'status'> | null | undefined,
+  isAdmin: boolean,
+): boolean {
+  return Boolean(
+    request && request.status === 'pending' && (isAdmin || hasPerm('access_warehouse')),
+  );
+}
+
+/** Confirm, then hand out; resolves true when the material left the warehouse. */
+export function useHandOutPullRequestFlow() {
+  const handOut = useMarkPullRequestTransferred();
+  return async (request: Pick<MaterialPullRequest, 'id' | 'number' | 'destination_name'>) => {
+    const ok = await confirm({
+      title: 'İmalata Teslim Et',
+      icon: 'fas fa-dolly',
+      message:
+        `${request.number} numaralı imalata çıkış talebindeki malzemeler ` +
+        `${request.destination_name || 'hedefe'} teslim edildi mi? Stoktan imalata çıkış yapılacak.`,
+      confirmLabel: 'Evet, Teslim Edildi',
+      cancelLabel: 'Vazgeç',
+    });
+    if (!ok) return false;
+    try {
+      await handOut.mutateAsync(request.id);
+      notify.success(`${request.number} teslim edildi`);
+      return true;
+    } catch (error) {
+      notify.error(
+        materialTrackingErrorMessage(
+          error,
+          'İmalata çıkış talebi teslim edilirken hata oluştu',
+          'Talep teslim edilemedi',
+        ),
+      );
+      return false;
+    }
+  };
+}
+
 /** Confirm, then cancel; resolves true when the request was cancelled. */
 export function useCancelPullRequestFlow() {
   const cancel = useCancelMaterialPullRequest();
   return async (request: Pick<MaterialPullRequest, 'id' | 'number'>): Promise<boolean> => {
     const ok = await confirm({
-      title: 'Depo Çekme Talebini İptal Et',
+      title: 'İmalata Çıkış Talebini İptal Et',
       icon: 'fas fa-ban',
-      message: `${request.number} numaralı depo çekme talebini iptal etmek istediğinize emin misiniz?`,
+      message: `${request.number} numaralı imalata çıkış talebini iptal etmek istediğinize emin misiniz?`,
       confirmLabel: 'Evet, İptal Et',
       cancelLabel: 'Vazgeç',
       danger: true,
@@ -84,13 +126,13 @@ export function useCancelPullRequestFlow() {
     if (!ok) return false;
     try {
       await cancel.mutateAsync(request.id);
-      notify.success('Depo çekme talebi iptal edildi');
+      notify.success('İmalata çıkış talebi iptal edildi');
       return true;
     } catch (error) {
       notify.error(
         materialTrackingErrorMessage(
           error,
-          'Depo çekme talebi iptal edilirken hata oluştu',
+          'İmalata çıkış talebi iptal edilirken hata oluştu',
           'Talep iptal edilirken hata oluştu',
         ),
       );
@@ -115,10 +157,10 @@ function ItemsTable({ request, ledger }: { request: MaterialPullRequest; ledger:
       <Table.Th ta="right" title="Planlama kalemi için depoya giren toplam">
         Teslim Alınan
       </Table.Th>
-      <Table.Th ta="right" title="İptal edilmemiş tüm çekme talepleri (bu talep dahil)">
-        Çekilen
+      <Table.Th ta="right" title="İptal edilmemiş tüm imalata çıkış talepleri (bu talep dahil)">
+        Çıkan
       </Table.Th>
-      <Table.Th ta="right" title="Depoda hâlâ çekilebilir miktar">
+      <Table.Th ta="right" title="Depoda hâlâ imalata çıkabilecek miktar">
         Depoda Kalan
       </Table.Th>
     </Table.Tr>
@@ -207,7 +249,7 @@ export interface PullRequestDetailModalProps {
   user: AuthUser | null | undefined;
   isAdmin: boolean;
   /**
-   * The Depo Çekme Talepleri layout: the warehouse ledger columns per line,
+   * The İmalata Çıkış Talepleri layout: the warehouse ledger columns per line,
    * usernames as a fallback and `Kalemler (n)`.
    */
   ledger?: boolean;
@@ -229,6 +271,7 @@ export function PullRequestDetailModal({
     enabled: requestId !== null,
   });
   const cancelFlow = useCancelPullRequestFlow();
+  const handOutFlow = useHandOutPullRequestFlow();
   const request = requestId !== null ? detail.data : undefined;
 
   useEffect(() => {
@@ -236,7 +279,7 @@ export function PullRequestDetailModal({
     notify.error(
       materialTrackingErrorMessage(
         detail.error,
-        'Depo çekme talebi yüklenirken hata oluştu',
+        'İmalata çıkış talebi yüklenirken hata oluştu',
         'Talep detayı yüklenemedi',
       ),
     );
@@ -309,6 +352,15 @@ export function PullRequestDetailModal({
             Excel&apos;e Aktar
           </Button>
         ) : null}
+        {canHandOutPullRequest(request, isAdmin) ? (
+          <Button
+            color="green"
+            leftSection={<FaIcon icon="fas fa-dolly" />}
+            onClick={() => void handOutFlow(request)}
+          >
+            Teslim Et
+          </Button>
+        ) : null}
         {canCancelPullRequest(request, user, isAdmin) ? (
           <Button
             color="red"
@@ -331,7 +383,7 @@ export function PullRequestDetailModal({
     <DetailModal
       opened={requestId !== null && !detail.isError}
       onClose={onClose}
-      title={request ? `Depo Çekme Talebi — ${request.number}` : 'Depo Çekme Talebi'}
+      title={request ? `İmalata Çıkış Talebi — ${request.number}` : 'İmalata Çıkış Talebi'}
       icon="fas fa-dolly"
       size="lg"
       loading={requestId !== null && detail.isPending}

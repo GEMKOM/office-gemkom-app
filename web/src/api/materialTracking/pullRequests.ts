@@ -120,6 +120,16 @@ export function createMaterialPullRequest(
   return apiFetch<MaterialPullRequest>('/warehouse/pull-requests/', { method: 'POST', body: data });
 }
 
+/**
+ * The warehouse hands the material out (İmalata Çıkış Talebi → Teslim Edildi): the stock
+ * leaves İş Emri to production. Warehouse grant only (the backend checks).
+ */
+export function markPullRequestTransferred(id: number | string): Promise<MaterialPullRequest> {
+  return apiFetch<MaterialPullRequest>(`/warehouse/pull-requests/${id}/mark_transferred/`, {
+    method: 'POST',
+  });
+}
+
 /** Legacy cancelMaterialPullRequest (requester or staff, pending only). */
 export function cancelMaterialPullRequest(id: number | string): Promise<MaterialPullRequest> {
   return apiFetch<MaterialPullRequest>(`/warehouse/pull-requests/${id}/cancel/`, {
@@ -140,6 +150,14 @@ function useInvalidatePullRequests() {
 export function useCreateMaterialPullRequest() {
   const invalidate = useInvalidatePullRequests();
   return useMutation({ mutationFn: createMaterialPullRequest, onSuccess: invalidate });
+}
+
+export function useMarkPullRequestTransferred() {
+  const invalidate = useInvalidatePullRequests();
+  return useMutation({
+    mutationFn: (id: number | string) => markPullRequestTransferred(id),
+    onSuccess: invalidate,
+  });
 }
 
 export function useCancelMaterialPullRequest() {

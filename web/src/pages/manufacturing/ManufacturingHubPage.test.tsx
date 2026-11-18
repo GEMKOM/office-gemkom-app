@@ -89,7 +89,7 @@ it('renders the section hub with its cards in legacy order and live figures', as
     'Raporlar',
     'Taşeron',
     'Malzeme Takibi',
-    'Depo Çekme Talepleri',
+    'İmalata Çıkış Talepleri',
   ]);
 
   await waitFor(() => expect(document.getElementById('openFaults')).toHaveTextContent('1.284'));
@@ -123,7 +123,7 @@ it('shows the open faults and what waits on the shop under the section cards', a
   expect(row).toHaveTextContent('2 gün');
 
   const queues = screen.getByRole('heading', { name: 'Atölyeyi Bekleyenler' }).closest('section')!;
-  const pulls = within(queues).getByRole('link', { name: /Depo çekme talepleri/ });
+  const pulls = within(queues).getByRole('link', { name: /İmalata çıkış talepleri/ });
   await waitFor(() => expect(pulls).toHaveTextContent('4'));
   expect(pulls).toHaveAttribute(
     'href',
@@ -137,7 +137,7 @@ it('shows the open faults and what waits on the shop under the section cards', a
   )!;
   expect(late).toContain('completion_date__isnull=true');
   expect(
-    screen.getByRole('heading', { name: 'Depo Çekme Talepleri' }).closest('article'),
+    screen.getByRole('heading', { name: 'İmalata Çıkış Talepleri' }).closest('article'),
   ).toHaveTextContent('4 talep depoda bekliyor');
 });
 

@@ -6,7 +6,11 @@ import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { PullRequestsPage } from './PullRequestsPage';
 
-vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+let warehouseGrant = false;
+vi.mock('@/auth/authService', () => ({
+  authedFetch: vi.fn(),
+  hasPerm: (code: string) => warehouseGrant && code === 'access_warehouse',
+}));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 const auth = { user: { id: 7, username: 'planlama' }, isAdmin: false };
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => auth }));
@@ -94,6 +98,7 @@ function renderPage(route = '/manufacturing/material-tracking/pull-requests') {
 
 beforeEach(() => {
   auth.isAdmin = false;
+  warehouseGrant = false;
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
@@ -102,6 +107,8 @@ beforeEach(() => {
       return json({ count: 2, next: null, previous: null, results: REQUESTS });
     }
     if (method === 'GET' && path === '/warehouse/pull-requests/55/') return json(DETAIL);
+    if (method === 'POST' && path.endsWith('/mark_transferred/'))
+      return json({ ...DETAIL, status: 'transferred' });
     if (method === 'POST' && path.endsWith('/cancel/'))
       return json({ ...REQUESTS[0], status: 'cancelled' });
     return json({ detail: 'not mocked' }, 404);
@@ -116,7 +123,7 @@ afterEach(() => {
 
 it('renders the requests and sends the legacy default params', async () => {
   renderPage();
-  expect(screen.getByText('Depo Çekme Talepleri')).toBeInTheDocument();
+  expect(screen.getByText('İmalata Çıkış Talepleri')).toBeInTheDocument();
   expect(await screen.findByText('MPR-2026-0055')).toBeInTheDocument();
   expect(screen.getByText('Usta Kaynak')).toBeInTheDocument();
   expect(screen.getByText('254-02')).toBeInTheDocument();
@@ -167,14 +174,14 @@ it('cancels a request only after the confirm', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'İptal' }));
   expect(
     await screen.findByText(
-      'MPR-2026-0055 numaralı depo çekme talebini iptal etmek istediğinize emin misiniz?',
+      'MPR-2026-0055 numaralı imalata çıkış talebini iptal etmek istediğinize emin misiniz?',
     ),
   ).toBeInTheDocument();
   expect(calls().some((c) => c.method === 'POST')).toBe(false);
 
   fireEvent.click(screen.getByRole('button', { name: 'Evet, İptal Et' }));
   await waitFor(() =>
-    expect(notify.success).toHaveBeenCalledWith('Depo çekme talebi iptal edildi'),
+    expect(notify.success).toHaveBeenCalledWith('İmalata çıkış talebi iptal edildi'),
   );
   expect(calls().find((c) => c.method === 'POST')!.url.pathname).toBe(
     '/warehouse/pull-requests/55/cancel/',
@@ -188,7 +195,7 @@ it('Vazgeç cancels nothing', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'İptal' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Vazgeç' }));
   await waitFor(() =>
-    expect(screen.queryByText(/numaralı depo çekme talebini iptal etmek/)).toBeNull(),
+    expect(screen.queryByText(/numaralı imalata çıkış talebini iptal etmek/)).toBeNull(),
   );
   expect(calls().some((c) => c.method === 'POST')).toBe(false);
 });
@@ -198,7 +205,7 @@ it('Detay shows the lines with the warehouse ledger', async () => {
   await screen.findByText('MPR-2026-0055');
   fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
 
-  const dialog = await screen.findByRole('dialog', { name: 'Depo Çekme Talebi — MPR-2026-0055' });
+  const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
   expect(within(dialog).getByText('Kalemler (1)')).toBeInTheDocument();
   expect(within(dialog).getByText('STK-001')).toBeInTheDocument();
   expect(within(dialog).getByText('600 kg')).toBeInTheDocument();
@@ -207,4 +214,26 @@ it('Detay shows the lines with the warehouse ledger', async () => {
   expect(within(dialog).getByText('300')).toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: "Excel'e Aktar" })).toBeInTheDocument();
   expect(within(dialog).getByRole('button', { name: 'Talebi İptal Et' })).toBeInTheDocument();
+});
+
+it('the warehouse hands a pending request out after the confirm (Teslim Et)', async () => {
+  const first = renderPage();
+  await screen.findByText('MPR-2026-0055');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
+  let dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
+  // Not for the requester without the warehouse grant.
+  expect(within(dialog).queryByRole('button', { name: 'Teslim Et' })).not.toBeInTheDocument();
+  first.unmount();
+
+  warehouseGrant = true;
+  renderPage();
+  await screen.findByText('MPR-2026-0055');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
+  dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Teslim Et' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Evet, Teslim Edildi' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('MPR-2026-0055 teslim edildi'));
+  expect(calls().find((c) => c.method === 'POST')!.url.pathname).toBe(
+    '/warehouse/pull-requests/55/mark_transferred/',
+  );
 });

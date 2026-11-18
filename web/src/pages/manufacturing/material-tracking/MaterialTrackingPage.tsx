@@ -132,13 +132,13 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
   {
     type: 'select',
     key: 'pull_state',
-    label: 'Depo Çekme',
+    label: 'İmalata Çıkış',
     placeholder: 'Tümü',
     options: [
       { value: 'available', label: 'Depoda kalan var' },
-      { value: 'none', label: 'Hiç çekilmedi' },
-      { value: 'partial', label: 'Kısmen çekildi' },
-      { value: 'full', label: 'Tamamı çekildi' },
+      { value: 'none', label: 'Hiç çıkmadı' },
+      { value: 'partial', label: 'Kısmen çıktı' },
+      { value: 'full', label: 'Tamamı çıktı' },
     ],
   },
   {
@@ -327,7 +327,7 @@ export function MaterialTrackingPage() {
           {selectedRows.length} kalem seçildi
         </Text>
         <Button size="xs" leftSection={<FaIcon icon="fas fa-dolly" />} onClick={openCreate}>
-          Depodan Çekme Talebi Oluştur
+          İmalata Çıkış Talebi Oluştur
         </Button>
         <Button size="xs" variant="default" onClick={clearSelection}>
           Seçimi Temizle
@@ -349,7 +349,7 @@ export function MaterialTrackingPage() {
             variant="default"
             leftSection={<FaIcon icon="fas fa-dolly" />}
           >
-            Depo Çekme Talepleri
+            İmalata Çıkış Talepleri
           </Button>
         }
       />

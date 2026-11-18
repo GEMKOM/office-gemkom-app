@@ -28,7 +28,7 @@ import {
 import { pullRequestColumns } from './columns';
 import { exportPullRequest } from './exportPullRequest';
 
-// Depo Çekme Talepleri — the office-side list of every warehouse pull request
+// İmalata Çıkış Talepleri — the office-side list of every request to issue material to production
 // (pending, handed over, cancelled), with detail, cancel and a per-request
 // Excel. The warehouse works the same requests on saha /warehouse/transfer-requests/.
 
@@ -184,7 +184,7 @@ export function PullRequestsPage() {
   const total = list.data?.count ?? 0;
 
   useEffect(() => {
-    if (list.isError) notify.error(list.error, { fallback: 'Depo çekme talepleri yüklenemedi' });
+    if (list.isError) notify.error(list.error, { fallback: 'İmalata çıkış talepleri yüklenemedi' });
   }, [list.isError, list.error, list.errorUpdatedAt]);
 
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -199,7 +199,7 @@ export function PullRequestsPage() {
       notify.error(
         materialTrackingErrorMessage(
           error,
-          'Depo çekme talebi yüklenirken hata oluştu',
+          'İmalata çıkış talebi yüklenirken hata oluştu',
           'Talep yüklenemedi.',
         ),
       );
@@ -244,8 +244,8 @@ export function PullRequestsPage() {
   return (
     <>
       <PageHeader
-        title="Depo Çekme Talepleri"
-        subtitle="Taşeron ve kaynak ekiplerine depodan çekilen malzemeler: bekleyen, teslim edilen ve iptal edilen talepler"
+        title="İmalata Çıkış Talepleri"
+        subtitle="Atölyenin istediği, deponun taşeron ve kaynak ekiplerine teslim ettiği malzemeler: bekleyen, teslim edilen ve iptal edilen talepler"
         icon="dolly"
         backTo="/manufacturing/material-tracking/"
       />
@@ -285,7 +285,7 @@ export function PullRequestsPage() {
         }}
         rowActions={rowActions}
         extraData={`${user.id}:${isAdmin}`}
-        emptyMessage="Depo çekme talebi bulunamadı."
+        emptyMessage="İmalata çıkış talebi bulunamadı."
         onRefresh={refresh}
         // Legacy exports the loaded page.
         exportable={{ fileName: exportFileName() }}

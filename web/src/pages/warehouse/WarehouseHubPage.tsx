@@ -64,7 +64,7 @@ export function WarehouseHubPage() {
       iconColor: 'teal',
       features: [
         { label: 'Mal Kabul', icon: 'fas fa-truck-loading', link: RECEIPTS },
-        { label: 'Depo Çekme Talepleri', icon: 'fas fa-dolly', link: PULLS },
+        { label: 'İmalata Çıkış Talepleri', icon: 'fas fa-dolly', link: PULLS },
         { label: 'İmalata Çıkış / İade', icon: 'fas fa-dolly-flatbed', link: SLIPS },
         { label: 'Depo Transferi', icon: 'fas fa-exchange-alt', link: TRANSFERS },
       ],

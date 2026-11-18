@@ -68,8 +68,8 @@ function lineHelp(line: PullLine): string {
   return (
     `İş No: ${line.job_no || '-'} · Birim: ${line.item_unit || '-'}` +
     ` · Teslim alınan ${fmtQty(line.received)}${line.partial ? ` / ${fmtQty(line.planned)} (kısmi teslim)` : ''}` +
-    (line.pulled > 0 ? ` · Daha önce çekilen ${fmtQty(line.pulled)}` : '') +
-    ` · Çekilebilir ${fmtQty(line.available)}`
+    (line.pulled > 0 ? ` · Daha önce çıkan ${fmtQty(line.pulled)}` : '') +
+    ` · Çıkabilir ${fmtQty(line.available)}`
   );
 }
 
@@ -141,7 +141,7 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
         const n = typeof raw === 'number' ? raw : Number.parseFloat(raw);
         if (!Number.isFinite(n) || n <= 0) errors[path] = "Miktar 0'dan büyük olmalıdır";
         else if (line.available > 0 && n > line.available)
-          errors[path] = `En fazla ${fmtQty(line.available)} çekilebilir`;
+          errors[path] = `En fazla ${fmtQty(line.available)} imalata çıkabilir`;
       }
       return errors;
     },
@@ -174,13 +174,13 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
 
     try {
       const result = await create.mutateAsync(payload);
-      notify.success(`Malzeme çekme talebi oluşturuldu: ${result.number}`);
+      notify.success(`İmalata çıkış talebi oluşturuldu: ${result.number}`);
       onCreated?.(result);
       onClose();
     } catch (error) {
       console.error('Error creating pull request:', error);
       notify.error(
-        materialTrackingErrorMessage(error, 'Depo çekme talebi oluşturulurken hata oluştu'),
+        materialTrackingErrorMessage(error, 'İmalata çıkış talebi oluşturulurken hata oluştu'),
       );
     }
   };
@@ -191,7 +191,7 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
     <FormModal
       opened={!listError}
       onClose={onClose}
-      title="Depodan Çekme Talebi Oluştur"
+      title="İmalata Çıkış Talebi Oluştur"
       icon="fas fa-dolly"
       size="lg"
       submitLabel="Talep Gönder"
