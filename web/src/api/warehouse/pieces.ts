@@ -71,6 +71,29 @@ export interface PieceMovement {
   created_at: string;
 }
 
+/** An edit of a lot's details (no pieces move): heat no, certificate no, note, kontrol. */
+export interface PieceChange {
+  id: number;
+  piece: number;
+  /** field → [old, new] */
+  changes: Partial<
+    Record<'heat_number' | 'certificate_no' | 'note' | 'needs_review', [unknown, unknown]>
+  >;
+  note: string;
+  created_by_username: string | null;
+  created_at: string;
+}
+
+/** PATCH /warehouse/pieces/{id}/: details only (count, size and place have their own actions). */
+export interface PieceEdit {
+  heat_number?: string;
+  certificate_no?: string;
+  note?: string;
+  /** Only false: marks a "kontrol edilmeli" lot as checked (change_note required). */
+  needs_review?: false;
+  change_note?: string;
+}
+
 /** A plate / boy card with what it holds in pieces (GET /warehouse/pieces/cards/). */
 export interface PieceCard {
   id: number;
@@ -95,6 +118,12 @@ export interface PieceCard {
 export interface PiecesParams {
   page?: number;
   page_size?: number;
+  /**
+   * One box for anything on a lot (backend warehouse.piece_search): code, name (Turkish
+   * letters either way), a size typed any way (1500x3000, 3000*1500, 1500 3000, 10 mm),
+   * heat / certificate / job no, place, supplier, note, origin, #old remnant or line no,
+   * the cut (CNC-2280), planning request and Mal kabul / irsaliye no. Words AND together.
+   */
   search?: string;
   kind?: PieceKind | '';
   warehouse?: string;
@@ -106,6 +135,12 @@ export interface PiecesParams {
   ordering?: string;
   /** Plate cards of this thickness. */
   thickness_mm?: string;
+  min_width_mm?: string;
+  max_width_mm?: string;
+  min_length_mm?: string;
+  max_length_mm?: string;
+  /** Lots planning has to check ("kontrol edilmeli"). */
+  needs_review?: 'true';
   /** Lots with sheets no CNC cut has reserved. */
   available?: 'true';
   /** The lots received for this planning line in Mal kabul (and split off them). */
@@ -153,6 +188,7 @@ export const pieceKeys = {
   list: (params: PiecesParams) => ['pieces', 'list', params] as const,
   cards: (params: PieceCardsParams) => ['pieces', 'cards', params] as const,
   movements: (id: number) => ['pieces', 'movements', id] as const,
+  changes: (id: number) => ['pieces', 'changes', id] as const,
   cardSearch: ['pieces', 'card-search'] as const,
   supplierSearch: ['pieces', 'supplier-search'] as const,
 };
@@ -182,6 +218,17 @@ export function pieceMovementsQueryOptions(id: number) {
     queryKey: pieceKeys.movements(id),
     queryFn: ({ signal }) => apiFetch<PieceMovement[]>(`${BASE}${id}/movements/`, { signal }),
   });
+}
+
+export function pieceChangesQueryOptions(id: number) {
+  return queryOptions({
+    queryKey: pieceKeys.changes(id),
+    queryFn: ({ signal }) => apiFetch<PieceChange[]>(`${BASE}${id}/changes/`, { signal }),
+  });
+}
+
+export function editPiece(id: number, data: PieceEdit) {
+  return apiFetch<MaterialPiece>(`${BASE}${id}/`, { method: 'PATCH', body: data });
 }
 
 export function createPieces(data: PieceInput | PieceInput[]) {
@@ -226,7 +273,9 @@ export function pieceCardFromSearch(value: string): PieceCard | undefined {
 /** Plate / boy cards for the piece entry, inactive ones too. */
 export async function searchPieceCards(term: string, signal?: AbortSignal, kind?: PieceKind) {
   const params = { search: term, page_size: 30, ...(kind ? { kind } : {}) };
-  const rows = extractResults<PieceCard>(await apiFetch<unknown>(`${BASE}cards/`, { params, signal }));
+  const rows = extractResults<PieceCard>(
+    await apiFetch<unknown>(`${BASE}cards/`, { params, signal }),
+  );
   return rows.map((card) => {
     seenCards.set(String(card.id), card);
     return { value: String(card.id), label: `${card.code} — ${card.name}` };
@@ -247,6 +296,23 @@ export async function searchSuppliers(term: string, signal?: AbortSignal) {
 // --- labels ------------------------------------------------------------------------
 
 export const KIND_LABELS: Record<PieceKind, string> = { plate: 'Sac', boy: 'Boy' };
+
+/** The lot origins (MaterialPiece.ORIGIN_CHOICES), for the Kaynak filter. */
+export const ORIGIN_OPTIONS = [
+  { value: 'count', label: 'Sayım' },
+  { value: 'receipt', label: 'Mal kabul' },
+  { value: 'manual', label: 'Elle giriş' },
+  { value: 'remnant', label: 'Fire sac' },
+  { value: 'offcut', label: 'Boy artığı' },
+  { value: 'migrated', label: 'Eski kayıttan aktarım' },
+  { value: 'split', label: 'Bölünen parça' },
+  { value: 'converted', label: 'Planlama kaleminden' },
+];
+
+/** What a "Lot" column counts (people read it as a lot number). */
+export const LOT_HELP =
+  "Lot: aynı kart, aynı ölçü, aynı yer ve aynı döküm no'lu özdeş parçaların tek kaydı. " +
+  'Bu sütun kartta kaç lot olduğunu gösterir.';
 
 const PLACE_NAMES: Record<string, string> = {
   HAMMADDE: 'Hammadde',
