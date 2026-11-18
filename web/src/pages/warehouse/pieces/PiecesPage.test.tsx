@@ -6,11 +6,15 @@ import { notify } from '@/ui';
 import { CncPlateStockPage, WarehouseBarStockPage, WarehousePlateStockPage } from './PiecesPage';
 
 let warehouseUser = true;
+// "Page: /route/" grants of the signed-in user (a planner's Kesimler page).
+let grantedPages: string[] = [];
 vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
   isAdmin: () => false,
   isSuperuser: () => false,
   hasPerm: (code: string) => warehouseUser && code === 'access_warehouse',
+  getGrantedPageRoutes: () => new Set(grantedPages),
+  getPermissions: () => ({}),
 }));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 
@@ -129,6 +133,7 @@ function renderPage(route = '/warehouse/plate-stock', page = <WarehousePlateStoc
 
 beforeEach(() => {
   warehouseUser = true;
+  grantedPages = [];
   lots = [NO_WEIGHT_LOT, WEIGHED_LOT];
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
@@ -433,4 +438,23 @@ it('the planning Sac Stoğu is the same page, back to CNC Kesim', async () => {
       .getAllByRole('link')
       .some((a) => a.getAttribute('href')?.startsWith('/planning/cnc-cutting')),
   ).toBe(true);
+});
+
+it('a CNC planner may edit a plate lot, and nothing else', async () => {
+  warehouseUser = false;
+  grantedPages = ['/manufacturing/cnc-cutting/cuts'];
+  renderPage('/planning/cnc-cutting/plate-stock?piece=2', <CncPlateStockPage />);
+  expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Düzenle' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Taşı / Fasona Gönder' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Adedi Düzelt' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Parça Ekle' })).not.toBeInTheDocument();
+});
+
+it('a Lineer Kesim planner may not edit a plate lot', async () => {
+  warehouseUser = false;
+  grantedPages = ['/manufacturing/linear-cutting/cuts'];
+  renderPage('/warehouse/plate-stock?piece=2');
+  expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Düzenle' })).not.toBeInTheDocument();
 });
