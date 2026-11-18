@@ -235,20 +235,17 @@ function OrderLinesTable({
   );
 }
 
-/** The order (and the one line, if any) "Kabul Et" opened the form for. */
+/** The order "Kabul Et" opened the form for: all its lines, to receive at once. */
 export interface ReceiveTarget {
   order: number;
   label: string;
-  line?: number;
 }
 
 function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: ReceiveTarget }) {
   const queryClient = useQueryClient();
   const [order, setOrder] = useState<string | null>(target ? String(target.order) : null);
   // Only what the user changed; untouched lines take everything receivable.
-  // Opened for one line: the order's other lines start at 0.
   const [quantities, setQuantities] = useState<Record<number, string | number>>({});
-  const lineOnly = target?.line;
   // Plate / boy lines: the pieces that came, per PO line.
   const [pieces, setPieces] = useState<Record<number, PieceDraft[]>>({});
   const [irsaliyeNo, setIrsaliyeNo] = useState('');
@@ -256,15 +253,6 @@ function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: Re
   const [note, setNote] = useState('');
   const orderId = order ? Number(order) : 0;
   const lines = useQuery({ ...orderLinesQueryOptions(orderId), enabled: orderId > 0 });
-  const [primedFor, setPrimedFor] = useState<number | null>(null);
-  if (lineOnly && lines.data && primedFor !== orderId && orderId === target?.order) {
-    setPrimedFor(orderId);
-    setQuantities(
-      Object.fromEntries(
-        lines.data.filter((l) => l.po_line !== lineOnly).map((l) => [l.po_line, 0]),
-      ),
-    );
-  }
   const create = useMutation({
     mutationFn: createGoodsReceipt,
     onSuccess: () => {
@@ -756,17 +744,10 @@ function PendingOrders({
         canReceive()
           ? () => [
               {
-                key: 'line',
+                key: 'order',
                 label: 'Kabul Et',
                 icon: 'fas fa-check',
                 color: 'success',
-                onClick: (row) =>
-                  onReceive({ order: row.purchase_order, label: label(row), line: row.po_line }),
-              },
-              {
-                key: 'order',
-                label: 'Siparişi Kabul Et',
-                icon: 'fas fa-truck-loading',
                 onClick: (row) => onReceive({ order: row.purchase_order, label: label(row) }),
               },
             ]
