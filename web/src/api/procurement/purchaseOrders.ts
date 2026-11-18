@@ -39,8 +39,11 @@ export interface PurchaseOrderLine {
   id: number;
   item_code?: string;
   item_name?: string;
+  item_unit?: string | null;
   item_description?: string;
   quantity?: Decimal;
+  /** Plate / bar lines: the size as one text ("1500×6000 mm × 2 adet · 1.413 kg"); '' otherwise. */
+  size_summary?: string | null;
   unit_price?: Decimal;
   total_price?: Decimal;
   delivery_days?: number | null;

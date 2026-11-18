@@ -25,6 +25,8 @@ export interface EditLine {
   item_name: string;
   item_unit: string;
   item_description: string;
+  /** Preview of a sized bar line: its size ("6000 mm × 3 adet · 18 m · 110 kg"). */
+  size_summary?: string | null;
   quantity: string;
   unit_price: string;
   planning_request_item: number | null;
@@ -98,6 +100,7 @@ export function fromPreviewLines(preview: ProcurementLinePreview[]): EditLine[] 
     item_name: str(p.item_name),
     item_unit: str(p.item_unit),
     item_description: str(p.item_description),
+    size_summary: p.size_summary || null,
     quantity: str(p.quantity, '0'),
     unit_price:
       p.unit_price_eur != null && p.unit_price_eur !== '' ? String(p.unit_price_eur) : '0',

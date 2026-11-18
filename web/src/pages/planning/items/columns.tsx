@@ -1,6 +1,6 @@
 import type { PlanningItem } from '@/api/planning/planningItems';
 import { toNumber } from '@/lib/format';
-import { StatusBadge, type DataTableColumn, type StatusFamily } from '@/ui';
+import { SizeNote, StatusBadge, type DataTableColumn, type StatusFamily } from '@/ui';
 import { BoolIcon, formatEuro, raw, textOrDash, ValueBadge } from './cells';
 import { DeliveryState, deliveryStateText } from './deliveryState';
 
@@ -88,7 +88,14 @@ export const planningItemColumns: DataTableColumn<PlanningItem>[] = [
     header: 'Ürün Adı',
     sortable: true,
     maxWidth: 'clamp(150px, 15vw, 360px)',
-    render: (row) => textOrDash(row.item_name),
+    exportValue: (row) => [row.item_name, row.size_summary].filter(Boolean).join(' · '),
+    cellTitle: (row) => [row.item_name, row.size_summary].filter(Boolean).join('\n'),
+    render: (row) => (
+      <>
+        {textOrDash(row.item_name)}
+        <SizeNote text={row.size_summary} />
+      </>
+    ),
   },
   {
     key: 'planning_request_number',

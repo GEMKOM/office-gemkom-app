@@ -27,6 +27,30 @@ export const emptyPiece = (): PieceDraft => ({
   certificate: '',
 });
 
+/**
+ * The rows a sized plate / bar line starts with while the warehouse hasn't touched them:
+ * the pieces this receipt's quantity comes to (2 of 2 sheets outstanding, or 1 when the
+ * quantity is lowered to one sheet's worth); one empty row otherwise.
+ */
+export function startPieces(
+  line: Pick<OrderLineState, 'outstanding_pieces' | 'outstanding'>,
+  quantity: number,
+): PieceDraft[] {
+  const pieces = line.outstanding_pieces;
+  const outstanding = Number(line.outstanding);
+  if (!pieces?.count || !(outstanding > 0)) return [emptyPiece()];
+  const count = Math.round(quantity / (outstanding / pieces.count));
+  if (!(count >= 1)) return [emptyPiece()];
+  return [
+    {
+      ...emptyPiece(),
+      width: pieces.width_mm ? Number(pieces.width_mm) : '',
+      length: Number(pieces.length_mm),
+      quantity: count,
+    },
+  ];
+}
+
 /** A row the backend can take, or null while it is incomplete. */
 export function pieceInput(kind: 'plate' | 'boy', row: PieceDraft): ReceiptPieceInput | null {
   const length = Number(row.length);

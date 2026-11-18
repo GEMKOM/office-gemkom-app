@@ -455,3 +455,20 @@ it('shows the pieces a receipt brought', async () => {
     await screen.findByText('Parçalar: 1500 × 3000 mm × 2 (döküm H-1) — 706,50 kg'),
   ).toBeInTheDocument();
 });
+
+describe('a sized plate / bar order line', () => {
+  it('starts its pieces from what is still to come', async () => {
+    const { startPieces } = await import('./ReceiptPiecesEditor');
+    const line = {
+      outstanding: '1413.00',
+      outstanding_pieces: { width_mm: '1500.0', length_mm: '6000.0', count: 2 },
+    };
+    expect(startPieces(line, 1413)[0]).toMatchObject({ width: 1500, length: 6000, quantity: 2 });
+    // The quantity lowered to one sheet: one sheet, not the two still outstanding.
+    expect(startPieces(line, 706.5)[0]).toMatchObject({ quantity: 1 });
+    expect(startPieces({ outstanding: '10', outstanding_pieces: null }, 10)[0]).toMatchObject({
+      length: '',
+      quantity: '',
+    });
+  });
+});

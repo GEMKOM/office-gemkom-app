@@ -25,6 +25,8 @@ export interface ComparisonItem {
   specifications: string;
   item_description: string;
   files?: RequestFile[];
+  /** Plate / bar lines: the pieces, as one text ("1500×6000 mm × 2 adet · 1.413 kg"). */
+  size?: string | null;
 }
 
 export interface ComparisonSupplier {
@@ -204,6 +206,7 @@ export function comparisonFromRequest(request: PurchaseRequestDetail): Compariso
         ? ri.allocations.map((a) => a.job_no).join(', ')
         : '-',
     files: ri.files || [],
+    size: ri.size_summary || null,
   }));
   const suppliers: ComparisonSupplier[] = (request.offers ?? []).map((offer) => ({
     id: String(offer.supplier.id),

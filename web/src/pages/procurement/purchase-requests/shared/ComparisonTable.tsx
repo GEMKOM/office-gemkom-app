@@ -523,6 +523,14 @@ const ItemRow = memo(function ItemRow({
           <strong>{item.name}</strong>
           <br />
           <span className={classes.muted}>{item.code}</span>
+          {item.size ? (
+            <>
+              <br />
+              <span className={classes.muted} data-testid="size-note">
+                {item.size}
+              </span>
+            </>
+          ) : null}
         </>,
         classes.itemCell,
       )}

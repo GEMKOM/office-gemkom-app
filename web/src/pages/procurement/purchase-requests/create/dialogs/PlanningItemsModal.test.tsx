@@ -149,3 +149,79 @@ test('sorting by İhtiyaç Tarihi asks the backend for ordering=needed_date', as
     ).toBe(true),
   );
 });
+
+test('a sized plate line is picked in whole sheets and keeps its size', async () => {
+  vi.mocked(authedFetch).mockImplementation((url) => {
+    const u = new URL(String(url));
+    if (u.pathname === '/planning/items/') {
+      const results = [
+        {
+          id: 9,
+          item_code: '0100 0000 0010 000 000',
+          item_name: '10 mm ST 37-2 SAC',
+          item_unit: 'kg',
+          quantity_to_purchase: '2826.00',
+          quantity_remaining_for_purchase: '2826.00',
+          size_summary: '1500×6000 mm × 4 adet · 2.826 kg',
+          piece_width_mm: '1500.0',
+          piece_length_mm: '6000.0',
+          piece_count: 4,
+          piece_quantity: '706.500',
+        },
+      ];
+      return json({ count: 1, next: null, previous: null, results });
+    }
+    return json({ detail: 'not mocked' }, 404);
+  });
+  const onAdd = vi.fn();
+  renderWithProviders(
+    <PlanningItemsModal pageItems={[]} onClose={() => {}} onAdd={onAdd} onAttached={() => {}} />,
+  );
+  expect(await screen.findByText('1500×6000 mm × 4 adet · 2.826 kg')).toBeInTheDocument();
+  fireEvent.click(box('0100 0000 0010 000 000'));
+  const pieces = screen.getByLabelText('0100 0000 0010 000 000 adet');
+  expect(pieces).toHaveValue('4');
+  fireEvent.change(pieces, { target: { value: '2' } });
+  fireEvent.blur(pieces, { target: { value: '2' } });
+  expect(await screen.findByText('Max: 4 adet · 1413 kg')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Seçilenleri Ekle/ }));
+  await waitFor(() => expect(onAdd).toHaveBeenCalled());
+  const [rows] = onAdd.mock.calls[0]!;
+  expect(rows[0]).toMatchObject({
+    quantity: 1413,
+    unit: 'kg',
+    size_text: '1500×6000 mm',
+    piece_quantity: 706.5,
+  });
+});
+
+test('ticking a sized line starts it at whole sheets, not the raw remaining kg', async () => {
+  vi.mocked(authedFetch).mockImplementation((url) => {
+    const u = new URL(String(url));
+    if (u.pathname === '/planning/items/') {
+      const results = [
+        {
+          id: 9,
+          item_code: '0100 0000 0010 000 000',
+          item_name: '10 mm ST 37-2 SAC',
+          item_unit: 'kg',
+          quantity_to_purchase: '2900.00',
+          quantity_remaining_for_purchase: '2900.00',
+          piece_width_mm: '1500.0',
+          piece_length_mm: '6000.0',
+          piece_count: 4,
+          piece_quantity: '706.500',
+        },
+      ];
+      return json({ count: 1, next: null, previous: null, results });
+    }
+    return json({ detail: 'not mocked' }, 404);
+  });
+  const onAdd = vi.fn();
+  renderWithProviders(<PlanningItemsModal pageItems={[]} onClose={() => {}} onAdd={onAdd} onAttached={() => {}} />);
+  fireEvent.click(await screen.findByRole('checkbox', { name: '0100 0000 0010 000 000 seç' }));
+  expect(await screen.findByText('Max: 4 adet · 2826 kg')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: /Seçilenleri Ekle/ }));
+  await waitFor(() => expect(onAdd).toHaveBeenCalled());
+  expect(onAdd.mock.calls[0]![0][0]).toMatchObject({ quantity: 2826 });
+});

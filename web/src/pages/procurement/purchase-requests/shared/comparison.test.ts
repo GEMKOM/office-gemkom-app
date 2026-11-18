@@ -96,3 +96,26 @@ describe('comparison model', () => {
     expect(s).toEqual({ itemCount: 2, totalQuantity: '10,00 adet, 2,00 kg', recommendedSupplierCount: 1, totalAmountEUR: 25 });
   });
 });
+
+describe('the size of plate / bar lines', () => {
+  it('rides along from the PR line and into the Excel', async () => {
+    const { comparisonFromRequest } = await import('./comparison');
+    const { comparisonRows } = await import('./comparisonExport');
+    const data = comparisonFromRequest({
+      id: 1,
+      request_items: [
+        {
+          id: 5,
+          quantity: '1413.00',
+          item: { code: '0100', name: '10 mm SAC', unit: 'kg' },
+          size_summary: '1500×6000 mm × 2 adet · 1.413 kg',
+        },
+      ],
+      offers: [],
+    } as never);
+    expect(data.items[0]!.size).toBe('1500×6000 mm × 2 adet · 1.413 kg');
+    const rows = comparisonRows(data, [], null, false);
+    expect(rows[0]!.slice(0, 2)).toEqual(['Malzeme', 'Ölçü']);
+    expect(rows[1]!.slice(0, 2)).toEqual(['10 mm SAC', '1500×6000 mm × 2 adet · 1.413 kg']);
+  });
+});

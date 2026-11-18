@@ -11,7 +11,7 @@ import {
 } from '@/api/materialTracking/pullRequests';
 import { subcontractorsQueryOptions } from '@/api/subcontracting/subcontractors';
 import { weldingTeamsQueryOptions } from '@/api/welding/teams';
-import { FormModal, ModalSection, notify } from '@/ui';
+import { FormModal, ModalSection, notify, SizeNote } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
 import { availableToPull } from './columns';
 import { fmtQty, isPartiallyDelivered, qty } from './deliveryState';
@@ -36,6 +36,7 @@ interface PullLine {
   id: number;
   item_code?: string;
   item_name?: string;
+  size_summary?: string;
   job_no?: string;
   item_unit?: string;
   received: number;
@@ -50,6 +51,7 @@ function toLine(row: PlanningItem): PullLine {
     id: row.id,
     item_code: row.item_code ?? undefined,
     item_name: row.item_name ?? undefined,
+    size_summary: row.size_summary ?? undefined,
     job_no: row.job_no ?? undefined,
     item_unit: row.item_unit ?? undefined,
     received: qty(row.delivered_quantity),
@@ -254,6 +256,7 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
                 <span className={uiClasses.code}>{line.item_code || '-'}</span> —{' '}
                 {line.item_name || '-'}
               </Text>
+              <SizeNote text={line.size_summary} />
               <Text size="xs" c="dimmed">
                 {lineHelp(line)}
               </Text>

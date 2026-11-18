@@ -26,6 +26,7 @@ import {
   modalClassNames,
   notify,
   sanitizeZipSegment,
+  SizeNote,
   StatusBadge,
   type DataTableColumn,
   type DateRange,
@@ -36,7 +37,7 @@ import {
 import { daysBetween, DueDate } from '../../../shared/dueDates';
 import { toAttachment } from '../../shared/badges';
 import { truncate } from '../../shared/columns';
-import { isPlanningItemOnPage, itemFromPlanning, type PrItem } from '../model';
+import { isPlanningItemOnPage, itemFromPlanning, onePiece, piecesOf, type PrItem } from '../model';
 
 // create.js "Planlama Talebi Malzemeleri": pick planning items (with a
 // quantity each) and add them as rows, or attach them to an existing PR.
@@ -44,6 +45,15 @@ import { isPlanningItemOnPage, itemFromPlanning, type PrItem } from '../model';
 const num = (v: unknown) => Number(v) || 0;
 const maxQty = (item: ProcurementPlanningItem) =>
   num(item.quantity_remaining_for_purchase) || num(item.quantity_to_purchase) || 0;
+// A sized plate / bar line is picked in whole pieces (the backend refuses part of one).
+const maxPieces = (item: ProcurementPlanningItem, one: number) =>
+  Math.floor(maxQty(item) / one + 1e-6);
+const round2 = (n: number) => Math.round(n * 100) / 100;
+/** What a ticked row starts with: all that is left, in whole pieces on a sized line. */
+const startQty = (item: ProcurementPlanningItem) => {
+  const one = onePiece(item);
+  return one ? round2(maxPieces(item, one) * one) : maxQty(item);
+};
 
 type Filters = {
   planning_request_number: string;
@@ -198,7 +208,7 @@ export function PlanningItemsModal({
       const next = new Map(prev);
       if (!on) next.delete(item.id);
       else if (qty !== undefined) next.set(item.id, qty);
-      else if (!next.has(item.id) && maxQty(item) > 0) next.set(item.id, maxQty(item));
+      else if (!next.has(item.id) && startQty(item) > 0) next.set(item.id, startQty(item));
       return next;
     });
   };
@@ -256,6 +266,7 @@ export function PlanningItemsModal({
             </span>
           ) : null}
           {row.item_name}
+          <SizeNote text={row.size_summary} />
         </>
       ),
     },
@@ -361,6 +372,41 @@ export function PlanningItemsModal({
               Mevcut değil
             </Text>
           );
+        const one = onePiece(row);
+        if (one) {
+          const most = maxPieces(row, one);
+          const picked = quantities.get(row.id);
+          const setPieces = (n: number) =>
+            setQuantity(row, round2(Math.min(Math.max(Math.round(n) || 0, 0), most) * one));
+          return (
+            <div onClick={(e) => e.stopPropagation()}>
+              <NumberInput
+                size="xs"
+                w={150}
+                min={0}
+                max={most}
+                allowDecimal={false}
+                placeholder="0"
+                aria-label={`${row.item_code ?? row.id} adet`}
+                rightSection={
+                  <Text size="xs" c="dimmed">
+                    adet
+                  </Text>
+                }
+                rightSectionWidth={44}
+                value={picked !== undefined ? piecesOf(picked, one) : ''}
+                onBlur={(e) => setPieces(parseFloat(e.currentTarget.value))}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') setPieces(parseFloat(e.currentTarget.value));
+                }}
+              />
+              <Text size="xs" c="dimmed">
+                {`Max: ${most} adet` +
+                  (picked !== undefined ? ` · ${round2(picked)} ${row.item_unit || ''}` : '')}
+              </Text>
+            </div>
+          );
+        }
         return (
           <div onClick={(e) => e.stopPropagation()}>
             <NumberInput

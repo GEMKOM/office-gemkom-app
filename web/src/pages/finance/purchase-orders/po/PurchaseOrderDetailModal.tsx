@@ -11,7 +11,7 @@ import {
 } from '@/api/procurement/purchaseOrders';
 import { formatDate, formatNumber } from '@/lib/format';
 import { NeoAskButton } from '@/neo';
-import { DataTable, DetailModal, FaIcon, notify, type DataTableColumn } from '@/ui';
+import { DataTable, DetailModal, FaIcon, notify, SizeNote, type DataTableColumn } from '@/ui';
 import classes from '../FinanceOperations.module.css';
 import { CurrencyBadge, money, parseMoney } from '../shared';
 import {
@@ -87,7 +87,16 @@ function scheduleColumns(
 function lineColumns(currency?: string): DataTableColumn<PurchaseOrderLine>[] {
   return [
     { key: 'item_code', header: 'Malzeme Kodu', render: (l) => <code>{l.item_code}</code> },
-    { key: 'item_name', header: 'Malzeme Adı' },
+    {
+      key: 'item_name',
+      header: 'Malzeme Adı',
+      render: (l) => (
+        <>
+          {l.item_name || '-'}
+          <SizeNote text={l.size_summary} />
+        </>
+      ),
+    },
     {
       key: 'job_no',
       header: 'İş Emri No',
@@ -97,7 +106,8 @@ function lineColumns(currency?: string): DataTableColumn<PurchaseOrderLine>[] {
       key: 'quantity',
       header: 'Miktar',
       align: 'right',
-      render: (l) => formatNumber(parseMoney(l.quantity)),
+      render: (l) =>
+        `${formatNumber(parseMoney(l.quantity))}${l.item_unit ? ` ${l.item_unit}` : ''}`,
     },
     {
       key: 'unit_price',
