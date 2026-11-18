@@ -6,6 +6,7 @@ web/node_modules/
 web/.vite/
 web/dist/
 _site/
+.asset-history/
 web/test-results/
 web/playwright-report/
 

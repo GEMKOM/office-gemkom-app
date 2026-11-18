@@ -27,12 +27,21 @@ export const page = {
   reload: () => window.location.reload(),
 };
 
+let reloading = false;
+
+/** Tests only: forget a reload this page already started. */
+export function resetReloadState() {
+  reloading = false;
+}
+
 /**
  * Reloads unless this tab already did so in the last few seconds. Returns
- * whether it reloaded. Storage can be off; then it reloads every time, which
- * is still better than an error page.
+ * whether a reload is on its way (also when this page already started one).
+ * Storage can be off; then it reloads every time, which is still better than
+ * an error page.
  */
 export function reloadForNewVersion(now = Date.now()): boolean {
+  if (reloading) return true;
   try {
     const last = Number(sessionStorage.getItem(RELOAD_KEY) ?? 0);
     if (now - last < RELOAD_WINDOW_MS) return false;
@@ -40,6 +49,7 @@ export function reloadForNewVersion(now = Date.now()): boolean {
   } catch {
     // Private mode or blocked storage: no loop guard, reload anyway.
   }
+  reloading = true;
   page.reload();
   return true;
 }
