@@ -58,12 +58,12 @@ export function formatWeight(weight: unknown): string {
   return `${toNumber(weight, 0).toFixed(3)} kg`;
 }
 
-/** Weight × quantity over the shown rows (quantity defaults to 1). */
+/**
+ * The shown rows' weight. A part's Ağırlık is already its row's total (all its
+ * pieces, as the nesting report gives it), so it is not multiplied by Adet.
+ */
 export function totalWeight(rows: readonly CncPartSearchRow[]): number {
-  return rows.reduce((sum, row) => {
-    const quantity = toNumber(row.quantity, 1);
-    return sum + toNumber(row.weight_kg, 0) * (quantity > 0 ? Math.trunc(quantity) : 1);
-  }, 0);
+  return rows.reduce((sum, row) => sum + toNumber(row.weight_kg, 0), 0);
 }
 
 const dateCell = (value: unknown) => (value ? formatDateTime(value as string | number) : '-');

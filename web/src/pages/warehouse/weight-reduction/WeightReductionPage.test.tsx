@@ -59,7 +59,7 @@ const DETAIL = {
   piece_issues: [{ piece: 9, quantity: 2, unit_kg: '353.250', piece_details: LOT }],
   remnant_pieces: [{ ...LOT, id: 15, width_mm: '600.0', length_mm: '1500.0', quantity: 1 }],
   parts: [
-    { id: 1, job_no: '254-01', image_no: 'R1', position_no: 'P1', weight_kg: '100', quantity: 2 },
+    { id: 1, job_no: '254-01', image_no: 'R1', position_no: 'P1', weight_kg: '200', quantity: 2 },
     { id: 2, job_no: '254-02', image_no: 'R2', position_no: 'P2', weight_kg: '50', quantity: 1 },
   ],
 };
@@ -98,7 +98,7 @@ function preview(body: { remnants?: { width_mm: string; length_mm: string; quant
     remnant_kg: remnantKg.toFixed(3),
     fire_kg: fire.toFixed(3),
     parts: [
-      { id: 1, job_no: '254-01', image_no: 'R1', position_no: 'P1', weight_kg: '100', quantity: 2, parts_kg: '400.000', fire_kg: share(400).toFixed(3), deduct_kg: (400 + share(400)).toFixed(3) },
+      { id: 1, job_no: '254-01', image_no: 'R1', position_no: 'P1', weight_kg: '200', quantity: 2, parts_kg: '400.000', fire_kg: share(400).toFixed(3), deduct_kg: (400 + share(400)).toFixed(3) },
       { id: 2, job_no: '254-02', image_no: 'R2', position_no: 'P2', weight_kg: '50', quantity: 1, parts_kg: '100.000', fire_kg: share(100).toFixed(3), deduct_kg: (100 + share(100)).toFixed(3) },
     ],
   };
@@ -218,7 +218,7 @@ describe('Mikro file', () => {
   it('spreads a processed cut’s fire over its parts by weight', () => {
     const rows = partDeductions(
       [
-        { id: 1, job_no: 'A', weight_kg: '100', quantity: 2 },
+        { id: 1, job_no: 'A', weight_kg: '200', quantity: 2 },
         { id: 2, job_no: 'B', weight_kg: '50', quantity: 1 },
       ],
       2,
