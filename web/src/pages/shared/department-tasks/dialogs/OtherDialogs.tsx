@@ -58,6 +58,7 @@ import {
 import { apiFetch } from '@/api/client';
 import { extractResults } from '@/api/types';
 import { useDepartmentTasks } from '../context';
+import { type BarDraft, barsMetres, barsProblem, draftBars, sizedBarCount } from './deliveryBars';
 import classes from '../DepartmentTasks.module.css';
 import {
   fmtQty,
@@ -365,13 +366,16 @@ export function DeliveryDialog({ task, onClose }: Props & { task: DepartmentTask
   const remaining = Math.max(Math.round((planned - onHand) * 100) / 100, 0);
   const [qty, setQty] = useState<number | string>(remaining);
   const [busy, setBusy] = useState(false);
+  // A boy line without a size: the bars that came, for İş Emri stock.
+  const asksBars = Boolean(task.is_bar) && !task.bar_length_mm;
+  const [bars, setBars] = useState<BarDraft[]>([{ length_mm: '', quantity: '' }]);
 
   const confirmIt = async () => {
     // One receipt at a time: a double click must not post twice (legacy createExclusiveRun).
     if (busy) return;
     if (!task.planning_request_item_id)
       return void notify.error('Planlama talebi kalemi bulunamadı');
-    const receipt: { quantity?: number } = {};
+    const receipt: Parameters<typeof markPlanningRequestItemDelivered>[1] = {};
     if (planned > 0) {
       const value = Number(qty);
       if (!(value > 0) || value > remaining + 1e-9) {
@@ -379,6 +383,15 @@ export function DeliveryDialog({ task, onClose }: Props & { task: DepartmentTask
         return;
       }
       receipt.quantity = value;
+    }
+    if (asksBars) {
+      const picked = draftBars(bars);
+      const problem = barsProblem(picked, unit, Number(receipt.quantity ?? remaining));
+      if (problem) {
+        notify.error(problem);
+        return;
+      }
+      receipt.bars = picked;
     }
     setBusy(true);
     try {
@@ -437,7 +450,108 @@ export function DeliveryDialog({ task, onClose }: Props & { task: DepartmentTask
           />
         </Paper>
       ) : null}
+      {task.is_bar ? (
+        <DeliveryBarsSection
+          sizedLength={task.bar_length_mm ?? null}
+          unit={unit}
+          quantity={Number(qty || 0)}
+          rows={bars}
+          onChange={setBars}
+        />
+      ) : null}
     </ConfirmShell>
+  );
+}
+
+/**
+ * The bars a Teslim Al of a boy line books in the job's İş Emri: said by a line
+ * ordered in sizes, otherwise typed (length × count, as many lengths as came).
+ */
+function DeliveryBarsSection({
+  sizedLength,
+  unit,
+  quantity,
+  rows,
+  onChange,
+}: {
+  sizedLength: number | null;
+  unit: string;
+  quantity: number;
+  rows: BarDraft[];
+  onChange: (rows: BarDraft[]) => void;
+}) {
+  if (sizedLength) {
+    const count = sizedBarCount(sizedLength, unit, quantity);
+    return (
+      <Text size="sm" mt="sm" data-testid="delivery-bars-sized">
+        {count
+          ? `${count} boy × ${fmtQty(sizedLength)} mm iş emri stoğuna girer.`
+          : `Bu miktar tam ${fmtQty(sizedLength)} mm boy etmiyor; boylar stoğa girmez.`}
+      </Text>
+    );
+  }
+  const set = (index: number, key: keyof BarDraft, value: number | string) =>
+    onChange(rows.map((row, i) => (i === index ? { ...row, [key]: value } : row)));
+  const metres = barsMetres(draftBars(rows));
+  return (
+    <Paper withBorder p="sm" mt="sm">
+      <Text size="sm" fw={600}>
+        Gelen boylar
+      </Text>
+      <Text size="xs" c="dimmed" mb="xs">
+        İş emri stoğuna girer; imalata çıkışta bu boylar seçilir.
+      </Text>
+      <Stack gap={6}>
+        {rows.map((row, index) => (
+          <Group key={index} gap="xs" wrap="nowrap" align="flex-end">
+            <NumberInput
+              size="xs"
+              label={index === 0 ? 'Uzunluk (mm)' : undefined}
+              aria-label={`Boy ${index + 1} uzunluk`}
+              min={1}
+              decimalSeparator=","
+              value={row.length_mm}
+              onChange={(value) => set(index, 'length_mm', value)}
+              style={{ flex: 1 }}
+            />
+            <NumberInput
+              size="xs"
+              label={index === 0 ? 'Adet' : undefined}
+              aria-label={`Boy ${index + 1} adet`}
+              min={1}
+              allowDecimal={false}
+              value={row.quantity}
+              onChange={(value) => set(index, 'quantity', value)}
+              w={90}
+            />
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              aria-label={`Boy ${index + 1} sil`}
+              disabled={rows.length === 1}
+              onClick={() => onChange(rows.filter((_, i) => i !== index))}
+            >
+              <FaIcon icon="fas fa-trash" />
+            </ActionIcon>
+          </Group>
+        ))}
+      </Stack>
+      <Group justify="space-between" mt="xs">
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          leftSection={<FaIcon icon="fas fa-plus" />}
+          onClick={() => onChange([...rows, { length_mm: '', quantity: '' }])}
+        >
+          Başka uzunluk
+        </Button>
+        {unit.toLowerCase() === 'metre' ? (
+          <Text size="xs" c="dimmed" data-testid="delivery-bars-metres">
+            {fmtQty(metres)} / {fmtQty(quantity)} m
+          </Text>
+        ) : null}
+      </Group>
+    </Paper>
   );
 }
 

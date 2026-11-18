@@ -274,6 +274,19 @@ it('reads name filters and the sort from the URL', async () => {
   });
 });
 
+it('the Depo and İş No filters ask for one warehouse and one job', async () => {
+  renderPage('/warehouse/stock?warehouse=IS_EMRI&job_no=293-17');
+  await screen.findByText('M-001');
+  expect(lastListParams()).toEqual({
+    page: '1',
+    page_size: '20',
+    is_active: 'true',
+    warehouse: 'IS_EMRI',
+    job_no: '293-17',
+    ordering: 'code',
+  });
+});
+
 it('the edit form validates and then PUTs every field', async () => {
   renderPage();
   await screen.findByText('M-001');

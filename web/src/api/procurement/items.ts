@@ -104,6 +104,10 @@ export interface ItemsParams {
   material_class?: string;
   /** Exact codes, comma-separated. */
   code__in?: string;
+  /** Cards with stock (or a negative balance) in HAMMADDE / IS_EMRI / MAMUL. */
+  warehouse?: string;
+  /** Cards with İş Emri stock on jobs starting with this; İş Emri shows their share. */
+  job_no?: string;
 }
 
 /** A row of /procurement/items/{id}/purchase-requests/ and /planning-requests/. */
