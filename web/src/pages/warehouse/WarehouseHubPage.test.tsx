@@ -54,7 +54,7 @@ it('groups Depo into Stoklar, Giriş / Çıkış, Sayım and Raporlar', async ()
     expect.arrayContaining([
       'Mal Kabul',
       'İmalata Çıkış Talepleri',
-      'İmalata Çıkış / İade',
+      'İmalattan İade',
       'Depo Transferi',
     ]),
   );

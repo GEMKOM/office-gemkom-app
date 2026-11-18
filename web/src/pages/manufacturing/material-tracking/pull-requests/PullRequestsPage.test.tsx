@@ -251,6 +251,8 @@ it('the detail lists the bars a bar line took from İş Emri', async () => {
               { piece: 41, quantity: 2, length_mm: '6000.0', heat_number: 'H-7' },
               { piece: 42, quantity: 1, length_mm: '4000.0', heat_number: '' },
             ],
+            returned_quantity: '4.000',
+            item_unit: 'metre',
           },
         ],
       });
@@ -264,4 +266,6 @@ it('the detail lists the bars a bar line took from İş Emri', async () => {
   expect(within(dialog).getByTestId('pulled-bars')).toHaveTextContent(
     '6000 mm × 2 boy (döküm H-7) · 4000 mm × 1 boy',
   );
+  // What came back on an İmalattan İade.
+  expect(within(dialog).getByTestId('returned-note')).toHaveTextContent('İmalattan iade: 4 metre');
 });

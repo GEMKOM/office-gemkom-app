@@ -3,7 +3,6 @@ import {
   Button,
   Group,
   NumberInput,
-  SegmentedControl,
   Select,
   Stack,
   Table,
@@ -13,7 +12,7 @@ import {
 } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { cardFromSearch, itemKeys, searchStockCards } from '@/api/procurement/items';
+import { pullRequestKeys } from '@/api/materialTracking/pullRequests';
 import { stockKeys } from '@/api/procurement/stock';
 import { useJobOrderOptions } from '@/api/reference';
 import { countErrorMessage } from '@/api/warehouse/counts';
@@ -22,10 +21,11 @@ import {
   createProductionSlip,
   productionSlipQueryOptions,
   productionSlipsQueryOptions,
+  returnableLinesQueryOptions,
   slipKeys,
   type ProductionSlip,
-  type SlipKind,
-  type SlipWarehouse,
+  type ProductionSlipInput,
+  type ReturnableLine,
 } from '@/api/warehouse/productionSlips';
 import { hasPerm, isAdmin } from '@/auth/authService';
 import { formatDateTime, formatNumber } from '@/lib/format';
@@ -38,12 +38,12 @@ import {
   FormModal,
   notify,
   PageHeader,
-  SelectRemote,
   StatusBadge,
   useUrlFilters,
   type DataTableColumn,
   type FilterConfig,
 } from '@/ui';
+import uiClasses from '@/ui/ui.module.css';
 
 const PAGE_SIZE = 20;
 const URL_DEFAULTS = { kind: '', status: '', job_no: '', search: '', fis: '', page: '1' };
@@ -76,11 +76,6 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'Örn. 254-01' },
 ];
 
-const WAREHOUSES: { value: SlipWarehouse; label: string }[] = [
-  { value: 'IS_EMRI', label: 'İş Emri' },
-  { value: 'HAMMADDE', label: 'Hammadde' },
-];
-
 /** Who may write slips (the backend checks the same: access_warehouse, staff, superuser). */
 function canWriteSlips(): boolean {
   return isAdmin() || hasPerm('access_warehouse');
@@ -103,7 +98,7 @@ const columns: DataTableColumn<ProductionSlip>[] = [
   { key: 'kind', header: 'Tür', render: kindBadge },
   { key: 'job_no', header: 'İş No' },
   { key: 'warehouse_name', header: 'Depo' },
-  { key: 'recipient', header: 'Alan / Getiren', render: (row) => row.recipient || '-' },
+  { key: 'recipient', header: 'Getiren / Alan', render: (row) => row.recipient || '-' },
   { key: 'lines', header: 'Satır', align: 'right', render: (row) => row.lines.length },
   {
     key: 'status',
@@ -121,29 +116,141 @@ const columns: DataTableColumn<ProductionSlip>[] = [
   },
 ];
 
-interface DraftLine {
+const mm = (value: string | number | null | undefined) => String(Number(value ?? 0));
+/** A quantity without trailing zeros: "5", "8,5". */
+const qty = (value: string | number) => formatNumber(value, { maximumFractionDigits: 3 });
+
+/** "6000 mm × 2 boy · 2500 mm × 1 boy" */
+export function barsText(bars: { length_mm: string | number | null; quantity: number }[]): string {
+  return bars.map((b) => `${mm(b.length_mm)} mm × ${b.quantity} boy`).join(' · ');
+}
+
+interface BarDraft {
   key: number;
-  code: string | null;
+  length: string | number;
+  count: string | number;
+}
+
+interface LineDraft {
   quantity: string | number;
+  bars: BarDraft[];
 }
 
 let nextKey = 1;
-const emptyLine = (): DraftLine => ({ key: nextKey++, code: null, quantity: '' });
 
-function NewSlipModal({ kind, onClose }: { kind: SlipKind; onClose: () => void }) {
+/** A bar line handed over as picked bars comes back as bars (length × count). */
+const takesBars = (line: ReturnableLine) => line.is_bar && line.pieces.length > 0;
+
+function emptyDraft(line: ReturnableLine): LineDraft {
+  return {
+    quantity: '',
+    bars: [{ key: nextKey++, length: Number(line.pieces[0]?.length_mm ?? '') || '', count: '' }],
+  };
+}
+
+const filledBars = (draft: LineDraft | undefined) =>
+  (draft?.bars ?? []).filter((b) => Number(b.length) > 0 && Number(b.count) > 0);
+
+/** What the bars come to in the card's unit, when that is plain (metre / adet). */
+function barsAmount(line: ReturnableLine, bars: BarDraft[]): string {
+  if (bars.length === 0) return '';
+  if (line.item_unit === 'metre') {
+    const metres = bars.reduce((t, b) => t + (Number(b.length) * Number(b.count)) / 1000, 0);
+    return `${qty(metres)} m`;
+  }
+  if (line.item_unit === 'adet') {
+    return `${bars.reduce((t, b) => t + Number(b.count), 0)} adet`;
+  }
+  return '';
+}
+
+function BarsInput({
+  line,
+  draft,
+  onChange,
+}: {
+  line: ReturnableLine;
+  draft: LineDraft;
+  onChange: (bars: BarDraft[]) => void;
+}) {
+  const set = (key: number, patch: Partial<BarDraft>) =>
+    onChange(draft.bars.map((b) => (b.key === key ? { ...b, ...patch } : b)));
+  const amount = barsAmount(line, filledBars(draft));
+  return (
+    <Stack gap={4}>
+      {draft.bars.map((bar, index) => (
+        <Group key={bar.key} gap={4} wrap="nowrap">
+          <NumberInput
+            size="xs"
+            w={100}
+            min={0}
+            hideControls
+            suffix=" mm"
+            aria-label={`${line.item_code} boy ${index + 1} uzunluk`}
+            value={bar.length}
+            onChange={(value) => set(bar.key, { length: value })}
+          />
+          <Text size="xs">×</Text>
+          <NumberInput
+            size="xs"
+            w={80}
+            min={0}
+            allowDecimal={false}
+            hideControls
+            suffix=" boy"
+            aria-label={`${line.item_code} boy ${index + 1} adet`}
+            value={bar.count}
+            onChange={(value) => set(bar.key, { count: value })}
+          />
+          <ActionIcon
+            variant="subtle"
+            color="red"
+            size="sm"
+            aria-label={`${line.item_code} boy ${index + 1} sil`}
+            disabled={draft.bars.length === 1}
+            onClick={() => onChange(draft.bars.filter((b) => b.key !== bar.key))}
+          >
+            <FaIcon icon="fas fa-times" />
+          </ActionIcon>
+        </Group>
+      ))}
+      <Group gap="xs">
+        <Button
+          size="compact-xs"
+          variant="subtle"
+          leftSection={<FaIcon icon="fas fa-plus" />}
+          onClick={() => onChange([...draft.bars, { key: nextKey++, length: '', count: '' }])}
+        >
+          Başka boy
+        </Button>
+        {amount ? (
+          <Text size="xs" c="dimmed">
+            = {amount}
+          </Text>
+        ) : null}
+      </Group>
+    </Stack>
+  );
+}
+
+function NewReturnModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
-  const jobOrders = useJobOrderOptions({ includeAll: kind === 'return' });
-  const [warehouse, setWarehouse] = useState<SlipWarehouse>('IS_EMRI');
+  const jobOrders = useJobOrderOptions({ includeAll: true });
   const [jobNo, setJobNo] = useState<string | null>(null);
   const [recipient, setRecipient] = useState('');
   const [note, setNote] = useState('');
-  const [lines, setLines] = useState<DraftLine[]>(() => [emptyLine()]);
+  const [drafts, setDrafts] = useState<Record<number, LineDraft>>({});
+  const returnable = useQuery({
+    ...returnableLinesQueryOptions(jobNo ?? ''),
+    enabled: Boolean(jobNo),
+  });
   const create = useMutation({
     mutationFn: createProductionSlip,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: slipKeys.all });
       void queryClient.invalidateQueries({ queryKey: stockKeys.all });
       void queryClient.invalidateQueries({ queryKey: ['procurementItems'] });
+      void queryClient.invalidateQueries({ queryKey: pullRequestKeys.all });
     },
   });
   const jobOptions = useMemo(
@@ -151,51 +258,53 @@ function NewSlipModal({ kind, onClose }: { kind: SlipKind; onClose: () => void }
       (jobOrders.data ?? []).map((j) => ({ value: j.job_no, label: `${j.job_no} - ${j.title}` })),
     [jobOrders.data],
   );
-
-  const update = (key: number, patch: Partial<DraftLine>) =>
-    setLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  const lines = returnable.data ?? EMPTY_LINES;
+  const draftOf = (line: ReturnableLine) => drafts[line.id] ?? emptyDraft(line);
+  const update = (line: ReturnableLine, patch: Partial<LineDraft>) =>
+    setDrafts((prev) => ({
+      ...prev,
+      [line.id]: { ...(prev[line.id] ?? emptyDraft(line)), ...patch },
+    }));
 
   const save = async () => {
     if (!jobNo) {
       notify.warning('İş numarası seçin');
       return;
     }
-    const filled = lines.filter((l) => l.code && Number(l.quantity) > 0);
-    if (filled.length === 0) {
-      notify.warning('En az bir ürün ve miktar girin');
-      return;
+    const payload: ProductionSlipInput['lines'] = [];
+    for (const line of lines) {
+      const draft = drafts[line.id];
+      if (takesBars(line)) {
+        const bars = filledBars(draft);
+        if (bars.length > 0) {
+          payload.push({
+            pull_item: line.id,
+            pieces: bars.map((b) => ({ length_mm: String(b.length), quantity: Number(b.count) })),
+          });
+        }
+      } else if (Number(draft?.quantity) > 0) {
+        payload.push({ pull_item: line.id, quantity: String(draft!.quantity) });
+      }
     }
-    const rows = filled.map((l) => ({
-      card: cardFromSearch(l.code!),
-      quantity: String(l.quantity),
-    }));
-    if (rows.some((r) => !r.card)) {
-      notify.error('Bir satırdaki kart bulunamadı; yeniden seçin');
+    if (payload.length === 0) {
+      notify.warning('En az bir satıra iade miktarı girin');
       return;
     }
     try {
-      const slip = await create.mutateAsync({
-        kind,
-        warehouse_code: warehouse,
-        job_no: jobNo,
-        recipient,
-        note,
-        lines: rows.map((r) => ({ item: r.card!.id, quantity: r.quantity })),
-      });
+      const slip = await create.mutateAsync({ job_no: jobNo, recipient, note, lines: payload });
       notify.success(`${slip.number} işlendi`);
       onClose();
     } catch (error) {
-      notify.error(countErrorMessage(error, 'Fiş kaydedilemedi'));
+      notify.error(countErrorMessage(error, 'İade kaydedilemedi'));
     }
   };
 
-  const title = kind === 'issue' ? 'İmalata Çıkış' : 'İmalattan İade';
   return (
     <FormModal
       opened
       onClose={onClose}
-      title={title}
-      icon={kind === 'issue' ? 'fas fa-dolly' : 'fas fa-undo'}
+      title="İmalattan İade"
+      icon="fas fa-undo"
       size="xl"
       submitLabel="Kaydet ve İşle"
       submitting={create.isPending}
@@ -206,25 +315,6 @@ function NewSlipModal({ kind, onClose }: { kind: SlipKind; onClose: () => void }
     >
       <Stack gap="sm">
         <Group grow align="flex-start">
-          <Stack gap={4}>
-            <Text size="sm" fw={500}>
-              {kind === 'issue' ? 'Nereden' : 'Nereye'}
-            </Text>
-            <SegmentedControl
-              value={warehouse}
-              onChange={(v) => setWarehouse(v as SlipWarehouse)}
-              data={WAREHOUSES}
-            />
-            <Text size="xs" c="dimmed">
-              {warehouse === 'IS_EMRI'
-                ? kind === 'issue'
-                  ? 'Önce işin kendi stoğu, sonra atanmamış stok kullanılır'
-                  : 'İş Emri deposuna, bu işin stoğuna döner'
-                : kind === 'issue'
-                  ? 'Hammadde stoğundan düşer; iş fişte kayıtlı kalır'
-                  : 'Hammadde stoğuna döner'}
-            </Text>
-          </Stack>
           <Select
             label="İş No"
             withAsterisk
@@ -233,76 +323,108 @@ function NewSlipModal({ kind, onClose }: { kind: SlipKind; onClose: () => void }
             placeholder="İş emri seçin"
             data={jobOptions}
             value={jobNo}
-            onChange={setJobNo}
+            onChange={(value) => {
+              setJobNo(value);
+              setDrafts({});
+            }}
           />
           <TextInput
-            label={kind === 'issue' ? 'Alan kişi / ekip' : 'Getiren kişi / ekip'}
+            label="Getiren kişi / ekip"
             value={recipient}
             onChange={(e) => setRecipient(e.currentTarget.value)}
           />
         </Group>
+        <Text size="xs" c="dimmed">
+          Bu işe teslim edilmiş imalata çıkış talebi satırlarından iade edilir. Dönen malzeme İş
+          Emri deposunda işin stoğuna girer ve yeniden imalata çıkış talebine alınabilir.
+        </Text>
 
-        <Table withTableBorder verticalSpacing={4}>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Ürün</Table.Th>
-              <Table.Th w={140}>Miktar</Table.Th>
-              <Table.Th w={40} />
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {lines.map((line, index) => (
-              <Table.Tr key={line.key}>
-                <Table.Td>
-                  <SelectRemote
-                    size="xs"
-                    aria-label={`Ürün ${index + 1}`}
-                    placeholder="Kod veya ad ile ara…"
-                    minSearchLength={2}
-                    queryKey={itemKeys.search}
-                    search={searchStockCards}
-                    comboboxProps={{ width: 560, position: 'bottom-start' }}
-                    value={line.code}
-                    onChange={(value) => update(line.key, { code: value })}
-                  />
-                </Table.Td>
-                <Table.Td>
-                  <NumberInput
-                    size="xs"
-                    min={0}
-                    decimalScale={3}
-                    hideControls
-                    aria-label={`Miktar ${index + 1}`}
-                    suffix={line.code ? ` ${cardFromSearch(line.code)?.unit ?? ''}` : undefined}
-                    value={line.quantity}
-                    onChange={(value) => update(line.key, { quantity: value })}
-                  />
-                </Table.Td>
-                <Table.Td>
-                  <ActionIcon
-                    variant="subtle"
-                    color="red"
-                    aria-label={`Satır ${index + 1} sil`}
-                    disabled={lines.length === 1}
-                    onClick={() => setLines((prev) => prev.filter((l) => l.key !== line.key))}
-                  >
-                    <FaIcon icon="fas fa-times" />
-                  </ActionIcon>
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-        <Group>
-          <Button
-            size="xs"
-            variant="default"
-            leftSection={<FaIcon icon="fas fa-plus" />}
-            onClick={() => setLines((prev) => [...prev, emptyLine()])}
-          >
-            Satır Ekle
-          </Button>
-        </Group>
+        {!jobNo ? null : returnable.isLoading ? (
+          <Text size="sm" c="dimmed">
+            Yükleniyor…
+          </Text>
+        ) : lines.length === 0 ? (
+          <Text size="sm" c="dimmed" data-testid="no-returnable">
+            Bu işte teslim edilmiş imalata çıkış talebi yok.
+          </Text>
+        ) : (
+          <Table.ScrollContainer minWidth={720}>
+            <Table withTableBorder verticalSpacing={4} fz="sm">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Talep</Table.Th>
+                  <Table.Th>Ürün</Table.Th>
+                  <Table.Th ta="right">Teslim Edilen</Table.Th>
+                  <Table.Th ta="right">İade Edilen</Table.Th>
+                  <Table.Th w={250}>İade</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {lines.map((line) => {
+                  const left = Number(line.returnable_quantity);
+                  const draft = draftOf(line);
+                  return (
+                    <Table.Tr key={line.id}>
+                      <Table.Td>
+                        <Text size="sm" fw={600}>
+                          {line.pull_request_number}
+                        </Text>
+                        <Text size="xs" c="dimmed">
+                          {line.destination_name} · {formatDateTime(line.transferred_at)}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        <Text size="xs" className={uiClasses.code}>
+                          {line.item_code}
+                        </Text>
+                        <Text size="sm">{line.item_name}</Text>
+                        {line.pieces.length > 0 ? (
+                          <Text size="xs" c="dimmed">
+                            {barsText(line.pieces)}
+                          </Text>
+                        ) : null}
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        {qty(line.quantity)} {line.item_unit}
+                      </Table.Td>
+                      <Table.Td ta="right">
+                        {Number(line.returned_quantity) > 0
+                          ? `${qty(line.returned_quantity)} ${line.item_unit}`
+                          : '-'}
+                      </Table.Td>
+                      <Table.Td>
+                        {left <= 0 ? (
+                          <Text size="xs" c="dimmed">
+                            Tamamı iade edildi
+                          </Text>
+                        ) : takesBars(line) ? (
+                          <BarsInput
+                            line={line}
+                            draft={draft}
+                            onChange={(bars) => update(line, { bars })}
+                          />
+                        ) : (
+                          <NumberInput
+                            size="xs"
+                            min={0}
+                            max={left}
+                            decimalScale={3}
+                            hideControls
+                            aria-label={`${line.item_code} iade miktarı`}
+                            suffix={` ${line.item_unit}`}
+                            description={`En fazla ${qty(left)} ${line.item_unit}`}
+                            value={draft.quantity}
+                            onChange={(value) => update(line, { quantity: value })}
+                          />
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  );
+                })}
+              </Table.Tbody>
+            </Table>
+          </Table.ScrollContainer>
+        )}
         <Textarea label="Not" value={note} onChange={(e) => setNote(e.currentTarget.value)} />
       </Stack>
     </FormModal>
@@ -379,6 +501,7 @@ function SlipDetail({ slip, onClose }: { slip: ProductionSlip; onClose: () => vo
                 <Table.Tr>
                   <Table.Th>Kod</Table.Th>
                   <Table.Th>Ürün</Table.Th>
+                  {slip.kind === 'return' ? <Table.Th>Talep</Table.Th> : null}
                   <Table.Th ta="right">Miktar</Table.Th>
                 </Table.Tr>
               </Table.Thead>
@@ -386,7 +509,17 @@ function SlipDetail({ slip, onClose }: { slip: ProductionSlip; onClose: () => vo
                 {slip.lines.map((l) => (
                   <Table.Tr key={l.id}>
                     <Table.Td>{l.item_code}</Table.Td>
-                    <Table.Td>{l.item_name}</Table.Td>
+                    <Table.Td>
+                      {l.item_name}
+                      {l.pieces?.length ? (
+                        <Text size="xs" c="dimmed" data-testid="returned-bars">
+                          {barsText(l.pieces)}
+                        </Text>
+                      ) : null}
+                    </Table.Td>
+                    {slip.kind === 'return' ? (
+                      <Table.Td>{l.pull_request_number || '-'}</Table.Td>
+                    ) : null}
                     <Table.Td ta="right">
                       {formatNumber(l.quantity, 2)} {l.item_unit}
                     </Table.Td>
@@ -415,12 +548,13 @@ function SlipDetail({ slip, onClose }: { slip: ProductionSlip; onClose: () => vo
 }
 
 const EMPTY: ProductionSlip[] = [];
+const EMPTY_LINES: ReturnableLine[] = [];
 
-/** İmalata çıkış / iade: the slips, a new issue or return, one slip's lines. */
+/** İmalattan İade: the slips (old direct issues included), a new return, one slip's lines. */
 export function ProductionSlipsPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
-  const [creating, setCreating] = useState<SlipKind | null>(null);
+  const [creating, setCreating] = useState(false);
   const list = useQuery({
     ...productionSlipsQueryOptions({
       page,
@@ -450,33 +584,21 @@ export function ProductionSlipsPage() {
   return (
     <>
       <PageHeader
-        title="İmalata Çıkış / İade"
-        subtitle="İmalata çıkış talebi olmadan imalata verilen ve imalattan dönen malzeme"
-        icon="dolly"
+        title="İmalattan İade"
+        subtitle="İmalata çıkış talebiyle teslim edilen malzemenin imalattan dönüşü. İmalata çıkış artık yalnız İmalata Çıkış Talepleri ile yapılır."
+        icon="undo"
         backTo="/warehouse"
         actions={
           canWrite ? (
-            <Group gap="xs">
-              <Button
-                variant="default"
-                leftSection={<FaIcon icon="fas fa-undo" />}
-                onClick={() => setCreating('return')}
-              >
-                İmalattan İade
-              </Button>
-              <Button
-                leftSection={<FaIcon icon="fas fa-dolly" />}
-                onClick={() => setCreating('issue')}
-              >
-                İmalata Çıkış
-              </Button>
-            </Group>
+            <Button leftSection={<FaIcon icon="fas fa-undo" />} onClick={() => setCreating(true)}>
+              İmalattan İade
+            </Button>
           ) : undefined
         }
       />
       <DataTable
         title="Fişler"
-        icon="fas fa-dolly"
+        icon="fas fa-undo"
         filters={
           <FilterBar
             inline
@@ -504,7 +626,7 @@ export function ProductionSlipsPage() {
         }}
         emptyMessage="Henüz fiş yok"
       />
-      {creating ? <NewSlipModal kind={creating} onClose={() => setCreating(null)} /> : null}
+      {creating ? <NewReturnModal onClose={() => setCreating(false)} /> : null}
       {open ? <SlipDetail key={open.id} slip={open} onClose={() => apply({ fis: '' })} /> : null}
     </>
   );

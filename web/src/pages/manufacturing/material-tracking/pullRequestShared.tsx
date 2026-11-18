@@ -158,6 +158,16 @@ function PulledBars({ item }: { item: MaterialPullRequestItem }) {
   );
 }
 
+/** What came back from production on İmalattan İade slips. */
+function ReturnedNote({ item }: { item: MaterialPullRequestItem }) {
+  if (!(qty(item.returned_quantity) > 0)) return null;
+  return (
+    <Text size="xs" c="blue.8" data-testid="returned-note">
+      {`İmalattan iade: ${fmtQty(item.returned_quantity)} ${item.item_unit || ''}`.trim()}
+    </Text>
+  );
+}
+
 function personAt(name: string | undefined, at: string | null | undefined) {
   return `${name || '-'} — ${formatDateTime(at)}`;
 }
@@ -224,6 +234,7 @@ function ItemsTable({ request, ledger }: { request: MaterialPullRequest; ledger:
                     {item.item_name || '-'}
                     <SizeNote text={item.size_summary} />
                     <PulledBars item={item} />
+                    <ReturnedNote item={item} />
                   </Table.Td>
                   <Table.Td>{item.job_no || '-'}</Table.Td>
                   <Table.Td ta="right" fw={600}>
@@ -246,6 +257,7 @@ function ItemsTable({ request, ledger }: { request: MaterialPullRequest; ledger:
                     {item.item_name || '-'}
                     <SizeNote text={item.size_summary} />
                     <PulledBars item={item} />
+                    <ReturnedNote item={item} />
                   </Table.Td>
                   <Table.Td>{item.job_no || '-'}</Table.Td>
                   <Table.Td>{item.quantity ?? '-'}</Table.Td>
