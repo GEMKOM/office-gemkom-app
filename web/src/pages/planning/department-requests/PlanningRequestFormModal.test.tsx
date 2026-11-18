@@ -226,3 +226,49 @@ it('a plate line is asked for in sizes and its kg follows the pieces', async () 
     ],
   });
 });
+
+it('PATCHes when only the plate size changes (adet, same count)', async () => {
+  const request = {
+    ...MIXED,
+    items: [
+      {
+        id: 201,
+        item: 12,
+        item_code: '0100 0000 0010 000 000',
+        item_name: '10 mm ST 37-2 SAC',
+        item_unit: 'adet',
+        item_material_class: 'plate',
+        job_no: '254-01',
+        quantity: 4,
+        size_mode: 'standard' as const,
+        piece_width_mm: '1500.0',
+        piece_length_mm: '6000.0',
+        piece_count: 4,
+      },
+    ],
+  };
+  renderWithProviders(
+    <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
+  );
+  expect(await screen.findByText('Sac ölçüsü')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('radio', { name: 'Özel ölçü' }));
+  fireEvent.change(screen.getByLabelText('En (mm) 1'), { target: { value: '2000' } });
+  fireEvent.change(screen.getByLabelText('Boy (mm) 1'), { target: { value: '12000' } });
+  expect(screen.getByLabelText('Parça adedi 1')).toHaveValue('4');
+  expect(screen.getByLabelText('Miktar 1')).toHaveValue('4');
+
+  fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(patches()).toHaveLength(1));
+  expect(patches()[0]!.body).toMatchObject({
+    items: [
+      {
+        id: 201,
+        quantity: 4,
+        size_mode: 'custom',
+        piece_width_mm: '2000',
+        piece_length_mm: '12000',
+        piece_count: 4,
+      },
+    ],
+  });
+});
