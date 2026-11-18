@@ -83,12 +83,15 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
   '/warehouse/equipment': ['/warehouse'],
   // Sac Stoğu holds the old Fire Plakalar too (retired, its URLs forward
   // there): whoever could open that page (CNC planning) sees the plates.
+  // The CNC / Lineer Kesim planners write their kind's pieces (backend
+  // PLANNER_GRANTS), so they open the Depo page of that kind too.
   '/warehouse/plate-stock': [
     '/warehouse',
     '/planning/cnc-cutting/remnants',
     '/manufacturing/cnc-cutting/remnants',
+    '/planning/cnc-cutting/cuts',
   ],
-  '/warehouse/bar-stock': ['/warehouse'],
+  '/warehouse/bar-stock': ['/warehouse', '/planning/linear-cutting/cuts'],
   // The same pages under Planlama: CNC Kesim / Lineer Kesim planners see them.
   '/planning/cnc-cutting/plate-stock': ['/warehouse/plate-stock', '/planning/cnc-cutting/cuts'],
   '/planning/linear-cutting/bar-stock': ['/warehouse/bar-stock', '/planning/linear-cutting/cuts'],

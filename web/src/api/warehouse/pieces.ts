@@ -77,7 +77,10 @@ export interface PieceChange {
   piece: number;
   /** field → [old, new] */
   changes: Partial<
-    Record<'heat_number' | 'certificate_no' | 'note' | 'needs_review', [unknown, unknown]>
+    Record<
+      'heat_number' | 'certificate_no' | 'note' | 'needs_review' | 'width_mm' | 'length_mm',
+      [unknown, unknown]
+    >
   >;
   note: string;
   created_by_username: string | null;
@@ -91,6 +94,12 @@ export interface PieceEdit {
   note?: string;
   /** Only false: marks a "kontrol edilmeli" lot as checked (change_note required). */
   needs_review?: false;
+  /**
+   * A size read wrong (change_note required): only while the lot has no reservation, was
+   * never cut / issued, isn't at a supplier or on a draft count.
+   */
+  width_mm?: string | null;
+  length_mm?: string;
   change_note?: string;
 }
 
