@@ -285,7 +285,7 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks());
 
-it('opens on Bekleyen Siparişler and receives one line from it', async () => {
+it('opens on Bekleyen Siparişler and receives a whole order from one button', async () => {
   renderPage();
   expect(await screen.findByText('0003 0012 0000 000 001')).toBeInTheDocument();
   expect(screen.getByText('2 satır · 1 geciken')).toBeInTheDocument();
@@ -297,13 +297,17 @@ it('opens on Bekleyen Siparişler and receives one line from it', async () => {
   )!;
   expect(pending.url.searchParams.get('ordered_since')).toMatch(/^\d{4}-\d{2}-\d{2}$/);
 
+  // One button per row; it opens the whole order with every line filled.
+  expect(screen.queryByRole('button', { name: 'Siparişi Kabul Et' })).not.toBeInTheDocument();
   fireEvent.click(screen.getAllByRole('button', { name: 'Kabul Et' })[1]!);
   const dialog = await screen.findByRole('dialog', { name: 'Yeni Mal Kabul' });
-  // The order is chosen; only that line starts filled.
   expect(await within(dialog).findByLabelText('Bu teslimat 0003 0012 0000 000 001')).toHaveValue(
     '20.00',
   );
-  expect(within(dialog).getByLabelText('Bu teslimat 0018 0012 0040 000 001')).toHaveValue('0');
+  // The order's other line is filled too; this receipt only takes the first one.
+  fireEvent.change(within(dialog).getByLabelText('Bu teslimat 0018 0012 0040 000 001'), {
+    target: { value: '0' },
+  });
   fireEvent.change(within(dialog).getByLabelText(/İrsaliye No/), { target: { value: 'IRS-80' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet ve İşle' }));
   await waitFor(() => expect(notify.success).toHaveBeenCalled());
