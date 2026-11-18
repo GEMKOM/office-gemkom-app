@@ -20,6 +20,7 @@ import {
   procurementLinesPendingCountQueryOptions,
   remnantPieceCountQueryOptions,
   requestablePlanningItemCountQueryOptions,
+  plannedCncCutCountQueryOptions,
   unplannedCncCutCountQueryOptions,
 } from '@/api/planning/hubs';
 import type { JobOrder } from '@/api/projects/jobOrders';
@@ -322,6 +323,7 @@ function CncLane() {
     enabled: live,
   });
   const open = useQuery({ ...pendingCncCutCountQueryOptions(), enabled: canCuts });
+  const planned = useQuery({ ...plannedCncCutCountQueryOptions(), enabled: canPlan });
   const unplanned = useQuery({ ...unplannedCncCutCountQueryOptions(), enabled: canPlan });
   const remnants = useQuery({ ...remnantPieceCountQueryOptions(), enabled: canRemnants });
   const machines = useQuery({ ...machinesQueryOptions({ used_in: 'cutting' }), enabled: canPlan });
@@ -364,23 +366,16 @@ function CncLane() {
   const top = loads?.reduce((max, load) => Math.max(max, load.hours), 0) ?? 0;
 
   const figures: LaneFigure[] = [
-    ...(live
-      ? [
-          {
-            id: 'cnc-timers',
-            label: 'Aktif zamanlayıcı',
-            value: timers.isError ? '-' : running ? formatNumber(running.length) : undefined,
-            hint: running
-              ? `${formatNumber(new Set(running.map((t) => t.machine_name)).size)} makinede`
-              : undefined,
-            link: CNC_DASHBOARD,
-          },
-        ]
-      : []),
     ...countLaneFigure(
       CNC_CUTS,
       { id: 'cnc-open', label: 'Açık kesim', link: `${CNC_CUTS}?status=pending` },
       open,
+    ),
+    // The open cuts' two parts, under it when it shows.
+    ...countLaneFigure(
+      CNC_CAPACITY,
+      { id: 'cnc-planned', label: 'Planlanan kesim', link: CNC_CAPACITY, child: canCuts },
+      planned,
     ),
     ...countLaneFigure(
       CNC_CAPACITY,
@@ -389,6 +384,7 @@ function CncLane() {
         label: 'Plana alınmamış kesim',
         link: CNC_CAPACITY,
         alert: Boolean(unplanned.data),
+        child: canCuts,
       },
       unplanned,
     ),

@@ -228,6 +228,43 @@ a.row:focus-visible,
   background: var(--gk-danger);
 }
 
+/* A part of the figure above: indented, with a tree line from the parent. */
+.figure[data-child] {
+  position: relative;
+  padding-left: 44px;
+  border-top-color: transparent;
+}
+
+.figure[data-child]::before {
+  content: '';
+  position: absolute;
+  left: 26px;
+  top: 0;
+  bottom: 0;
+  border-left: 1.5px solid var(--gk-line);
+}
+
+.figure[data-child][data-last]::before {
+  bottom: 50%;
+}
+
+.figure[data-child]::after {
+  content: '';
+  position: absolute;
+  left: 26px;
+  top: 50%;
+  width: 10px;
+  border-top: 1.5px solid var(--gk-line);
+}
+
+.figure[data-child] .figureLabel {
+  font-size: 13.5px;
+}
+
+.figure[data-child] .figureValue {
+  font-size: 16px;
+}
+
 /* ---- records ---- */
 .row {
   height: var(--lane-row);
