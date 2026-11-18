@@ -74,8 +74,8 @@ it('loads the first page, shows plate sources and the weight total', async () =>
   expect(screen.getByText('Teslim')).toBeInTheDocument();
   expect(screen.getByText('Fire Plaka')).toBeInTheDocument();
   expect(screen.getByText('8 mm S355')).toBeInTheDocument();
-  // 1.5 × 2 + 0.25 × 1 (missing quantity counts as one).
-  expect(screen.getByTestId('parts-total-weight')).toHaveTextContent('3.250 kg');
+  // Each row's weight is already its total: 1.5 + 0.25, not multiplied by Adet.
+  expect(screen.getByTestId('parts-total-weight')).toHaveTextContent('1.750 kg');
   expect(Object.fromEntries(searchCalls()[0]!.searchParams)).toEqual({
     page: '1',
     page_size: '20',

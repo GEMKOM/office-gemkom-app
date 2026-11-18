@@ -45,7 +45,8 @@ export function partDeductions(
   sheets: number,
   fireKg: number | null,
 ): ProcessPart[] {
-  const kgOf = (p: CncPart) => Number(p.weight_kg || 0) * Number(p.quantity || 0) * sheets;
+  // A part's weight_kg is its row's total (all its pieces), per sheet.
+  const kgOf = (p: CncPart) => Number(p.weight_kg || 0) * sheets;
   const total = parts.reduce((sum, p) => sum + kgOf(p), 0);
   return parts.map((p) => {
     const kg = kgOf(p);
