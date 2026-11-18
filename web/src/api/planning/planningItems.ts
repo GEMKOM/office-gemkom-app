@@ -69,6 +69,17 @@ export interface PlanningItem {
   is_consumed?: boolean | null;
   consumed_by_username?: string | null;
   cnc_cuts_count?: number | null;
+  /** Plate / bar size (sized lines). */
+  size_mode?: string | null;
+  piece_width_mm?: Decimal | null;
+  piece_length_mm?: Decimal | null;
+  piece_count?: number | null;
+  /** Talep Edilen Sac (fields=simple, sized plate lines): sheets through Mal kabul / free to cut. */
+  sheets_received?: number | null;
+  sheets_free?: number | null;
+  /** On a cut's plate_item: the line is a sized plate line whose sheets the cut takes. */
+  ordered_line?: boolean;
+  sheets_cut?: number | null;
   purchase_request_number?: string | null;
   is_critical?: boolean | null;
   critical_marked_by_username?: string | null;
@@ -98,6 +109,8 @@ export type PlanningItemsParams = QueryParams & {
   is_delivered?: string;
   partially_delivered?: string;
   is_plate?: string;
+  /** Plate / bar lines with a size and piece count (Talep Edilen Sac). */
+  sized?: string;
   is_consumed?: string;
   is_critical?: string;
   from_inventory?: string;

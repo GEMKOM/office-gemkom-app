@@ -6,7 +6,7 @@ import type { CncTask, CncTaskFile, CncTaskInput } from '@/api/manufacturing/cnc
 import { useJobOrderOptions } from '@/api/reference/jobOrders';
 import { useMachines } from '@/api/reference/machines';
 import type { AttachmentFile } from '@/ui';
-import { plateSourceInput, type PlateSourceValue } from './PlateSource';
+import { adetFollowsLot, plateSourceInput, type PlateSourceValue } from './PlateSource';
 
 // The "Temel Bilgiler" fields the create and edit modals share.
 
@@ -62,8 +62,9 @@ export function cutInput(values: CutFormValues, plate: PlateSourceValue): CncTas
     dimensions: values.dimensions,
     machine_fk: values.machine_fk ? parseInt(values.machine_fk, 10) : null,
     estimated_hours: toNumber(values.estimated_hours, parseFloat),
-    // A cut on a stock lot cuts as many sheets as it reserves (the backend checks).
-    quantity: plate.piece && !plate.locked
+    // A cut on a stock lot cuts as many sheets as it reserves (the backend checks);
+    // a Talep Edilen Sac cut keeps its own Adet.
+    quantity: adetFollowsLot(plate)
       ? plate.quantityUsed
       : toNumber(values.quantity, (s) => parseInt(s, 10)),
     ...plateSourceInput(plate),

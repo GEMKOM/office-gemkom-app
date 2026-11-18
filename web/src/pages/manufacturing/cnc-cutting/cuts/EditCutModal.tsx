@@ -22,9 +22,11 @@ import {
 } from './cutForm';
 import { PartsManager } from './PartsManager';
 import {
+  adetFollowsLot,
   EMPTY_PLATE_SOURCE,
   plateSourceFromTask,
   PlateSourceSection,
+  samePlateSource,
   type PlateSourceValue,
 } from './PlateSource';
 
@@ -35,11 +37,14 @@ export function EditCutModal({ cutKey, onClose }: { cutKey: string; onClose: () 
   const task = useQuery(cncTaskQueryOptions(cutKey));
   const form = useForm({ initialValues: EMPTY_CUT_FORM, validate: zod4Resolver(cutSchema) });
   const [plate, setPlate] = useState<PlateSourceValue>(EMPTY_PLATE_SOURCE);
+  // The source the cut was opened with: an edit that leaves it alone doesn't resend it.
+  const [openedPlate, setOpenedPlate] = useState<PlateSourceValue>(EMPTY_PLATE_SOURCE);
   // The form starts from the task as first loaded; refetches (parts, files) leave it alone.
   const [opened, setOpened] = useState<CncTask | null>(null);
   if (task.data && !opened) {
     setOpened(task.data);
     setPlate(plateSourceFromTask(task.data));
+    setOpenedPlate(plateSourceFromTask(task.data));
   }
   useEffect(() => {
     if (!opened) return;
@@ -51,7 +56,13 @@ export function EditCutModal({ cutKey, onClose }: { cutKey: string; onClose: () 
   const refresh = () => queryClient.invalidateQueries({ queryKey: cncTaskKeys.all });
 
   const update = useMutation({
-    mutationFn: (values: typeof form.values) => updateCncTask(cutKey, cutInput(values, plate)),
+    mutationFn: (values: typeof form.values) => {
+      const input = cutInput(values, plate);
+      return updateCncTask(
+        cutKey,
+        samePlateSource(plate, openedPlate) ? { ...input, keepSource: true } : input,
+      );
+    },
     onSuccess: () => refresh(),
   });
 
@@ -87,12 +98,17 @@ export function EditCutModal({ cutKey, onClose }: { cutKey: string; onClose: () 
     >
       {loaded ? (
         <>
-          <PlateSourceSection value={plate} onChange={setPlate} />
+          <PlateSourceSection
+            value={plate}
+            onChange={setPlate}
+            sheetsWaiting={loaded.sheets_waiting ?? null}
+            mismatch={loaded.plate_mismatch ?? []}
+          />
           <ModalSection title="Temel Bilgiler" icon="fas fa-info-circle">
             <CutBasicFields
               form={form}
               dimensionsHelp="Plaka boyutları (opsiyonel)"
-              sheets={plate.piece && !plate.locked ? plate.quantityUsed : null}
+              sheets={adetFollowsLot(plate) ? plate.quantityUsed : null}
             />
           </ModalSection>
           <PartsManager taskKey={cutKey} parts={loaded.parts ?? []} />

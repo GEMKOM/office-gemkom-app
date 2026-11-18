@@ -14,7 +14,11 @@ export type PlateSourceRow = { id?: unknown } & Pick<
   | 'plate_item_is_delivered'
   | 'has_remnant_plate'
   | 'has_piece'
->;
+> & {
+    /** Cuts table only: Talep Edilen Sac sheets still waiting for Mal kabul. */
+    sheets_waiting?: number | null;
+    plate_mismatch?: unknown[] | null;
+  };
 
 /**
  * Combined "N mm MATERIAL" text from the part's cut fields. Derived materials
@@ -40,6 +44,22 @@ export interface PlateSource {
 
 /** The plate source cell (same as the cuts table): name plus delivery state. */
 export function plateSource(row: PlateSourceRow): PlateSource {
+  const waiting = Number(row.sheets_waiting || 0);
+  if (row.planning_request_item && waiting > 0) {
+    const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
+    if (row.plate_mismatch && row.plate_mismatch.length > 0) {
+      return {
+        name,
+        badge: { label: 'Farklı ölçüde geldi', color: 'red' },
+        tooltip: `${waiting} sac bekleniyor; bu kaleme farklı ölçüde sac geldi. Kesimi düzenleyip o sacı ayırın ya da doğru ölçüyü bekleyin.`,
+      };
+    }
+    return {
+      name,
+      badge: { label: 'Sac bekleniyor', color: 'orange' },
+      tooltip: `${waiting} sac henüz Mal Kabul'den geçmedi; sac gelince kesim başlatılabilir.`,
+    };
+  }
   if (row.planning_request_item) {
     const delivered = row.plate_item_is_delivered === true;
     const partial = !delivered && Number(row.plate_item_delivered_quantity || 0) > 0;

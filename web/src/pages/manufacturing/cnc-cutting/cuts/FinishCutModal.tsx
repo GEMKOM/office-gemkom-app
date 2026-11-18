@@ -35,7 +35,7 @@ import {
   StatusBadge,
   type DataTableColumn,
 } from '@/ui';
-import { pieceText } from './PlateSource';
+import { isOrderedLine, pieceText, SHEETS_WAITING_FINISH } from './PlateSource';
 
 // Finishing a cut ("Kesimi Bitir"). The operator enters the remnants the cut
 // left; none entered means it left none. On finish the backend issues the reserved
@@ -206,7 +206,8 @@ export function KgSummary({
   partsWithoutWeight?: number;
   scrapped?: boolean;
 }) {
-  const fire = figures.fire_kg === null || figures.fire_kg === undefined ? null : Number(figures.fire_kg);
+  const fire =
+    figures.fire_kg === null || figures.fire_kg === undefined ? null : Number(figures.fire_kg);
   return (
     <Stack gap="xs">
       <StatCards
@@ -222,7 +223,13 @@ export function KgSummary({
               ? `Kesimin ölçüsü (${task.dimensions || '-'}), kalınlığı ve sac adedinden`
               : undefined,
           },
-          { id: 'parts', title: 'Parçalar', value: kg(figures.parts_kg), icon: 'fas fa-puzzle-piece', color: 'green' },
+          {
+            id: 'parts',
+            title: 'Parçalar',
+            value: kg(figures.parts_kg),
+            icon: 'fas fa-puzzle-piece',
+            color: 'green',
+          },
           {
             id: 'remnants',
             title: 'Stoğa Dönen Fire Sac',
@@ -298,7 +305,9 @@ function LineSheets({
   picks: Record<number, number>;
   onChange: (picks: Record<number, number>) => void;
 }) {
-  const lots = useQuery(piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }));
+  const lots = useQuery(
+    piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }),
+  );
   const rows = lots.data?.results ?? EMPTY_LOTS;
   if (lots.isLoading || rows.length === 0) return null;
   const chosen = Object.values(picks).reduce((sum, n) => sum + n, 0);
@@ -308,8 +317,8 @@ function LineSheets({
         Bu kesimin plaka kaleminin gelen sacları
       </Text>
       <Text size="xs" c="dimmed">
-        Kesimde kullanılan sacları girin ({sheets} sac); stoktan düşülür ve ağırlık tahmin
-        edilmez. Boş bırakılırsa ağırlık kesimin ölçüsünden tahmin edilir.
+        Kesimde kullanılan sacları girin ({sheets} sac); stoktan düşülür ve ağırlık tahmin edilmez.
+        Boş bırakılırsa ağırlık kesimin ölçüsünden tahmin edilir.
       </Text>
       {rows.map((lot) => {
         const free = lot.available_quantity ?? lot.quantity;
@@ -326,7 +335,9 @@ function LineSheets({
               allowDecimal={false}
               aria-label={`Kullanılan sac ${lot.id}`}
               value={picks[lot.id] ?? 0}
-              onChange={(value) => onChange({ ...picks, [lot.id]: Math.max(0, Number(value) || 0) })}
+              onChange={(value) =>
+                onChange({ ...picks, [lot.id]: Math.max(0, Number(value) || 0) })
+              }
             />
           </Group>
         );
@@ -350,7 +361,9 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   const [card, setCard] = useState<string | null>(null);
   const remnants = useMemo(() => remnantInputs(rows, card), [rows, card]);
   // A cut on a plate line without a lot: the line's sheets picked here.
-  const lineId = !reservation && t?.plate_item ? t.plate_item.id : null;
+  // (Not a Talep Edilen Sac line: its sheets are reserved, never named here.)
+  const lineId =
+    !reservation && t?.plate_item && !isOrderedLine(t.plate_item) ? t.plate_item.id : null;
   const [picks, setPicks] = useState<Record<number, number>>({});
   const consumed = useMemo(() => (lineId ? consumedInputs(picks) : []), [lineId, picks]);
   const input = useMemo<ProcessInput>(
@@ -373,6 +386,9 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
       ]),
   });
   const result = preview.data;
+  // Talep Edilen Sac still on order: no finish until Mal kabul posts the sheets
+  // (unless the line's received sheets are picked here).
+  const waiting = Number(t?.sheets_waiting || 0) > 0;
   const previewError = preview.isError ? errorMessage(preview.error, 'Hesaplanamadı') : '';
 
   const save = async () => {
@@ -393,6 +409,11 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
           <Text c="dimmed">Yükleniyor…</Text>
         ) : (
           <Stack gap="md">
+            {waiting ? (
+              <Alert color="orange" icon={<FaIcon icon="fas fa-hourglass-half" />}>
+                {SHEETS_WAITING_FINISH} ({t.sheets_waiting} sac bekleniyor)
+              </Alert>
+            ) : null}
             <ModalSection title="Kesim" icon="fas fa-info-circle">
               <Text size="sm">
                 {t.name || '-'} · Nesting {t.nesting_id || '-'} · {t.material || '-'} ·{' '}
@@ -450,12 +471,16 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
             />
 
             <Group justify="flex-end">
-              <Button variant="default" onClick={onClose} leftSection={<FaIcon icon="fas fa-times" />}>
+              <Button
+                variant="default"
+                onClick={onClose}
+                leftSection={<FaIcon icon="fas fa-times" />}
+              >
                 Vazgeç
               </Button>
               <Button
                 leftSection={<FaIcon icon="fas fa-check" />}
-                disabled={Boolean(previewError) || preview.isFetching}
+                disabled={Boolean(previewError) || preview.isFetching || waiting}
                 loading={finish.isPending}
                 onClick={() => void save()}
               >
