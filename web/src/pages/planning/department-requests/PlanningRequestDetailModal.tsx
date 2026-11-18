@@ -70,19 +70,22 @@ function ItemsTable({ request }: { request: PlanningRequest }) {
                 <Table.Td>{item.item_description || '-'}</Table.Td>
                 <Table.Td>{item.job_no || '-'}</Table.Td>
                 <Table.Td>{formatQuantity(item.quantity_from_inventory || 0)}</Table.Td>
-                <Table.Td fw={700}>{formatQuantity(item.quantity_to_purchase || 0)}</Table.Td>
-                <Table.Td>{item.item_unit || 'adet'}</Table.Td>
                 <Table.Td>
-                  <PriorityBadge priority={item.priority || 'normal'} />
-                </Table.Td>
-                <Table.Td>
-                  {item.specifications || '-'}
+                  <Text size="sm" fw={700}>
+                    {formatQuantity(item.quantity_to_purchase || 0)}
+                  </Text>
                   {item.size_label ? (
-                    <Text size="xs" c="dimmed">
+                    // A plate / boy line: the size and count its quantity comes from.
+                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
                       {item.size_label}
                     </Text>
                   ) : null}
                 </Table.Td>
+                <Table.Td>{item.item_unit || 'adet'}</Table.Td>
+                <Table.Td>
+                  <PriorityBadge priority={item.priority || 'normal'} />
+                </Table.Td>
+                <Table.Td>{item.specifications || '-'}</Table.Td>
                 <Table.Td>
                   <PurchaseRequests info={item.purchase_request_info} />
                 </Table.Td>
