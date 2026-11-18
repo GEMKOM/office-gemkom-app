@@ -1,6 +1,8 @@
 import {
+  ActionIcon,
   Alert,
   Button,
+  Checkbox,
   Group,
   NumberInput,
   SegmentedControl,
@@ -20,11 +22,14 @@ import { countErrorMessage } from '@/api/warehouse/counts';
 import {
   adjustPieces,
   createPieces,
+  editPiece,
   KIND_LABELS,
+  LOT_HELP,
   missingWeightText,
   movePieces,
   pieceCardFromSearch,
   pieceCardsQueryOptions,
+  pieceChangesQueryOptions,
   pieceKeys,
   pieceMovementsQueryOptions,
   piecesQueryOptions,
@@ -34,8 +39,12 @@ import {
   searchPieceCards,
   searchSuppliers,
   sizeLabel,
+  ORIGIN_OPTIONS,
   type MaterialPiece,
   type PieceCard,
+  type PieceChange,
+  type PieceEdit,
+  type PieceMovement,
   type PieceKind,
   type PiecePlace,
 } from '@/api/warehouse/pieces';
@@ -64,14 +73,58 @@ const URL_DEFAULTS = {
   search: '',
   place: '',
   job_no: '',
+  thickness: '',
+  min_width: '',
+  max_width: '',
+  min_length: '',
+  max_length: '',
+  origin: '',
+  review: false,
   item: '',
   piece: '',
   page: '1',
 };
-type FilterKeys = 'search' | 'place' | 'job_no';
+type FilterKeys =
+  | 'search'
+  | 'place'
+  | 'job_no'
+  | 'thickness'
+  | 'min_width'
+  | 'max_width'
+  | 'min_length'
+  | 'max_length'
+  | 'origin'
+  | 'review';
+const FILTER_KEYS: FilterKeys[] = [
+  'search',
+  'place',
+  'job_no',
+  'thickness',
+  'min_width',
+  'max_width',
+  'min_length',
+  'max_length',
+  'origin',
+  'review',
+];
 
-const filterConfig: FilterConfig<FilterKeys>[] = [
-  { type: 'text', key: 'search', label: 'Arama', placeholder: 'Kod, ad, döküm no, iş no…' },
+/** One box for anything on a lot; the backend splits it into words that all must match. */
+export const SEARCH_PLACEHOLDER = 'Kod, ad, ölçü (1500x3000), döküm no, iş no, CNC-…, #fire no…';
+const SEARCH_FILTER: FilterConfig<FilterKeys> = {
+  type: 'text',
+  key: 'search',
+  label: 'Arama',
+  placeholder: SEARCH_PLACEHOLDER,
+};
+const mmFilter = (key: FilterKeys, label: string): FilterConfig<FilterKeys> => ({
+  type: 'text',
+  inputType: 'number',
+  key,
+  label,
+  placeholder: 'mm',
+});
+
+const PLACE_FILTERS: FilterConfig<FilterKeys>[] = [
   {
     type: 'select',
     key: 'place',
@@ -87,6 +140,50 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
   },
   { type: 'text', key: 'job_no', label: 'İş No', placeholder: 'Örn. 254-01' },
 ];
+
+function filterConfig(kind: PieceKind): FilterConfig<FilterKeys>[] {
+  return [
+    SEARCH_FILTER,
+    ...PLACE_FILTERS,
+    ...(kind === 'plate'
+      ? [
+          mmFilter('thickness', 'Kalınlık'),
+          mmFilter('min_width', 'En ≥'),
+          mmFilter('max_width', 'En ≤'),
+        ]
+      : []),
+    mmFilter('min_length', 'Boy ≥'),
+    mmFilter('max_length', 'Boy ≤'),
+    {
+      type: 'select',
+      key: 'origin',
+      label: 'Kaynak',
+      placeholder: 'Tümü',
+      options: ORIGIN_OPTIONS,
+    },
+    { type: 'checkbox', key: 'review', label: 'Kontrol edilmeli' },
+  ];
+}
+
+/** A column header with an (i) that says what the column holds. */
+export function HeaderHelp({ label, help }: { label: string; help: string }) {
+  return (
+    <Group gap={4} wrap="nowrap" component="span" style={{ display: 'inline-flex' }}>
+      {label}
+      <Tooltip label={help} multiline w={300} withArrow>
+        <ActionIcon
+          size="xs"
+          variant="subtle"
+          color="gray"
+          aria-label={`${label} nedir?`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <FaIcon icon="fas fa-info-circle" />
+        </ActionIcon>
+      </Tooltip>
+    </Group>
+  );
+}
 
 const mono = { fontFamily: 'var(--gk-font-mono)' };
 
@@ -190,7 +287,24 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
   },
   { key: 'place', header: 'Yer', render: (row) => placeLabel(row) },
   { key: 'heat', header: 'Döküm No', render: (row) => row.heat_number || '–' },
-  { key: 'origin', header: 'Kaynak', render: (row) => row.origin_label },
+  {
+    key: 'origin',
+    header: 'Kaynak',
+    exportValue: (row) => row.origin_label,
+    render: (row) =>
+      row.needs_review ? (
+        <Group gap={4} wrap="nowrap">
+          {row.origin_label}
+          <Tooltip label={row.review_note || 'Planlama kontrol etmeli'} multiline w={280}>
+            <span>
+              <StatusBadge color="orange">Kontrol</StatusBadge>
+            </span>
+          </Tooltip>
+        </Group>
+      ) : (
+        row.origin_label
+      ),
+  },
 ];
 
 const cardColumns: DataTableColumn<PieceCard>[] = [
@@ -216,7 +330,13 @@ const cardColumns: DataTableColumn<PieceCard>[] = [
           ? `${formatNumber(row.kg_per_m, 3)} kg/m`
           : '–',
   },
-  { key: 'lots', header: 'Lot', align: 'right', render: (row) => row.lots },
+  {
+    key: 'lots',
+    header: <HeaderHelp label="Lot" help={LOT_HELP} />,
+    exportHeader: 'Lot',
+    align: 'right',
+    render: (row) => row.lots,
+  },
   { key: 'pieces', header: 'Adet', align: 'right', render: (row) => row.pieces },
   {
     key: 'kg',
@@ -488,6 +608,7 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
 // --- one lot ------------------------------------------------------------------------
 
 type LotAction = 'move' | 'adjust' | 'scrap';
+type DetailAction = LotAction | 'edit';
 
 function LotActionModal({
   piece,
@@ -573,14 +694,147 @@ function LotActionModal({
   );
 }
 
+function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () => void }) {
+  const invalidate = useInvalidatePieces();
+  const [heat, setHeat] = useState(piece.heat_number);
+  const [certificate, setCertificate] = useState(piece.certificate_no);
+  const [note, setNote] = useState(piece.note);
+  const [checked, setChecked] = useState(false);
+  const [changeNote, setChangeNote] = useState('');
+  const run = useMutation({
+    mutationFn: (data: PieceEdit) => editPiece(piece.id, data),
+    onSuccess: invalidate,
+  });
+  const save = async () => {
+    if (checked && !changeNote.trim()) return notify.warning('Kontrol edildi için açıklama girin');
+    try {
+      await run.mutateAsync({
+        heat_number: heat,
+        certificate_no: certificate,
+        note,
+        ...(checked ? { needs_review: false as const } : {}),
+        change_note: changeNote,
+      });
+      notify.success(`${piece.item_code}: bilgiler kaydedildi`);
+      onClose();
+    } catch (error) {
+      notify.error(countErrorMessage(error, 'Kaydedilemedi'));
+    }
+  };
+  return (
+    <FormModal
+      opened
+      onClose={onClose}
+      title="Lotu Düzenle"
+      subtitle={`${piece.item_code} · ${sizeLabel(piece)} · ${piece.quantity} adet · ${placeLabel(piece)}`}
+      icon="fas fa-pen"
+      size="md"
+      submitLabel="Kaydet"
+      submitting={run.isPending}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <Stack gap="sm">
+        <Text size="xs" c="dimmed">
+          Adet, ölçü ve yer kendi işlemleriyle değişir (Adedi Düzelt, Taşı). Değişiklik lotun
+          geçmişinde kim ve ne zaman ile görünür.
+        </Text>
+        <Group grow>
+          <TextInput
+            label="Döküm no"
+            maxLength={100}
+            value={heat}
+            onChange={(e) => setHeat(e.currentTarget.value)}
+          />
+          <TextInput
+            label="Sertifika no"
+            maxLength={100}
+            value={certificate}
+            onChange={(e) => setCertificate(e.currentTarget.value)}
+          />
+        </Group>
+        <Textarea
+          label="Not"
+          maxLength={255}
+          value={note}
+          onChange={(e) => setNote(e.currentTarget.value)}
+        />
+        {piece.needs_review ? (
+          <Alert color="orange" variant="light" icon={<FaIcon icon="fas fa-clipboard-check" />}>
+            <Stack gap={6}>
+              <Text size="sm">
+                Kontrol edilmeli: {piece.review_note || 'planlama kontrol etmeli'}
+              </Text>
+              <Checkbox
+                label="Kontrol edildi (işareti kaldır)"
+                checked={checked}
+                onChange={(e) => setChecked(e.currentTarget.checked)}
+              />
+            </Stack>
+          </Alert>
+        ) : null}
+        <Textarea
+          label={checked ? 'Açıklama (zorunlu)' : 'Açıklama'}
+          description="Geçmişte bu değişikliğin yanında görünür"
+          maxLength={255}
+          value={changeNote}
+          onChange={(e) => setChangeNote(e.currentTarget.value)}
+        />
+      </Stack>
+    </FormModal>
+  );
+}
+
+const CHANGE_LABELS: Record<string, string> = {
+  heat_number: 'Döküm no',
+  certificate_no: 'Sertifika no',
+  note: 'Not',
+};
+
+/** "Döküm no: – → D-901" lines of an edit (needs_review is the row's own label). */
+export function changeLines(change: PieceChange): string[] {
+  return Object.entries(change.changes)
+    .filter(([field]) => field in CHANGE_LABELS)
+    .map(([field, pair]) => {
+      const [before, after] = pair ?? ['', ''];
+      return `${CHANGE_LABELS[field]}: ${String(before || '–')} → ${String(after || '–')}`;
+    });
+}
+
+type HistoryRow =
+  | { kind: 'movement'; at: string; key: string; movement: PieceMovement }
+  | { kind: 'change'; at: string; key: string; change: PieceChange };
+
+/** The lot's ledger and the edits of its details, newest first. */
+export function lotHistory(movements: PieceMovement[], changes: PieceChange[]): HistoryRow[] {
+  return [
+    ...movements.map((m) => ({
+      kind: 'movement' as const,
+      at: m.created_at,
+      key: `m${m.id}`,
+      movement: m,
+    })),
+    ...changes.map((c) => ({
+      kind: 'change' as const,
+      at: c.created_at,
+      key: `c${c.id}`,
+      change: c,
+    })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+}
+
 function movementPlace(code: string | null, job: string, supplier: string | null): string {
   if (!code && !supplier) return '';
   return placeLabel({ warehouse_code: code, job_no: job, supplier_name: supplier });
 }
 
 function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => void }) {
-  const [action, setAction] = useState<LotAction | null>(null);
+  const [action, setAction] = useState<DetailAction | null>(null);
   const movements = useQuery(pieceMovementsQueryOptions(piece.id));
+  const changes = useQuery(pieceChangesQueryOptions(piece.id));
+  const history = lotHistory(movements.data ?? [], changes.data ?? []);
   const actions: { key: LotAction; label: string; icon: string; color?: string }[] = [
     { key: 'move', label: 'Taşı / Fasona Gönder', icon: 'fas fa-exchange-alt' },
     { key: 'adjust', label: 'Adedi Düzelt', icon: 'fas fa-pen' },
@@ -595,6 +849,9 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
     { label: 'Döküm no', value: piece.heat_number || '–' },
     { label: 'Sertifika no', value: piece.certificate_no || '–' },
     { label: 'Kaynak', value: piece.origin_label },
+    ...(piece.needs_review
+      ? [{ label: 'Kontrol', value: <StatusBadge color="orange">Kontrol edilmeli</StatusBadge> }]
+      : []),
   ];
   return (
     <>
@@ -619,7 +876,8 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
               <Stack gap={4}>
                 {piece.note ? <Text size="sm">{piece.note}</Text> : null}
                 {piece.review_note ? (
-                  <Text size="sm" c="orange.8">
+                  <Text size="sm" c={piece.needs_review ? 'orange.8' : 'dimmed'}>
+                    {piece.needs_review ? '' : 'Kontrol edildi · '}
                     {piece.review_note}
                   </Text>
                 ) : null}
@@ -640,7 +898,29 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {(movements.data ?? []).map((m) => {
+                  {history.map((row) => {
+                    if (row.kind === 'change') {
+                      const c = row.change;
+                      return (
+                        <Table.Tr key={row.key}>
+                          <Table.Td>
+                            {formatDateTime(c.created_at)}
+                            {c.created_by_username ? ` · ${c.created_by_username}` : ''}
+                          </Table.Td>
+                          <Table.Td>
+                            {c.changes.needs_review ? 'Kontrol edildi' : 'Bilgi düzenlendi'}
+                            {[...changeLines(c), c.note].filter(Boolean).map((line) => (
+                              <Text key={line} size="xs" c="dimmed">
+                                {line}
+                              </Text>
+                            ))}
+                          </Table.Td>
+                          <Table.Td ta="right">–</Table.Td>
+                          <Table.Td />
+                        </Table.Tr>
+                      );
+                    }
+                    const m = row.movement;
                     const from = movementPlace(
                       m.from_warehouse_code,
                       m.from_job_no,
@@ -648,7 +928,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
                     );
                     const to = movementPlace(m.to_warehouse_code, m.to_job_no, m.to_supplier_name);
                     return (
-                      <Table.Tr key={m.id}>
+                      <Table.Tr key={row.key}>
                         <Table.Td>
                           {formatDateTime(m.created_at)}
                           {m.created_by_username ? ` · ${m.created_by_username}` : ''}
@@ -674,9 +954,16 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
           },
         ]}
         footerActions={
-          canWritePieces() && piece.quantity > 0 ? (
+          canWritePieces() ? (
             <Group gap="xs">
-              {actions.map((a) => (
+              <Button
+                variant="light"
+                leftSection={<FaIcon icon="fas fa-edit" />}
+                onClick={() => setAction('edit')}
+              >
+                Düzenle
+              </Button>
+              {(piece.quantity > 0 ? actions : []).map((a) => (
                 <Button
                   key={a.key}
                   variant="light"
@@ -691,7 +978,8 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
           ) : undefined
         }
       />
-      {action ? (
+      {action === 'edit' ? <LotEditModal piece={piece} onClose={() => setAction(null)} /> : null}
+      {action && action !== 'edit' ? (
         <LotActionModal
           piece={piece}
           action={action}
@@ -708,6 +996,13 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
 // --- the page -----------------------------------------------------------------------
 
 const EMPTY_PIECES: MaterialPiece[] = [];
+
+function pickFilters(values: typeof URL_DEFAULTS): Pick<typeof URL_DEFAULTS, FilterKeys> {
+  return Object.fromEntries(FILTER_KEYS.map((k) => [k, values[k]])) as Pick<
+    typeof URL_DEFAULTS,
+    FilterKeys
+  >;
+}
 const EMPTY_CARDS: PieceCard[] = [];
 /** Sac & boy stoğu: plate and boy material in pieces, by lot or by stock card. */
 /** Where a stock page sits: Depo, or the planning cutting section of its kind. */
@@ -766,12 +1061,30 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
     ...pieceCardsQueryOptions({ in_stock: 'true', kind, page_size: 1000 }),
     placeholderData: keepPreviousData,
   });
+  const search = values.search.trim();
+  // Kartlar with a search: the backend matches cards by their own details or by a lot.
+  const searchedCards = useQuery({
+    ...pieceCardsQueryOptions({ in_stock: 'true', kind, page_size: 1000, search }),
+    placeholderData: keepPreviousData,
+    enabled: view === 'cards' && search !== '',
+  });
+  const mm = (
+    key: 'thickness' | 'min_width' | 'max_width' | 'min_length' | 'max_length',
+    param: string,
+  ) => (values[key] ? { [param]: values[key] } : {});
   const list = useQuery({
     ...piecesQueryOptions({
       page,
       page_size: PAGE_SIZE,
-      ...(values.search ? { search: values.search } : {}),
+      ...(search ? { search } : {}),
       kind,
+      ...(kind === 'plate' ? mm('thickness', 'thickness_mm') : {}),
+      ...(kind === 'plate' ? mm('min_width', 'min_width_mm') : {}),
+      ...(kind === 'plate' ? mm('max_width', 'max_width_mm') : {}),
+      ...mm('min_length', 'min_length_mm'),
+      ...mm('max_length', 'max_length_mm'),
+      ...(values.origin ? { origin: values.origin } : {}),
+      ...(values.review ? { needs_review: 'true' as const } : {}),
       ...(values.place === 'FASON'
         ? { at_supplier: 'true' as const }
         : values.place
@@ -799,13 +1112,13 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
       noWeightPieces: unweighed.reduce((n, c) => n + c.pieces, 0),
     };
   }, [allCards]);
-  const shownCards = useMemo(() => {
-    const term = values.search.trim().toLocaleUpperCase('tr');
-    return allCards.filter(
-      (c) =>
-        c.kind === kind && (!term || `${c.code} ${c.name}`.toLocaleUpperCase('tr').includes(term)),
-    );
-  }, [allCards, kind, values.search]);
+  const shownCards = useMemo(
+    () =>
+      (search ? (searchedCards.data?.results ?? EMPTY_CARDS) : allCards).filter(
+        (c) => c.kind === kind,
+      ),
+    [allCards, kind, search, searchedCards.data],
+  );
 
   const rows = list.data?.results ?? EMPTY_PIECES;
   const openId = Number.parseInt(values.piece, 10);
@@ -826,14 +1139,10 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
   const filters = (
     <FilterBar
       inline
-      filters={view === 'pieces' ? filterConfig : filterConfig.slice(0, 1)}
-      values={{
-        search: values.search,
-        place: values.place,
-        job_no: values.job_no,
-      }}
+      filters={view === 'pieces' ? filterConfig(kind) : [SEARCH_FILTER]}
+      values={pickFilters(values)}
       onApply={(next) => apply({ ...next, page: '1' })}
-      onClear={() => apply({ search: '', place: '', job_no: '', item: '', page: '1' })}
+      onClear={() => apply({ ...pickFilters(URL_DEFAULTS), item: '', page: '1' })}
     />
   );
 
@@ -915,10 +1224,10 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
           data={shownCards}
           columns={cardColumns}
           getRowId={(row) => String(row.id)}
-          loading={cards.isFetching}
+          loading={cards.isFetching || searchedCards.isFetching}
           onRowClick={(row) => apply({ view: 'pieces', item: String(row.id), page: '1' })}
           pagination
-          emptyMessage="Parçası olan kart yok"
+          emptyMessage={search ? 'Bu aramayla kart yok' : 'Parçası olan kart yok'}
         />
       )}
       {creating ? <NewPiecesModal kind={kind} onClose={() => setCreating(false)} /> : null}

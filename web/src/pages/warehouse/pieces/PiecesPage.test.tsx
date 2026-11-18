@@ -100,6 +100,16 @@ const CARDS = [
   },
 ];
 
+let lots: unknown[] = [];
+const CHANGE = {
+  id: 1,
+  piece: 2,
+  changes: { heat_number: ['', 'H-1'] },
+  note: 'sertifikadan',
+  created_by_username: 'depo',
+  created_at: '2026-11-12T09:00:00Z',
+};
+
 function json(body: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(body), { status }));
 }
@@ -119,12 +129,13 @@ function renderPage(route = '/warehouse/plate-stock', page = <WarehousePlateStoc
 
 beforeEach(() => {
   warehouseUser = true;
+  lots = [NO_WEIGHT_LOT, WEIGHED_LOT];
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
     const u = new URL(String(url), 'https://api.test');
     if (method === 'GET' && u.pathname === '/warehouse/pieces/') {
-      return json({ count: 2, results: [NO_WEIGHT_LOT, WEIGHED_LOT] });
+      return json({ count: lots.length, results: lots });
     }
     if (method === 'GET' && u.pathname === '/warehouse/pieces/cards/') {
       const search = (u.searchParams.get('search') ?? '').toUpperCase();
@@ -166,6 +177,12 @@ beforeEach(() => {
           created_at: '2026-11-11T09:00:00Z',
         },
       ]);
+    }
+    if (method === 'GET' && u.pathname === '/warehouse/pieces/2/changes/') {
+      return json([CHANGE]);
+    }
+    if (method === 'PATCH' && u.pathname === '/warehouse/pieces/2/') {
+      return json({ ...WEIGHED_LOT, heat_number: 'D-9', needs_review: false });
     }
     if (method === 'POST' && u.pathname === '/warehouse/pieces/2/move/') {
       return json({
@@ -270,6 +287,102 @@ it('is read-only without the warehouse grant', async () => {
   expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Parça Ekle' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Taşı / Fasona Gönder' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Düzenle' })).not.toBeInTheDocument();
+});
+
+it('explains the Kartlar "Lot" column: a count of lots, not a lot number', async () => {
+  renderPage('/warehouse/plate-stock?view=cards');
+  await screen.findByText('8,00 mm');
+  expect(screen.getByRole('columnheader', { name: /Lot/ })).toBeInTheDocument();
+  fireEvent.mouseEnter(screen.getByRole('button', { name: 'Lot nedir?' }));
+  expect(
+    await screen.findByText(/özdeş parçaların tek kaydı\. Bu sütun kartta kaç lot olduğunu/),
+  ).toBeInTheDocument();
+});
+
+it('searches on the backend, in Parçalar and in Kartlar', async () => {
+  renderPage('/warehouse/plate-stock?search=hardox%201500x3000');
+  await waitFor(() =>
+    expect(
+      calls().some(
+        (c) =>
+          c.url.pathname === '/warehouse/pieces/' &&
+          c.url.searchParams.get('search') === 'hardox 1500x3000',
+      ),
+    ).toBe(true),
+  );
+  fireEvent.click(screen.getByRole('radio', { name: 'Kartlar' }));
+  await waitFor(() => {
+    const call = calls().find(
+      (c) => c.url.pathname === '/warehouse/pieces/cards/' && c.url.searchParams.get('search'),
+    );
+    expect(call?.url.searchParams.get('search')).toBe('hardox 1500x3000');
+    expect(call?.url.searchParams.get('in_stock')).toBe('true');
+    expect(call?.url.searchParams.get('kind')).toBe('plate');
+  });
+});
+
+it('sends the size, origin and kontrol filters', async () => {
+  renderPage(
+    '/warehouse/plate-stock?thickness=8&min_width=1000&max_width=1500&max_length=3000&origin=converted&review=true',
+  );
+  await waitFor(() => {
+    const call = calls().find(
+      (c) => c.url.pathname === '/warehouse/pieces/' && c.url.searchParams.get('thickness_mm'),
+    );
+    expect(call).toBeDefined();
+    const p = call!.url.searchParams;
+    expect([
+      p.get('thickness_mm'),
+      p.get('min_width_mm'),
+      p.get('max_width_mm'),
+      p.get('max_length_mm'),
+      p.get('origin'),
+      p.get('needs_review'),
+    ]).toEqual(['8', '1000', '1500', '3000', 'converted', 'true']);
+    expect(p.has('min_length_mm')).toBe(false);
+  });
+  expect(screen.getByRole('checkbox', { name: 'Kontrol edilmeli' })).toHaveAttribute(
+    'aria-checked',
+    'true',
+  );
+});
+
+it('edits the heat no of a lot and marks it checked, kept in its history', async () => {
+  lots = [
+    NO_WEIGHT_LOT,
+    { ...WEIGHED_LOT, needs_review: true, review_note: 'Açıklamadan okunan adet' },
+  ];
+  renderPage('/warehouse/plate-stock?piece=2');
+  // The earlier edit shows in the history with who did it.
+  expect(await screen.findByText('Döküm no: – → H-1')).toBeInTheDocument();
+  expect(screen.getByText('Bilgi düzenlendi')).toBeInTheDocument();
+  expect(screen.getByText('sertifikadan')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }));
+  const dialog = await screen.findByRole('dialog', { name: /Lotu Düzenle/ });
+  fireEvent.change(within(dialog).getByLabelText('Döküm no'), { target: { value: 'D-9' } });
+  fireEvent.click(within(dialog).getByLabelText('Kontrol edildi (işareti kaldır)'));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() =>
+    expect(notify.warning).toHaveBeenCalledWith('Kontrol edildi için açıklama girin'),
+  );
+  expect(calls().some((c) => c.method === 'PATCH')).toBe(false);
+
+  fireEvent.change(within(dialog).getByLabelText(/Açıklama/), {
+    target: { value: 'Sayıldı, doğru' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalled());
+  const patch = calls().find((c) => c.method === 'PATCH')!;
+  expect(patch.url.pathname).toBe('/warehouse/pieces/2/');
+  expect(patch.body).toEqual({
+    heat_number: 'D-9',
+    certificate_no: '',
+    note: '',
+    needs_review: false,
+    change_note: 'Sayıldı, doğru',
+  });
 });
 
 it('Sac Stoğu asks only for plates: pieces, cards and the card picker', async () => {
