@@ -245,6 +245,33 @@ describe('offers and merge', () => {
   });
 });
 
+describe('merging sized plate / bar rows', () => {
+  const sheet = (id: string, over: Partial<PrItem> = {}) =>
+    item(id, {
+      name: '10 mm SAC',
+      unit: 'kg',
+      quantity: 1413,
+      size_text: '1500×6000 mm',
+      piece_quantity: 706.5,
+      ...over,
+    });
+
+  it('merges rows of the same size and keeps it', () => {
+    const outcome = mergeSelection('A1', [sheet('a'), sheet('b', { job_no: '254-02', quantity: 706.5 })]);
+    if (outcome.kind !== 'merged') throw new Error(outcome.kind);
+    expect(outcome.item).toMatchObject({ quantity: 2119.5, size_text: '1500×6000 mm', piece_quantity: 706.5 });
+  });
+
+  it('refuses other sizes and unsized rows', () => {
+    const other = sheet('b', { job_no: '254-02', size_text: '2000×6000 mm', piece_quantity: 942 });
+    expect(mergeSelection('A1', [sheet('a'), other]).kind).toBe('different');
+    const unsized = sheet('c', { job_no: '254-03', size_text: null, piece_quantity: null });
+    const outcome = mergeSelection('A1', [sheet('a'), unsized]);
+    expect(outcome.kind).toBe('different');
+    if (outcome.kind === 'different') expect(outcome.message).toContain('ölçüsüz');
+  });
+});
+
 describe('drafts', () => {
   it('round-trips through localStorage in the legacy shape', () => {
     const s = { ...readyState(), savedDraft: { id: 4, title: 'Eski' } };

@@ -221,7 +221,7 @@ function OrderLinesTable({
                     <ReceiptPiecesEditor
                       line={line}
                       quantity={num(value)}
-                      rows={pieces[line.po_line] ?? startPieces(line)}
+                      rows={pieces[line.po_line] ?? startPieces(line, num(value))}
                       onChange={(rows) => onPiecesChange(line.po_line, rows)}
                     />
                   </Table.Td>
@@ -300,10 +300,10 @@ function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: Re
     }
     // Plate / boy lines need the pieces that came.
     const pieceRows: Record<number, ReceiptPieceInput[]> = {};
-    for (const { line } of picked) {
+    for (const { line, qty } of picked) {
       if (!line.piece_kind) continue;
       const kind = line.piece_kind;
-      const rows = (pieces[line.po_line] ?? startPieces(line))
+      const rows = (pieces[line.po_line] ?? startPieces(line, qty))
         .filter((row) => !isBlankPiece(row))
         .map((row) => pieceInput(kind, row));
       if (rows.length === 0) {

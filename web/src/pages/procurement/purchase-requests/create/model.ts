@@ -415,6 +415,18 @@ export function mergeSelection(code: string, selected: readonly PrItem[]): Merge
         '\n\nBu grup birleştirilmeyecek.',
     };
   }
+  // Sized plate / bar rows merge only with rows of the same piece size: the backend checks
+  // the merged quantity in whole pieces of the first row's planning line.
+  const sizeKey = (i: PrItem) => (i.size_text && i.piece_quantity ? `${i.size_text}|${i.piece_quantity}` : '');
+  if (selected.some((i) => sizeKey(i) !== sizeKey(first))) {
+    return {
+      kind: 'different',
+      message:
+        `Kod "${code}" için farklı ölçülerde (ya da ölçülü ve ölçüsüz) satırlar var:\n\n` +
+        selected.map((i) => `  ${i.job_no || '-'}: ${pieceShareText(i) ?? 'ölçüsüz'}`).join('\n') +
+        '\n\nSac / boy satırları yalnız aynı ölçüdekilerle birleştirilir. Bu grup birleştirilmeyecek.',
+    };
+  }
   const identical = selected.every(
     (i) =>
       norm(i.job_no) === norm(first.job_no) &&
@@ -458,6 +470,9 @@ export function mergeSelection(code: string, selected: readonly PrItem[]): Merge
       file_asset_ids: [...new Set(selected.flatMap((i) => i.file_asset_ids ?? []))],
       source_planning_request_item_id: first.source_planning_request_item_id || null,
       source_planning_request_item_ids: [...sourceIds],
+      ...(first.size_text && first.piece_quantity
+        ? { size_text: first.size_text, piece_quantity: first.piece_quantity }
+        : {}),
     },
   };
 }

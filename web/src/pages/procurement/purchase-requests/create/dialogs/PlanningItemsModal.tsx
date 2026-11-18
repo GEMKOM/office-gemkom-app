@@ -49,6 +49,11 @@ const maxQty = (item: ProcurementPlanningItem) =>
 const maxPieces = (item: ProcurementPlanningItem, one: number) =>
   Math.floor(maxQty(item) / one + 1e-6);
 const round2 = (n: number) => Math.round(n * 100) / 100;
+/** What a ticked row starts with: all that is left, in whole pieces on a sized line. */
+const startQty = (item: ProcurementPlanningItem) => {
+  const one = onePiece(item);
+  return one ? round2(maxPieces(item, one) * one) : maxQty(item);
+};
 
 type Filters = {
   planning_request_number: string;
@@ -203,7 +208,7 @@ export function PlanningItemsModal({
       const next = new Map(prev);
       if (!on) next.delete(item.id);
       else if (qty !== undefined) next.set(item.id, qty);
-      else if (!next.has(item.id) && maxQty(item) > 0) next.set(item.id, maxQty(item));
+      else if (!next.has(item.id) && startQty(item) > 0) next.set(item.id, startQty(item));
       return next;
     });
   };
