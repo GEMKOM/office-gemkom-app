@@ -21,9 +21,18 @@ import {
 import { exportPartsSearch } from './exportPartsSearch';
 import { plateSource, plateSourceText } from './plateSource';
 
-const URL_DEFAULTS = { job_no: '', image_no: '', position_no: '', page: '1', page_size: '20' };
+const URL_DEFAULTS = {
+  job_no: '',
+  image_no: '',
+  position_no: '',
+  thickness_mm: '',
+  plate: '',
+  plate_source: '',
+  page: '1',
+  page_size: '20',
+};
 
-type FilterKeys = 'job_no' | 'image_no' | 'position_no';
+type FilterKeys = 'job_no' | 'image_no' | 'position_no' | 'thickness_mm' | 'plate' | 'plate_source';
 type FilterState = Record<FilterKeys, string>;
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
@@ -36,9 +45,41 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
   },
   { type: 'text', key: 'image_no', label: 'Resim No', placeholder: 'Resim numarası...' },
   { type: 'text', key: 'position_no', label: 'Pozisyon No', placeholder: 'Pozisyon numarası...' },
+  // The plate the cut used.
+  {
+    type: 'text',
+    key: 'thickness_mm',
+    label: 'Sac Kalınlığı (mm)',
+    inputType: 'number',
+    placeholder: 'Örn. 20',
+  },
+  {
+    type: 'text',
+    key: 'plate',
+    label: 'Sac / Malzeme',
+    placeholder: 'Kalite, stok kodu veya ölçü (ST44, P355GH...)',
+  },
+  {
+    type: 'select',
+    key: 'plate_source',
+    label: 'Plaka Kaynağı',
+    options: [
+      { value: 'request', label: 'Talep edilen sac' },
+      { value: 'piece', label: 'Stok sac' },
+      { value: 'remnant', label: 'Fire plaka' },
+      { value: 'none', label: 'Kaynak belirtilmemiş' },
+    ],
+  },
 ];
 
-const EMPTY_FILTERS: FilterState = { job_no: '', image_no: '', position_no: '' };
+const EMPTY_FILTERS: FilterState = {
+  job_no: '',
+  image_no: '',
+  position_no: '',
+  thickness_mm: '',
+  plate: '',
+  plate_source: '',
+};
 const EMPTY_ROWS: CncPartSearchRow[] = [];
 
 function positiveInt(value: string, fallback: number): number {
@@ -125,13 +166,32 @@ const WEIGHT_INDEX = columns.findIndex((c) => c.key === 'weight_kg');
 export function PartsSearchPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const filters = useMemo<FilterState>(
-    () => ({ job_no: values.job_no, image_no: values.image_no, position_no: values.position_no }),
-    [values.job_no, values.image_no, values.position_no],
+    () => ({
+      job_no: values.job_no,
+      image_no: values.image_no,
+      position_no: values.position_no,
+      thickness_mm: values.thickness_mm,
+      plate: values.plate,
+      plate_source: values.plate_source,
+    }),
+    [
+      values.job_no,
+      values.image_no,
+      values.position_no,
+      values.thickness_mm,
+      values.plate,
+      values.plate_source,
+    ],
   );
   const page = positiveInt(values.page, 1);
   const pageSize = positiveInt(values.page_size, 20);
 
-  const params: CncPartsSearchParams = { ...filters, page, page_size: pageSize };
+  const params: CncPartsSearchParams = {
+    ...filters,
+    plate_source: filters.plate_source as CncPartsSearchParams['plate_source'],
+    page,
+    page_size: pageSize,
+  };
   const list = useQuery({
     ...cncPartsSearchQueryOptions(params),
     placeholderData: keepPreviousData,
@@ -168,7 +228,7 @@ export function PartsSearchPage() {
     <>
       <PageHeader
         title="CNC Parça Arama"
-        subtitle="İş No, Resim No veya Pozisyon No ile CNC parçalarını arayın"
+        subtitle="İş No, Resim No, Pozisyon No veya kullanılan sac ile CNC parçalarını arayın"
         backTo="/planning/cnc-cutting/reports/"
       />
 
