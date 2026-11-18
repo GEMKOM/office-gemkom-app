@@ -25,6 +25,11 @@ export interface LaneFigure {
   link?: string;
   /** Red when it counts something late or stopped. */
   alert?: boolean;
+  /**
+   * A part of the figure above it (e.g. the planned and unplanned share of the
+   * open cuts): indented under it with a tree line.
+   */
+  child?: boolean;
 }
 
 export interface LaneRow {
@@ -74,7 +79,7 @@ export function LaneAlert({ children }: { children: ReactNode }) {
   return <span className={css.alert}>{children}</span>;
 }
 
-function Figure({ figure }: { figure: LaneFigure }) {
+function Figure({ figure, last }: { figure: LaneFigure; last?: boolean }) {
   const body = (
     <>
       <span className={css.figureLabel}>
@@ -86,12 +91,15 @@ function Figure({ figure }: { figure: LaneFigure }) {
       </b>
     </>
   );
+  const tree = figure.child ? { 'data-child': true, 'data-last': last || undefined } : undefined;
   return figure.link ? (
-    <AppLink to={figure.link} className={css.figure} data-link>
+    <AppLink to={figure.link} className={css.figure} data-link {...tree}>
       {body}
     </AppLink>
   ) : (
-    <div className={css.figure}>{body}</div>
+    <div className={css.figure} {...tree}>
+      {body}
+    </div>
   );
 }
 
@@ -204,8 +212,8 @@ export function AreaLane({ title, icon, family, hub, links, figures, list }: Are
         </ul>
       </nav>
       <div className={css.figures}>
-        {figures.map((figure) => (
-          <Figure key={figure.id} figure={figure} />
+        {figures.map((figure, i) => (
+          <Figure key={figure.id} figure={figure} last={!figures[i + 1]?.child} />
         ))}
       </div>
       <div className={css.list}>

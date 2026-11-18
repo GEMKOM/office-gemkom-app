@@ -58,8 +58,10 @@ beforeEach(() => {
       if (searchParams.get('status') === 'blocked') return json(page(1));
       return json(page(19));
     }
-    if (pathname === '/cnc_cutting/tasks/')
-      return json(page(searchParams.get('in_plan') === 'false' ? 6 : 14));
+    if (pathname === '/cnc_cutting/tasks/') {
+      const inPlan = searchParams.get('in_plan');
+      return json(page(inPlan === 'false' ? 6 : inPlan === 'true' ? 8 : 14));
+    }
     if (pathname === '/machines/')
       return json(
         page(4, [
@@ -197,16 +199,19 @@ it('shows a lane per area with its live figures', async () => {
     'Projeler',
   ]);
 
-  // CNC: running timers (as İmalat shows machining's), open and unplanned
-  // cuts, each machine's planned load, the remnants.
+  // CNC: open cuts with their planned and unplanned parts under them, each
+  // machine's planned load (and what runs on it), the remnants.
   const cnc = lane('CNC Kesim');
-  await waitFor(() => expect(cnc).toHaveTextContent('Aktif zamanlayıcı2 makinede2'));
-  expect(within(cnc).getByRole('link', { name: /Aktif zamanlayıcı/ })).toHaveAttribute(
-    'href',
-    '/planning/cnc-cutting/dashboard',
-  );
   await waitFor(() => expect(cnc).toHaveTextContent('Açık kesim14'));
+  await waitFor(() => expect(cnc).toHaveTextContent('Planlanan kesim8'));
   expect(cnc).toHaveTextContent('Plana alınmamış kesim6');
+  expect(cnc).not.toHaveTextContent('Aktif zamanlayıcı');
+  const planned = within(cnc).getByRole('link', { name: /Planlanan kesim/ });
+  const unplanned = within(cnc).getByRole('link', { name: /Plana alınmamış kesim/ });
+  expect(planned).toHaveAttribute('data-child');
+  expect(planned).not.toHaveAttribute('data-last');
+  expect(unplanned).toHaveAttribute('data-last');
+  expect(within(cnc).getByRole('link', { name: /Açık kesim/ })).not.toHaveAttribute('data-child');
   await waitFor(() => expect(cnc).toHaveTextContent('Planlı iş yükü'));
   await waitFor(() => expect(cnc).toHaveTextContent('14,5 sa'));
   // One list: each machine's load and what it does now (its running timer, or

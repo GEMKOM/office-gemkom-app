@@ -65,6 +65,16 @@ export function requestablePlanningItemCountQueryOptions() {
   });
 }
 
+/** Open CNC cuts in a machine's plan; with the unplanned ones they make the open cuts. */
+export function plannedCncCutCountQueryOptions() {
+  return listCountQueryOptions(
+    ['cncTasks'],
+    '/cnc_cutting/tasks/',
+    { completion_date__isnull: true, in_plan: true },
+    SHOP_FLOOR_STALE_TIME,
+  );
+}
+
 /** Open CNC cuts not yet in a machine's plan. */
 export function unplannedCncCutCountQueryOptions() {
   return listCountQueryOptions(
