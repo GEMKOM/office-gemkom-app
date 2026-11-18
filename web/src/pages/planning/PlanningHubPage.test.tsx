@@ -103,6 +103,7 @@ beforeEach(() => {
             machine_name: 'Fiber Lazer',
             issue_key: 'CNC-88',
             issue_name: 'Flanş 20 mm',
+            nesting_id: 'E8338',
             username: 'ayse',
             timer_type: 'productive',
             start_time: Date.now() - 50 * 60_000,
@@ -217,7 +218,8 @@ it('shows a lane per area with its live figures', async () => {
         .getAllByRole('listitem')
         .map((row) => row.textContent),
     ).toEqual([
-      expect.stringMatching(/^Fiber Lazer.*CNC-88 · ayse/),
+      // The kesim kodu when the cut has one, else the CNC key.
+      expect.stringMatching(/^Fiber Lazer.*E8338 · ayse/),
       expect.stringMatching(/^Oksijen.*CNC-90 · mehmet/),
       expect.stringMatching(/^PlazmaBoşta/),
     ]),

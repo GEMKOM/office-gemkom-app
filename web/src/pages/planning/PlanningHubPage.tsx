@@ -276,7 +276,7 @@ function machineLoad(id: number, name: string, tasks: CuttingPlanTask[]): Machin
 }
 
 /**
- * In a machine's load row: its running timer's time, job and operator, or
+ * In a machine's load row: its running timer's time, cut and operator, or
  * "Boşta" when nothing runs on it, so every row says what the machine does.
  */
 function MachineState({ timer }: { timer: Timer | undefined }) {
@@ -288,7 +288,9 @@ function MachineState({ timer }: { timer: Timer | undefined }) {
       </span>
     );
   }
-  const job = timer.issue_key || timer.issue_name;
+  // The cut's kesim kodu (nesting id, e.g. E8338) is what the shop knows it
+  // by; the CNC-… key only when a cut has none.
+  const job = timer.nesting_id || timer.issue_key || timer.issue_name;
   return (
     <span className={css.state} title="Çalışıyor">
       <span className={css.stateDot} data-family="green" aria-hidden />
