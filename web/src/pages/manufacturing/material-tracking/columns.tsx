@@ -19,8 +19,14 @@ export function isPlateLine(row: PlanningItem): boolean {
   return row.item_material_class === 'plate';
 }
 
+/** A bar (boy) line: its bars can be picked from the job's İş Emri piece stock. */
+export function isBarLine(row: PlanningItem): boolean {
+  return row.item_material_class === 'boy';
+}
+
 export function canPull(row: PlanningItem): boolean {
-  return !isPlateLine(row) && qty(row.quantity_available_to_pull) > 0;
+  // A bar line may have bars in the job's İş Emri stock even when nothing came on the line.
+  return !isPlateLine(row) && (isBarLine(row) || qty(row.quantity_available_to_pull) > 0);
 }
 
 /**

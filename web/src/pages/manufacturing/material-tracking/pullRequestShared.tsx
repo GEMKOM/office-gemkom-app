@@ -1,4 +1,4 @@
-import { Button, Group, Table } from '@mantine/core';
+import { Button, Group, Table, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, type ReactNode } from 'react';
 import { materialTrackingErrorMessage } from '@/api/materialTracking/errors';
@@ -7,6 +7,7 @@ import {
   useCancelMaterialPullRequest,
   useMarkPullRequestTransferred,
   type MaterialPullRequest,
+  type MaterialPullRequestItem,
 } from '@/api/materialTracking/pullRequests';
 import { hasPerm, type AuthUser } from '@/auth/authService';
 import { formatDateTime } from '@/lib/format';
@@ -141,6 +142,22 @@ export function useCancelPullRequestFlow() {
   };
 }
 
+/** A bar line's bars from the job's İş Emri stock: "6000 mm × 2 boy · 4000 mm × 1 boy". */
+function PulledBars({ item }: { item: MaterialPullRequestItem }) {
+  if (!item.pieces?.length) return null;
+  return (
+    <Text size="xs" c="dimmed" data-testid="pulled-bars">
+      {item.pieces
+        .map(
+          (p) =>
+            `${String(Number(p.length_mm))} mm × ${p.quantity} boy` +
+            (p.heat_number ? ` (döküm ${p.heat_number})` : ''),
+        )
+        .join(' · ')}
+    </Text>
+  );
+}
+
 function personAt(name: string | undefined, at: string | null | undefined) {
   return `${name || '-'} — ${formatDateTime(at)}`;
 }
@@ -206,6 +223,7 @@ function ItemsTable({ request, ledger }: { request: MaterialPullRequest; ledger:
                   <Table.Td>
                     {item.item_name || '-'}
                     <SizeNote text={item.size_summary} />
+                    <PulledBars item={item} />
                   </Table.Td>
                   <Table.Td>{item.job_no || '-'}</Table.Td>
                   <Table.Td ta="right" fw={600}>
@@ -227,6 +245,7 @@ function ItemsTable({ request, ledger }: { request: MaterialPullRequest; ledger:
                   <Table.Td>
                     {item.item_name || '-'}
                     <SizeNote text={item.size_summary} />
+                    <PulledBars item={item} />
                   </Table.Td>
                   <Table.Td>{item.job_no || '-'}</Table.Td>
                   <Table.Td>{item.quantity ?? '-'}</Table.Td>

@@ -237,3 +237,31 @@ it('the warehouse hands a pending request out after the confirm (Teslim Et)', as
     '/warehouse/pull-requests/55/mark_transferred/',
   );
 });
+
+it('the detail lists the bars a bar line took from İş Emri', async () => {
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    if (new URL(String(url)).pathname === '/warehouse/pull-requests/55/') {
+      return json({
+        ...DETAIL,
+        items: [
+          {
+            ...DETAIL.items[0],
+            pieces: [
+              { piece: 41, quantity: 2, length_mm: '6000.0', heat_number: 'H-7' },
+              { piece: 42, quantity: 1, length_mm: '4000.0', heat_number: '' },
+            ],
+          },
+        ],
+      });
+    }
+    return base(url, init);
+  });
+  renderPage();
+  await screen.findByText('MPR-2026-0055');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
+  expect(within(dialog).getByTestId('pulled-bars')).toHaveTextContent(
+    '6000 mm × 2 boy (döküm H-7) · 4000 mm × 1 boy',
+  );
+});
