@@ -51,7 +51,9 @@ import {
 // The "Plaka Kaynağı" section of the create and edit modals. Every cut uses
 // exactly one plate source: sheets from piece stock (a plate lot on the Sac &
 // Boy Stoğu page) or a planning request item (plaka kalemi); picking one
-// clears the other. The sheets are reserved for the cut and leave stock when
+// clears the other. A plaka kalemi may also take one of the lots received
+// for it in Mal kabul: the cut then reserves the line's own sheets and keeps
+// the line. The sheets are reserved for the cut and leave stock when
 // the warehouse processes it (Ağırlık Düşüşü). Cuts made before piece stock
 // may still show their old remnant plate (fire plaka); it can be kept or
 // replaced, not picked anew.
@@ -195,13 +197,15 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
     return (
       <ModalSection title="Plaka Kaynağı" icon="fas fa-layer-group">
         <Text size="sm">
-          {piece
-            ? `Stoktan sac: ${pieceText(piece)} × ${value.quantityUsed}`
-            : planningItem
-              ? `Plaka kalemi: ${itemLabel}`
-              : remnant
-                ? `Fire plaka: ${remnantText(remnant)}`
-                : 'Sac partisi seçilmeden işlendi.'}
+          {piece && planningItem
+            ? `Plaka kalemi: ${itemLabel} · gelen sac: ${pieceText(piece)} × ${value.quantityUsed}`
+            : piece
+              ? `Stoktan sac: ${pieceText(piece)} × ${value.quantityUsed}`
+              : planningItem
+                ? `Plaka kalemi: ${itemLabel}`
+                : remnant
+                  ? `Fire plaka: ${remnantText(remnant)}`
+                  : 'Sac partisi seçilmeden işlendi.'}
         </Text>
         <Text size="xs" c="dimmed">
           Kesim tamamlandı ve sacı stoktan düşüldü; sac kaynağını değiştirmek için önce kesimi
@@ -293,6 +297,14 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
             checked={value.markConsumed}
             onChange={(event) => onChange({ ...value, markConsumed: event.currentTarget.checked })}
           />
+          <LineLots
+            planningItemId={planningItem.id}
+            selectedId={piece?.id ?? null}
+            onPick={(lot) => {
+              setQuantityError('');
+              onChange({ ...value, piece: lot, remnant: null, quantityUsed: 1 });
+            }}
+          />
         </Stack>
       ) : null}
 
@@ -347,6 +359,68 @@ export function PlateSourceSection({ value, onChange }: PlateSourceSectionProps)
         />
       ) : null}
     </ModalSection>
+  );
+}
+
+// ---- The sheets received for a plaka kalemi ----
+
+const EMPTY_LINE_LOTS: MaterialPiece[] = [];
+
+/** The lots received for a planning line, to cut from (the line stays on the cut). */
+export function LineLots({
+  planningItemId,
+  selectedId,
+  onPick,
+}: {
+  planningItemId: number;
+  selectedId: number | null;
+  onPick: (lot: PieceChoice) => void;
+}) {
+  const lots = useQuery(
+    piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }),
+  );
+  const rows = lots.data?.results ?? EMPTY_LINE_LOTS;
+  if (lots.isLoading) return null;
+  if (rows.length === 0) {
+    return (
+      <Text size="xs" c="dimmed">
+        Bu kaleme mal kabulde henüz sac girilmedi. Sac gelince kesimi düzenleyip seçebilir ya da
+        kesimi bitirirken seçebilirsiniz.
+      </Text>
+    );
+  }
+  return (
+    <Stack gap={4}>
+      <Text size="xs" fw={600}>
+        Bu kalemin gelen sacları
+      </Text>
+      {rows.map((lot) => {
+        const free = lot.available_quantity ?? lot.quantity;
+        const chosen = lot.id === selectedId;
+        return (
+          <Group key={lot.id} gap="xs">
+            <Text size="sm">
+              {pieceText(lot)} · {placeLabel(lot)} · boş {free} / {lot.quantity}
+              {lot.heat_number ? ` · şarj ${lot.heat_number}` : ''}
+            </Text>
+            {chosen ? (
+              <Badge color="green" leftSection={<FaIcon icon="fas fa-check" />}>
+                Seçili
+              </Badge>
+            ) : (
+              <Button
+                size="compact-xs"
+                variant="light"
+                disabled={free < 1 || !lot.warehouse_code}
+                onClick={() => onPick(pieceChoice(lot))}
+              >
+                Bu sacı kullan
+              </Button>
+            )}
+          </Group>
+        );
+      })}
+    </Stack>
   );
 }
 
