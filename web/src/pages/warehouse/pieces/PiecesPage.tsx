@@ -200,10 +200,10 @@ const PLANNER_PAGES: Record<PieceKind, string> = {
 };
 
 /**
- * Who may edit a lot's döküm no / sertifika / not and mark it checked: the warehouse,
- * and the planners of its kind (the backend checks the same Kesimler grants).
+ * Who may write pieces of a kind (add, adjust, move, scrap, edit): the warehouse for both,
+ * and the planners of that kind (the backend checks the same Kesimler grants).
  */
-export function canEditLot(kind: PieceKind | null): boolean {
+export function canWriteKind(kind: PieceKind | null): boolean {
   return canWritePieces() || (kind !== null && hasRouteAccess(PLANNER_PAGES[kind]));
 }
 
@@ -716,18 +716,38 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
   const [note, setNote] = useState(piece.note);
   const [checked, setChecked] = useState(false);
   const [changeNote, setChangeNote] = useState('');
+  const plate = piece.kind === 'plate';
+  const [width, setWidth] = useState<string | number>(piece.width_mm ? Number(piece.width_mm) : '');
+  const [length, setLength] = useState<string | number>(Number(piece.length_mm));
+  const resized =
+    Number(length) !== Number(piece.length_mm) ||
+    (plate && Number(width) !== Number(piece.width_mm));
+  // What the page knows of the backend's size guard (it also refuses a lot that was cut).
+  const sizeLock = piece.reserved_quantity
+    ? 'kesime ayrılmış parçası var'
+    : piece.supplier
+      ? 'fasoncuda'
+      : '';
   const run = useMutation({
     mutationFn: (data: PieceEdit) => editPiece(piece.id, data),
     onSuccess: invalidate,
   });
   const save = async () => {
     if (checked && !changeNote.trim()) return notify.warning('Kontrol edildi için açıklama girin');
+    if (resized) {
+      if (!(Number(length) > 0) || (plate && !(Number(width) > 0)))
+        return notify.warning(plate ? 'En ve boy (mm) girin' : 'Boy (mm) girin');
+      if (!changeNote.trim()) return notify.warning('Ölçü düzeltmesi için açıklama girin');
+    }
     try {
       await run.mutateAsync({
         heat_number: heat,
         certificate_no: certificate,
         note,
         ...(checked ? { needs_review: false as const } : {}),
+        ...(resized
+          ? { ...(plate ? { width_mm: String(width) } : {}), length_mm: String(length) }
+          : {}),
         change_note: changeNote,
       });
       notify.success(`${piece.item_code}: bilgiler kaydedildi`);
@@ -753,8 +773,36 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
     >
       <Stack gap="sm">
         <Text size="xs" c="dimmed">
-          Adet, ölçü ve yer kendi işlemleriyle değişir (Adedi Düzelt, Taşı). Değişiklik lotun
-          geçmişinde kim ve ne zaman ile görünür.
+          Adet ve yer kendi işlemleriyle değişir (Adedi Düzelt, Taşı). Değişiklik lotun geçmişinde
+          kim ve ne zaman ile görünür.
+        </Text>
+        <Group grow align="flex-start">
+          {plate ? (
+            <NumberInput
+              label="En (mm)"
+              min={0}
+              decimalScale={1}
+              hideControls
+              disabled={Boolean(sizeLock)}
+              value={width}
+              onChange={setWidth}
+            />
+          ) : null}
+          <NumberInput
+            label="Boy (mm)"
+            min={0}
+            decimalScale={1}
+            hideControls
+            disabled={Boolean(sizeLock)}
+            value={length}
+            onChange={setLength}
+          />
+        </Group>
+        <Text size="xs" c={sizeLock ? 'orange.8' : 'dimmed'}>
+          {sizeLock
+            ? `Ölçü değiştirilemez: ${sizeLock}. Adedi düzeltip doğru ölçüde yeni lot ekleyin.`
+            : 'Ölçü yalnız yanlış okunmuş bir lotta düzeltilir (ayrılmamış, kesime çıkmamış, ' +
+              'fasonda değil); ağırlık yeni ölçüden hesaplanır, açıklama zorunlu.'}
         </Text>
         <Group grow>
           <TextInput
@@ -791,7 +839,7 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
           </Alert>
         ) : null}
         <Textarea
-          label={checked ? 'Açıklama (zorunlu)' : 'Açıklama'}
+          label={checked || resized ? 'Açıklama (zorunlu)' : 'Açıklama'}
           description="Geçmişte bu değişikliğin yanında görünür"
           maxLength={255}
           value={changeNote}
@@ -806,6 +854,8 @@ const CHANGE_LABELS: Record<string, string> = {
   heat_number: 'Döküm no',
   certificate_no: 'Sertifika no',
   note: 'Not',
+  width_mm: 'En (mm)',
+  length_mm: 'Boy (mm)',
 };
 
 /** "Döküm no: – → D-901" lines of an edit (needs_review is the row's own label). */
@@ -923,7 +973,11 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
                             {c.created_by_username ? ` · ${c.created_by_username}` : ''}
                           </Table.Td>
                           <Table.Td>
-                            {c.changes.needs_review ? 'Kontrol edildi' : 'Bilgi düzenlendi'}
+                            {c.changes.needs_review
+                              ? 'Kontrol edildi'
+                              : c.changes.width_mm || c.changes.length_mm
+                                ? 'Ölçü düzeltildi'
+                                : 'Bilgi düzenlendi'}
                             {[...changeLines(c), c.note].filter(Boolean).map((line) => (
                               <Text key={line} size="xs" c="dimmed">
                                 {line}
@@ -969,7 +1023,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
           },
         ]}
         footerActions={
-          canEditLot(piece.kind) ? (
+          canWriteKind(piece.kind) ? (
             <Group gap="xs">
               <Button
                 variant="light"
@@ -978,7 +1032,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
               >
                 Düzenle
               </Button>
-              {(canWritePieces() && piece.quantity > 0 ? actions : []).map((a) => (
+              {(piece.quantity > 0 ? actions : []).map((a) => (
                 <Button
                   key={a.key}
                   variant="light"
@@ -1183,7 +1237,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
           },
         ]}
         actions={
-          canWritePieces() ? (
+          canWriteKind(kind) ? (
             <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating(true)}>
               Parça Ekle
             </Button>

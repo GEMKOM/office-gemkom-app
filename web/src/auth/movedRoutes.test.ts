@@ -62,13 +62,18 @@ describe('moved pages', () => {
     legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/cuts']);
     const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
     // '/', '/quiz' and '/general' are open to everyone.
-    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning']);
+    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning', '/warehouse']);
     const planning = tree['/planning']!.children;
     expect(Object.keys(planning)).toEqual(['/planning/cnc-cutting']);
     // A CNC planner also sees Sac Stoğu, the Depo page under CNC Kesim.
     expect(Object.keys(planning['/planning/cnc-cutting']!.children)).toEqual([
       '/planning/cnc-cutting/cuts',
       '/planning/cnc-cutting/plate-stock',
+    ]);
+    // ...and under Depo › Stoklar (they write plate pieces), nothing else of Depo.
+    expect(Object.keys(tree['/warehouse']!.children)).toEqual(['/warehouse#stoklar']);
+    expect(Object.keys(tree['/warehouse']!.children['/warehouse#stoklar']!.children)).toEqual([
+      '/warehouse/plate-stock',
     ]);
   });
 

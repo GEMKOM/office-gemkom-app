@@ -440,15 +440,82 @@ it('the planning Sac Stoğu is the same page, back to CNC Kesim', async () => {
   ).toBe(true);
 });
 
-it('a CNC planner may edit a plate lot, and nothing else', async () => {
+it('a CNC planner writes plate lots like the warehouse, under Planlama and Depo', async () => {
   warehouseUser = false;
   grantedPages = ['/manufacturing/cnc-cutting/cuts'];
   renderPage('/planning/cnc-cutting/plate-stock?piece=2', <CncPlateStockPage />);
   expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Düzenle' })).toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Taşı / Fasona Gönder' })).not.toBeInTheDocument();
-  expect(screen.queryByRole('button', { name: 'Adedi Düzelt' })).not.toBeInTheDocument();
+  for (const name of ['Düzenle', 'Taşı / Fasona Gönder', 'Adedi Düzelt', 'Hurdaya Ayır']) {
+    expect(screen.getByRole('button', { name })).toBeInTheDocument();
+  }
+  expect(screen.getByRole('button', { name: 'Parça Ekle' })).toBeInTheDocument();
+});
+
+it('a CNC planner adds nothing on Boy Stoğu; a Lineer planner does', async () => {
+  warehouseUser = false;
+  grantedPages = ['/manufacturing/cnc-cutting/cuts'];
+  const first = renderPage('/warehouse/bar-stock', <WarehouseBarStockPage />);
+  expect(await screen.findByRole('heading', { name: 'Boy Stoğu' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Parça Ekle' })).not.toBeInTheDocument();
+  first.unmount();
+
+  grantedPages = ['/manufacturing/linear-cutting/cuts'];
+  renderPage('/warehouse/bar-stock', <WarehouseBarStockPage />);
+  fireEvent.click(await screen.findByRole('button', { name: 'Parça Ekle' }));
+  // The card picker asks for bar cards only.
+  const dialog = await screen.findByRole('dialog', { name: 'Parça Ekle' });
+  const picker = within(dialog).getByLabelText('Stok kartı');
+  picker.focus();
+  fireEvent.change(picker, { target: { value: 'boru' } });
+  await waitFor(() =>
+    expect(
+      calls()
+        .find(
+          (c) => c.url.pathname === '/warehouse/pieces/cards/' && c.url.searchParams.get('search'),
+        )
+        ?.url.searchParams.get('kind'),
+    ).toBe('boy'),
+  );
+});
+
+it('corrects a lot size with a required note', async () => {
+  renderPage('/warehouse/plate-stock?piece=2');
+  expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }));
+  const dialog = await screen.findByRole('dialog', { name: /Lotu Düzenle/ });
+  fireEvent.change(within(dialog).getByLabelText('En (mm)'), { target: { value: '1250' } });
+  fireEvent.change(within(dialog).getByLabelText('Boy (mm)'), { target: { value: '2500' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() =>
+    expect(notify.warning).toHaveBeenCalledWith('Ölçü düzeltmesi için açıklama girin'),
+  );
+  expect(calls().some((c) => c.method === 'PATCH')).toBe(false);
+  fireEvent.change(within(dialog).getByLabelText(/Açıklama/), {
+    target: { value: 'Ölçüldü' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalled());
+  expect(calls().find((c) => c.method === 'PATCH')!.body).toEqual({
+    heat_number: '',
+    certificate_no: '',
+    note: '',
+    width_mm: '1250',
+    length_mm: '2500',
+    change_note: 'Ölçüldü',
+  });
+});
+
+it('locks the size of a lot a cut has reserved', async () => {
+  lots = [
+    NO_WEIGHT_LOT,
+    { ...WEIGHED_LOT, reserved_quantity: 1, reservations: [{ cnc_task: 'CNC-9', quantity: 1 }] },
+  ];
+  renderPage('/warehouse/plate-stock?piece=2');
+  expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }));
+  const dialog = await screen.findByRole('dialog', { name: /Lotu Düzenle/ });
+  expect(within(dialog).getByLabelText('En (mm)')).toBeDisabled();
+  expect(within(dialog).getByText(/Ölçü değiştirilemez: kesime ayrılmış/)).toBeInTheDocument();
 });
 
 it('a Lineer Kesim planner may not edit a plate lot', async () => {
