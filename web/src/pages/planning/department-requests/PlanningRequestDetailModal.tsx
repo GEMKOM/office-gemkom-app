@@ -15,6 +15,7 @@ import {
   FileAttachments,
   FormModal,
   notify,
+  SizeNote,
   StatusBadge,
   type DetailSection,
 } from '@/ui';
@@ -74,12 +75,8 @@ function ItemsTable({ request }: { request: PlanningRequest }) {
                   <Text size="sm" fw={700}>
                     {formatQuantity(item.quantity_to_purchase || 0)}
                   </Text>
-                  {item.size_label ? (
-                    // A plate / boy line: the size and count its quantity comes from.
-                    <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-                      {item.size_label}
-                    </Text>
-                  ) : null}
+                  {/* A plate / boy line: the pieces its quantity comes from. */}
+                  <SizeNote text={item.size_summary || item.size_label} />
                 </Table.Td>
                 <Table.Td>{item.item_unit || 'adet'}</Table.Td>
                 <Table.Td>

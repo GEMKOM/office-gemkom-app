@@ -14,6 +14,7 @@ import {
   DetailModal,
   FaIcon,
   notify,
+  SizeNote,
   StatusBadge,
   type DetailSection,
   type StatusFamily,
@@ -160,7 +161,10 @@ function ItemsTable({ request, ledger }: { request: MaterialPullRequest; ledger:
               return ledger ? (
                 <Table.Tr key={item.id ?? index}>
                   <Table.Td className={uiClasses.code}>{item.item_code || '-'}</Table.Td>
-                  <Table.Td>{item.item_name || '-'}</Table.Td>
+                  <Table.Td>
+                    {item.item_name || '-'}
+                    <SizeNote text={item.size_summary} />
+                  </Table.Td>
                   <Table.Td>{item.job_no || '-'}</Table.Td>
                   <Table.Td ta="right" fw={600}>
                     {`${fmtQty(item.quantity)} ${item.item_unit || ''}`.trim()}
@@ -178,7 +182,10 @@ function ItemsTable({ request, ledger }: { request: MaterialPullRequest; ledger:
               ) : (
                 <Table.Tr key={item.id ?? index}>
                   <Table.Td className={uiClasses.code}>{item.item_code || '-'}</Table.Td>
-                  <Table.Td>{item.item_name || '-'}</Table.Td>
+                  <Table.Td>
+                    {item.item_name || '-'}
+                    <SizeNote text={item.size_summary} />
+                  </Table.Td>
                   <Table.Td>{item.job_no || '-'}</Table.Td>
                   <Table.Td>{item.quantity ?? '-'}</Table.Td>
                   <Table.Td>{item.item_unit || '-'}</Table.Td>

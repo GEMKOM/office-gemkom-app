@@ -87,6 +87,10 @@ export interface RequestItem {
   specifications?: string | null;
   allocations?: { job_no: string; quantity?: string | number }[];
   files?: RequestFile[];
+  /** The planning line's size ("1500 × 6000 mm × 4 adet"). */
+  size_label?: string | null;
+  /** This line's share of it as one text ("1500×6000 mm × 2 adet · 1.413 kg"). */
+  size_summary?: string | null;
 }
 
 export interface ItemOffer {
@@ -554,6 +558,12 @@ export interface ProcurementPlanningItem {
   is_available_for_purchase?: boolean;
   is_critical?: boolean;
   specifications?: string | null;
+  /** Plate / bar lines: the size as one text, and one piece in the card's unit. */
+  size_summary?: string | null;
+  piece_width_mm?: string | null;
+  piece_length_mm?: string | null;
+  piece_count?: number | null;
+  piece_quantity?: string | null;
   files_count?: number | null;
   files?: { asset_id?: number | null; file_url?: string; file_name?: string }[];
   /** The planning request's İhtiyaç tarihi (YYYY-MM-DD). */

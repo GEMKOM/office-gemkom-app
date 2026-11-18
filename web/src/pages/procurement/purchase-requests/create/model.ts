@@ -36,6 +36,13 @@ export interface PrItem {
   file_asset_ids?: number[];
   /** Merged rows: one line per job number. */
   allocations?: Allocation[];
+  /**
+   * A sized plate / bar planning line: its piece size ("1500×6000 mm") and one piece in
+   * the card's unit. Such a row is bought in whole pieces: its quantity and unit come
+   * from the planning picker and are not edited here.
+   */
+  size_text?: string | null;
+  piece_quantity?: number | null;
 }
 
 export interface PrSupplier {
@@ -275,8 +282,36 @@ export function itemFromDraft(draft: ItemDraft): PrItem {
 }
 
 /** Rows from the planning modal (addSelectedPlanningItems). */
+/** "1500×6000 mm" / "6000 mm" for a sized planning line, else null. */
+export function pieceSizeText(planning: ProcurementPlanningItem): string | null {
+  const n = (v: string | null | undefined) => String(Number(v));
+  if (!planning.piece_length_mm || !planning.piece_count) return null;
+  return planning.piece_width_mm
+    ? `${n(planning.piece_width_mm)}×${n(planning.piece_length_mm)} mm`
+    : `${n(planning.piece_length_mm)} mm`;
+}
+
+/** One piece of a sized line in its card's unit (null: not counted in pieces). */
+export function onePiece(planning: Pick<ProcurementPlanningItem, 'piece_quantity'>): number | null {
+  const one = Number(planning.piece_quantity);
+  return one > 0 ? one : null;
+}
+
+/** How many whole pieces a quantity is (rounded), for a sized row. */
+export function piecesOf(quantity: number, one: number): number {
+  return Math.round(quantity / one);
+}
+
+/** A sized row's pieces as text: "1500×6000 mm × 2 adet"; null for other rows. */
+export function pieceShareText(item: Pick<PrItem, 'size_text' | 'piece_quantity' | 'quantity'>): string | null {
+  if (!item.size_text || !item.piece_quantity) return null;
+  return `${item.size_text} × ${piecesOf(item.quantity, item.piece_quantity)} adet`;
+}
+
 export function itemFromPlanning(planning: ProcurementPlanningItem, quantity: number): PrItem {
   const code = planning.item_code || '';
+  const one = onePiece(planning);
+  const size = pieceSizeText(planning);
   return {
     id: newItemId(),
     code,
@@ -289,6 +324,7 @@ export function itemFromPlanning(planning: ProcurementPlanningItem, quantity: nu
     specifications: planning.specifications || '',
     source_planning_request_item_id: planning.id,
     file_asset_ids: (planning.files ?? []).filter((f) => f.asset_id).map((f) => f.asset_id as number),
+    ...(size && one ? { size_text: size, piece_quantity: one } : {}),
   };
 }
 
@@ -522,6 +558,7 @@ export function comparisonData(state: PrState): ComparisonData {
       unit: i.unit,
       specifications: i.specifications || i.specs || '',
       item_description: i.item_description || '',
+      size: pieceShareText(i),
     })),
     suppliers: state.suppliers.map((s) => ({
       id: s.id,

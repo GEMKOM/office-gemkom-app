@@ -74,6 +74,11 @@ export interface PlanningItem {
   piece_width_mm?: Decimal | null;
   piece_length_mm?: Decimal | null;
   piece_count?: number | null;
+  size_label?: string | null;
+  /** Plate / bar lines: the size as one text ("1500×6000 mm × 2 adet · 1.413 kg"); '' otherwise. */
+  size_summary?: string | null;
+  /** One piece in the card's unit (a PR buys whole sheets / bars of a sized line). */
+  piece_quantity?: string | null;
   /** Talep Edilen Sac (fields=simple, sized plate lines): sheets through Mal kabul / free to cut. */
   sheets_received?: number | null;
   sheets_free?: number | null;

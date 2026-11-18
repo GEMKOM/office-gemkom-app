@@ -98,6 +98,10 @@ export interface OrderLineState {
   kg_per_m?: string | null;
   /** What the card lacks for its pieces to weigh something ('' if nothing). */
   weight_missing?: string;
+  /** Sized lines: what was ordered as one text ("1500×6000 mm × 2 adet · 1.413 kg"). */
+  size_summary?: string;
+  /** Sized lines: the pieces still to come, to start the pieces form from. */
+  outstanding_pieces?: { width_mm: string | null; length_mm: string; count: number | null } | null;
 }
 
 export interface GoodsReceiptsParams {
@@ -138,6 +142,7 @@ export interface PendingLine {
   job_no: string;
   destination: string;
   piece_kind: 'plate' | 'boy' | null;
+  size_summary?: string;
 }
 
 export interface PendingSupplier {

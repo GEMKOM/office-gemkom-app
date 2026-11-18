@@ -1,12 +1,20 @@
-import type { DataTableColumn } from '@/ui';
+import { SizeNote, type DataTableColumn } from '@/ui';
 import { truncate } from '../shared/columns';
-import { isValidFieldValue, UNIT_CHOICES, type EditableField, type PrItem } from './model';
+import {
+  isValidFieldValue,
+  pieceShareText,
+  UNIT_CHOICES,
+  type EditableField,
+  type PrItem,
+} from './model';
 
 // itemsManager.renderItemsTable: every cell edits in place. Merged rows (with
 // allocations) keep their job number and quantity: legacy let both be edited,
 // but submission reads the allocations, so an edit there was silently lost.
 
 const merged = (row: PrItem) => (row.allocations?.length ?? 0) > 0;
+// A sized plate / bar row is bought in whole pieces: quantity and unit stay as picked.
+const sized = (row: PrItem) => Boolean(row.size_text && row.piece_quantity);
 const valid = (field: EditableField) => (value: unknown, row: PrItem) =>
   isValidFieldValue(row, field, value) ? null : 'Geçersiz değer';
 
@@ -17,7 +25,17 @@ export function itemColumns(): DataTableColumn<PrItem>[] {
     { key: 'index', header: '#', render: (_row, index) => index + 1, width: 48 },
     // Rows come from planning lines; changing the card would break the link.
     { key: 'code', header: 'Malzeme Kodu' },
-    { key: 'name', header: 'Malzeme Adı', editable: { validate: valid('name') } },
+    {
+      key: 'name',
+      header: 'Malzeme Adı',
+      render: (row) => (
+        <>
+          {row.name || '-'}
+          <SizeNote text={pieceShareText(row)} />
+        </>
+      ),
+      editable: { validate: valid('name') },
+    },
     {
       key: 'job_no',
       header: 'İş No',
@@ -28,12 +46,18 @@ export function itemColumns(): DataTableColumn<PrItem>[] {
     {
       key: 'quantity',
       header: 'Miktar',
-      editable: { type: 'number', min: 0, step: 0.01, validate: valid('quantity'), enabled: (row) => !merged(row) },
+      editable: {
+        type: 'number',
+        min: 0,
+        step: 0.01,
+        validate: valid('quantity'),
+        enabled: (row) => !merged(row) && !sized(row),
+      },
     },
     {
       key: 'unit',
       header: 'Birim',
-      editable: { type: 'select', options: UNIT_CHOICES, validate: valid('unit') },
+      editable: { type: 'select', options: UNIT_CHOICES, validate: valid('unit'), enabled: (row) => !sized(row) },
     },
     {
       key: 'item_description',

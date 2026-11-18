@@ -23,6 +23,8 @@ export interface MaterialPullRequestItem {
   delivered_quantity?: string | number | null;
   pulled_quantity?: string | number | null;
   quantity_available_to_pull?: string | number | null;
+  /** Plate / bar lines: the size as one text ("1500×6000 mm × 2 adet · 1.413 kg"); '' otherwise. */
+  size_summary?: string | null;
   [key: string]: unknown;
 }
 

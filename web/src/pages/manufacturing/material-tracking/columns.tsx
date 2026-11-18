@@ -1,7 +1,7 @@
 import { Checkbox, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import type { PlanningItem } from '@/api/planning/planningItems';
 import { toNumber } from '@/lib/format';
-import { StatusBadge, type DataTableColumn } from '@/ui';
+import { SizeNote, StatusBadge, type DataTableColumn } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
 import { DeliveryState, deliveryStateText, fmtQty, qty } from './deliveryState';
 
@@ -120,7 +120,18 @@ export function materialTrackingColumns({
       sortable: true,
       render: (row) => <Code value={row.item_code} />,
     },
-    { key: 'item_name', header: 'Ürün Adı', sortable: true },
+    {
+      key: 'item_name',
+      header: 'Ürün Adı',
+      sortable: true,
+      exportValue: (row) => [row.item_name, row.size_summary].filter(Boolean).join(' · '),
+      render: (row) => (
+        <>
+          {row.item_name || '-'}
+          <SizeNote text={row.size_summary} />
+        </>
+      ),
+    },
     {
       key: 'planning_request_number',
       header: 'Talep No',

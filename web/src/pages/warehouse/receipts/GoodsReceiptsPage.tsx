@@ -41,16 +41,17 @@ import {
   notify,
   PageHeader,
   SelectRemote,
+  SizeNote,
   StatusBadge,
   useUrlFilters,
   type DataTableColumn,
   type FilterConfig,
 } from '@/ui';
 import {
-  emptyPiece,
   isBlankPiece,
   pieceInput,
   ReceiptPiecesEditor,
+  startPieces,
   type PieceDraft,
 } from './ReceiptPiecesEditor';
 
@@ -179,6 +180,7 @@ function OrderLinesTable({
                   <Text size="xs" c="dimmed">
                     {line.item_name}
                   </Text>
+                  <SizeNote text={line.size_summary} />
                 </Table.Td>
                 <Table.Td>
                   <Text size="sm">{line.destination || '-'}</Text>
@@ -219,7 +221,7 @@ function OrderLinesTable({
                     <ReceiptPiecesEditor
                       line={line}
                       quantity={num(value)}
-                      rows={pieces[line.po_line] ?? [emptyPiece()]}
+                      rows={pieces[line.po_line] ?? startPieces(line)}
                       onChange={(rows) => onPiecesChange(line.po_line, rows)}
                     />
                   </Table.Td>
@@ -301,7 +303,7 @@ function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: Re
     for (const { line } of picked) {
       if (!line.piece_kind) continue;
       const kind = line.piece_kind;
-      const rows = (pieces[line.po_line] ?? [])
+      const rows = (pieces[line.po_line] ?? startPieces(line))
         .filter((row) => !isBlankPiece(row))
         .map((row) => pieceInput(kind, row));
       if (rows.length === 0) {
@@ -598,6 +600,7 @@ const pendingColumns: DataTableColumn<PendingLine>[] = [
         <Text size="xs" c="dimmed">
           {row.item_name}
         </Text>
+        <SizeNote text={row.size_summary} />
       </Stack>
     ),
   },

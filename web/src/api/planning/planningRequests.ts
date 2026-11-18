@@ -48,6 +48,8 @@ export interface PlanningRequestItem {
   piece_length_mm?: string | null;
   piece_count?: number | null;
   size_label?: string | null;
+  /** Plate / bar lines: the size as one text ("1500×6000 mm × 2 adet · 1.413 kg"); '' otherwise. */
+  size_summary?: string | null;
   files?: PlanningRequestFile[];
   purchase_request_info?: PurchaseRequestInfo[] | null;
   [key: string]: unknown;

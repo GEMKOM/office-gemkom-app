@@ -75,6 +75,8 @@ export interface ProcurementLinePreview {
   item_name?: string | null;
   item_unit?: string | null;
   item_description?: string | null;
+  /** A sized bar line: its size as one text ("6000 mm × 3 adet · 18 m · 110 kg"). */
+  size_summary?: string | null;
   quantity?: Decimal | null;
   unit_price_eur?: Decimal | null;
   planning_request_item?: number | null;

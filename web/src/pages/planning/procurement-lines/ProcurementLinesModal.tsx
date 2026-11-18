@@ -13,6 +13,7 @@ import {
   FileDropInput,
   FormModal,
   notify,
+  SizeNote,
   type CellEdit,
   type CellValue,
   type DataTableColumn,
@@ -490,7 +491,16 @@ function buildColumns(compare: ExcelCompare | null): DataTableColumn<EditLine>[]
           <span className={uiClasses.code}>{line.item_code || '–'}</span>
         ),
     },
-    { key: 'item_name', header: 'Malzeme Adı', render: (line) => muted(line.item_name || '–') },
+    {
+      key: 'item_name',
+      header: 'Malzeme Adı',
+      render: (line) => (
+        <>
+          {muted(line.item_name || '–')}
+          <SizeNote text={line.size_summary} />
+        </>
+      ),
+    },
     {
       key: 'item_description',
       header: 'Açıklama',

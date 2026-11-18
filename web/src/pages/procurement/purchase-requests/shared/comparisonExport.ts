@@ -34,13 +34,14 @@ export function comparisonRows(
   withSummary: boolean,
 ): string[][] {
   const visible = EXPORT_ORDER.filter((c) => columns.includes(c));
-  const header = ['Malzeme', 'İş No', 'Miktar', 'Birim', 'Teknik Özellikler'];
+  const header = ['Malzeme', 'Ölçü', 'İş No', 'Miktar', 'Birim', 'Teknik Özellikler'];
   for (const s of data.suppliers) for (const c of visible) header.push(`${s.name} - ${HEADER[c]}`);
   const rows: string[][] = [header];
   for (const item of data.items) {
     const qty = parseFloat(String(item.quantity));
     const row = [
       item.name,
+      item.size || '',
       item.job_no,
       Number.isFinite(qty) ? tr.format(qty) : '',
       item.unit,
