@@ -469,24 +469,32 @@ export async function fetchAllDepartmentTasks(
 // ---- cache helpers ----------------------------------------------------------
 
 /**
+ * Whether a cached entry under departmentTaskKeys.lists is a task page. Other
+ * queries share that prefix with other shapes (the hubs' counts are numbers),
+ * so the cache updates below leave those alone.
+ */
+function isTaskPage(data: unknown): data is Paginated<DepartmentTask> {
+  return (
+    !!data && typeof data === 'object' && Array.isArray((data as { results?: unknown }).results)
+  );
+}
+
+/**
  * Puts a fresh task over its old copy wherever it is cached (list pages,
  * expanded subtasks, the detail), so only that row re-renders. Returns
  * whether any list held it (legacy updateTaskInLocalData).
  */
 export function replaceTaskInCache(queryClient: QueryClient, task: DepartmentTask): boolean {
   let found = false;
-  queryClient.setQueriesData<Paginated<DepartmentTask>>(
-    { queryKey: departmentTaskKeys.lists },
-    (page) => {
-      if (!page || !page.results.some((t) => t.id === task.id)) return page;
-      found = true;
-      return { ...page, results: page.results.map((t) => (t.id === task.id ? task : t)) };
-    },
-  );
+  queryClient.setQueriesData<unknown>({ queryKey: departmentTaskKeys.lists }, (page: unknown) => {
+    if (!isTaskPage(page) || !page.results.some((t) => t.id === task.id)) return page;
+    found = true;
+    return { ...page, results: page.results.map((t) => (t.id === task.id ? task : t)) };
+  });
   queryClient.setQueriesData<DepartmentTask[]>(
     { queryKey: departmentTaskKeys.subtasks },
     (rows) => {
-      if (!rows || !rows.some((t) => t.id === task.id)) return rows;
+      if (!Array.isArray(rows) || !rows.some((t) => t.id === task.id)) return rows;
       found = true;
       return rows.map((t) => (t.id === task.id ? task : t));
     },
@@ -501,15 +509,13 @@ export function patchTaskInCache(
   patch: Partial<DepartmentTask>,
 ): void {
   const merge = (t: DepartmentTask) => (t.id === id ? { ...t, ...patch } : t);
-  queryClient.setQueriesData<Paginated<DepartmentTask>>(
-    { queryKey: departmentTaskKeys.lists },
-    (page) =>
-      page && page.results.some((t) => t.id === id)
-        ? { ...page, results: page.results.map(merge) }
-        : page,
+  queryClient.setQueriesData<unknown>({ queryKey: departmentTaskKeys.lists }, (page: unknown) =>
+    isTaskPage(page) && page.results.some((t) => t.id === id)
+      ? { ...page, results: page.results.map(merge) }
+      : page,
   );
   queryClient.setQueriesData<DepartmentTask[]>({ queryKey: departmentTaskKeys.subtasks }, (rows) =>
-    rows && rows.some((t) => t.id === id) ? rows.map(merge) : rows,
+    Array.isArray(rows) && rows.some((t) => t.id === id) ? rows.map(merge) : rows,
   );
 }
 
