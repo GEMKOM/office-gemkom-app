@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { theme } from '@/theme';
 import { RouteError } from './RouteError';
-import { isStaleChunkError, page, reloadForNewVersion } from './staleChunk';
+import { isStaleChunkError, page, reloadForNewVersion, resetReloadState } from './staleChunk';
 
 const STALE =
   'Failed to fetch dynamically imported module: https://ofis.gemcore.com.tr/app-assets/assets/EstimatesPage-KzMRwZyr.js';
@@ -35,6 +35,7 @@ function renderFailing(error: Error) {
 let reload: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   sessionStorage.clear();
+  resetReloadState();
   reload = vi.spyOn(page, 'reload').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -57,10 +58,20 @@ describe('isStaleChunkError', () => {
 
 describe('reloadForNewVersion', () => {
   it('reloads once in a short window, so a chunk that is really gone cannot loop', () => {
+    // resetReloadState: each call on a freshly loaded page.
     expect(reloadForNewVersion(1_000_000)).toBe(true);
+    resetReloadState();
     expect(reloadForNewVersion(1_005_000)).toBe(false);
+    resetReloadState();
     expect(reloadForNewVersion(1_020_000)).toBe(true);
     expect(reload).toHaveBeenCalledTimes(2);
+  });
+
+  it('on the same page, a second call reports the reload already on its way', () => {
+    // The preload handler starts it; the route error page then shows it.
+    expect(reloadForNewVersion(1_000_000)).toBe(true);
+    expect(reloadForNewVersion(1_001_000)).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -73,6 +84,7 @@ describe('RouteError', () => {
 
   it('after a reload that did not help, asks the user to refresh instead of looping', async () => {
     reloadForNewVersion();
+    resetReloadState();
     reload.mockClear();
     renderFailing(new TypeError(STALE));
     expect(await screen.findByText('Uygulama güncellendi')).toBeInTheDocument();

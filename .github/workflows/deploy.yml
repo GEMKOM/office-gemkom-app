@@ -53,6 +53,23 @@ jobs:
           cmp ../_site/index.html ../_site/404.html
           cmp ../_site/index.html ../_site/sales/customers/index.html
 
+      # Recent deploys' asset files stay published (see scripts/keep-old-assets.mjs),
+      # so a tab opened before this deploy keeps working instead of breaking on its
+      # next page switch. The history carries over between runs in the Actions cache;
+      # the live site's files are fetched too, in case the cache is gone.
+      - name: Restore earlier deploys' assets
+        uses: actions/cache/restore@v4
+        with:
+          path: .asset-history
+          key: app-assets-history-${{ github.run_id }}
+          restore-keys: app-assets-history-
+      - run: node scripts/keep-old-assets.mjs --site ../_site --history ../.asset-history --days 14 --live https://ofis.gemcore.com.tr
+      - name: Save the assets history
+        uses: actions/cache/save@v4
+        with:
+          path: .asset-history
+          key: app-assets-history-${{ github.run_id }}
+
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

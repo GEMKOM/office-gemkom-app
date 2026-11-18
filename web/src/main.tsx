@@ -16,10 +16,13 @@ import { Providers } from '@/app/Providers';
 import { router } from '@/routes/router';
 import { reloadForNewVersion } from '@/routes/staleChunk';
 
-// A chunk preload failing after a deploy: reload for the new version before the
-// page even tries to render (once; the route error page covers the rest).
-window.addEventListener('vite:preloadError', (event) => {
-  if (reloadForNewVersion()) event.preventDefault();
+// A chunk failing to load (a file a deploy removed): reload for the new
+// version. The error is not prevented: preventing it makes the page's import
+// resolve to undefined, and the route then broke with "Cannot read properties
+// of undefined" before the reload. It reaches the route error page instead,
+// which shows the reload in progress.
+window.addEventListener('vite:preloadError', () => {
+  reloadForNewVersion();
 });
 
 createRoot(document.getElementById('root')!).render(
