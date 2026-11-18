@@ -48,6 +48,7 @@ import {
   type FilterConfig,
 } from '@/ui';
 import {
+  followReceiptQuantity,
   isBlankPiece,
   pieceInput,
   ReceiptPiecesEditor,
@@ -394,7 +395,18 @@ function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: Re
             <OrderLinesTable
               lines={lines.data}
               quantities={quantities}
-              onChange={(poLine, value) => setQuantities((prev) => ({ ...prev, [poLine]: value }))}
+              onChange={(poLine, value) => {
+                const line = lines.data?.find((l) => l.po_line === poLine);
+                const previous = num(quantities[poLine] ?? line?.receivable);
+                setQuantities((prev) => ({ ...prev, [poLine]: value }));
+                if (!line?.piece_kind) return;
+                setPieces((prev) => {
+                  const rows = prev[poLine];
+                  if (!rows) return prev;
+                  const next = followReceiptQuantity(rows, line, previous, num(value));
+                  return next === rows ? prev : { ...prev, [poLine]: next };
+                });
+              }}
               pieces={pieces}
               onPiecesChange={(poLine, rows) => setPieces((prev) => ({ ...prev, [poLine]: rows }))}
             />
