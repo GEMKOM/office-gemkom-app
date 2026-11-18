@@ -53,14 +53,13 @@ import { ItemFormModal } from '../inventory/cards/ItemFormModal';
 import { UNIT_CHOICES } from '../../general/department-requests/list/constants';
 import { shiftAttachTargets } from '../../general/department-requests/list/fileItemMapping';
 import { ExcelImportModal } from './ExcelImportModal';
-import { RowSizeEditor, sizeTotals } from './RowSizeEditor';
+import { RowSizeEditor } from './RowSizeEditor';
 import {
   attachmentsFromDepartmentRequest,
   attachmentsFromPlanningRequest,
   buildFiles,
   buildItems,
   changedFields,
-  formatQuantity,
   isClearProtected,
   itemRow,
   lockReason,
@@ -195,10 +194,12 @@ export function PlanningRequestFormModal({
       form.setFieldValue(`items.${index}.item_name`, picked.name);
       if (picked.unit) form.setFieldValue(`items.${index}.item_unit`, picked.unit.toLowerCase());
     }
-    // Plate / boy cards are asked for in sizes; a new card starts the size over.
-    form.setFieldValue(`items.${index}.kind`, pieceKindOf(picked?.material_class));
+    // Plate / boy cards are asked for in sizes; a new card starts over on a
+    // standard size (the dropdown also offers "Özel ölçü…").
+    const kind = pieceKindOf(picked?.material_class);
+    form.setFieldValue(`items.${index}.kind`, kind);
     form.setFieldValue(`items.${index}.item_id`, picked?.id ?? null);
-    form.setFieldValue(`items.${index}.size_mode`, '');
+    form.setFieldValue(`items.${index}.size_mode`, kind ? 'standard' : '');
     form.setFieldValue(`items.${index}.piece_width`, '');
     form.setFieldValue(`items.${index}.piece_length`, '');
     form.setFieldValue(`items.${index}.piece_count`, '');
@@ -499,11 +500,10 @@ export function PlanningRequestFormModal({
                 [
                   ['Stok Kodu *', 5],
                   ['Ürün Adı', 3],
-                  ['Ürün Açıklaması', 3],
+                  ['Ürün Açıklaması', 2],
                   ['İş No', 4],
-                  ['Miktar', 2],
-                  ['Birim', 2],
-                  ['Özellikler', 3],
+                  ['Miktar', 6],
+                  ['Özellikler', 2],
                   ['İşlem', 2],
                 ] as const
               ).map(([label, span]) => (
@@ -570,7 +570,7 @@ export function PlanningRequestFormModal({
                       {...form.getInputProps(`items.${index}.item_name`)}
                     />
                   </Grid.Col>
-                  <Grid.Col span={{ base: 12, md: 3 }}>
+                  <Grid.Col span={{ base: 12, md: 2 }}>
                     <TextInput
                       size="xs"
                       placeholder="Ürün açıklaması"
@@ -592,29 +592,29 @@ export function PlanningRequestFormModal({
                       {...form.getInputProps(`items.${index}.job_no`)}
                     />
                   </Grid.Col>
-                  {row.kind ? (
-                    // A plate / boy line's quantity follows from its size and count
-                    // (the row below), in the card's unit: shown, never typed.
-                    <Grid.Col span={{ base: 16, md: 4 }}>
-                      <Tooltip label="Sac ölçüsü / boy ve adetten hesaplanır" withArrow>
-                        <Text
-                          size="xs"
-                          fw={600}
-                          pt={6}
-                          aria-label={`Miktar ${index + 1}`}
-                          c={sizeTotals(row, undefined).complete ? undefined : 'dimmed'}
-                        >
-                          {sizeTotals(row, undefined).complete && Number(row.quantity) > 0
-                            ? `${formatQuantity(Number(row.quantity))} ${row.item_unit}`
-                            : 'Ölçüden'}
-                        </Text>
-                      </Tooltip>
-                    </Grid.Col>
-                  ) : (
-                    <>
-                      <Grid.Col span={{ base: 8, md: 2 }}>
+                  <Grid.Col span={{ base: 24, md: 6 }}>
+                    {row.kind ? (
+                      // A plate / boy line: size × count on the line itself; its
+                      // quantity in the card's unit follows and is never typed.
+                      <RowSizeEditor
+                        row={row}
+                        itemId={row.item_id ?? cardFromSearch(row.item_code)?.id ?? null}
+                        index={index}
+                        disabled={locked}
+                        onChange={(patch) => {
+                          for (const [field, value] of Object.entries(patch)) {
+                            form.setFieldValue(`items.${index}.${field}`, value);
+                          }
+                        }}
+                        onQuantity={(quantity) =>
+                          form.setFieldValue(`items.${index}.quantity`, quantity)
+                        }
+                      />
+                    ) : (
+                      <Group gap={6} wrap="nowrap">
                         <NumberInput
                           size="xs"
+                          style={{ flex: 1, minWidth: 0 }}
                           placeholder="Miktar"
                           aria-label={`Miktar ${index + 1}`}
                           min={0.01}
@@ -622,10 +622,9 @@ export function PlanningRequestFormModal({
                           disabled={locked}
                           {...form.getInputProps(`items.${index}.quantity`)}
                         />
-                      </Grid.Col>
-                      <Grid.Col span={{ base: 8, md: 2 }}>
                         <Select
                           size="xs"
+                          w={96}
                           aria-label={`Birim ${index + 1}`}
                           allowDeselect={false}
                           disabled={locked}
@@ -636,10 +635,10 @@ export function PlanningRequestFormModal({
                           }
                           {...form.getInputProps(`items.${index}.item_unit`)}
                         />
-                      </Grid.Col>
-                    </>
-                  )}
-                  <Grid.Col span={{ base: 12, md: 3 }}>
+                      </Group>
+                    )}
+                  </Grid.Col>
+                  <Grid.Col span={{ base: 12, md: 2 }}>
                     <TextInput
                       size="xs"
                       placeholder="Özellikler"
@@ -673,24 +672,6 @@ export function PlanningRequestFormModal({
                       </Tooltip>
                     )}
                   </Grid.Col>
-                  {row.kind ? (
-                    <Grid.Col span={24}>
-                      <RowSizeEditor
-                        row={row}
-                        itemId={row.item_id ?? cardFromSearch(row.item_code)?.id ?? null}
-                        index={index}
-                        disabled={locked}
-                        onChange={(patch) => {
-                          for (const [field, value] of Object.entries(patch)) {
-                            form.setFieldValue(`items.${index}.${field}`, value);
-                          }
-                        }}
-                        onQuantity={(quantity) =>
-                          form.setFieldValue(`items.${index}.quantity`, quantity)
-                        }
-                      />
-                    </Grid.Col>
-                  ) : null}
                 </Grid>
               );
             })}
