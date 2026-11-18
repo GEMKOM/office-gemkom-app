@@ -48,6 +48,7 @@ import {
   type PieceKind,
   type PiecePlace,
 } from '@/api/warehouse/pieces';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { hasPerm, isAdmin } from '@/auth/authService';
 import { formatDateTime, formatNumber } from '@/lib/format';
 import {
@@ -190,6 +191,20 @@ const mono = { fontFamily: 'var(--gk-font-mono)' };
 /** Who may change plate / boy stock (the backend checks the same: access_warehouse, staff, superuser). */
 function canWritePieces(): boolean {
   return isAdmin() || hasPerm('access_warehouse');
+}
+
+/** The planners who open the same page under Planlama: CNC Kesim (sac), Lineer Kesim (boy). */
+const PLANNER_PAGES: Record<PieceKind, string> = {
+  plate: '/planning/cnc-cutting/cuts',
+  boy: '/planning/linear-cutting/cuts',
+};
+
+/**
+ * Who may edit a lot's döküm no / sertifika / not and mark it checked: the warehouse,
+ * and the planners of its kind (the backend checks the same Kesimler grants).
+ */
+export function canEditLot(kind: PieceKind | null): boolean {
+  return canWritePieces() || (kind !== null && hasRouteAccess(PLANNER_PAGES[kind]));
 }
 
 function kg(value: string | null | undefined): string {
@@ -954,7 +969,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
           },
         ]}
         footerActions={
-          canWritePieces() ? (
+          canEditLot(piece.kind) ? (
             <Group gap="xs">
               <Button
                 variant="light"
@@ -963,7 +978,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
               >
                 Düzenle
               </Button>
-              {(piece.quantity > 0 ? actions : []).map((a) => (
+              {(canWritePieces() && piece.quantity > 0 ? actions : []).map((a) => (
                 <Button
                   key={a.key}
                   variant="light"
