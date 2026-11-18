@@ -75,7 +75,18 @@ const codeInput = (n: number) =>
     .getAllByLabelText(`Ürün kodu ${n}`)
     .find((el) => (el as HTMLInputElement).type !== 'hidden')!;
 
+const WEIGHT = {
+  unit_kg: '706.500' as string | null,
+  total_kg: '706.500' as string | null,
+  density_g_cm3: '7.850',
+  plate_thickness_mm: '10.00',
+  kg_per_m: null,
+  missing: '',
+};
+let weightPreview = WEIGHT;
+
 beforeEach(() => {
+  weightPreview = WEIGHT;
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
@@ -97,14 +108,7 @@ beforeEach(() => {
       });
     }
     if (method === 'POST' && path === '/warehouse/pieces/weight-preview/') {
-      return json({
-        unit_kg: '706.500',
-        total_kg: '706.500',
-        density_g_cm3: '7.850',
-        plate_thickness_mm: '10.00',
-        kg_per_m: null,
-        missing: '',
-      });
+      return json(weightPreview);
     }
     return json({ detail: 'not mocked' }, 404);
   });
@@ -205,11 +209,14 @@ it('a plate line is asked for in sizes and its kg follows the pieces', async () 
     <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
   );
   expect(await screen.findByText('Sac ölçüsü')).toBeInTheDocument();
-  expect(await screen.findByText('= 706,50 kg')).toBeInTheDocument();
+  expect(await screen.findByText('Toplam 706,50 kg · 706,50 kg / sac')).toBeInTheDocument();
+  // No Miktar / Birim to type: the quantity follows the size and is only shown.
+  expect(screen.queryByRole('textbox', { name: 'Miktar 1' })).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Birim 1')).not.toBeInTheDocument();
 
   fireEvent.change(screen.getByLabelText('Parça adedi 1'), { target: { value: '2' } });
-  expect(await screen.findByText('= 1.413,00 kg')).toBeInTheDocument();
-  await waitFor(() => expect(screen.getByLabelText('Miktar 1')).toHaveValue('1413'));
+  expect(await screen.findByText('Toplam 1.413,00 kg · 706,50 kg / sac')).toBeInTheDocument();
+  await waitFor(() => expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('1.413,00 kg'));
 
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
   await waitFor(() => expect(patches()).toHaveLength(1));
@@ -251,11 +258,11 @@ it('PATCHes when only the plate size changes (adet, same count)', async () => {
     <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
   );
   expect(await screen.findByText('Sac ölçüsü')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('radio', { name: 'Özel ölçü' }));
+  fireEvent.click(screen.getByRole('radio', { name: 'Özel' }));
   fireEvent.change(screen.getByLabelText('En (mm) 1'), { target: { value: '2000' } });
   fireEvent.change(screen.getByLabelText('Boy (mm) 1'), { target: { value: '12000' } });
   expect(screen.getByLabelText('Parça adedi 1')).toHaveValue('4');
-  expect(screen.getByLabelText('Miktar 1')).toHaveValue('4');
+  expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('4,00 adet');
 
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
   await waitFor(() => expect(patches()).toHaveLength(1));
@@ -271,4 +278,70 @@ it('PATCHes when only the plate size changes (adet, same count)', async () => {
       },
     ],
   });
+});
+
+const BAR_LINE = {
+  id: 202,
+  item: 13,
+  item_code: '0010 0114 0015 000 000',
+  item_name: '114,3*15 ST 44 ÇELİK ÇEKME BORU',
+  item_unit: 'metre',
+  item_material_class: 'boy',
+  job_no: '254-01',
+  quantity: '18.00',
+  size_mode: 'standard' as const,
+  piece_width_mm: null,
+  piece_length_mm: '6000.0',
+  piece_count: 3,
+};
+
+it('a bar line shows its total metres and kg on one row', async () => {
+  weightPreview = { ...WEIGHT, unit_kg: '220.380', total_kg: '220.380' };
+  renderWithProviders(
+    <PlanningRequestFormModal
+      mode={{ kind: 'edit', request: { ...MIXED, items: [BAR_LINE] } }}
+      onClose={() => {}}
+    />,
+  );
+  expect(await screen.findByText('Toplam 18,00 m · 661,14 kg')).toBeInTheDocument();
+  expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('18,00 metre');
+  expect(screen.queryByLabelText('Birim 1')).not.toBeInTheDocument();
+});
+
+it('a kg plate card without a thickness asks for the kg and says why', async () => {
+  weightPreview = {
+    ...WEIGHT,
+    unit_kg: null,
+    total_kg: null,
+    missing: 'Kartta sac kalınlığı yok.',
+  };
+  const request = {
+    ...MIXED,
+    items: [
+      {
+        id: 201,
+        item: 12,
+        item_code: '0100 0000 0010 000 000',
+        item_name: '10 mm ST 37-2 SAC',
+        item_unit: 'kg',
+        item_material_class: 'plate',
+        job_no: '254-01',
+        quantity: '500.00',
+        size_mode: 'standard' as const,
+        piece_width_mm: '1500.0',
+        piece_length_mm: '6000.0',
+        piece_count: 1,
+      },
+    ],
+  };
+  renderWithProviders(
+    <PlanningRequestFormModal mode={{ kind: 'edit', request }} onClose={() => {}} />,
+  );
+  expect(await screen.findByText('Ağırlık yok: Kartta sac kalınlığı yok.')).toBeInTheDocument();
+  const kgInput = screen.getByLabelText('Miktar (kg) 1');
+  expect(kgInput).toHaveValue('500.00');
+  fireEvent.change(kgInput, { target: { value: '520' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(patches()).toHaveLength(1));
+  expect(patches()[0]!.body).toMatchObject({ items: [{ id: 201, quantity: 520 }] });
 });

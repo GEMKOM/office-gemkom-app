@@ -2,21 +2,76 @@ import { Group, NumberInput, SegmentedControl, Select, Text } from '@mantine/cor
 import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { standardSizesQueryOptions, type SizeMode } from '@/api/planning/planningRequests';
-import { previewWeight } from '@/api/warehouse/pieces';
+import { missingWeightText, previewWeight } from '@/api/warehouse/pieces';
 import { formatNumber } from '@/lib/format';
 import type { ItemRow } from './logic';
 
-// The size of a plate / boy planning line: a standard sheet size or bar
-// length, or a custom size, and a count. The quantity follows from the pieces
-// (backend weight for kg, length for metre, count for adet); the backend
-// computes the same when it saves. Bars also show their kg (the card's kg/m).
+// The size of a plate / boy planning line, on one row: a standard sheet size
+// or bar length (or a custom one) and a count, then what they come to: total
+// kg for a plate (and the kg of one sheet), total metres and kg for a bar. The
+// line's quantity (in the card's unit) follows from them: backend weight for
+// kg, length for metre, count for adet; the backend computes the same when it
+// saves. The user never types it, except for a kg card that has no weight data
+// yet (no thickness / kg/m): then the kg is asked for here.
 
 type Patch = Partial<Pick<ItemRow, 'size_mode' | 'piece_width' | 'piece_length' | 'piece_count'>>;
 
 const MODES: { value: SizeMode; label: string }[] = [
-  { value: 'standard', label: 'Standart ölçü' },
-  { value: 'custom', label: 'Özel ölçü' },
+  { value: 'standard', label: 'Standart' },
+  { value: 'custom', label: 'Özel' },
 ];
+
+const kg = (value: number) => `${formatNumber(value, 2)} kg`;
+
+export interface SizeTotals {
+  /** Every size field filled in. */
+  complete: boolean;
+  /** One piece's weight (null: unknown yet, or the card has no weight data). */
+  unitKg: number | null;
+  totalKg: number | null;
+  /** Bars: length × count in metres. */
+  metres: number | null;
+  /** The line's quantity in the card's unit (null: it can't be derived). */
+  quantity: number | null;
+  /** What the card lacks for a weight ('' while unknown or when it has one). */
+  missing: string;
+}
+
+/** What a sized row comes to (pure, for the editor and the tests). */
+export function sizeTotals(
+  row: Pick<
+    ItemRow,
+    'kind' | 'size_mode' | 'piece_width' | 'piece_length' | 'piece_count' | 'item_unit'
+  >,
+  weight: { unit_kg: string | null; missing: string } | undefined,
+): SizeTotals {
+  const kind = row.kind === 'plate' ? 'plate' : 'boy';
+  const mode = row.size_mode ?? '';
+  const width = Number(row.piece_width) || 0;
+  const length = Number(row.piece_length) || 0;
+  const count = Number(row.piece_count) || 0;
+  const complete =
+    (mode === 'standard' || mode === 'custom') &&
+    length > 0 &&
+    count >= 1 &&
+    (kind === 'boy' || width > 0);
+  const unit = (row.item_unit || '').toLowerCase();
+  const round = (n: number) => Math.round(n * 100) / 100;
+  const unitKg = complete && weight?.unit_kg ? Number(weight.unit_kg) : null;
+  const totalKg = unitKg === null ? null : round(unitKg * count);
+  const metres = complete && kind === 'boy' ? round((length * count) / 1000) : null;
+  const quantity = !complete
+    ? null
+    : unit === 'kg'
+      ? totalKg
+      : unit === 'metre'
+        ? round((length * count) / 1000)
+        : unit === 'adet'
+          ? count
+          : null;
+  const missing = complete && weight && weight.unit_kg === null ? weight.missing || ' ' : '';
+  return { complete, unitKg, totalKg, metres, quantity, missing };
+}
 
 export function RowSizeEditor({
   row,
@@ -32,17 +87,16 @@ export function RowSizeEditor({
   index: number;
   disabled?: boolean;
   onChange: (patch: Patch) => void;
-  onQuantity: (quantity: number) => void;
+  onQuantity: (quantity: number | string) => void;
 }) {
   const kind = row.kind === 'plate' ? 'plate' : 'boy';
   const sizes = useQuery(standardSizesQueryOptions());
   const mode = row.size_mode ?? '';
   const width = Number(row.piece_width) || 0;
   const length = Number(row.piece_length) || 0;
-  const count = Number(row.piece_count) || 0;
-  const sized = (mode === 'standard' || mode === 'custom') && length > 0 && count >= 1;
-  const complete = sized && (kind === 'boy' || width > 0);
   const unit = (row.item_unit || '').toLowerCase();
+  const ready =
+    (mode === 'standard' || mode === 'custom') && length > 0 && (kind === 'boy' || width > 0);
   const weight = useQuery({
     queryKey: ['planning-size-weight', itemId, kind === 'plate' ? width : null, length],
     queryFn: () =>
@@ -52,32 +106,17 @@ export function RowSizeEditor({
         length_mm: String(length),
         quantity: 1,
       }),
-    enabled: complete && itemId !== null && (unit === 'kg' || kind === 'boy'),
+    enabled: ready && itemId !== null,
     staleTime: Infinity,
   });
+  const totals = sizeTotals(row, weight.data);
+  // A kg card without weight data: the kg can't be derived and is asked for.
+  const askKg = totals.complete && totals.quantity === null && unit === 'kg' && totals.missing;
 
-  // What the pieces come to, in the line's unit (null when it can't be said).
-  const unitKg = weight.data?.unit_kg ? Number(weight.data.unit_kg) : null;
-  const computed = !complete
-    ? null
-    : unit === 'kg'
-      ? unitKg === null
-        ? null
-        : Math.round(unitKg * count * 100) / 100
-      : unit === 'metre'
-        ? Math.round(((length * count) / 1000) * 100) / 100
-        : unit === 'adet'
-          ? count
-          : null;
-  // A bar line in metres / adet: its kg too (null without the card's kg/m).
-  const barKg =
-    complete && kind === 'boy' && unit !== 'kg' && unitKg !== null
-      ? Math.round(unitKg * count * 100) / 100
-      : null;
   const current = Number(row.quantity) || 0;
   useEffect(() => {
-    if (computed !== null && computed !== current) onQuantity(computed);
-  }, [computed, current, onQuantity]);
+    if (totals.quantity !== null && totals.quantity !== current) onQuantity(totals.quantity);
+  }, [totals.quantity, current, onQuantity]);
 
   const standardValue =
     kind === 'plate'
@@ -95,9 +134,20 @@ export function RowSizeEditor({
         }))
       : (sizes.data?.bar ?? []).map((s) => ({ value: String(s.length_mm), label: s.label }));
 
+  const summary = !totals.complete
+    ? mode === 'standard' || mode === 'custom'
+      ? ''
+      : 'Sac / boy kalemleri ölçü ve adetle istenir.'
+    : kind === 'plate'
+      ? totals.totalKg !== null
+        ? `Toplam ${kg(totals.totalKg)} · ${kg(totals.unitKg!)} / sac`
+        : ''
+      : `Toplam ${formatNumber(totals.metres ?? 0, 2)} m` +
+        (totals.totalKg !== null ? ` · ${kg(totals.totalKg)}` : '');
+
   return (
-    <Group gap="xs" wrap="wrap" align="center">
-      <Text size="xs" fw={600} c="dimmed">
+    <Group gap="xs" wrap="wrap" align="center" data-testid={`size-row-${index + 1}`}>
+      <Text size="xs" fw={600} c="dimmed" w={70}>
         {kind === 'plate' ? 'Sac ölçüsü' : 'Boy'}
       </Text>
       <SegmentedControl
@@ -113,9 +163,9 @@ export function RowSizeEditor({
       {mode === 'standard' ? (
         <Select
           size="xs"
-          w={170}
+          w={150}
           disabled={disabled}
-          placeholder={kind === 'plate' ? 'Sac ölçüsü seçin' : 'Boy seçin'}
+          placeholder={kind === 'plate' ? 'Sac ölçüsü' : 'Boy'}
           aria-label={`Standart ölçü ${index + 1}`}
           data={standardData}
           value={standardValue}
@@ -135,7 +185,7 @@ export function RowSizeEditor({
           {kind === 'plate' ? (
             <NumberInput
               size="xs"
-              w={90}
+              w={84}
               min={0}
               hideControls
               disabled={disabled}
@@ -145,9 +195,14 @@ export function RowSizeEditor({
               onChange={(value) => onChange({ piece_width: value })}
             />
           ) : null}
+          {kind === 'plate' ? (
+            <Text size="xs" c="dimmed">
+              ×
+            </Text>
+          ) : null}
           <NumberInput
             size="xs"
-            w={90}
+            w={84}
             min={0}
             hideControls
             disabled={disabled}
@@ -159,29 +214,55 @@ export function RowSizeEditor({
         </>
       ) : null}
       {mode === 'standard' || mode === 'custom' ? (
+        <>
+          <Text size="xs" c="dimmed">
+            ×
+          </Text>
+          <NumberInput
+            size="xs"
+            w={70}
+            min={1}
+            allowDecimal={false}
+            hideControls
+            disabled={disabled}
+            placeholder="Adet"
+            aria-label={`Parça adedi ${index + 1}`}
+            value={row.piece_count ?? ''}
+            onChange={(value) => onChange({ piece_count: value })}
+          />
+          <Text size="xs" c="dimmed">
+            adet
+          </Text>
+        </>
+      ) : null}
+      {summary ? (
+        <Text size="xs" fw={600} data-testid={`size-total-${index + 1}`}>
+          {summary}
+        </Text>
+      ) : null}
+      {totals.missing ? (
+        <Text size="xs" c="orange.8">
+          Ağırlık yok: {totals.missing.trim() || missingWeightText(kind)}
+        </Text>
+      ) : null}
+      {askKg ? (
         <NumberInput
           size="xs"
-          w={80}
-          min={1}
-          allowDecimal={false}
-          hideControls
+          w={110}
+          min={0.01}
+          step={0.01}
           disabled={disabled}
-          placeholder="Adet"
-          aria-label={`Parça adedi ${index + 1}`}
-          value={row.piece_count ?? ''}
-          onChange={(value) => onChange({ piece_count: value })}
+          placeholder="Miktar (kg)"
+          aria-label={`Miktar (kg) ${index + 1}`}
+          rightSection={
+            <Text size="xs" c="dimmed">
+              kg
+            </Text>
+          }
+          value={row.quantity ?? ''}
+          onChange={onQuantity}
         />
       ) : null}
-      <Text size="xs" c="dimmed">
-        {computed !== null
-          ? `= ${formatNumber(computed, unit === 'adet' ? 0 : 2)} ${unit}` +
-            (barKg !== null ? ` · ${formatNumber(barKg, 2)} kg` : '')
-          : complete && unit === 'kg' && weight.data && unitKg === null
-            ? `Kartta ağırlık bilgisi yok (${weight.data.missing}); miktarı kg olarak girin.`
-            : mode === 'standard' || mode === 'custom'
-              ? ''
-              : 'Sac / boy kalemleri ölçü ve adetle istenir.'}
-      </Text>
     </Group>
   );
 }

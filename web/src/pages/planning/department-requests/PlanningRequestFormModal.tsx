@@ -53,13 +53,14 @@ import { ItemFormModal } from '../inventory/cards/ItemFormModal';
 import { UNIT_CHOICES } from '../../general/department-requests/list/constants';
 import { shiftAttachTargets } from '../../general/department-requests/list/fileItemMapping';
 import { ExcelImportModal } from './ExcelImportModal';
-import { RowSizeEditor } from './RowSizeEditor';
+import { RowSizeEditor, sizeTotals } from './RowSizeEditor';
 import {
   attachmentsFromDepartmentRequest,
   attachmentsFromPlanningRequest,
   buildFiles,
   buildItems,
   changedFields,
+  formatQuantity,
   isClearProtected,
   itemRow,
   lockReason,
@@ -591,31 +592,53 @@ export function PlanningRequestFormModal({
                       {...form.getInputProps(`items.${index}.job_no`)}
                     />
                   </Grid.Col>
-                  <Grid.Col span={{ base: 8, md: 2 }}>
-                    <NumberInput
-                      size="xs"
-                      placeholder="Miktar"
-                      aria-label={`Miktar ${index + 1}`}
-                      min={0.01}
-                      step={0.01}
-                      disabled={locked}
-                      {...form.getInputProps(`items.${index}.quantity`)}
-                    />
-                  </Grid.Col>
-                  <Grid.Col span={{ base: 8, md: 2 }}>
-                    <Select
-                      size="xs"
-                      aria-label={`Birim ${index + 1}`}
-                      allowDeselect={false}
-                      disabled={locked}
-                      data={
-                        unitData.some((u) => u.value === row.item_unit)
-                          ? unitData
-                          : [...unitData, { value: row.item_unit, label: row.item_unit }]
-                      }
-                      {...form.getInputProps(`items.${index}.item_unit`)}
-                    />
-                  </Grid.Col>
+                  {row.kind ? (
+                    // A plate / boy line's quantity follows from its size and count
+                    // (the row below), in the card's unit: shown, never typed.
+                    <Grid.Col span={{ base: 16, md: 4 }}>
+                      <Tooltip label="Sac ölçüsü / boy ve adetten hesaplanır" withArrow>
+                        <Text
+                          size="xs"
+                          fw={600}
+                          pt={6}
+                          aria-label={`Miktar ${index + 1}`}
+                          c={sizeTotals(row, undefined).complete ? undefined : 'dimmed'}
+                        >
+                          {sizeTotals(row, undefined).complete && Number(row.quantity) > 0
+                            ? `${formatQuantity(Number(row.quantity))} ${row.item_unit}`
+                            : 'Ölçüden'}
+                        </Text>
+                      </Tooltip>
+                    </Grid.Col>
+                  ) : (
+                    <>
+                      <Grid.Col span={{ base: 8, md: 2 }}>
+                        <NumberInput
+                          size="xs"
+                          placeholder="Miktar"
+                          aria-label={`Miktar ${index + 1}`}
+                          min={0.01}
+                          step={0.01}
+                          disabled={locked}
+                          {...form.getInputProps(`items.${index}.quantity`)}
+                        />
+                      </Grid.Col>
+                      <Grid.Col span={{ base: 8, md: 2 }}>
+                        <Select
+                          size="xs"
+                          aria-label={`Birim ${index + 1}`}
+                          allowDeselect={false}
+                          disabled={locked}
+                          data={
+                            unitData.some((u) => u.value === row.item_unit)
+                              ? unitData
+                              : [...unitData, { value: row.item_unit, label: row.item_unit }]
+                          }
+                          {...form.getInputProps(`items.${index}.item_unit`)}
+                        />
+                      </Grid.Col>
+                    </>
+                  )}
                   <Grid.Col span={{ base: 12, md: 3 }}>
                     <TextInput
                       size="xs"
