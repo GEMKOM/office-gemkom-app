@@ -52,7 +52,7 @@ export async function exportPullRequest(requestOrRow: MaterialPullRequest): Prom
     'Miktar',
     'Birim',
     'Teslim Alınan',
-    'Çekilen',
+    'Çıkan',
     'Depoda Kalan',
   ];
   const lines = (request.items ?? []).map((item, i) => [

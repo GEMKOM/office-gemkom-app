@@ -208,7 +208,7 @@ function ProcurementTile({ procurement, onOpen }: { procurement: ProcurementBrie
   const pullLine =
     pulls && Number(pulls.items_pulled) > 0 ? (
       <>
-        Depodan çekilen {fmtInt(pulls.items_pulled)} kalem
+        İmalata çıkan {fmtInt(pulls.items_pulled)} kalem
         {Number(pulls.pending) > 0 ? (
           <>
             {' · '}

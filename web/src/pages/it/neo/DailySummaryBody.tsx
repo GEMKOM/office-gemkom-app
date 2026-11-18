@@ -63,7 +63,7 @@ const REF_TYPE_LABELS: Record<string, string> = {
   cnc: 'CNC kesim',
   lc_session: 'Profil kesim',
   statement: 'Hakediş',
-  mpr: 'Malzeme çekme',
+  mpr: 'İmalata çıkış',
   fault: 'Arıza',
 };
 
@@ -115,7 +115,7 @@ const STAT_META: [string, string, ChipColor, boolean][] = [
   ['deliveries_jobs', 'teslimat alan iş', 'grey', false],
   ['tonnage_kg', 'kg üretim', 'grey', false],
   ['crane_requests', 'vinç talebi', 'grey', false],
-  ['mpr_created', 'malzeme çekme', 'grey', false],
+  ['mpr_created', 'imalata çıkış', 'grey', false],
   ['isg_new', 'İSG kaydı', 'orange', false],
   ['faults_new', 'arıza', 'orange', false],
   ['date_changes', 'tarih değişikliği', 'grey', false],

@@ -90,7 +90,7 @@ const LINKS = {
   ],
   materials: [
     { label: 'Malzeme Takibi', link: MATERIALS },
-    { label: 'Çekme Talepleri', link: PULL_REQUESTS },
+    { label: 'İmalata Çıkış Talepleri', link: PULL_REQUESTS },
   ],
   projects: [{ label: 'İmalat Görevleri', link: PROJECTS }],
 } satisfies Record<string, LaneLink[]>;
@@ -539,7 +539,7 @@ function MaterialsLane() {
       list={
         requests
           ? {
-              title: 'Bekleyen çekme talepleri',
+              title: 'Bekleyen imalata çıkış talepleri',
               columns: [
                 { label: 'Talep', width: '96px' },
                 { label: 'Hedef · iş no' },

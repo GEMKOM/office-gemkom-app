@@ -570,7 +570,7 @@ function ProcurementBody({
       {pullRows.length ? (
         <>
           <div className={SECTION}>
-            Depodan Çekilen Malzemeler{' '}
+            İmalata Çıkan Malzemeler{' '}
             <span className={s.textMuted}>
               · {fmtInt(pulls.transferred)} talep teslim edildi / {fmtInt(pulls.pending)} bekliyor
             </span>

@@ -53,7 +53,7 @@ it('groups Depo into Stoklar, Giriş / Çıkış, Sayım and Raporlar', async ()
   expect(links('Giriş / Çıkış')).toEqual(
     expect.arrayContaining([
       'Mal Kabul',
-      'Depo Çekme Talepleri',
+      'İmalata Çıkış Talepleri',
       'İmalata Çıkış / İade',
       'Depo Transferi',
     ]),

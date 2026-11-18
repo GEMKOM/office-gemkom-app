@@ -133,8 +133,8 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
         link: '/manufacturing/material-tracking',
       },
       {
-        title: 'Depo Çekme Talepleri',
-        description: 'Taşeron ve kaynak ekiplerine depodan çekilen malzeme taleplerini izleyin.',
+        title: 'İmalata Çıkış Talepleri',
+        description: 'Taşeron ve kaynak ekiplerine imalata çıkan malzeme taleplerini izleyin.',
         icon: 'fas fa-dolly',
         iconColor: 'info',
         link: '/manufacturing/material-tracking/pull-requests',

@@ -6,7 +6,7 @@ import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { MaterialTrackingPage } from './MaterialTrackingPage';
 
-vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
+vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn(), hasPerm: () => false }));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 const auth = { user: { id: 7, username: 'planlama' }, isAdmin: false };
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => auth }));
@@ -226,8 +226,8 @@ it('selects pullable lines and creates a pull request for a subcontractor', asyn
   fireEvent.click(rowChecks[0]!);
   expect(await screen.findByText('1 kalem seçildi')).toBeInTheDocument();
 
-  fireEvent.click(screen.getByRole('button', { name: 'Depodan Çekme Talebi Oluştur' }));
-  const dialog = await screen.findByRole('dialog', { name: 'Depodan Çekme Talebi Oluştur' });
+  fireEvent.click(screen.getByRole('button', { name: 'İmalata Çıkış Talebi Oluştur' }));
+  const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi Oluştur' });
   expect(within(dialog).getByText('Kalemler (1)')).toBeInTheDocument();
   const qty = within(dialog).getByLabelText('Miktar: STK-001');
   // Preset to what is still in the warehouse.
@@ -245,7 +245,7 @@ it('selects pullable lines and creates a pull request for a subcontractor', asyn
   expect(screen.queryByRole('option', { name: 'Eski Firma', hidden: true })).toBeNull();
   fireEvent.click(option);
   fireEvent.click(within(dialog).getByRole('button', { name: 'Talep Gönder' }));
-  expect(await within(dialog).findByText('En fazla 300 çekilebilir')).toBeInTheDocument();
+  expect(await within(dialog).findByText('En fazla 300 imalata çıkabilir')).toBeInTheDocument();
   expect(calls().some((c) => c.method === 'POST')).toBe(false);
 
   fireEvent.change(qty, { target: { value: '250' } });
@@ -255,7 +255,7 @@ it('selects pullable lines and creates a pull request for a subcontractor', asyn
   fireEvent.click(within(dialog).getByRole('button', { name: 'Talep Gönder' }));
 
   await waitFor(() =>
-    expect(notify.success).toHaveBeenCalledWith('Malzeme çekme talebi oluşturuldu: MPR-2026-0056'),
+    expect(notify.success).toHaveBeenCalledWith('İmalata çıkış talebi oluşturuldu: MPR-2026-0056'),
   );
   const post = calls().find((c) => c.method === 'POST')!;
   expect(post.url.pathname).toBe('/warehouse/pull-requests/');
@@ -273,8 +273,8 @@ it('a team destination posts team instead of subcontractor', async () => {
   renderPage();
   await screen.findByText('STK-001');
   fireEvent.click(screen.getAllByRole('checkbox', { name: 'Satırı seç' })[0]!);
-  fireEvent.click(await screen.findByRole('button', { name: 'Depodan Çekme Talebi Oluştur' }));
-  const dialog = await screen.findByRole('dialog', { name: 'Depodan Çekme Talebi Oluştur' });
+  fireEvent.click(await screen.findByRole('button', { name: 'İmalata Çıkış Talebi Oluştur' }));
+  const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi Oluştur' });
 
   fireEvent.click(within(dialog).getByRole('radio', { name: 'Kaynak Ekibi' }));
   fireEvent.click(within(dialog).getByPlaceholderText('Ekip seçin...'));
@@ -294,20 +294,20 @@ it('a pull request chip opens the detail; its requester may cancel it after the 
   await screen.findByText('STK-001');
 
   fireEvent.click(screen.getByText('Usta Kaynak · 600 kg'));
-  const dialog = await screen.findByRole('dialog', { name: 'Depo Çekme Talebi — MPR-2026-0055' });
+  const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
   expect(within(dialog).getByText('Plan Lama', { exact: false })).toBeInTheDocument();
 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Talebi İptal Et' }));
   expect(
     await screen.findByText(
-      'MPR-2026-0055 numaralı depo çekme talebini iptal etmek istediğinize emin misiniz?',
+      'MPR-2026-0055 numaralı imalata çıkış talebini iptal etmek istediğinize emin misiniz?',
     ),
   ).toBeInTheDocument();
   expect(calls().some((c) => c.method === 'POST')).toBe(false);
 
   fireEvent.click(screen.getByRole('button', { name: 'Evet, İptal Et' }));
   await waitFor(() =>
-    expect(notify.success).toHaveBeenCalledWith('Depo çekme talebi iptal edildi'),
+    expect(notify.success).toHaveBeenCalledWith('İmalata çıkış talebi iptal edildi'),
   );
   expect(calls().find((c) => c.method === 'POST')!.url.pathname).toBe(
     '/warehouse/pull-requests/55/cancel/',
@@ -321,7 +321,7 @@ it('someone else cannot cancel a request they did not make', async () => {
     renderPage();
     await screen.findByText('STK-001');
     fireEvent.click(screen.getByText('Usta Kaynak · 600 kg'));
-    const dialog = await screen.findByRole('dialog', { name: 'Depo Çekme Talebi — MPR-2026-0055' });
+    const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
     expect(within(dialog).queryByRole('button', { name: 'Talebi İptal Et' })).toBeNull();
   } finally {
     auth.user = { id: 7, username: 'planlama' };

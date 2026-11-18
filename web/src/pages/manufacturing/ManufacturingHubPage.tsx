@@ -141,13 +141,13 @@ const FIGURES: Record<HubFigure, FigureDef> = {
     query: () => pendingTimesheetCountQueryOptions(today()),
   },
   pendingPullRequests: {
-    label: 'Bekleyen Çekme Talebi',
+    label: 'Bekleyen İmalata Çıkış Talebi',
     cardLabel: 'talep depoda bekliyor',
     icon: 'fas fa-dolly',
     link: '/manufacturing/material-tracking/pull-requests?status=pending',
     route: '/manufacturing/material-tracking/pull-requests',
     query: () => pendingPullRequestCountQueryOptions(),
-    queue: { label: 'Depo çekme talepleri', hint: 'Depodan aktarılmayı bekliyor', color: 'yellow' },
+    queue: { label: 'İmalata çıkış talepleri', hint: 'Depodan teslim edilmeyi bekliyor', color: 'yellow' },
   },
   statementsInApproval: {
     label: 'Onay Bekleyen Hakediş',
