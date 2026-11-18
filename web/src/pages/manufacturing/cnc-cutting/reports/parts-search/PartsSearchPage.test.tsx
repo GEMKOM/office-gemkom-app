@@ -109,6 +109,21 @@ it('search fields go to the URL and the request', async () => {
   });
 });
 
+it('filters by the plate the cut used', async () => {
+  renderPage(
+    '/planning/cnc-cutting/reports/parts-search/?job_no=304-01&thickness_mm=20&plate=ST44&plate_source=remnant',
+  );
+  await screen.findByText('R-10');
+  expect(Object.fromEntries(searchCalls()[0]!.searchParams)).toEqual({
+    job_no: '304-01',
+    thickness_mm: '20',
+    plate: 'ST44',
+    plate_source: 'remnant',
+    page: '1',
+    page_size: '20',
+  });
+});
+
 it('says why the table is empty', async () => {
   fetchMock.mockImplementation(() => json({ count: 0, next: null, previous: null, results: [] }));
   renderPage('/planning/cnc-cutting/reports/parts-search/?job_no=999');

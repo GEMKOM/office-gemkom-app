@@ -32,6 +32,12 @@ export type CncPartsSearchParams = {
   job_no?: string;
   image_no?: string;
   position_no?: string;
+  /** The cut's thickness, exact ("20", "20,5"). */
+  thickness_mm?: string;
+  /** Text in the material, dimensions or the requested plate's name or code; spaces ignored. */
+  plate?: string;
+  /** Where the sheets came from, as the Plaka Kaynağı column decides it. */
+  plate_source?: '' | 'request' | 'piece' | 'remnant' | 'none';
   page?: number;
   page_size?: number;
 };
