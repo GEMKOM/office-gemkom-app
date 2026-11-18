@@ -14,8 +14,26 @@ export function availableToPull(row: PlanningItem): number {
     : Math.max(received - pulled, 0);
 }
 
+/** Plate goes to CNC cutting, is cut and delivered to the station: never pulled. */
+export function isPlateLine(row: PlanningItem): boolean {
+  return row.item_material_class === 'plate';
+}
+
 export function canPull(row: PlanningItem): boolean {
-  return qty(row.quantity_available_to_pull) > 0;
+  return !isPlateLine(row) && qty(row.quantity_available_to_pull) > 0;
+}
+
+/**
+ * A plate line in place of its pull cell: "CNC kesime gider · kesilen 2 / 4 levha".
+ * Out of the sheets the line asked for (a sized line), else out of the sheets its cuts
+ * planned (an older line without a size).
+ */
+export function plateCutText(row: PlanningItem): string {
+  const done = qty(row.cnc_cuts_done);
+  const planned = qty(row.cnc_cuts_count);
+  const total = row.piece_count ? row.piece_count : planned;
+  if (!total) return 'CNC kesime gider · kesim planlanmadı';
+  return `CNC kesime gider · kesilen ${fmtQty(done)} / ${fmtQty(total)} levha`;
 }
 
 function Code({ value }: { value: string | null | undefined }) {
@@ -33,6 +51,20 @@ function pullQty(quantity: unknown, unit: string | undefined) {
  * request detail.
  */
 function PullCell({ row, onOpen }: { row: PlanningItem; onOpen: (id: number) => void }) {
+  if (isPlateLine(row)) {
+    const done = qty(row.cnc_cuts_done);
+    const total = row.piece_count || qty(row.cnc_cuts_count);
+    return (
+      <Text
+        size="xs"
+        c={total && done >= total ? 'green.7' : 'dimmed'}
+        style={{ whiteSpace: 'nowrap' }}
+        title="Sac depodan çekilmez: CNC kesime gider, kesilip istasyona teslim edilir."
+      >
+        {plateCutText(row)}
+      </Text>
+    );
+  }
   const received = qty(row.delivered_quantity);
   const pulled = qty(row.pulled_quantity);
   const available = availableToPull(row);
@@ -83,6 +115,7 @@ function PullCell({ row, onOpen }: { row: PlanningItem; onOpen: (id: number) => 
 }
 
 function pullCellText(row: PlanningItem): string {
+  if (isPlateLine(row)) return plateCutText(row);
   const received = qty(row.delivered_quantity);
   const unit = row.item_unit || '';
   const parts: string[] = [];

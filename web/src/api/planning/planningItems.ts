@@ -69,6 +69,10 @@ export interface PlanningItem {
   is_consumed?: boolean | null;
   consumed_by_username?: string | null;
   cnc_cuts_count?: number | null;
+  /** Sheets on the line's finished CNC cuts (plate lines are cut, not pulled). */
+  cnc_cuts_done?: number | null;
+  /** The card's class: 'plate' / 'boy' for piece cards, else 'normal' / null. */
+  item_material_class?: string | null;
   /** Plate / bar size (sized lines). */
   size_mode?: string | null;
   piece_width_mm?: Decimal | null;
