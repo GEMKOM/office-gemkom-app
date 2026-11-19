@@ -9,6 +9,8 @@ import { toPaginated } from '../types';
 const BASE = '/planning/department-requests/';
 
 export interface DepartmentRequestItem {
+  /** The stock card the row was picked from (rows made before cards were picked have none). */
+  item_id?: number | null;
   item_code?: string | null;
   code?: string | null;
   item_name?: string | null;
@@ -24,6 +26,8 @@ export interface DepartmentRequestItem {
   specifications?: string | null;
   /** Asset ids of the request files uploaded for this row. */
   file_asset_ids?: (number | string)[];
+  /** "Kart yok": no stock card fitted; planning opens one. */
+  no_card?: boolean;
   [key: string]: unknown;
 }
 
@@ -96,6 +100,8 @@ export type DepartmentRequestsParams = {
 
 /** Row as the create form sends it in the `items` JSON field. */
 export interface DepartmentRequestItemInput {
+  /** The picked stock card; absent on a "Kart yok" row. */
+  item_id?: number | null;
   item_code: string | null;
   item_name: string;
   job_no: string | null;
@@ -103,6 +109,8 @@ export interface DepartmentRequestItemInput {
   quantity: number;
   item_description: string | null;
   item_specifications: string | null;
+  /** No stock card fitted: described in words, planning opens the card. */
+  no_card?: boolean;
 }
 
 export interface DepartmentRequestCreateInput {

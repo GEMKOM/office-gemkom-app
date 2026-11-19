@@ -1,5 +1,6 @@
 import type { DepartmentRequest } from '@/api/general/departmentRequests';
 import type { PlanningRequest } from '@/api/planning/planningRequests';
+import type { Item } from '@/api/procurement/items';
 import {
   attachmentsFromDepartmentRequest,
   attachmentsFromPlanningRequest,
@@ -23,6 +24,8 @@ import {
   rejectionComments,
   rowsFromDepartmentRequest,
   rowsFromPlanningRequest,
+  unresolvedCardCodes,
+  withResolvedCards,
 } from './logic';
 
 const PLANNING: PlanningRequest = {
@@ -80,6 +83,44 @@ it('reads department request items in every shape and keeps the source index', (
     ['B', 'Somun', 'adet', 1, null, 1],
   ]);
   expect(rows[0]!.specifications).toBe('M8');
+});
+
+it('resolves the stock cards of department request rows, except "Kart yok" ones', () => {
+  const rows = rowsFromDepartmentRequest({
+    id: 3,
+    items: [
+      { item_code: 'SAC-10', item_id: 12, item_name: '10 mm sac', item_unit: 'kg' },
+      { item_code: 'BORU', item_name: 'Boru', item_unit: 'adet' },
+      { item_code: 'VIDA', item_name: 'Vida', item_unit: 'adet' },
+      { item_code: 'YOK', item_name: 'Kartsız', item_unit: 'adet' },
+      { item_code: null, item_name: 'Özel conta', item_unit: 'adet', no_card: true },
+    ],
+  } as DepartmentRequest);
+  expect(rows[0]).toMatchObject({ item_id: 12 });
+  expect(rows[4]).toMatchObject({ no_card: true });
+  expect(unresolvedCardCodes(rows)).toEqual(['SAC-10', 'BORU', 'VIDA', 'YOK']);
+
+  const card = (id: number, code: string, material_class: string, unit: string) =>
+    ({ id, code, name: code, unit, material_class }) as Item;
+  const cards = new Map([
+    ['SAC-10', card(12, 'SAC-10', 'plate', 'KG')],
+    ['BORU', card(13, 'BORU', 'boy', 'Metre')],
+    ['VIDA', card(14, 'VIDA', 'normal', 'Adet')],
+  ]);
+  const resolved = withResolvedCards(rows, cards);
+  expect(resolved.map((r) => [r.item_id, r.kind, r.size_mode, r.item_unit])).toEqual([
+    [12, 'plate', 'standard', 'kg'],
+    [13, 'boy', 'standard', 'metre'],
+    [14, null, '', 'adet'],
+    [undefined, undefined, undefined, 'adet'],
+    [undefined, undefined, undefined, 'adet'],
+  ]);
+  // The department request's own wording stays.
+  expect(resolved[0]!.item_name).toBe('10 mm sac');
+  expect(unresolvedCardCodes(resolved)).toEqual(['YOK']);
+  // A row the planner picked again (kind set) is not overwritten.
+  const picked = { ...rows[1]!, kind: null };
+  expect(withResolvedCards([picked], cards)[0]).toBe(picked);
 });
 
 it('marks planning rows locked by inventory, purchase requests or conversion', () => {

@@ -33,6 +33,7 @@ import {
   canManageStockCards,
   cardFromSearch,
   itemKeys,
+  lookupCardsByCode,
   searchStockCards,
   type Item,
 } from '@/api/procurement/items';
@@ -71,6 +72,8 @@ import {
   rowsFromDepartmentRequest,
   rowsFromPlanningRequest,
   rowTargetLabel,
+  unresolvedCardCodes,
+  withResolvedCards,
   type Attachment,
   type ItemRow,
 } from './logic';
@@ -153,6 +156,26 @@ export function PlanningRequestFormModal({
   const [newCardRow, setNewCardRow] = useState<number | null>(null);
   const canOpenCards = canManageStockCards();
   const resetFileButton = useRef<() => void>(null);
+
+  // Rows prefilled from a department request carry codes, not their cards:
+  // find the cards so plate / boy lines get their size editor at once.
+  useEffect(() => {
+    if (!fromDepartment) return;
+    const codes = unresolvedCardCodes(form.getValues().items);
+    if (codes.length === 0) return;
+    const controller = new AbortController();
+    lookupCardsByCode(codes, controller.signal)
+      .then((cards) => {
+        if (controller.signal.aborted || cards.size === 0) return;
+        form.setFieldValue('items', withResolvedCards(form.getValues().items, cards));
+      })
+      .catch(() => {
+        // Not found or offline: the planner picks the cards by hand.
+      });
+    return () => controller.abort();
+    // Once per opened department request; form is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromDepartment]);
 
   const jobOrders = useJobOrderOptions();
   useEffect(() => {

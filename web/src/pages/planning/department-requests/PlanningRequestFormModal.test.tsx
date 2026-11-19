@@ -85,6 +85,17 @@ const WEIGHT = {
 };
 let weightPreview = WEIGHT;
 
+const CARDS = [
+  {
+    id: 12,
+    code: '0100 0000 0010 000 000',
+    name: '10 mm ST 37-2 SAC',
+    unit: 'KG',
+    material_class: 'plate',
+  },
+  { id: 14, code: 'K-1', name: 'Rulman', unit: 'ADET', material_class: 'normal' },
+];
+
 // Mantine's combobox scrolls the active option into view; jsdom has no scrollIntoView.
 beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
@@ -114,6 +125,10 @@ beforeEach(() => {
     }
     if (method === 'POST' && path === '/warehouse/pieces/weight-preview/') {
       return json(weightPreview);
+    }
+    if (method === 'GET' && path === '/procurement/items/') {
+      const codes = new URL(String(url)).searchParams.get('code__in')?.split(',') ?? [];
+      return json(CARDS.filter((card) => codes.includes(card.code)));
     }
     return json({ detail: 'not mocked' }, 404);
   });
@@ -350,4 +365,44 @@ it('a kg plate card without a thickness asks for the kg and says why', async () 
   fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
   await waitFor(() => expect(patches()).toHaveLength(1));
   expect(patches()[0]!.body).toMatchObject({ items: [{ id: 201, quantity: 520 }] });
+});
+
+it('resolves the cards of department request rows so a plate line asks for sizes', async () => {
+  const departmentRequest = {
+    id: 9,
+    title: 'Sac talebi',
+    needed_date: '2026-12-10',
+    items: [
+      {
+        item_code: '0100 0000 0010 000 000',
+        item_id: 12,
+        item_name: '10 mm ST 37-2 SAC',
+        item_unit: 'kg',
+        job_no: '254-01',
+        quantity: 100,
+      },
+      { item_code: 'K-1', item_name: 'Rulman', item_unit: 'adet', job_no: '254-01', quantity: 2 },
+      { item_code: 'MIKRO-9', item_name: 'Eski kod', item_unit: 'adet', quantity: 1 },
+      { item_code: null, item_name: 'Özel conta', item_unit: 'adet', quantity: 2, no_card: true },
+    ],
+  };
+  const onCreateReady = vi.fn();
+  renderWithProviders(
+    <PlanningRequestFormModal
+      mode={{ kind: 'create', departmentRequest }}
+      onClose={() => {}}
+      onCreateReady={onCreateReady}
+    />,
+  );
+
+  // The plate card arrives with the size editor; no re-pick.
+  expect(await screen.findByRole('combobox', { name: 'Ölçü 1' })).toBeInTheDocument();
+  const lookups = calls().filter((c) => c.url.pathname === '/procurement/items/');
+  expect(lookups).toHaveLength(1);
+  expect(lookups[0]!.url.searchParams.get('code__in')).toBe('0100 0000 0010 000 000,K-1,MIKRO-9');
+  // A normal card, a code with no card and a "Kart yok" row keep Miktar / Birim.
+  for (const n of [2, 3, 4]) {
+    expect(screen.getAllByLabelText(`Birim ${n}`).length).toBeGreaterThan(0);
+  }
+  expect(screen.queryByRole('combobox', { name: 'Ölçü 2' })).not.toBeInTheDocument();
 });
