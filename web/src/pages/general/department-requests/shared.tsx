@@ -1,4 +1,14 @@
-import { ActionIcon, Anchor, Group, Paper, SimpleGrid, Table, Text, Tooltip } from '@mantine/core';
+import {
+  ActionIcon,
+  Anchor,
+  Badge,
+  Group,
+  Paper,
+  SimpleGrid,
+  Table,
+  Text,
+  Tooltip,
+} from '@mantine/core';
 import {
   DEPARTMENT_OPTIONS,
   type DepartmentRequest,
@@ -216,7 +226,15 @@ export function ItemsTable({ items, approval = false, files = [] }: ItemsTablePr
             return (
               <Table.Tr key={index}>
                 {approval ? <Table.Td>{index + 1}</Table.Td> : null}
-                <Table.Td fw={700}>{item.item_code}</Table.Td>
+                <Table.Td fw={700}>
+                  {raw.no_card ? (
+                    <Badge color="orange" variant="light" size="sm" radius="sm">
+                      Kart yok
+                    </Badge>
+                  ) : (
+                    item.item_code
+                  )}
+                </Table.Td>
                 <Table.Td>{item.name}</Table.Td>
                 {approval ? <Table.Td>{item.job_no}</Table.Td> : null}
                 <Table.Td>{String(quantity)}</Table.Td>

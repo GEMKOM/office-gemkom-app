@@ -51,9 +51,32 @@ const DETAIL = {
   requestor_full_name: 'Ali Veli',
   description: 'Bakım için malzeme',
   purchase_request_keys: [],
-  items: [{ item_code: 'K-1', item_name: 'Rulman', quantity: 4, item_unit: 'adet' }],
+  items: [
+    // Made before cards were picked: code and name typed by hand.
+    { item_code: 'K-1', item_name: 'Rulman', quantity: 4, item_unit: 'adet' },
+    { item_code: null, item_name: 'Özel conta', quantity: 2, item_unit: 'adet', no_card: true },
+  ],
   files: [{ id: 1, file_name: 'uploads/teklif.pdf', file_url: 'https://files.test/teklif.pdf' }],
 };
+
+const CARDS = [
+  { id: 7, code: 'K-1', name: 'Rulman', unit: 'ADET', is_active: true },
+  { id: 31, code: 'F014 0000 0000 000 000', name: 'LAZER KESİM', unit: 'ADET', is_active: true },
+];
+
+/** GET /procurement/items/: `code__in` lookups and active-card searches by code or name. */
+function cardsFor(params: URLSearchParams) {
+  const codes = params.get('code__in');
+  if (codes !== null) return CARDS.filter((c) => codes.split(',').includes(c.code));
+  if (params.get('is_active') !== 'true') return [];
+  const term = (params.get('search') ?? '').toLocaleLowerCase('tr');
+  return CARDS.filter((c) => `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(term));
+}
+
+// Mantine's combobox scrolls the active option into view; jsdom has no scrollIntoView.
+beforeAll(() => {
+  Element.prototype.scrollIntoView ??= () => {};
+});
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
@@ -90,7 +113,11 @@ beforeEach(() => {
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
-    const path = new URL(String(url)).pathname;
+    const { pathname: path, searchParams } = new URL(String(url));
+    if (method === 'GET' && path === '/procurement/items/') {
+      const results = cardsFor(searchParams);
+      return json({ count: results.length, next: null, previous: null, results });
+    }
     if (method === 'GET' && path === '/planning/department-requests/') {
       return json({ count: 3, next: null, previous: null, results: ROWS });
     }
@@ -109,6 +136,7 @@ beforeEach(() => {
   vi.spyOn(notify, 'success');
   vi.spyOn(notify, 'error');
   vi.spyOn(notify, 'info');
+  vi.spyOn(notify, 'warning');
 });
 
 afterEach(() => {
@@ -186,12 +214,37 @@ it('create validates the title, requires an item and posts multipart data', asyn
   await waitFor(() => expect(notify.error).toHaveBeenCalledWith('En az bir ürün eklemelisiniz'));
   expect(calls().some((c) => c.method === 'POST')).toBe(false);
 
-  // A nameless row is skipped; the named one is sent.
+  // Every row needs a stock card or "Kart yok"; an empty row is not sent silently.
   fireEvent.click(within(dialog).getByRole('button', { name: 'Ürün Ekle' }));
   fireEvent.click(within(dialog).getByRole('button', { name: 'Ürün Ekle' }));
   expect(within(dialog).getAllByTestId('item-row')).toHaveLength(2);
-  fireEvent.change(within(dialog).getByLabelText('Ürün adı 2'), { target: { value: 'Rulman' } });
-  fireEvent.change(within(dialog).getByLabelText('Ürün kodu 2'), { target: { value: 'K-1' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Oluştur' }));
+  expect(
+    await within(dialog).findAllByText('Stok kartı seçin ya da "Kart yok" deyin'),
+  ).toHaveLength(2);
+  // Name and unit come from the card, not typed.
+  expect(within(dialog).getByLabelText('Ürün adı 1')).toHaveAttribute('readonly');
+  expect(within(dialog).getByLabelText('Birim 1')).toHaveAttribute('readonly');
+
+  // Row 1: no card fits, so it is described for planning.
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kart yok 1' }));
+  expect(within(dialog).getByText('Kart yok')).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Oluştur' }));
+  expect(await within(dialog).findByText('Malzemeyi yazın')).toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('Ürün adı 1'), {
+    target: { value: 'Özel conta' },
+  });
+  fireEvent.change(within(dialog).getByLabelText('Ürün açıklaması 1'), {
+    target: { value: 'Ø40 viton' },
+  });
+
+  // Row 2: a card searched by name; code, name and unit fill in from it.
+  const code2 = within(dialog).getByLabelText('Ürün kodu 2');
+  code2.focus();
+  fireEvent.change(code2, { target: { value: 'rulm' } });
+  fireEvent.click(await screen.findByRole('option', { name: 'K-1 — Rulman • ADET', hidden: true }));
+  expect(within(dialog).getByLabelText('Ürün adı 2')).toHaveValue('Rulman');
+  expect(within(dialog).getByLabelText('Birim 2')).toHaveValue('adet');
   fireEvent.change(within(dialog).getByLabelText('Miktar 2'), { target: { value: '3' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Oluştur' }));
 
@@ -207,10 +260,21 @@ it('create validates the title, requires an item and posts multipart data', asyn
   expect(body.has('needed_date')).toBe(false);
   expect(JSON.parse(String(body.get('items')))).toEqual([
     {
+      item_code: null,
+      item_name: 'Özel conta',
+      job_no: null,
+      item_unit: 'adet',
+      quantity: 1,
+      item_description: 'Ø40 viton',
+      item_specifications: null,
+      no_card: true,
+    },
+    {
+      item_id: 7,
       item_code: 'K-1',
       item_name: 'Rulman',
       job_no: null,
-      item_unit: null,
+      item_unit: 'adet',
       quantity: 3,
       item_description: null,
       item_specifications: null,
@@ -230,11 +294,12 @@ it('removing an item row keeps a file mapped to the later row', async () => {
   fireEvent.change(within(dialog).getByLabelText(/Başlık/), { target: { value: 'T' } });
   for (let i = 0; i < 3; i += 1)
     fireEvent.click(within(dialog).getByRole('button', { name: 'Ürün Ekle' }));
-  ['A', 'B', 'C'].forEach((name, i) =>
+  ['A', 'B', 'C'].forEach((name, i) => {
+    fireEvent.click(within(dialog).getByRole('button', { name: `Kart yok ${i + 1}` }));
     fireEvent.change(within(dialog).getByLabelText(`Ürün adı ${i + 1}`), {
       target: { value: name },
-    }),
-  );
+    });
+  });
 
   const file = new File(['x'], 'cizim.pdf', { type: 'application/pdf' });
   const input = dialog.querySelector('input[type="file"]') as HTMLInputElement;
@@ -256,6 +321,33 @@ it('removing an item row keeps a file mapped to the later row', async () => {
   expect(
     JSON.parse(String(body.get('items'))).map((i: { item_name: string }) => i.item_name),
   ).toEqual(['B', 'C']);
+});
+
+it('Hazır Ürün Ekle adds the preset from its stock card, or warns when there is none', async () => {
+  renderPage();
+  await screen.findByText('Taslak talep');
+  fireEvent.click(screen.getByRole('button', { name: 'Yeni Talep Oluştur' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Yeni Departman Talebi' });
+
+  fireEvent.click(within(dialog).getByLabelText('Hazır Ürün Ekle'));
+  fireEvent.click(await screen.findByRole('option', { name: 'LAZER KESİM', hidden: true }));
+  await waitFor(() => expect(within(dialog).getAllByTestId('item-row')).toHaveLength(1));
+  expect(within(dialog).getByLabelText('Ürün adı 1')).toHaveValue('LAZER KESİM');
+  expect(
+    calls()
+      .find((c) => c.url.searchParams.has('code__in'))!
+      .url.searchParams.get('code__in'),
+  ).toBe('F014 0000 0000 000 000');
+
+  // No card with BÜKÜM's code in this mock: nothing is added with a guessed code.
+  fireEvent.click(within(dialog).getByLabelText('Hazır Ürün Ekle'));
+  fireEvent.click(await screen.findByRole('option', { name: 'BÜKÜM', hidden: true }));
+  await waitFor(() =>
+    expect(notify.warning).toHaveBeenCalledWith(
+      'BÜKÜM için stok kartı bulunamadı; kod veya ad ile arayın.',
+    ),
+  );
+  expect(within(dialog).getAllByTestId('item-row')).toHaveLength(1);
 });
 
 it('edit patches the four basic fields', async () => {
@@ -311,6 +403,10 @@ it('?request=<id> opens the details with items and files', async () => {
   expect(await within(dialog).findByText('DR-11')).toBeInTheDocument();
   expect(within(dialog).getByText('Ali Veli')).toBeInTheDocument();
   expect(within(dialog).getByText('Rulman')).toBeInTheDocument();
+  // The typed code of an older row, and the badge of a "Kart yok" row.
+  expect(within(dialog).getByText('K-1')).toBeInTheDocument();
+  expect(within(dialog).getByText('Özel conta')).toBeInTheDocument();
+  expect(within(dialog).getByText('Kart yok')).toBeInTheDocument();
   expect(within(dialog).getByText('teklif.pdf')).toHaveAttribute(
     'href',
     'https://files.test/teklif.pdf',
