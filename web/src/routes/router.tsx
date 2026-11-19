@@ -113,7 +113,7 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/general/overtime',
+    path: '/human_resources/overtime',
     handle: hub,
     lazy: async () => ({
       Component: (await import('@/pages/general/OvertimeHubPage')).OvertimeHubPage,
@@ -662,28 +662,28 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/general/overtime/pending',
+    path: '/human_resources/overtime/pending',
     lazy: async () => ({
       Component: (await import('@/pages/general/overtime/pending/OvertimePendingPage'))
         .OvertimePendingPage,
     }),
   },
   {
-    path: '/general/overtime/registry',
+    path: '/human_resources/overtime/registry',
     lazy: async () => ({
       Component: (await import('@/pages/general/overtime/registry/OvertimeRegistryPage'))
         .OvertimeRegistryPage,
     }),
   },
   {
-    path: '/general/overtime/users',
+    path: '/human_resources/overtime/users',
     lazy: async () => ({
       Component: (await import('@/pages/general/overtime/users/OvertimeUsersPage'))
         .OvertimeUsersPage,
     }),
   },
   {
-    path: '/general/overtime/welding-report',
+    path: '/human_resources/overtime/welding-report',
     lazy: async () => ({
       Component: (await import('@/pages/general/overtime/welding-report/WeldingReportPage'))
         .WeldingReportPage,
@@ -704,7 +704,7 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/general/machines',
+    path: '/warehouse/machines',
     lazy: async () => ({
       Component: (await import('@/pages/general/machines/MachinesPage')).MachinesPage,
     }),
@@ -986,14 +986,14 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/general/overtime/cost-report',
+    path: '/human_resources/overtime/cost-report',
     lazy: async () => ({
       Component: (await import('@/pages/general/overtime/cost-report/CostReportPage'))
         .CostReportPage,
     }),
   },
   {
-    path: '/general/overtime/machining-report',
+    path: '/human_resources/overtime/machining-report',
     lazy: async () => ({
       Component: (await import('@/pages/general/overtime/machining-report/MachiningReportPage'))
         .MachiningReportPage,

@@ -85,7 +85,7 @@ const DEFS: TrendDef[] = [
     section: 'people',
     icon: 'user-clock',
     title: 'Fazla mesai kişi-saat (6 ay)',
-    link: { href: '/general/overtime', label: 'Fazla mesai' },
+    link: { href: '/human_resources/overtime', label: 'Fazla mesai' },
   },
 ];
 

@@ -21,6 +21,16 @@ export const MOVED_ROUTES: Record<string, string> = {
   // The stock pages moved from Planlama › Stok to Depo › Stoklar.
   '/planning/inventory/cards': '/warehouse/stock',
   '/planning/inventory/equipment': '/warehouse/equipment',
+  // Genel was reorganised (2026-11-19): Makineler moved to Depo, Mesailer to
+  // İnsan Kaynakları; leave / overtime requests and approvals sit in the user menu.
+  '/general/machines': '/warehouse/machines',
+  '/general/overtime': '/human_resources/overtime',
+  '/general/overtime/pending': '/human_resources/overtime/pending',
+  '/general/overtime/registry': '/human_resources/overtime/registry',
+  '/general/overtime/users': '/human_resources/overtime/users',
+  '/general/overtime/welding-report': '/human_resources/overtime/welding-report',
+  '/general/overtime/cost-report': '/human_resources/overtime/cost-report',
+  '/general/overtime/machining-report': '/human_resources/overtime/machining-report',
 };
 
 // Retired pages, old route -> the page that does their work now. Forward

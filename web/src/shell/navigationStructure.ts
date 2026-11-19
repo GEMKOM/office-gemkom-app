@@ -44,67 +44,14 @@ export const NAVIGATION_STRUCTURE: NavTree = {
     icon: 'fas fa-chart-pie',
     children: {},
   },
+  // Talepler (was Genel, reorganised 2026-11-19): the requests that cross
+  // departments. Makineler moved to Depo, Mesailer to İnsan Kaynakları, İSG got
+  // its own section; personal leave / overtime requests and approvals are in
+  // the user menu (shell/UserMenu.tsx).
   '/general': {
-    label: 'Genel',
-    icon: 'fas fa-cogs',
+    label: 'Talepler',
+    icon: 'fas fa-inbox',
     children: {
-      '/general/machines': {
-        label: 'Makineler',
-        icon: 'fas fa-cogs',
-        children: {},
-      },
-      '/general/overtime': {
-        label: 'Mesailer',
-        icon: 'fas fa-clock',
-        children: {
-          '/general/overtime/pending': {
-            label: 'Bekleyen Talepler',
-            icon: 'fas fa-clock',
-            children: {},
-          },
-          '/general/overtime/registry': {
-            label: 'Kayıt Defteri',
-            icon: 'fas fa-archive',
-            children: {},
-          },
-          '/general/overtime/users': {
-            label: 'Mesai Kullanıcıları',
-            icon: 'fas fa-users',
-            children: {},
-          },
-          '/general/overtime/machining-report': {
-            label: 'Talaşlı İmalat Mesai Raporu',
-            icon: 'fas fa-cogs',
-            children: {},
-          },
-          '/general/overtime/welding-report': {
-            label: 'Kaynaklı İmalat Mesai Raporu',
-            icon: 'fas fa-fire',
-            children: {},
-          },
-          '/general/overtime/cost-report': {
-            label: 'Mesai Maliyet Raporu',
-            icon: 'fas fa-coins',
-            children: {},
-          },
-        },
-      },
-      '/general/vacation': {
-        label: 'İzin Talepleri',
-        icon: 'fas fa-calendar-check',
-        children: {
-          '/general/vacation/requests': {
-            label: 'İzin Taleplerim',
-            icon: 'fas fa-calendar-plus',
-            children: {},
-          },
-          '/general/vacation/pending': {
-            label: 'Bekleyen Onaylar',
-            icon: 'fas fa-user-check',
-            children: {},
-          },
-        },
-      },
       '/general/department-requests': {
         label: 'Departman Talepleri',
         icon: 'fas fa-boxes',
@@ -120,12 +67,6 @@ export const NAVIGATION_STRUCTURE: NavTree = {
             children: {},
           },
         },
-      },
-      // Fason: imalat, depo, planlama and satınalma all follow it (accessControl).
-      '/general/fason': {
-        label: 'Fason',
-        icon: 'fas fa-people-carry',
-        children: {},
       },
       '/general/crane-requests': {
         label: 'Vinç Talepleri',
@@ -148,18 +89,23 @@ export const NAVIGATION_STRUCTURE: NavTree = {
           },
         },
       },
-      // İSG lives under Genel: the page is open to everyone, so it is a
-      // company-wide entry rather than a module of its own. The route
-      // stays /isg/issues (ALWAYS_ALLOWED_ROUTES in auth/accessControl.ts).
+      // Fason: imalat, depo, planlama and satınalma all follow it (accessControl).
+      '/general/fason': {
+        label: 'Fason',
+        icon: 'fas fa-people-carry',
+        children: {},
+      },
+    },
+  },
+  // İSG: its own section. The page is open to everyone (ALWAYS_ALLOWED_ROUTES
+  // in auth/accessControl.ts), so the section shows for everyone too.
+  '/isg': {
+    label: 'İSG',
+    icon: 'fas fa-helmet-safety',
+    children: {
       '/isg/issues': {
         label: 'İSG Bildirimleri',
         icon: 'fas fa-helmet-safety',
-        children: {},
-      },
-      // Personal, open to everyone like İSG (ALWAYS_ALLOWED_ROUTES).
-      '/general/discussions': {
-        label: 'Tartışmalarım',
-        icon: 'fas fa-comments',
         children: {},
       },
     },
@@ -602,6 +548,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
             icon: 'fas fa-toolbox',
             children: {},
           },
+          // Makineler (moved from Genel).
+          '/warehouse/machines': {
+            label: 'Makineler',
+            icon: 'fas fa-cogs',
+            children: {},
+          },
           '/warehouse/mikro-comparison': {
             label: 'Mikro Karşılaştırması',
             icon: 'fas fa-balance-scale',
@@ -890,6 +842,38 @@ export const NAVIGATION_STRUCTURE: NavTree = {
           '/human_resources/attendance/shift-rules': {
             label: 'Vardiya Kuralları',
             icon: 'fas fa-clock',
+            children: {},
+          },
+        },
+      },
+      // Mesailer (moved from Genel). Pending approvals are in the user menu.
+      '/human_resources/overtime': {
+        label: 'Mesailer',
+        icon: 'fas fa-clock',
+        children: {
+          '/human_resources/overtime/registry': {
+            label: 'Kayıt Defteri',
+            icon: 'fas fa-archive',
+            children: {},
+          },
+          '/human_resources/overtime/users': {
+            label: 'Mesai Kullanıcıları',
+            icon: 'fas fa-users',
+            children: {},
+          },
+          '/human_resources/overtime/machining-report': {
+            label: 'Talaşlı İmalat Mesai Raporu',
+            icon: 'fas fa-cogs',
+            children: {},
+          },
+          '/human_resources/overtime/welding-report': {
+            label: 'Kaynaklı İmalat Mesai Raporu',
+            icon: 'fas fa-fire',
+            children: {},
+          },
+          '/human_resources/overtime/cost-report': {
+            label: 'Mesai Maliyet Raporu',
+            icon: 'fas fa-coins',
             children: {},
           },
         },

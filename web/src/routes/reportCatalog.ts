@@ -262,7 +262,7 @@ export const REPORT_CATALOG: ReportEntry[] = [
 
   // ---- Mesai ve personel ----
   {
-    route: '/general/overtime/cost-report',
+    route: '/human_resources/overtime/cost-report',
     title: 'Mesai Maliyet Raporu',
     question: 'Fazla mesai SGK dahil kaça mal oldu; katsayı, iş, ekip ve kişi bazında?',
     topic: 'maliyet',
@@ -270,7 +270,7 @@ export const REPORT_CATALOG: ReportEntry[] = [
     departments: ['overtime'],
   },
   {
-    route: '/general/overtime/machining-report',
+    route: '/human_resources/overtime/machining-report',
     title: 'Talaşlı İmalat Mesai Raporu',
     question:
       'Onaylı mesaide talaşlı operatörler talep edilen operasyonlarda gerçekten çalıştı mı?',
@@ -279,7 +279,7 @@ export const REPORT_CATALOG: ReportEntry[] = [
     departments: ['overtime', 'machining'],
   },
   {
-    route: '/general/overtime/welding-report',
+    route: '/human_resources/overtime/welding-report',
     title: 'Kaynaklı İmalat Mesai Raporu',
     question: 'Kaynakçıların onaylı mesaisi, işlenen mesai saatleriyle gün gün tutuyor mu?',
     topic: 'personel',

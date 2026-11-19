@@ -83,6 +83,14 @@ export function HumanResourcesHubPage() {
       stat: { value: countValue(leaveInbox), label: 'izin onayı bekliyor' },
     },
     {
+      // Moved from Genel (2026-11-19). Pending approvals are in the user menu.
+      title: 'Mesailer',
+      description: 'Mesai kayıt defteri, mesai kullanıcıları ve mesai raporları',
+      icon: 'fas fa-clock',
+      iconColor: 'warning',
+      link: '/human_resources/overtime',
+    },
+    {
       title: 'Özel Günler',
       description: 'Uygulamanın bayramlarda ve özel günlerde nasıl görüneceğini önizleyin',
       icon: 'fas fa-cake-candles',

@@ -225,7 +225,7 @@ function items(live: LiveSection): ReactNode[] {
               ]
             : []
         }
-        href="/general/overtime/pending"
+        href="/human_resources/overtime/pending"
       />,
     );
   }

@@ -57,7 +57,7 @@ const DEPARTMENT_PAGES: Record<string, string[]> = {
     '/manufacturing/machining/tasks/list',
     '/manufacturing/machining/capacity/planning',
   ],
-  maintenance: ['/manufacturing/maintenance/fault-requests', '/manufacturing/maintenance/dashboard', '/general/machines'],
+  maintenance: ['/manufacturing/maintenance/fault-requests', '/manufacturing/maintenance/dashboard', '/warehouse/machines'],
   logistics: ['/logistics/projects', '/logistics/cost-lines'],
   qualitycontrol: ['/quality-control/qc-reviews', '/quality-control/ncrs', '/quality-control/documents'],
   cutting: ['/planning/cnc-cutting/cuts', '/planning/cnc-cutting/plate-stock', '/planning/cnc-cutting/capacity'],
@@ -69,7 +69,7 @@ const DEPARTMENT_PAGES: Record<string, string[]> = {
 };
 
 /** For everyone, after the department's own. */
-const COMMON_PAGES = ['/general/vacation/requests', '/general/overtime/registry', '/isg/issues', '/general/discussions'];
+const COMMON_PAGES = ['/general/vacation/requests', '/human_resources/overtime/registry', '/isg/issues', '/general/discussions'];
 
 export const SHORTCUT_COUNT = 6;
 

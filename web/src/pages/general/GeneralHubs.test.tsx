@@ -70,36 +70,24 @@ describe('Genel', () => {
   it('shows every card in the legacy order, linking where legacy did', () => {
     renderWithProviders(<GeneralHubPage />, { route: '/general/' });
 
-    expect(screen.getByRole('heading', { level: 1, name: 'Genel Modülü' })).toBeInTheDocument();
-    expect(cardTitles()).toEqual([
-      'Makineler',
-      'Mesailer',
-      'İzin Talepleri',
-      'Departman Talepleri',
-      'Vinç Talepleri',
-      'İSG Bildirimleri',
-      'Tartışmalarım',
-    ]);
+    expect(screen.getByRole('heading', { level: 1, name: 'Talepler' })).toBeInTheDocument();
+    // Talepler (was Genel): Makineler, Mesailer, İzin, İSG and Tartışmalarım moved out.
+    expect(cardTitles()).toEqual(['Departman Talepleri', 'Vinç Talepleri', 'Fason']);
+    expect(within(card('Fason')).getByRole('link')).toHaveAttribute('href', '/general/fason');
     expect(within(card('Vinç Talepleri')).getByRole('link')).toHaveAttribute(
       'href',
       '/general/crane-requests',
-    );
-    expect(within(card('İSG Bildirimleri')).getByRole('link')).toHaveAttribute(
-      'href',
-      '/isg/issues',
     );
   });
 
   it('flags what waits on the user, and only where something does', async () => {
     renderWithProviders(<GeneralHubPage />, { route: '/general/' });
 
-    await waitFor(() => expect(card('Mesailer')).toHaveTextContent('5 onayınızı bekliyor'));
-    await waitFor(() => expect(card('İSG Bildirimleri')).toHaveTextContent('3 size atanmış'));
     await waitFor(() =>
       expect(card('Departman Talepleri')).toHaveTextContent('2 onayınızı bekliyor'),
     );
-    // Nothing waiting for a vacation approval: no pill at all.
-    expect(card('İzin Talepleri')).not.toHaveTextContent('bekliyor');
+    // Nothing waiting for a crane approval: no pill at all.
+    expect(card('Vinç Talepleri')).not.toHaveTextContent('bekliyor');
     const pending = calls().filter((url) => url.pathname.endsWith('/pending_approval/'));
     expect(pending.map((url) => url.searchParams.get('page_size'))).toEqual(['1', '1', '1', '1']);
   });
@@ -110,7 +98,7 @@ describe('Genel', () => {
     const panel = screen.getByRole('heading', { name: 'Sizi Bekleyenler' }).closest('section')!;
     const row = (name: RegExp) => within(panel).getByRole('link', { name });
     await waitFor(() => expect(row(/Mesai talepleri/)).toHaveTextContent('5'));
-    expect(row(/Mesai talepleri/)).toHaveAttribute('href', '/general/overtime/pending');
+    expect(row(/Mesai talepleri/)).toHaveAttribute('href', '/human_resources/overtime/pending');
     await waitFor(() => expect(row(/Departman talepleri/)).toHaveTextContent('2'));
     await waitFor(() => expect(row(/Vinç talepleri/)).toHaveAttribute('data-idle', 'true'));
     expect(row(/İSG aksiyonları/)).toHaveAttribute('href', '/isg/issues?mine=true');
@@ -149,9 +137,10 @@ describe('Genel', () => {
     access.granted = new Set();
     renderWithProviders(<GeneralHubPage />, { route: '/general/' });
 
-    expect(cardTitles()).toEqual(['İSG Bildirimleri', 'Tartışmalarım']);
-    await waitFor(() => expect(card('İSG Bildirimleri')).toHaveTextContent('3 size atanmış'));
-    expect(calls().map((url) => url.pathname)).toEqual(['/isg/issues/summary/']);
+    expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
+    await waitFor(() =>
+      expect(calls().map((url) => url.pathname)).toEqual(['/isg/issues/summary/']),
+    );
     expect(screen.queryByRole('heading', { name: 'Bu Hafta İzinde' })).not.toBeInTheDocument();
     expect(document.getElementById('leave-left')).toBeNull();
   });
@@ -159,7 +148,7 @@ describe('Genel', () => {
 
 describe('Genel sub-hubs', () => {
   it('Mesai Talepleri: six cards, the pending one with its count', async () => {
-    renderWithProviders(<OvertimeHubPage />, { route: '/general/overtime/' });
+    renderWithProviders(<OvertimeHubPage />, { route: '/human_resources/overtime/' });
 
     expect(cardTitles()).toEqual([
       'Bekleyen Talepler',
@@ -186,11 +175,11 @@ describe('Genel sub-hubs', () => {
         total_users: 6,
       },
     ];
-    renderWithProviders(<OvertimeHubPage />, { route: '/general/overtime/' });
+    renderWithProviders(<OvertimeHubPage />, { route: '/human_resources/overtime/' });
 
     const upcoming = screen.getByRole('heading', { name: 'Yaklaşan Mesailer' }).closest('section')!;
     const row = await within(upcoming).findByRole('link', { name: /Kaynaklı İmalat/ });
-    expect(row).toHaveAttribute('href', '/general/overtime/registry?request=71');
+    expect(row).toHaveAttribute('href', '/human_resources/overtime/registry?request=71');
     expect(row).toHaveTextContent('4 sa · 6 kişi');
 
     const list = calls().find(
@@ -213,14 +202,14 @@ describe('Genel sub-hubs', () => {
     ).toBe(true);
     const month = within(document.getElementById('overtime-month')!).getByRole('link');
     expect(month.getAttribute('href')).toMatch(
-      /^\/general\/overtime\/registry\?status=approved&start_date=\d{4}-\d{2}-01&end_date=/,
+      /^\/human_resources\/overtime\/registry\?status=approved&start_date=\d{4}-\d{2}-01&end_date=/,
     );
     expect(calls().some((url) => url.pathname.startsWith('/overtime/users-for-date/'))).toBe(true);
   });
 
   it('Mesai Talepleri: a user with only the reports sees only those, and no count is asked for', () => {
-    access.granted = new Set(['/general/overtime/cost-report']);
-    renderWithProviders(<OvertimeHubPage />, { route: '/general/overtime/' });
+    access.granted = new Set(['/human_resources/overtime/cost-report']);
+    renderWithProviders(<OvertimeHubPage />, { route: '/human_resources/overtime/' });
 
     expect(cardTitles()).toEqual(['Mesai Maliyet Raporu']);
     expect(fetchMock).not.toHaveBeenCalled();

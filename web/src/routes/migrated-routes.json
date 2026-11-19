@@ -204,5 +204,13 @@
   "/warehouse/plate-stock",
   "/warehouse/bar-stock",
   "/planning/cnc-cutting/plate-stock",
-  "/planning/linear-cutting/bar-stock"
+  "/planning/linear-cutting/bar-stock",
+  "/warehouse/machines",
+  "/human_resources/overtime",
+  "/human_resources/overtime/pending",
+  "/human_resources/overtime/registry",
+  "/human_resources/overtime/users",
+  "/human_resources/overtime/welding-report",
+  "/human_resources/overtime/cost-report",
+  "/human_resources/overtime/machining-report"
 ]

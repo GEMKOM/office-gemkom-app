@@ -73,7 +73,7 @@ export const SUBJECT_META: Record<string, { label: string; url: string; icon: st
     url: '/manufacturing/subcontracting/statements/',
     icon: 'file-invoice',
   },
-  overtime_request: { label: 'Fazla Mesai', url: '/general/overtime/pending', icon: 'user-clock' },
+  overtime_request: { label: 'Fazla Mesai', url: '/human_resources/overtime/pending', icon: 'user-clock' },
   vacation_request: { label: 'İzin', url: '/general/vacation/pending', icon: 'umbrella-beach' },
   department_request: {
     label: 'Departman Talebi',
@@ -184,7 +184,7 @@ export const PILLARS: PillarDef[] = [
     initials: 'İ',
     icon: 'users',
     mobileOrder: 7,
-    drill: '/general/overtime/cost-report',
+    drill: '/human_resources/overtime/cost-report',
   },
 ];
 

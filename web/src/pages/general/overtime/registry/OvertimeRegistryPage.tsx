@@ -267,7 +267,7 @@ export function OvertimeRegistryPage() {
         title="Mesai Talepleri"
         subtitle="Mesai talepleri takibi ve yönetimi"
         icon="clock"
-        backTo="/general/overtime"
+        backTo="/human_resources/overtime"
         stats={[
           {
             id: 'total-requests',
