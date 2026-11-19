@@ -190,10 +190,12 @@ it('is Fason Talepleri and opens a fason request: one operation, its parts, subm
   const items = calls().find((c) => c.url.pathname === '/procurement/items/')!.url.searchParams;
   expect(items.get('is_active')).toBe('true');
 
-  // Nothing is sent without an operation and a described part.
+  // Nothing is sent without an operation, a described part and its job.
   fireEvent.click(within(dialog).getByRole('button', { name: 'Talep Oluştur' }));
   expect(await within(dialog).findByText('İşlem seçin')).toBeInTheDocument();
   expect(within(dialog).getByText('Bu alan gereklidir')).toBeInTheDocument();
+  // Every part is for a job.
+  expect(within(dialog).getByText('İş no gerekli')).toBeInTheDocument();
 
   fireEvent.click(within(dialog).getByRole('combobox', { name: /^İşlem/ }));
   fireEvent.click(await screen.findByRole('option', { name: 'BÜKÜM İŞLEMİ', hidden: true }));

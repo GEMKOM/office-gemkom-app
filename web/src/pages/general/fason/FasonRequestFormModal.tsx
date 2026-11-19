@@ -89,6 +89,8 @@ export function FasonRequestFormModal({ onClose, onCreated }: FasonRequestFormMo
       rows: {
         part: (value) => (value.trim() ? null : REQUIRED),
         quantity: (value) => (Number(value) >= 1 ? null : 'En az 1'),
+        // Every fason part is for a job: its cost lands on that job.
+        job_no: (value) => (value ? null : 'İş no gerekli'),
       },
     },
   });
@@ -193,8 +195,8 @@ export function FasonRequestFormModal({ onClose, onCreated }: FasonRequestFormMo
                     label={index === 0 ? 'İş No' : undefined}
                     aria-label={`İş No ${index + 1}`}
                     placeholder="İş no seçin"
+                    withAsterisk={index === 0}
                     searchable
-                    clearable
                     limit={100}
                     data={jobOrderData}
                     {...form.getInputProps(`rows.${index}.job_no`)}
