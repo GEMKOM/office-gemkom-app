@@ -25,6 +25,10 @@ export interface JobHolding {
   /** '' = atanmamış. */
   job_no: string;
   job_title: string;
+  /** The job order's status (null: no job order with this number). */
+  job_status?: string | null;
+  /** The job order is completed or cancelled but still holds stock here. */
+  job_closed?: boolean;
   /** Cards with a balance above zero on the job. */
   cards: number;
   /** Cards below zero (issued before they were received or counted). */
