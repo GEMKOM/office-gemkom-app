@@ -28,7 +28,7 @@ import {
 import classes from './analytics.module.css';
 
 export type DrillKind =
-  'job' | 'machining' | 'welding' | 'material' | 'subcontractor' | 'estimated';
+  'job' | 'machining' | 'welding' | 'material' | 'fason' | 'subcontractor' | 'estimated';
 
 export interface ColumnContext {
   /** Show the cost-detail columns (İşçilik … Genel Giderler). */
@@ -45,6 +45,7 @@ export interface ColumnContext {
 export const DETAIL_KEYS = new Set([
   'labor_cost',
   'material_cost',
+  'fason_cost',
   'subcontractor_cost',
   'paint_cost',
   'qc_cost',
@@ -202,6 +203,21 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
           value={row.material_cost}
           title="Malzeme Detayları"
           onInfo={num(row.material_cost) > 0 ? () => ctx.onDrill('material', row) : undefined}
+        />
+      ),
+    },
+    {
+      key: 'fason_cost',
+      header: 'Fason',
+      align: 'right',
+      hidden: !ctx.breakdown,
+      exportValue: (row) => numOrNull(row.fason_cost),
+      exportFormat: MONEY,
+      render: (row) => (
+        <MoneyWithInfo
+          value={row.fason_cost}
+          title="Fason Detayları"
+          onInfo={num(row.fason_cost) > 0 ? () => ctx.onDrill('fason', row) : undefined}
         />
       ),
     },
@@ -368,6 +384,7 @@ export function costFooter() {
       ),
       labor_cost: euro(t.laborWithTax),
       material_cost: euro(t.material),
+      fason_cost: euro(t.fason),
       subcontractor_cost: euro(t.subcontractor),
       paint_cost: euro(t.paintWithMaterial),
       qc_cost: euro(t.qc),

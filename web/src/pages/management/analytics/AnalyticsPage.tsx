@@ -50,6 +50,7 @@ import { CatalogPicker } from './CatalogPicker';
 import { joinNodeIds, parseNodeIds } from './catalogTree';
 import { costColumns, costFooter, type DrillKind } from './columns';
 import { EstimatedCostModal } from './EstimatedCostModal';
+import { FasonDetailsModal } from '@/pages/sales/cost-table/FasonDetailsModal';
 import {
   JobDetailsModal,
   MachiningDetailsModal,
@@ -486,6 +487,8 @@ export function AnalyticsPage() {
             return <WeldingDetailsModal key={index} jobNo={jobNo} onClose={onClose} />;
           case 'material':
             return <MaterialDetailsModal key={index} jobNo={jobNo} onClose={onClose} />;
+          case 'fason':
+            return <FasonDetailsModal key={index} jobNo={jobNo} onClose={onClose} />;
           case 'subcontractor':
             return <SubcontractorDetailsModal key={index} jobNo={jobNo} onClose={onClose} />;
           case 'estimated':
