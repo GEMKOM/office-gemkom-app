@@ -77,7 +77,7 @@ describe('moved pages', () => {
     ]);
   });
 
-  it('an old Stok Kartları grant shows Ana Stok under Depo › Stoklar', () => {
+  it('an old Stok Kartları grant shows Tüm Stok Kartları under Depo › Stoklar', () => {
     legacy.grantedPages = new Set(['/planning/inventory/cards']);
     const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
     expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/warehouse']);

@@ -430,8 +430,10 @@ test('HR designs a day in Tasarım, then previews it across the app', async ({ p
   await expect(page.getByTestId('occasion-preview-banner')).toContainText('27 Ekim 2026');
   const welcome = page.getByTestId('occasion-welcome');
   await expect(welcome.getByTestId('welcome-template')).toHaveAttribute('data-layout', 'solemn');
+  // Inside the welcome: while the home page loads, the Tasarım page (with its
+  // own preview of the same heading) can still be on screen for a moment.
   await expect(
-    page.getByRole('heading', {
+    welcome.getByRole('heading', {
       level: 1,
       name: 'Cumhuriyetimizin 103. yılı şimdiden kutlu olsun',
     }),

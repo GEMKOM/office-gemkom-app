@@ -570,9 +570,15 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         label: 'Stoklar',
         icon: 'fas fa-boxes',
         children: {
-          '/warehouse/stock': {
-            label: 'Ana Stok',
-            icon: 'fas fa-boxes',
+          // The two daily inventories: free stock, and stock set aside per job.
+          '/warehouse/hammadde': {
+            label: 'Hammadde',
+            icon: 'fas fa-cubes',
+            children: {},
+          },
+          '/warehouse/is-emri': {
+            label: 'İş Emri',
+            icon: 'fas fa-clipboard-list',
             children: {},
           },
           '/warehouse/plate-stock': {
@@ -583,6 +589,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
           '/warehouse/bar-stock': {
             label: 'Boy Stoğu',
             icon: 'fas fa-ruler-horizontal',
+            children: {},
+          },
+          // Every card with its Hammadde / İş Emri / Mamul balances (was Ana Stok).
+          '/warehouse/stock': {
+            label: 'Tüm Stok Kartları',
+            icon: 'fas fa-boxes',
             children: {},
           },
           '/warehouse/equipment': {

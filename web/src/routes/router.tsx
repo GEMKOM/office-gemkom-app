@@ -231,6 +231,19 @@ export const appRoutes: RouteObject[] = [
         .ProductionSlipsPage,
     }),
   },
+  // Hammadde (free stock) and İş Emri (stock per job): the warehouse's daily inventories.
+  {
+    path: '/warehouse/hammadde',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/inventories/InventoryPages')).HammaddePage,
+    }),
+  },
+  {
+    path: '/warehouse/is-emri',
+    lazy: async () => ({
+      Component: (await import('@/pages/warehouse/inventories/InventoryPages')).IsEmriPage,
+    }),
+  },
   {
     path: '/warehouse/transfers',
     lazy: async () => ({

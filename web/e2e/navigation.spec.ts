@@ -100,7 +100,7 @@ test('admin: the menu puts the cutting pages under Planlama', async ({ page, con
   consoleErrors.expectNone();
 });
 
-test('Planlama › Stok moved to Depo: the old Stok Kartları URL opens Ana Stok', async ({
+test('Planlama › Stok moved to Depo: the old Stok Kartları URL opens Tüm Stok Kartları', async ({
   page,
   consoleErrors,
 }) => {
@@ -110,7 +110,9 @@ test('Planlama › Stok moved to Depo: the old Stok Kartları URL opens Ana Stok
   await page.goto('/planning/inventory/cards/');
   await expect(page).toHaveURL(/\/warehouse\/stock\/$/);
   const main = page.getByRole('main');
-  await expect(main.getByRole('navigation', { name: 'Konum' })).toHaveText('Depo/Stoklar/Ana Stok');
+  await expect(main.getByRole('navigation', { name: 'Konum' })).toHaveText(
+    'Depo/Stoklar/Tüm Stok Kartları',
+  );
 
   // The old Sac ve Boy Stoğu URL picks the page by kind.
   await page.goto('/warehouse/pieces/?kind=boy');
