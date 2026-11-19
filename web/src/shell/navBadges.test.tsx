@@ -1,7 +1,7 @@
 import { authedFetch } from '@/auth/authService';
 import { screen, waitFor } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
-import { badgeCount, NavBadgesProvider, useNavBadgeCount } from './navBadges';
+import { badgeCount, NavBadgesProvider, useNavBadgeCount, useWaitingSummary } from './navBadges';
 
 vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
@@ -30,7 +30,13 @@ describe('badgeCount', () => {
 
 function Probe() {
   const countFor = useNavBadgeCount();
-  return <output aria-label="Satın Alma">{countFor('/procurement', section)}</output>;
+  const { total, anyQueue } = useWaitingSummary();
+  return (
+    <>
+      <output aria-label="Satın Alma">{countFor('/procurement', section)}</output>
+      <output aria-label="Toplam">{anyQueue ? total : '-'}</output>
+    </>
+  );
 }
 
 describe('NavBadgesProvider', () => {
@@ -58,5 +64,28 @@ describe('NavBadgesProvider', () => {
     );
 
     await waitFor(() => expect(screen.getByLabelText('Satın Alma')).toHaveTextContent('5'));
+  });
+
+  it('sums every queue for the avatar and Onaylar, the cross-domain inbox included', async () => {
+    fetchMock.mockImplementation((url) => {
+      const { pathname } = new URL(String(url));
+      const json =
+        pathname === '/procurement/purchase-requests/pending_approval/'
+          ? body(5)
+          : pathname === '/overtime/requests/pending_approval/'
+            ? body(2)
+            : pathname === '/notifications/unread_count/'
+              ? { count: 0 }
+              : pathname === '/approvals/inbox/'
+                ? [{ workflow_id: 1, subject_type: 'procurement.paymentlist', subject_id: 4 }]
+                : body(0);
+      return Promise.resolve(new Response(JSON.stringify(json), { status: 200 }));
+    });
+    renderWithProviders(
+      <NavBadgesProvider>
+        <Probe />
+      </NavBadgesProvider>,
+    );
+    await waitFor(() => expect(screen.getByLabelText('Toplam')).toHaveTextContent('8'));
   });
 });

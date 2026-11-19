@@ -4,10 +4,10 @@ import { notifications } from '@mantine/notifications';
 import { useCallback, useMemo } from 'react';
 import { useAuth } from '@/auth/AuthProvider';
 import { useAppNavigate } from './AppLink';
-import { isUnbuiltGeneralPage, USER_MENU_PATHS, withoutPaths } from './navModel';
+import { isUnbuiltGeneralPage, OFF_MENU_PATHS, withoutPaths } from './navModel';
 
 /**
- * The menu tree this user may see (less the pages the user menu carries),
+ * The menu tree this user may see (less the entries kept off the rail),
  * plus the click handler both navbars use.
  */
 export function useNavigation() {
@@ -15,7 +15,7 @@ export function useNavigation() {
   const navigate = useAppNavigate();
 
   const tree = useMemo(
-    () => withoutPaths(filterNavigationByAccess(NAVIGATION_STRUCTURE), USER_MENU_PATHS),
+    () => withoutPaths(filterNavigationByAccess(NAVIGATION_STRUCTURE), OFF_MENU_PATHS),
     // Recompute when the permission payload changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [permissionsVersion],

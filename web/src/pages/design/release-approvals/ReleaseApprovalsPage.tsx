@@ -39,6 +39,7 @@ import {
   ReleaseStatusBadge,
   revisionLabel,
 } from './columns';
+import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 const DEFAULT_COMPLETED_STATUS = 'released,rejected';
 const DEFAULT_ORDERING = '-review_completed_at';
@@ -269,7 +270,7 @@ function ReleaseDetailModal({
 }
 
 /** Port of design/release-approvals (release-approvals.js): peer review of drawing releases. */
-export function ReleaseApprovalsPage() {
+export function ReleaseApprovalsPage({ embedded = false }: EmbeddableProps = {}) {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const tab = values.tab === 'completed' ? 'completed' : 'pending';
   const users = useUsers({ is_active: true });
@@ -416,28 +417,30 @@ export function ReleaseApprovalsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Çizim İncelemesi"
-        subtitle="Bekleyen incelemeleri değerlendirin ve tamamlanan inceleme geçmişini görüntüleyin"
-        icon="fas fa-search"
-        backTo="/design/"
-        stats={[
-          {
-            id: 'pending-release-count',
-            label: 'İnceleme Bekleyen',
-            value: pending.data ? pending.data.length.toLocaleString('tr-TR') : '–',
-          },
-        ]}
-        actions={
-          <Button
-            variant="default"
-            leftSection={<FaIcon icon="fas fa-sync-alt" />}
-            onClick={refresh}
-          >
-            Yenile
-          </Button>
-        }
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="Çizim İncelemesi"
+          subtitle="Bekleyen incelemeleri değerlendirin ve tamamlanan inceleme geçmişini görüntüleyin"
+          icon="fas fa-search"
+          backTo="/design/"
+          stats={[
+            {
+              id: 'pending-release-count',
+              label: 'İnceleme Bekleyen',
+              value: pending.data ? pending.data.length.toLocaleString('tr-TR') : '–',
+            },
+          ]}
+          actions={
+            <Button
+              variant="default"
+              leftSection={<FaIcon icon="fas fa-sync-alt" />}
+              onClick={refresh}
+            >
+              Yenile
+            </Button>
+          }
+        />
+      )}
 
       <Panel>
         <Tabs

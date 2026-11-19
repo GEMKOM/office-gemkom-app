@@ -17,6 +17,10 @@ const BUILT_GENERAL_PAGES = [
 // Personal pages reached from the user menu instead of the section menus.
 export const USER_MENU_PATHS = ['/general/discussions', '/general/vacation/requests'];
 
+// Entries kept in the menu tree (search, breadcrumbs, back links) but left off
+// the rail: Onaylar is in the user menu, Günün Quizi on the home page.
+export const OFF_MENU_PATHS = [...USER_MENU_PATHS, '/approvals', '/quiz'];
+
 /**
  * The tree without these paths. A parent whose pages were all removed goes
  * too, rather than turning into a link of its own.

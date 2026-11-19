@@ -211,7 +211,7 @@ export function CranePricesPage() {
         title="Vinç / Platform Fiyat Listesi"
         subtitle="Kiralık vinç ve platformların güncel fiyatları (KDV hariç)"
         icon="fas fa-tags"
-        backTo="/general/crane-requests"
+        backTo="/general/crane-requests/list"
         stats={[
           {
             id: 'crane-types-count',

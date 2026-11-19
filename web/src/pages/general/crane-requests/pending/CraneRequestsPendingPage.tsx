@@ -37,6 +37,7 @@ import {
 import { formatDurationSummary, formatMoney } from '../crane';
 import { CraneRequestDetailModal } from '../CraneRequestDetailModal';
 import { RejectCraneRequestModal } from './RejectCraneRequestModal';
+import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 const URL_DEFAULTS = { request: '' };
 const EMPTY_ROWS: CraneRequest[] = [];
@@ -59,7 +60,7 @@ const APPROVED_COLUMNS = [...SHARED_COLUMNS, createdAtColumn];
 const APPROVED_SOURCE_PARAMS = { page_size: 100 };
 
 /** Port of general/crane-requests/pending (pending.js): Onay Bekleyen Vinç Talepleri. */
-export function CraneRequestsPendingPage() {
+export function CraneRequestsPendingPage({ embedded = false }: EmbeddableProps = {}) {
   const { user } = useAuth();
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
 
@@ -191,24 +192,26 @@ export function CraneRequestsPendingPage() {
 
   return (
     <>
-      <PageHeader
-        title="Onay Bekleyen Vinç Talepleri"
-        subtitle="Onayınızı bekleyen vinç/platform taleplerinin yönetimi"
-        icon="fas fa-truck-pickup"
-        backTo="/general/crane-requests"
-        stats={[
-          {
-            id: 'crane-pending-count',
-            label: 'Onay Bekleyen',
-            value: figure(pending.isPending, pending.data?.count ?? 0),
-          },
-          {
-            id: 'crane-approved-count',
-            label: 'Onayladığım',
-            value: figure(approvedSource.isPending, approvedRows.length),
-          },
-        ]}
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="Onay Bekleyen Vinç Talepleri"
+          subtitle="Onayınızı bekleyen vinç/platform taleplerinin yönetimi"
+          icon="fas fa-truck-pickup"
+          backTo="/general/crane-requests/list"
+          stats={[
+            {
+              id: 'crane-pending-count',
+              label: 'Onay Bekleyen',
+              value: figure(pending.isPending, pending.data?.count ?? 0),
+            },
+            {
+              id: 'crane-approved-count',
+              label: 'Onayladığım',
+              value: figure(approvedSource.isPending, approvedRows.length),
+            },
+          ]}
+        />
+      )}
 
       <DataTable
         title="Onay Bekleyen Vinç Talepleri"

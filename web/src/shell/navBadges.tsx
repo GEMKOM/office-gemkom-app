@@ -14,7 +14,7 @@ import { useUnreadCount } from './notifications';
 /** Counts older than this are asked for again when the user moves or something new arrives. */
 const REFRESH_AFTER_MS = 15_000;
 
-const isApprovalQuery = (key: readonly unknown[]) =>
+export const isApprovalQuery = (key: readonly unknown[]) =>
   (key[0] === 'home' && key[1] === 'approvals') || (key[0] === 'approvals' && key[1] === 'inbox');
 
 /** Waiting approvals under a menu entry: its own queue plus those of everything below it. */
@@ -32,6 +32,16 @@ export function badgeCount(
 type CountFor = (path: string, item: NavItem) => number;
 
 const NavBadgesContext = createContext<CountFor>(() => 0);
+
+/** Every approval waiting on the user, for the avatar and the Onaylar entry. */
+export interface WaitingSummary {
+  /** The counts that are in so far, summed. */
+  total: number;
+  /** Whether the user sits on any queue they can open (the Onaylar page has a tab). */
+  anyQueue: boolean;
+}
+
+const WaitingContext = createContext<WaitingSummary>({ total: 0, anyQueue: false });
 
 /** Mounted once in the shell; the rail and the drawer read from it. */
 export function NavBadgesProvider({ children }: { children: ReactNode }) {
@@ -62,8 +72,22 @@ export function NavBadgesProvider({ children }: { children: ReactNode }) {
     () => (path, item) => badgeCount(path, item, waiting),
     [waiting],
   );
-  return <NavBadgesContext.Provider value={countFor}>{children}</NavBadgesContext.Provider>;
+  const summary = useMemo<WaitingSummary>(
+    () => ({
+      total: approvals.items.reduce((sum, i) => sum + (i.count.data ?? 0), 0),
+      anyQueue: !approvals.none,
+    }),
+    [approvals.items, approvals.none],
+  );
+  return (
+    <NavBadgesContext.Provider value={countFor}>
+      <WaitingContext.Provider value={summary}>{children}</WaitingContext.Provider>
+    </NavBadgesContext.Provider>
+  );
 }
 
 /** (path, item) -> how many approvals wait under that menu entry; 0 outside the provider. */
 export const useNavBadgeCount = () => useContext(NavBadgesContext);
+
+/** Everything waiting on the user across the queues; nothing outside the provider. */
+export const useWaitingSummary = () => useContext(WaitingContext);

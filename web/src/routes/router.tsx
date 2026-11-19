@@ -91,25 +91,16 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    // Onaylar: a tab per approval queue. Open to everyone (accessControl.ts);
+    // each tab shows only for a queue the user can open.
+    path: '/approvals',
+    lazy: async () => ({ Component: (await import('@/pages/approvals/ApprovalsPage')).ApprovalsPage }),
+  },
+  {
     path: '/general',
     handle: hub,
     lazy: async () => ({
       Component: (await import('@/pages/general/GeneralHubPage')).GeneralHubPage,
-    }),
-  },
-  {
-    path: '/general/crane-requests',
-    handle: hub,
-    lazy: async () => ({
-      Component: (await import('@/pages/general/CraneRequestsHubPage')).CraneRequestsHubPage,
-    }),
-  },
-  {
-    path: '/general/department-requests',
-    handle: hub,
-    lazy: async () => ({
-      Component: (await import('@/pages/general/DepartmentRequestsHubPage'))
-        .DepartmentRequestsHubPage,
     }),
   },
   {

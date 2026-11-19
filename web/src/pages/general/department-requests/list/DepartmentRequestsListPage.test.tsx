@@ -11,6 +11,11 @@ vi.setConfig({ testTimeout: 20_000 });
 
 vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
+vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ user: { id: 7, username: 'ben' } }) }));
+// Planning (its department requests page) may list everyone's requests.
+const access = vi.hoisted(() => ({ open: new Set<string>() }));
+vi.mock('@/auth/accessControl', () => ({ hasRouteAccess: (route: string) => access.open.has(route) }));
+const PLANNING = '/planning/department-requests';
 
 const fetchMock = vi.mocked(authedFetch);
 
@@ -117,6 +122,7 @@ function renderPage(route = '/general/department-requests/list') {
 }
 
 beforeEach(() => {
+  access.open = new Set();
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
@@ -150,9 +156,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it('renders the rows with the legacy request and status-dependent actions', async () => {
+it("renders the user's own rows with the legacy request and status-dependent actions", async () => {
   renderPage();
-  expect(screen.getByText('Tüm Departman Talepleri')).toBeInTheDocument();
+  expect(screen.getByText('Departman Taleplerim')).toBeInTheDocument();
   expect(await screen.findByText('Taslak talep')).toBeInTheDocument();
   expect(screen.getByText('GS-10162')).toBeInTheDocument();
   expect(screen.getByText('Bakım')).toBeInTheDocument();
@@ -164,8 +170,13 @@ it('renders the rows with the legacy request and status-dependent actions', asyn
     page: '1',
     page_size: '20',
     ordering: '-id',
+    requestor: '7',
     kind: 'material',
   });
+  // Only their own: no switch, no Talep Eden, and no user list asked for.
+  expect(screen.queryByRole('radio', { name: 'Tüm Talepler' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /^Talep Eden/ })).not.toBeInTheDocument();
+  expect(calls().some((c) => c.url.pathname === '/users/dropdown/')).toBe(false);
 
   const row = (title: string) => screen.getByText(title).closest('tr')!;
   // Edit: draft / submitted. Delete: draft / cancelled.
@@ -180,8 +191,9 @@ it('renders the rows with the legacy request and status-dependent actions', asyn
 });
 
 it('sends URL filters with the legacy param names and writes typed search to the URL', async () => {
+  access.open = new Set([PLANNING]);
   renderPage(
-    '/general/department-requests/list?status=submitted&department=it&priority=urgent&requestor=5&page=2',
+    '/general/department-requests/list?scope=all&status=submitted&department=it&priority=urgent&requestor=5&page=2',
   );
   await screen.findByText('Taslak talep');
   expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({
@@ -205,6 +217,33 @@ it('sends URL filters with the legacy param names and writes typed search to the
   });
   await waitFor(() => expect(listCalls().at(-1)!.url.searchParams.get('search')).toBe('GS-10162'));
   expect(listCalls().at(-1)!.url.searchParams.get('page')).toBe('1');
+});
+
+it("lets planning switch between their own requests and everyone's", async () => {
+  access.open = new Set([PLANNING]);
+  renderPage();
+  expect(await screen.findByText('Departman Taleplerim')).toBeInTheDocument();
+  await screen.findByText('Taslak talep');
+  expect(listCalls()[0]!.url.searchParams.get('requestor')).toBe('7');
+
+  fireEvent.click(screen.getByRole('radio', { name: 'Tüm Talepler' }));
+  expect(await screen.findByText('Tüm Departman Talepleri')).toBeInTheDocument();
+  const params = () => new URLSearchParams(screen.getByTestId('location').textContent ?? '');
+  expect(params().get('scope')).toBe('all');
+  await waitFor(() => expect(listCalls().at(-1)!.url.searchParams.has('requestor')).toBe(false));
+  // Everyone's requests can be narrowed to one requester.
+  expect(screen.getAllByRole('button', { name: /^Talep Eden/ }).length).toBeGreaterThan(0);
+
+  fireEvent.click(screen.getByRole('radio', { name: 'Benim Taleplerim' }));
+  expect(await screen.findByText('Departman Taleplerim')).toBeInTheDocument();
+  expect(params().has('scope')).toBe(false);
+});
+
+it('keeps a requester on their own requests even when the URL asks for all', async () => {
+  renderPage('/general/department-requests/list?scope=all&requestor=5');
+  await screen.findByText('Taslak talep');
+  expect(screen.getByText('Departman Taleplerim')).toBeInTheDocument();
+  expect(listCalls().every((c) => c.url.searchParams.get('requestor') === '7')).toBe(true);
 });
 
 it('create validates the title, requires an item and posts multipart data', async () => {

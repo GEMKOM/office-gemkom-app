@@ -19,6 +19,7 @@ import {
   type RowAction,
   type StatusFamily,
 } from '@/ui';
+import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 const EMPTY_ROWS: PendingOverrideRecord[] = [];
 
@@ -89,7 +90,7 @@ const columns: DataTableColumn<PendingOverrideRecord>[] = [
 ];
 
 /** Port of human_resources/attendance/pending-overrides (pending-overrides.js). */
-export function PendingOverridesPage() {
+export function PendingOverridesPage({ embedded = false }: EmbeddableProps = {}) {
   const list = usePendingOverrides();
   const rows = list.data ?? EMPTY_ROWS;
   const approve = useApproveOverride();
@@ -204,18 +205,20 @@ export function PendingOverridesPage() {
 
   return (
     <>
-      <PageHeader
-        title="PDKS Onayları"
-        subtitle="Ofis dışı giriş taleplerini onaylayın veya reddedin"
-        backTo="/human_resources/attendance"
-        stats={[
-          {
-            id: 'pending-overrides-count',
-            label: 'Bekleyen',
-            value: list.isPending ? '–' : rows.length,
-          },
-        ]}
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="PDKS Onayları"
+          subtitle="Ofis dışı giriş taleplerini onaylayın veya reddedin"
+          backTo="/human_resources/attendance"
+          stats={[
+            {
+              id: 'pending-overrides-count',
+              label: 'Bekleyen',
+              value: list.isPending ? '–' : rows.length,
+            },
+          ]}
+        />
+      )}
 
       <DataTable
         title="Bekleyen Talepler"

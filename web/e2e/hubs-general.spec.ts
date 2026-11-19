@@ -4,8 +4,10 @@ import { expect, mockBackend, paginated, seedSession, test } from './fixtures';
 // Contracts used here:
 //   /                       the personal home; no work-area cards (the menu has them)
 //   /general/               title "Talepler": Departman / Vinç Talepleri, Fason
-//   user menu               the overtime approvals waiting (GET
-//                           /overtime/requests/pending_approval/) count on the avatar
+//   user menu               every approval waiting (here GET
+//                           /overtime/requests/pending_approval/) counts on the
+//                           avatar and on its Onaylar entry
+//   /approvals/             Onaylar: a tab per queue, the first with something waiting open
 //   /human_resources/overtime/  title "Mesai Talepleri" (old /general/overtime/ forwards)
 //   /it/                    hub; needs a grant under /it
 
@@ -18,7 +20,7 @@ declare global {
 const cardTitles = (page: import('@playwright/test').Page) =>
   page.getByRole('main').getByRole('heading', { level: 3 }).allTextContents();
 
-test('admin: landing page -> Talepler, overtime approvals on the avatar, all client-side', async ({
+test('admin: landing page -> Talepler, approvals on the avatar -> Onaylar, all client-side', async ({
   page,
   consoleErrors,
 }) => {
@@ -51,13 +53,65 @@ test('admin: landing page -> Talepler, overtime approvals on the avatar, all cli
   await expect(main.getByRole('heading', { level: 1, name: 'Talepler' })).toBeVisible();
   expect(await cardTitles(page)).toEqual(['Departman Talepleri', 'Vinç Talepleri', 'Fason Talepleri']);
 
-  // Overtime approvals moved to the user menu: the avatar wears their count.
+  // Every approval is in Onaylar, in the user menu: the avatar wears the total.
   const avatar = page.getByRole('button', { name: /, 4 onay bekliyor$/ }).first();
   await expect(avatar).toBeVisible();
   await avatar.click();
-  await page.getByRole('menuitem', { name: /Mesai Onayları/ }).click();
-  await expect(page).toHaveURL(/\/human_resources\/overtime\/pending\/?$/);
+  await page.getByRole('menuitem', { name: /Onaylar/ }).click();
+  // The overtime tab is the first with something waiting; its page sits inside.
+  await expect(page).toHaveURL(/\/approvals\/?$/);
+  await expect(main.getByRole('heading', { level: 1, name: 'Onaylar' })).toBeVisible();
+  await expect(main.getByRole('tab', { name: /Mesai talepleri/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(main.getByRole('heading', { name: 'Onayladığım Mesai Talepleri' })).toBeVisible();
+  // Its own band is left out: one title on the page.
+  await expect(main.getByRole('heading', { level: 1 })).toHaveCount(1);
   expect(await page.evaluate(() => window.__spaMarker)).toBe('still-here');
+  consoleErrors.expectNone();
+});
+
+test("Departman / Vinç Talepleri open the user's own requests; the old hub addresses forward there", async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, {
+    admin: false,
+    grants: ['/general/department-requests/list/', '/general/crane-requests/list/', '/general/crane-requests/prices/'],
+  });
+  const backend = await mockBackend(
+    page,
+    {
+      'GET /planning/department-requests/': { json: paginated([]) },
+      'GET /planning/department-requests/31/': {
+        json: { id: 31, title: 'Bakım malzemesi', status: 'submitted', items: [], files: [] },
+      },
+      'GET /cranes/requests/': { json: paginated([]) },
+      'GET /cranes/requests/my_permissions/': { json: { can_complete: false, can_manage_prices: false } },
+    },
+    { session },
+  );
+  const main = page.getByRole('main');
+
+  await page.goto('/');
+  const menu = page.getByRole('navigation', { name: 'Ana menü' });
+  await menu.getByRole('button', { name: 'Talepler' }).hover();
+  await page.getByRole('menuitem', { name: 'Departman Talepleri' }).click();
+  await expect(page).toHaveURL(/\/general\/department-requests\/list\/?$/);
+  await expect(main.getByRole('heading', { level: 1, name: 'Departman Taleplerim' })).toBeVisible();
+  await expect
+    .poll(() => backend.callsTo('/planning/department-requests/', 'GET').at(-1)?.query ?? '')
+    .toContain(`requestor=${String(session.user.id)}`);
+  // Only planning may switch to everyone's requests.
+  await expect(main.getByRole('radio', { name: 'Tüm Talepler' })).toHaveCount(0);
+
+  // A notification's link to the old hub opens the list, the request kept.
+  await page.goto('/general/department-requests/?request=31');
+  await expect(page).toHaveURL(/\/general\/department-requests\/list\/\?request=31$/);
+
+  await page.goto('/general/crane-requests/');
+  await expect(page).toHaveURL(/\/general\/crane-requests\/list\/?$/);
+  await expect(main.getByRole('heading', { level: 1, name: 'Vinç Taleplerim' })).toBeVisible();
+  await main.getByRole('link', { name: /Fiyat Listesi/ }).click();
+  await expect(page).toHaveURL(/\/general\/crane-requests\/prices\/?$/);
   consoleErrors.expectNone();
 });
 

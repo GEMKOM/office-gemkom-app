@@ -1,8 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { apiFetch, type QueryParams } from '../client';
 import { listCountQueryOptions, listPageQueryOptions, HUB_STALE_TIME } from '../counts';
-import type { CraneRequest } from './craneRequests';
-import type { DepartmentRequest } from './departmentRequests';
 import type { OvertimeRequest } from './overtime';
 import type { VacationRequest } from './vacation';
 
@@ -21,36 +19,6 @@ export function departmentRequestPendingCountQueryOptions() {
   return listCountQueryOptions(
     ['departmentRequests', 'pendingApproval'],
     `${DEPARTMENT_REQUESTS}pending_approval/`,
-  );
-}
-
-/** Crane requests by exact status (the list filters status exactly). */
-export function craneStatusCountQueryOptions(status: string) {
-  return listCountQueryOptions(['craneRequests', 'list'], CRANES, { status });
-}
-
-/** Material requests only (`kind`): fason requests are counted on Fason Talepleri. */
-export function departmentRequestStatusCountQueryOptions(status: string) {
-  return listCountQueryOptions(['departmentRequests', 'list'], DEPARTMENT_REQUESTS, {
-    status,
-    kind: 'material',
-  });
-}
-
-/** The user's own latest crane requests (my_requests, newest first). */
-export function myCraneRequestsQueryOptions(pageSize: number) {
-  return listPageQueryOptions<CraneRequest>(['craneRequests', 'mine'], `${CRANES}my_requests/`, {
-    ordering: '-created_at',
-    page_size: pageSize,
-  });
-}
-
-/** The user's own latest material requests (my_requests ignores filters but `kind`; newest first). */
-export function myDepartmentRequestsQueryOptions(pageSize: number) {
-  return listPageQueryOptions<DepartmentRequest>(
-    ['departmentRequests', 'mine'],
-    `${DEPARTMENT_REQUESTS}my_requests/`,
-    { page_size: pageSize, kind: 'material' },
   );
 }
 

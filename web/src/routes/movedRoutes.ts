@@ -60,4 +60,9 @@ export const REPLACED_HUB_ROUTES: Record<string, string> = {
   '/manufacturing/cnc-cutting/capacity': '/planning/cnc-cutting/capacity',
   '/manufacturing/linear-cutting/capacity': '/planning/linear-cutting/capacity',
   '/manufacturing/machining/capacity': '/manufacturing/machining/capacity/planning',
+  // Departman / Vinç Talepleri open their lists now (2026-11-19): the pending
+  // cards became Onaylar tabs, Fiyat Listesi a button on the crane list. The
+  // notification e-mails' ?request= deep links open the request there.
+  '/general/department-requests': '/general/department-requests/list',
+  '/general/crane-requests': '/general/crane-requests/list',
 };
