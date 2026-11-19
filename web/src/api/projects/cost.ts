@@ -40,6 +40,8 @@ export interface CostTableRow {
   labor_cost?: ApiDecimal;
   employee_overhead_cost?: ApiDecimal;
   material_cost?: ApiDecimal;
+  /** F-card purchases (büküm, lazer kesim, galvaniz…); not part of material_cost. */
+  fason_cost?: ApiDecimal;
   subcontractor_cost?: ApiDecimal;
   paint_cost?: ApiDecimal;
   paint_material_cost?: ApiDecimal;
@@ -112,6 +114,8 @@ export interface ProcurementLine {
   quantity?: ApiDecimal;
   unit_price?: ApiDecimal;
   amount_eur?: ApiDecimal;
+  /** An F card: its amount is in fason_cost, not material_cost. */
+  is_fason?: boolean;
   [key: string]: unknown;
 }
 
@@ -185,6 +189,61 @@ export interface SubcontractorCostBreakdown {
   total_eur?: ApiDecimal;
 }
 
+/** A file on a fason line's purchase order, planning / department request or planning line. */
+export interface FasonCostFile {
+  id: number;
+  asset_id?: number | null;
+  file_name: string;
+  file_url: string;
+  source: 'purchase_order' | 'planning_request' | 'department_request' | 'planning_item' | string;
+}
+
+/** One saved F-card cost line, with the request and purchase order behind it. */
+export interface FasonCostLine {
+  procurement_line_id: number;
+  job_no: string;
+  planning_request_id?: number | null;
+  planning_request_number?: string | null;
+  department_request_id?: number | null;
+  department_request_number?: string | null;
+  purchase_request_number?: string | null;
+  /** The line's item_description. */
+  part_no?: string | null;
+  quantity?: ApiDecimal;
+  unit?: string | null;
+  supplier_name?: string | null;
+  purchase_order_id?: number | null;
+  po_number?: string | null;
+  unit_price_eur?: ApiDecimal;
+  amount_eur?: ApiDecimal;
+  /** In the purchase order's currency; null without an order. */
+  original_unit_price?: ApiDecimal;
+  original_amount?: ApiDecimal;
+  original_currency?: string | null;
+  date?: string | null;
+  files?: FasonCostFile[];
+}
+
+export interface FasonCostGroup {
+  item_id: number;
+  item_code: string;
+  item_name: string;
+  total_eur: ApiDecimal;
+  line_count: number;
+  lines: FasonCostLine[];
+}
+
+/** GET /projects/job-orders/{job_no}/fason_cost_breakdown/: the job tree's F-card lines by card. */
+export interface FasonCostBreakdown {
+  job_order?: string;
+  total_eur?: ApiDecimal;
+  /** The summary's fason_cost (the table's Fason column). */
+  fason_cost?: ApiDecimal;
+  group_count?: number;
+  line_count?: number;
+  groups?: FasonCostGroup[];
+}
+
 /** Cost figures move slowly; a minute keeps tab switches from refetching. */
 export const COST_STALE_TIME = 60_000;
 
@@ -198,6 +257,7 @@ export const costKeys = {
   procurementLines: (jobNo: string) => ['job-order-cost', 'procurement-lines', jobNo] as const,
   estimated: (jobNo: string) => ['job-order-cost', 'estimated', jobNo] as const,
   subcontractor: (jobNo: string) => ['job-order-cost', 'subcontractor', jobNo] as const,
+  fason: (jobNo: string) => ['job-order-cost', 'fason', jobNo] as const,
 };
 
 const DATE_PARAMS = [
@@ -340,6 +400,19 @@ export function subcontractorCostBreakdownQueryOptions(jobNo: string) {
     queryFn: ({ signal }) =>
       apiFetch<SubcontractorCostBreakdown>(
         `/projects/job-orders/${encodeURIComponent(jobNo)}/subcontractor_cost_breakdown/`,
+        { signal },
+      ).then((data) => data ?? {}),
+    staleTime: COST_STALE_TIME,
+  });
+}
+
+/** GET /projects/job-orders/{job_no}/fason_cost_breakdown/ (the job and its descendants). */
+export function fasonCostBreakdownQueryOptions(jobNo: string) {
+  return queryOptions({
+    queryKey: costKeys.fason(jobNo),
+    queryFn: ({ signal }) =>
+      apiFetch<FasonCostBreakdown>(
+        `/projects/job-orders/${encodeURIComponent(jobNo)}/fason_cost_breakdown/`,
         { signal },
       ).then((data) => data ?? {}),
     staleTime: COST_STALE_TIME,

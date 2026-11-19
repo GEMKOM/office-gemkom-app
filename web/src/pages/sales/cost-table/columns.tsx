@@ -21,7 +21,7 @@ import { FaIcon, StatusBadge, type DataTableColumn } from '@/ui';
 import { parsePriceInput, rateText, STATUS_FAMILY, statusLabel } from './costTableData';
 import classes from './CostTable.module.css';
 
-export type DrillKind = 'job' | 'machining' | 'welding' | 'material' | 'subcontractor';
+export type DrillKind = 'job' | 'machining' | 'welding' | 'material' | 'fason' | 'subcontractor';
 
 export interface ColumnContext {
   expanded: ReadonlySet<string>;
@@ -200,6 +200,21 @@ export function costColumns(ctx: ColumnContext): DataTableColumn<TreeRow>[] {
           onInfo={
             num(row.material_cost) > 0 ? () => ctx.onDrill('material', row.job_no) : undefined
           }
+        />
+      ),
+    },
+    {
+      key: 'fason_cost',
+      hidden: !ctx.breakdown,
+      header: 'Fason',
+      align: 'right',
+      exportValue: (row) => numOrNull(row.fason_cost),
+      exportFormat: MONEY,
+      render: (row) => (
+        <MoneyWithInfo
+          value={row.fason_cost}
+          title="Fason Detaylarını Görüntüle"
+          onInfo={num(row.fason_cost) > 0 ? () => ctx.onDrill('fason', row.job_no) : undefined}
         />
       ),
     },

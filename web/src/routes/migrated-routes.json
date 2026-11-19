@@ -83,6 +83,7 @@
   "/general/crane-requests/prices",
   "/general/department-requests/list",
   "/general/department-requests/pending",
+  "/general/fason",
   "/general/overtime/pending",
   "/general/overtime/registry",
   "/general/overtime/users",
