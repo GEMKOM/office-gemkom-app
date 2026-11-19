@@ -49,7 +49,7 @@ test('admin: landing page -> Talepler, overtime approvals on the avatar, all cli
   await menu.getByRole('button', { name: 'Talepler' }).click();
   await expect(page).toHaveURL(/\/general\/?$/);
   await expect(main.getByRole('heading', { level: 1, name: 'Talepler' })).toBeVisible();
-  expect(await cardTitles(page)).toEqual(['Departman Talepleri', 'Vinç Talepleri', 'Fason']);
+  expect(await cardTitles(page)).toEqual(['Departman Talepleri', 'Vinç Talepleri', 'Fason Talepleri']);
 
   // Overtime approvals moved to the user menu: the avatar wears their count.
   const avatar = page.getByRole('button', { name: /, 4 onay bekliyor$/ }).first();

@@ -32,9 +32,9 @@ export function GeneralHubPage() {
       badge: waitingBadge(crane.data, 'onayınızı bekliyor', 'yellow'),
     },
     {
-      title: 'Fason',
+      title: 'Fason Talepleri',
       description:
-        'Atölyenin fason işleri: satınalma ve malzeme yan yana; depodan tedarikçiye gidiş ve dönüş.',
+        'Atölyenin fason talepleri (büküm, işleme, galvaniz…): satınalma ve malzeme yan yana; depodan tedarikçiye gidiş ve dönüş.',
       icon: 'fas fa-people-carry',
       iconColor: 'warning',
       link: '/general/fason',

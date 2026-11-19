@@ -98,6 +98,11 @@ export type DepartmentRequestsParams = {
   department?: string;
   priority?: string;
   requestor?: string;
+  /**
+   * material: Departman Talepleri (no fason requests); fason: the workshop
+   * fason requests (Fason Talepleri). Unset: every request (planning, approvals).
+   */
+  kind?: 'material' | 'fason';
 };
 
 /** Row as the create form sends it in the `items` JSON field. */
