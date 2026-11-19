@@ -83,6 +83,8 @@ export interface DepartmentRequest {
   updated_at?: string | null;
   planning_request_keys?: string[] | null;
   purchase_request_keys?: string[] | null;
+  /** A workshop fason request: its job on the Fason page (/general/fason?job=). */
+  fason_job_id?: number | null;
   approvals?: ApprovalWorkflow[];
   [key: string]: unknown;
 }

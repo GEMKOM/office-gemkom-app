@@ -3,6 +3,8 @@ import {
   DEPARTMENT_REQUEST_STATUS_OPTIONS,
   type DepartmentRequest,
 } from '@/api/general/departmentRequests';
+import { Anchor } from '@mantine/core';
+import { Link } from 'react-router';
 import { DetailModal, type DetailSection } from '@/ui';
 import { departmentLabel, FileAttachmentList, ItemsTable } from '../shared';
 
@@ -61,6 +63,16 @@ export function DepartmentRequestDetailModal({
               hidden: !r.planning_request_keys || r.planning_request_keys.length === 0,
             },
             { label: 'Satın Alma Talepleri', value: joinKeys(r.purchase_request_keys), span: 12 },
+            {
+              label: 'Fason İşi',
+              span: 12,
+              hidden: !r.fason_job_id,
+              render: (
+                <Anchor component={Link} to={`/general/fason?job=${r.fason_job_id}`} size="sm">
+                  Fason sayfasında takip et →
+                </Anchor>
+              ),
+            },
             { label: 'Açıklama', value: r.description, span: 12, hidden: !r.description },
           ],
         },

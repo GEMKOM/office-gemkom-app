@@ -23,7 +23,6 @@ export const PREDEFINED_PROCESS_ITEMS = [
   { code: 'F010 0000 0000 000 000', name: 'DÖKÜM İŞLEMİ', unit: 'adet' },
   { code: 'F011 0000 0000 000 001', name: 'KAYNAK AĞZI AÇMA', unit: 'adet' },
   { code: 'F012 0000 0000 000 000', name: 'MİL KESİM', unit: 'adet' },
-  { code: 'F013 0000 0000 000 000', name: 'BORWERK İŞLEMESİ', unit: 'adet' },
   { code: 'F014 0000 0000 000 000', name: 'LAZER KESİM', unit: 'adet' },
   { code: 'F015 0000 0000 000 000', name: 'İNDÜKSİYON İŞLEMİ', unit: 'adet' },
   { code: 'F016 0000 0000 000 000', name: 'KUMLAMA İŞLEMİ', unit: 'adet' },
