@@ -64,6 +64,23 @@ const SHEETS = {
   updated_at: '',
 };
 
+const BARS = {
+  ...SHEETS,
+  id: 32,
+  item: 10,
+  item_code: '0010 0114 0015 000 000',
+  item_name: 'BORU 114,3x15',
+  item_unit: 'metre',
+  category_code: '0010',
+  kind: 'boy',
+  width_mm: null,
+  length_mm: '6000.0',
+  quantity: 3,
+  available_quantity: 3,
+  unit_kg: '220.380',
+  total_kg: '661.140',
+};
+
 const JOBS = [
   {
     job_no: '',
@@ -113,7 +130,7 @@ beforeEach(() => {
         results: [job ? { ...BOLT, warehouse_code: 'IS_EMRI', job_no: job } : BOLT],
       });
     }
-    if (u.pathname === '/warehouse/pieces/') return json({ count: 1, results: [SHEETS] });
+    if (u.pathname === '/warehouse/pieces/') return json({ count: 2, results: [SHEETS, BARS] });
     if (u.pathname === '/warehouse/inventories/jobs/') return json(JOBS);
     if (u.pathname === '/projects/job-orders/dropdown/') {
       return json([
@@ -159,7 +176,7 @@ function moves() {
   );
 }
 
-it('Hammadde: ticks a card and a lot, sets both aside for a job in one move', async () => {
+it('Hammadde: ticks a card and a bar lot, sets both aside for a job; plates stay', async () => {
   renderWithProviders(
     <ModalsProvider>
       <HammaddePage />
@@ -174,7 +191,12 @@ it('Hammadde: ticks a card and a lot, sets both aside for a job in one move', as
   expect(lots.url.searchParams.get('warehouse')).toBe('HAMMADDE');
 
   expect(screen.getByRole('button', { name: 'İşe Ayır' })).toBeDisabled();
-  for (const box of screen.getAllByLabelText('Satırı seç')) fireEvent.click(box);
+  // Rows: the card, the plate lot, the bar lot. A plate never goes on a job.
+  const boxes = screen.getAllByLabelText('Satırı seç');
+  expect(boxes[1]).toBeDisabled();
+  expect(screen.getByText(/Sac İş Emri deposuna alınmaz/)).toBeInTheDocument();
+  fireEvent.click(boxes[0]!);
+  fireEvent.click(boxes[2]!);
   expect(screen.getByText('2 satır seçili')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'İşe Ayır' }));
 
@@ -187,7 +209,7 @@ it('Hammadde: ticks a card and a lot, sets both aside for a job in one move', as
   fireEvent.change(within(dialog).getByLabelText(`${BOLT.item_code} miktar`), {
     target: { value: '25' },
   });
-  fireEvent.change(within(dialog).getByLabelText('Lot 31 adet'), { target: { value: '1' } });
+  fireEvent.change(within(dialog).getByLabelText('Lot 32 adet'), { target: { value: '1' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
 
   expect(await screen.findByText('Kaynakta yeterli stok yok')).toBeInTheDocument();
@@ -205,7 +227,7 @@ it('Hammadde: ticks a card and a lot, sets both aside for a job in one move', as
     to_job_no: '254-01',
     note: '',
     lines: [{ item: 7, quantity: '25' }],
-    pieces: [{ piece: 31, quantity: 1 }],
+    pieces: [{ piece: 32, quantity: 1 }],
   });
   expect(moves()[1]!.body).toMatchObject({ allow_negative: true });
 });
@@ -255,5 +277,37 @@ it('İş Emri · Atanmamış: assigns the unassigned stock to a job, or returns 
     to_job_no: '',
     lines: [{ item: 7, quantity: '20' }],
     pieces: [],
+  });
+});
+
+it('İş Emri job: a plate already on the job only goes back to Hammadde, never to another job', async () => {
+  renderWithProviders(
+    <ModalsProvider>
+      <IsEmriPage />
+    </ModalsProvider>,
+    { route: '/warehouse/is-emri?job=254-01' },
+  );
+  expect(await screen.findByText('10 mm SAC')).toBeInTheDocument();
+  const boxes = screen.getAllByLabelText('Satırı seç');
+  // Card, plate lot, bar lot: here the plate can be ticked (for Hammaddeye İade).
+  expect(boxes[1]).not.toBeDisabled();
+  fireEvent.click(boxes[1]!);
+  fireEvent.click(boxes[2]!);
+  fireEvent.click(screen.getByRole('button', { name: 'Başka İşe Aktar' }));
+
+  const dialog = await screen.findByRole('dialog', { name: 'Başka İşe Aktar' });
+  expect(within(dialog).getByText(/1 sac lotu listeye alınmadı/)).toBeInTheDocument();
+  expect(within(dialog).queryByLabelText('Lot 31 adet')).toBeNull();
+  fireEvent.click(within(dialog).getByLabelText('Hangi işe (İş No)'));
+  fireEvent.click(await screen.findByRole('option', { name: '300-02 - Vinç', hidden: true }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(moves()).toHaveLength(1));
+  expect(moves()[0]!.body).toMatchObject({
+    from_warehouse_code: 'IS_EMRI',
+    from_job_no: '254-01',
+    to_warehouse_code: 'IS_EMRI',
+    to_job_no: '300-02',
+    lines: [],
+    pieces: [{ piece: 32, quantity: 3 }],
   });
 });

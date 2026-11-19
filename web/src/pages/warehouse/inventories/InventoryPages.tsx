@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Alert,
   Button,
   Group,
   NumberInput,
@@ -65,6 +66,10 @@ const IS_EMRI_ROUTE = '/warehouse/is-emri';
 const UNASSIGNED = '__unassigned__';
 
 const mono = { fontFamily: 'var(--gk-font-mono)' };
+
+/** Plates stay in Hammadde (backend pieces.PLATE_NOT_IN_JOB_TEXT). */
+const PLATE_NOT_IN_JOB =
+  "Sac İş Emri deposuna alınmaz; Hammadde'de tutulur. Kesime seçildiğinde maliyeti kesimdeki işlere dağıtılır.";
 
 /** Who may move cards (the backend checks the same as Depo transferi). */
 function canMoveCards(): boolean {
@@ -209,7 +214,12 @@ function MoveModal({ source, target, title, cards, lots, onClose, onDone }: Move
     Object.fromEntries(lots.map((l) => [l.id, l.quantity])),
   );
   const [cardRows, setCardRows] = useState(cards);
-  const [lotRows, setLotRows] = useState(lots);
+  // Plates never go on a job (the backend refuses them): they wait in Hammadde
+  // for a cut, whose jobs carry their cost. A job move leaves them out.
+  const leftOutPlates = target === 'job' ? lots.filter((l) => l.kind === 'plate').length : 0;
+  const [lotRows, setLotRows] = useState(() =>
+    target === 'job' ? lots.filter((l) => l.kind !== 'plate') : lots,
+  );
   const move = useMutation({
     mutationFn: moveStock,
     onSuccess: () => {
@@ -244,7 +254,11 @@ function MoveModal({ source, target, title, cards, lots, onClose, onDone }: Move
       .filter((l) => Number(lotQty[l.id]) > 0)
       .map((l) => ({ piece: l.id, quantity: Number(lotQty[l.id]) }));
     if (lines.length === 0 && pieces.length === 0) {
-      notify.warning('Taşınacak miktar girin');
+      notify.warning(
+        cardRows.length === 0 && lotRows.length === 0 && leftOutPlates
+          ? PLATE_NOT_IN_JOB
+          : 'Taşınacak miktar girin',
+      );
       return;
     }
     const tooMany = lotRows.find((l) => Number(lotQty[l.id]) > l.quantity);
@@ -311,6 +325,11 @@ function MoveModal({ source, target, title, cards, lots, onClose, onDone }: Move
       }}
     >
       <Stack gap="sm">
+        {leftOutPlates ? (
+          <Alert color="orange" variant="light" icon={<FaIcon icon="fas fa-layer-group" />}>
+            {leftOutPlates} sac lotu listeye alınmadı. {PLATE_NOT_IN_JOB}
+          </Alert>
+        ) : null}
         <Group grow align="flex-end">
           <Stack gap={2}>
             <Text size="sm" fw={500}>
@@ -511,6 +530,8 @@ function PlaceStock({
   const selectedLots = showLots ? [...lotSel.selected.values()] : [];
   const count = selectedCards.length + selectedLots.length;
   const canCards = canMoveCards();
+  // A plate can only go back to Hammadde (one already sitting on a job from before).
+  const platesCanMove = actions.some((a) => a.target === 'HAMMADDE');
 
   const filters = (
     <FilterBar
@@ -575,7 +596,9 @@ function PlaceStock({
           selection={{
             selectedIds: lotSel.ids,
             onChange: lotSel.onChange(lotRows),
-            isRowSelectable: (row) => canWriteKind(row.kind),
+            // On Hammadde (moves only go to a job) a plate cannot be picked: it stays here.
+            isRowSelectable: (row) =>
+              canWriteKind(row.kind) && (row.kind !== 'plate' || platesCanMove),
           }}
           pagination={{
             page: lotPage,
@@ -585,6 +608,11 @@ function PlaceStock({
           }}
           emptyMessage={search ? 'Bu aramayla lot yok' : 'Burada sac veya boy lotu yok'}
         />
+      ) : null}
+      {showLots && !platesCanMove && kind !== 'boy' ? (
+        <Text size="xs" c="dimmed">
+          {PLATE_NOT_IN_JOB}
+        </Text>
       ) : null}
       {moving ? (
         <MoveModal
