@@ -7,6 +7,7 @@ import type {
   PlanningRequestItemInput,
   SizeMode,
 } from '@/api/planning/planningRequests';
+import type { Item } from '@/api/procurement/items';
 import type { StatusFamily } from '@/ui';
 import { UNIT_CHOICES } from '../../general/department-requests/list/constants';
 
@@ -151,6 +152,8 @@ export interface ItemRow {
   kind?: 'plate' | 'boy' | null;
   /** The card's id when known (for the weight preview of a sized line). */
   item_id?: number | null;
+  /** A department request line with no stock card ("Kart yok"): the planner picks or opens one. */
+  no_card?: boolean;
   size_mode?: SizeMode;
   piece_width?: number | string;
   piece_length?: number | string;
@@ -192,7 +195,42 @@ export function rowsFromDepartmentRequest(request: DepartmentRequest): ItemRow[]
       job_no: str(item.job_no || raw.job_number || raw.job) || null,
       specifications: str(item.item_specifications || item.specifications || raw.specs),
       sourceIndex: index,
+      ...(typeof raw.item_id === 'number' ? { item_id: raw.item_id } : {}),
+      ...(raw.no_card === true ? { no_card: true } : {}),
     });
+  });
+}
+
+/** The codes of prefilled department request rows whose stock card is still to resolve. */
+export function unresolvedCardCodes(rows: readonly ItemRow[]): string[] {
+  return rows.filter((row) => cardPending(row)).map((row) => row.item_code.trim());
+}
+
+// A row from a department request whose card was never picked here (pickCard sets kind).
+const cardPending = (row: ItemRow) =>
+  !row.no_card && row.kind === undefined && row.item_code.trim() !== '';
+
+/**
+ * Department request rows with their found stock cards: the card's id, unit
+ * and plate / boy kind (sized lines start on a standard size), as pickCard
+ * sets them. "Kart yok" rows, codes without a card and rows already picked
+ * again stay as they are.
+ */
+export function withResolvedCards(
+  rows: readonly ItemRow[],
+  cards: ReadonlyMap<string, Item>,
+): ItemRow[] {
+  return rows.map((row) => {
+    const card = cardPending(row) ? cards.get(row.item_code.trim()) : undefined;
+    if (!card) return row;
+    const kind = pieceKindOf(card.material_class);
+    return {
+      ...row,
+      item_id: card.id,
+      kind,
+      size_mode: kind ? 'standard' : '',
+      ...(card.unit ? { item_unit: card.unit.toLowerCase() } : {}),
+    };
   });
 }
 
