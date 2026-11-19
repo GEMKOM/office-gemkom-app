@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Badge,
   Box,
   Button,
   Checkbox,
@@ -23,16 +24,35 @@ import {
   type DepartmentRequest,
   type DepartmentRequestItemInput,
 } from '@/api/general/departmentRequests';
+import {
+  cardFromSearch,
+  itemKeys,
+  lookupCardsByCode,
+  searchStockCards,
+  type Item,
+} from '@/api/procurement/items';
 import { useJobOrderOptions } from '@/api/reference';
-import { errorMessage, FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
+import {
+  errorMessage,
+  FaIcon,
+  FileDropInput,
+  FormModal,
+  ModalSection,
+  notify,
+  SelectRemote,
+} from '@/ui';
 import { FileAttachmentList, ItemsTable } from '../shared';
 import { PREDEFINED_PROCESS_ITEMS, UNIT_CHOICES } from './constants';
 import { shiftAttachTargets, type AttachTarget } from './fileItemMapping';
 
 const REQUIRED = 'Bu alan gereklidir';
+const PICK_CARD = 'Stok kartı seçin ya da "Kart yok" deyin';
+const DESCRIBE = 'Malzemeyi yazın';
 
 export interface ItemRow {
   key: number;
+  /** The picked stock card; code, name and unit come from it. */
+  item_id: number | null;
   item_code: string;
   item_name: string;
   job_no: string | null;
@@ -40,6 +60,8 @@ export interface ItemRow {
   item_unit: string | null;
   item_description: string;
   item_specifications: string;
+  /** No card fits: the material is described in words and planning opens the card. */
+  no_card: boolean;
 }
 
 export interface DepartmentRequestFormValues {
@@ -58,6 +80,7 @@ interface FileMapping {
 let nextKey = 1;
 function emptyRow(fill: Partial<ItemRow> = {}): ItemRow {
   return {
+    item_id: null,
     item_code: '',
     item_name: '',
     job_no: null,
@@ -65,9 +88,26 @@ function emptyRow(fill: Partial<ItemRow> = {}): ItemRow {
     item_unit: null,
     item_description: '',
     item_specifications: '',
+    no_card: false,
     ...fill,
     key: nextKey++,
   };
+}
+
+/** A row's card fields from a stock card. */
+export function cardFill(card: Pick<Item, 'id' | 'code' | 'name' | 'unit'>): Partial<ItemRow> {
+  return {
+    item_id: card.id,
+    item_code: card.code,
+    item_name: card.name,
+    item_unit: card.unit ? card.unit.toLowerCase() : null,
+    no_card: false,
+  };
+}
+
+/** The row a field path such as `items.2.item_code` belongs to. */
+function rowAt(values: DepartmentRequestFormValues, path: string): ItemRow | undefined {
+  return values.items[Number(path.split('.')[1])];
 }
 
 /** Legacy formatDateForInput: YYYY-MM-DD in local time, '' when not a date. */
@@ -92,9 +132,10 @@ function itemTargetLabel(row: ItemRow, index: number): string {
 }
 
 /**
- * Rows with a name become `items`; the others are skipped. `indexMap` maps a
- * form row to its position in `items`, so the file mapping still points at the
- * right item when a nameless row sits before it.
+ * Rows with a name become `items`; the others are skipped (the form's
+ * validation already stops a row with neither a card nor "Kart yok").
+ * `indexMap` maps a form row to its position in `items`, so the file mapping
+ * still points at the right item when a row is skipped.
  */
 export function buildItems(rows: ItemRow[]): {
   items: DepartmentRequestItemInput[];
@@ -108,14 +149,17 @@ export function buildItems(rows: ItemRow[]): {
     const rawQuantity = String(row.quantity ?? '').trim();
     const quantity = rawQuantity ? Number.parseInt(rawQuantity, 10) : 1;
     indexMap.set(index, items.length);
+    const card = !row.no_card && row.item_id !== null;
     items.push({
-      item_code: row.item_code.trim() || null,
+      ...(card ? { item_id: row.item_id } : {}),
+      item_code: card ? row.item_code.trim() || null : null,
       item_name: name,
       job_no: row.job_no || null,
       item_unit: row.item_unit || null,
       quantity: Number.isNaN(quantity) ? 1 : quantity,
       item_description: row.item_description.trim() || null,
       item_specifications: row.item_specifications.trim() || null,
+      ...(row.no_card ? { no_card: true } : {}),
     });
   });
   return { items, indexMap };
@@ -158,7 +202,17 @@ export function DepartmentRequestFormModal({
       needed_date: dateForInput(request?.needed_date),
       items: [],
     },
-    validate: { title: (value) => (value.trim() ? null : REQUIRED) },
+    validate: {
+      title: (value) => (value.trim() ? null : REQUIRED),
+      items: {
+        item_code: (_value, values, path) => {
+          const row = rowAt(values, path);
+          return !row || row.no_card || row.item_id !== null ? null : PICK_CARD;
+        },
+        item_name: (value, values, path) =>
+          rowAt(values, path)?.no_card && !value.trim() ? DESCRIBE : null,
+      },
+    },
   });
   const [files, setFiles] = useState<FileMapping[]>([]);
   const create = useCreateDepartmentRequest();
@@ -182,6 +236,34 @@ export function DepartmentRequestFormModal({
   const rows = form.values.items;
 
   const addRow = (fill?: Partial<ItemRow>) => form.insertListItem('items', emptyRow(fill));
+  /** A card picked on a row (or cleared): code, name and unit follow the card. */
+  const pickCard = (index: number, code: string | null) => {
+    const card = code ? cardFromSearch(code) : undefined;
+    form.setFieldValue(`items.${index}.item_id`, card?.id ?? null);
+    form.setFieldValue(`items.${index}.item_code`, card?.code ?? '');
+    form.setFieldValue(`items.${index}.item_name`, card?.name ?? '');
+    form.setFieldValue(`items.${index}.item_unit`, card?.unit ? card.unit.toLowerCase() : null);
+  };
+  /** "Kart yok": the row is described in words; "Kart ara" goes back to the search. */
+  const setNoCard = (index: number, noCard: boolean) => {
+    form.setFieldValue(`items.${index}.no_card`, noCard);
+    form.setFieldValue(`items.${index}.item_id`, null);
+    form.setFieldValue(`items.${index}.item_code`, '');
+    form.setFieldValue(`items.${index}.item_name`, '');
+    form.setFieldValue(`items.${index}.item_unit`, noCard ? 'adet' : null);
+    form.clearFieldError(`items.${index}.item_code`);
+    form.clearFieldError(`items.${index}.item_name`);
+  };
+  /** "Hazır Ürün Ekle": the preset's stock card, found by its code. */
+  const addPreset = async (preset: (typeof PREDEFINED_PROCESS_ITEMS)[number]) => {
+    try {
+      const card = (await lookupCardsByCode([preset.code])).get(preset.code);
+      if (card) addRow(cardFill(card));
+      else notify.warning(`${preset.name} için stok kartı bulunamadı; kod veya ad ile arayın.`);
+    } catch (error) {
+      notify.error(`Stok kartı aranırken hata oluştu: ${errorMessage(error)}`);
+    }
+  };
   const duplicateRow = (index: number) => {
     const source = rows[index];
     if (source) addRow({ ...source });
@@ -359,10 +441,9 @@ export function DepartmentRequestFormModal({
                   data={predefinedData}
                   value={null}
                   onChange={(value) => {
-                    const item =
+                    const preset =
                       value === null ? undefined : PREDEFINED_PROCESS_ITEMS[Number(value)];
-                    if (item)
-                      addRow({ item_code: item.code, item_name: item.name, item_unit: item.unit });
+                    if (preset) void addPreset(preset);
                   }}
                 />
                 <Button
@@ -388,13 +469,13 @@ export function DepartmentRequestFormModal({
             {rows.length > 0 ? (
               <Grid columns={24} gap="xs" visibleFrom="md">
                 {[
-                  ['Ürün Kodu', 3],
+                  ['Stok Kartı *', 6],
                   ['Ürün Adı', 4],
                   ['İş No', 4],
                   ['Miktar', 2],
-                  ['Birim', 3],
-                  ['Ürün Açıklaması', 3],
-                  ['Özellikler', 3],
+                  ['Birim', 2],
+                  ['Ürün Açıklaması', 2],
+                  ['Özellikler', 2],
                   ['İşlem', 2],
                 ].map(([label, span]) => (
                   <Grid.Col key={label} span={span as number}>
@@ -408,19 +489,68 @@ export function DepartmentRequestFormModal({
 
             {rows.map((row, index) => (
               <Grid key={row.key} columns={24} gap="xs" data-testid="item-row">
-                <Grid.Col span={{ base: 12, md: 3 }}>
-                  <TextInput
-                    size="xs"
-                    placeholder="Ürün kodu"
-                    aria-label={`Ürün kodu ${index + 1}`}
-                    {...form.getInputProps(`items.${index}.item_code`)}
-                  />
+                <Grid.Col span={{ base: 24, md: 6 }}>
+                  {row.no_card ? (
+                    <Group gap={6} wrap="nowrap" h="100%">
+                      <Tooltip
+                        label="Planlama bu malzeme için stok kartı açacak"
+                        withArrow
+                        multiline
+                        w={240}
+                      >
+                        <Badge color="orange" variant="light" size="lg" radius="sm">
+                          Kart yok
+                        </Badge>
+                      </Tooltip>
+                      <Button
+                        size="compact-xs"
+                        variant="subtle"
+                        leftSection={<FaIcon icon="fas fa-search" />}
+                        aria-label={`Kart ara ${index + 1}`}
+                        onClick={() => setNoCard(index, false)}
+                      >
+                        Kart ara
+                      </Button>
+                    </Group>
+                  ) : (
+                    <Group gap={4} wrap="nowrap">
+                      <Box style={{ flex: 1, minWidth: 0 }}>
+                        <SelectRemote
+                          size="xs"
+                          aria-label={`Ürün kodu ${index + 1}`}
+                          placeholder="Kod veya ad ile ara…"
+                          minSearchLength={2}
+                          queryKey={itemKeys.search}
+                          search={searchStockCards}
+                          initialOptions={
+                            row.item_code ? [{ value: row.item_code, label: row.item_code }] : []
+                          }
+                          comboboxProps={{ width: 560, position: 'bottom-start' }}
+                          value={row.item_code || null}
+                          onChange={(value) => pickCard(index, value)}
+                          error={form.errors[`items.${index}.item_code`]}
+                        />
+                      </Box>
+                      <Tooltip label="Uygun stok kartı yok: malzemeyi yazın" withArrow>
+                        <ActionIcon
+                          size="sm"
+                          variant="default"
+                          aria-label={`Kart yok ${index + 1}`}
+                          onClick={() => setNoCard(index, true)}
+                        >
+                          <FaIcon icon="fas fa-question" />
+                        </ActionIcon>
+                      </Tooltip>
+                    </Group>
+                  )}
                 </Grid.Col>
                 <Grid.Col span={{ base: 12, md: 4 }}>
                   <TextInput
                     size="xs"
-                    placeholder="Ürün adı"
+                    placeholder={row.no_card ? 'Malzemeyi tarif edin' : 'Kart seçilince dolar'}
                     aria-label={`Ürün adı ${index + 1}`}
+                    // The card's name; typed only when there is no card.
+                    readOnly={!row.no_card}
                     {...form.getInputProps(`items.${index}.item_name`)}
                   />
                 </Grid.Col>
@@ -447,25 +577,35 @@ export function DepartmentRequestFormModal({
                     {...form.getInputProps(`items.${index}.quantity`)}
                   />
                 </Grid.Col>
-                <Grid.Col span={{ base: 16, md: 3 }}>
-                  <Select
-                    size="xs"
-                    placeholder="Birim Seçin"
-                    aria-label={`Birim ${index + 1}`}
-                    clearable
-                    data={unitData}
-                    {...form.getInputProps(`items.${index}.item_unit`)}
-                  />
+                <Grid.Col span={{ base: 16, md: 2 }}>
+                  {row.no_card ? (
+                    <Select
+                      size="xs"
+                      placeholder="Birim Seçin"
+                      aria-label={`Birim ${index + 1}`}
+                      allowDeselect={false}
+                      data={unitData}
+                      {...form.getInputProps(`items.${index}.item_unit`)}
+                    />
+                  ) : (
+                    <TextInput
+                      size="xs"
+                      placeholder="Karttan"
+                      aria-label={`Birim ${index + 1}`}
+                      readOnly
+                      value={row.item_unit ?? ''}
+                    />
+                  )}
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
+                <Grid.Col span={{ base: 12, md: 2 }}>
                   <TextInput
                     size="xs"
-                    placeholder="Ürün açıklaması"
+                    placeholder={row.no_card ? 'Planlamaya not' : 'Ürün açıklaması'}
                     aria-label={`Ürün açıklaması ${index + 1}`}
                     {...form.getInputProps(`items.${index}.item_description`)}
                   />
                 </Grid.Col>
-                <Grid.Col span={{ base: 12, md: 3 }}>
+                <Grid.Col span={{ base: 12, md: 2 }}>
                   <TextInput
                     size="xs"
                     placeholder="Özellikler"
