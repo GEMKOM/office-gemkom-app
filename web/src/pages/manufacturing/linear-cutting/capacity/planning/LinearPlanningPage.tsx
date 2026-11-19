@@ -16,7 +16,7 @@ import {
   type LinearCuttingTask,
 } from '@/api/manufacturing/linearCutting';
 import { machinesQueryOptions } from '@/api/reference/machines';
-import { formatDateTime } from '@/lib/format';
+import { barMetres, formatDateTime } from '@/lib/format';
 import {
   confirm,
   DataTable,
@@ -98,7 +98,11 @@ function linearSections(task: LinearCuttingTask): DetailSection[] {
         },
         { label: 'Bar', value: task.bar_index, type: 'number', span: 2 },
         { label: 'Malzeme', value: task.item_name || task.material || '-', span: 4 },
-        { label: 'Stok (mm)', value: task.stock_length_mm, type: 'number', span: 3 },
+        {
+          label: 'Stok',
+          value: task.stock_length_mm != null ? barMetres(task.stock_length_mm) : null,
+          span: 3,
+        },
         { label: 'Fire (mm)', value: task.waste_mm, type: 'number', span: 3 },
       ],
     },

@@ -6,6 +6,7 @@ import {
 import { Group, Portal, Table, Text } from '@mantine/core';
 import { useEffect, useMemo, useRef } from 'react';
 import type { LinearCuttingTask, LinearPass } from '@/api/manufacturing/linearCutting';
+import { barMetres } from '@/lib/format';
 import { FaIcon, StatusBadge } from '@/ui';
 import classes from './BarDiagram.module.css';
 
@@ -146,7 +147,7 @@ export function BarLayout({ task }: { task: LinearCuttingTask }) {
             Bar #{task.bar_index ?? '—'}
             {task.is_remnant_bar ? <StatusBadge color="yellow">Artık Bar</StatusBadge> : null}
             <Text span c="dimmed" fw={500} fz="sm">
-              ({task.stock_length_mm ?? '—'} mm)
+              ({task.stock_length_mm != null ? barMetres(task.stock_length_mm) : '—'})
             </Text>
           </Group>
           <span className={classes.meta}>

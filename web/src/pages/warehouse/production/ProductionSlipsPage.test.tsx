@@ -226,7 +226,8 @@ it("returns from the job's handed-over lines: by quantity, and bars by length ×
   expect(notify.warning).toHaveBeenCalledWith('İş numarası seçin');
 
   await pickJob(dialog, '254-01 - Pres Hattı');
-  expect(await within(dialog).findByText('6000 mm × 2 boy')).toBeInTheDocument();
+  // Bars read in metres, never mm.
+  expect(await within(dialog).findByText('6 m × 2 boy')).toBeInTheDocument();
   expect(within(dialog).getByText('Tamamı iade edildi')).toBeInTheDocument();
   expect(within(dialog).getByText('En fazla 5 adet')).toBeInTheDocument();
 
@@ -237,15 +238,16 @@ it("returns from the job's handed-over lines: by quantity, and bars by length ×
   fireEvent.change(within(dialog).getByLabelText('0018 0012 0040 000 001 iade miktarı'), {
     target: { value: '2' },
   });
-  // The pipe: the picked length is filled; one full bar and a 2500 mm piece come back.
+  // The pipe: the picked length is filled (in metres); one full bar and a 2,5 m piece come back.
   const pipe = '0010 0114 0015 000 000';
-  expect(within(dialog).getByLabelText(`${pipe} boy 1 uzunluk`)).toHaveValue('6000 mm');
+  expect(within(dialog).getByLabelText(`${pipe} boy 1 uzunluk`)).toHaveValue('6 m');
   fireEvent.change(within(dialog).getByLabelText(`${pipe} boy 1 adet`), {
     target: { value: '1' },
   });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Başka boy' }));
+  // Typed in metres with a comma; sent in mm.
   fireEvent.change(within(dialog).getByLabelText(`${pipe} boy 2 uzunluk`), {
-    target: { value: '2500' },
+    target: { value: '2,5' },
   });
   fireEvent.change(within(dialog).getByLabelText(`${pipe} boy 2 adet`), {
     target: { value: '1' },
@@ -290,7 +292,7 @@ it('says so when the job has nothing handed over', async () => {
 it("shows a return's request and the bars that came back", async () => {
   renderPage('/warehouse/production-slips?fis=4');
   expect(await screen.findByTestId('returned-bars')).toHaveTextContent(
-    '6000 mm × 1 boy · 2500 mm × 1 boy',
+    '6 m × 1 boy · 2,5 m × 1 boy',
   );
   const dialog = screen.getByRole('dialog');
   expect(within(dialog).getAllByText('DCT-2026-0005')).toHaveLength(2);

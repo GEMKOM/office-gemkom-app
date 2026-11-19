@@ -1,4 +1,15 @@
-import { Button, Grid, Group, Modal, Stack, Table, Text, TextInput, Textarea } from '@mantine/core';
+import {
+  Button,
+  Grid,
+  Group,
+  Modal,
+  NumberInput,
+  Stack,
+  Table,
+  Text,
+  TextInput,
+  Textarea,
+} from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { z } from 'zod';
@@ -8,6 +19,7 @@ import {
   type LinearCuttingSession,
   type LinearStockBar,
 } from '@/api/manufacturing/linearCuttingSessions';
+import { BAR_METRES_INPUT, barMetres, metresToMm } from '@/lib/format';
 import {
   FaIcon,
   FormModal,
@@ -22,7 +34,8 @@ import { castNumber } from './partRows';
 
 const createSchema = z.object({
   title: z.string().refine((v) => v.trim() !== '', 'Başlık zorunludur.'),
-  stock_length_mm: z.string(),
+  // The stock bar's length in metres (bars read in metres, never mm); sent in mm.
+  stock_m: z.union([z.string(), z.number()]),
   kerf_mm: z.string(),
   notes: z.string(),
 });
@@ -38,7 +51,7 @@ export function CreatePlanModal({
   onCreated: (session: LinearCuttingSession) => void;
 }) {
   const form = useForm<CreateValues>({
-    initialValues: { title: '', stock_length_mm: '6000', kerf_mm: '3', notes: '' },
+    initialValues: { title: '', stock_m: 6, kerf_mm: '3', notes: '' },
     validate: zod4Resolver(createSchema),
   });
 
@@ -46,7 +59,7 @@ export function CreatePlanModal({
     try {
       const created = await createLinearSession({
         title: values.title.trim(),
-        stock_length_mm: castNumber(values.stock_length_mm, 6000),
+        stock_length_mm: castNumber(metresToMm(values.stock_m), 6000),
         kerf_mm: castNumber(values.kerf_mm, 3),
         notes: values.notes || '',
         parts_data: [],
@@ -81,12 +94,7 @@ export function CreatePlanModal({
             />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6 }}>
-            <TextInput
-              label="Stok Boyu (mm)"
-              type="number"
-              min={1}
-              {...form.getInputProps('stock_length_mm')}
-            />
+            <NumberInput label="Stok Boyu (m)" {...BAR_METRES_INPUT} {...form.getInputProps('stock_m')} />
           </Grid.Col>
           <Grid.Col span={{ base: 12, sm: 6 }}>
             <TextInput label="Kerf (mm)" type="number" min={0} {...form.getInputProps('kerf_mm')} />
@@ -221,7 +229,7 @@ export function StockBarsModal({
                     <Table.Th>#</Table.Th>
                     <Table.Th>Malzeme Kodu</Table.Th>
                     <Table.Th>Malzeme</Table.Th>
-                    <Table.Th ta="right">Boy (mm)</Table.Th>
+                    <Table.Th ta="right">Boy (m)</Table.Th>
                     <Table.Th ta="right">Adet</Table.Th>
                     <Table.Th>Birim</Table.Th>
                     <Table.Th>Beyan Eden</Table.Th>
@@ -233,7 +241,7 @@ export function StockBarsModal({
                       <Table.Td>{i + 1}</Table.Td>
                       <Table.Td>{bar.item_code || '-'}</Table.Td>
                       <Table.Td>{bar.item_name || '-'}</Table.Td>
-                      <Table.Td ta="right">{bar.length_mm ?? '-'}</Table.Td>
+                      <Table.Td ta="right">{barMetres(bar.length_mm)}</Table.Td>
                       <Table.Td ta="right">{bar.quantity ?? '-'}</Table.Td>
                       <Table.Td>{bar.item_unit || '-'}</Table.Td>
                       <Table.Td>{bar.declared_by_username || '-'}</Table.Td>

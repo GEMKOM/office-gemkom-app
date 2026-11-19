@@ -28,7 +28,14 @@ import {
   type ReturnableLine,
 } from '@/api/warehouse/productionSlips';
 import { hasPerm, isAdmin } from '@/auth/authService';
-import { formatDateTime, formatNumber } from '@/lib/format';
+import {
+  BAR_METRES_INPUT,
+  barMetres,
+  formatDateTime,
+  formatNumber,
+  metresToMm,
+  mmToMetres,
+} from '@/lib/format';
 import {
   confirm,
   DataTable,
@@ -116,17 +123,17 @@ const columns: DataTableColumn<ProductionSlip>[] = [
   },
 ];
 
-const mm = (value: string | number | null | undefined) => String(Number(value ?? 0));
 /** A quantity without trailing zeros: "5", "8,5". */
 const qty = (value: string | number) => formatNumber(value, { maximumFractionDigits: 3 });
 
-/** "6000 mm × 2 boy · 2500 mm × 1 boy" */
+/** "6 m × 2 boy · 2,5 m × 1 boy" (bars read in metres, never mm). */
 export function barsText(bars: { length_mm: string | number | null; quantity: number }[]): string {
-  return bars.map((b) => `${mm(b.length_mm)} mm × ${b.quantity} boy`).join(' · ');
+  return bars.map((b) => `${barMetres(b.length_mm ?? 0)} × ${b.quantity} boy`).join(' · ');
 }
 
 interface BarDraft {
   key: number;
+  /** In metres, as typed ("2,5"); sent in mm. */
   length: string | number;
   count: string | number;
 }
@@ -144,18 +151,18 @@ const takesBars = (line: ReturnableLine) => line.is_bar && line.pieces.length > 
 function emptyDraft(line: ReturnableLine): LineDraft {
   return {
     quantity: '',
-    bars: [{ key: nextKey++, length: Number(line.pieces[0]?.length_mm ?? '') || '', count: '' }],
+    bars: [{ key: nextKey++, length: mmToMetres(line.pieces[0]?.length_mm) || '', count: '' }],
   };
 }
 
 const filledBars = (draft: LineDraft | undefined) =>
-  (draft?.bars ?? []).filter((b) => Number(b.length) > 0 && Number(b.count) > 0);
+  (draft?.bars ?? []).filter((b) => Number(metresToMm(b.length)) > 0 && Number(b.count) > 0);
 
 /** What the bars come to in the card's unit, when that is plain (metre / adet). */
 function barsAmount(line: ReturnableLine, bars: BarDraft[]): string {
   if (bars.length === 0) return '';
   if (line.item_unit === 'metre') {
-    const metres = bars.reduce((t, b) => t + (Number(b.length) * Number(b.count)) / 1000, 0);
+    const metres = bars.reduce((t, b) => t + Number(metresToMm(b.length)) * Number(b.count), 0) / 1000;
     return `${qty(metres)} m`;
   }
   if (line.item_unit === 'adet') {
@@ -183,9 +190,8 @@ function BarsInput({
           <NumberInput
             size="xs"
             w={100}
-            min={0}
-            hideControls
-            suffix=" mm"
+            {...BAR_METRES_INPUT}
+            suffix=" m"
             aria-label={`${line.item_code} boy ${index + 1} uzunluk`}
             value={bar.length}
             onChange={(value) => set(bar.key, { length: value })}
@@ -279,7 +285,10 @@ function NewReturnModal({ onClose }: { onClose: () => void }) {
         if (bars.length > 0) {
           payload.push({
             pull_item: line.id,
-            pieces: bars.map((b) => ({ length_mm: String(b.length), quantity: Number(b.count) })),
+            pieces: bars.map((b) => ({
+              length_mm: String(metresToMm(b.length)),
+              quantity: Number(b.count),
+            })),
           });
         }
       } else if (Number(draft?.quantity) > 0) {

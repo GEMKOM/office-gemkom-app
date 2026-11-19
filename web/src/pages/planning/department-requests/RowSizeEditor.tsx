@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { standardSizesQueryOptions } from '@/api/planning/planningRequests';
 import { missingWeightText, previewWeight } from '@/api/warehouse/pieces';
-import { formatNumber } from '@/lib/format';
+import { barMetres, formatNumber } from '@/lib/format';
 import { FaIcon } from '@/ui';
 import type { ItemRow } from './logic';
 
@@ -22,14 +22,6 @@ type Patch = Partial<Pick<ItemRow, 'size_mode' | 'piece_width' | 'piece_length' 
 const CUSTOM = '__custom';
 
 const kg = (value: number) => `${formatNumber(value, 2)} kg`;
-
-/**
- * A bar length in metres ("6 m", "2,5 m"). Bars are ordered in metres: a length
- * in mm next to a quantity in metres invites ordering 500 m of pipe instead of
- * 500 mm. The line still stores the length in mm (piece_length).
- */
-export const barMetres = (lengthMm: number) =>
-  `${String(Number((lengthMm / 1000).toFixed(3))).replace('.', ',')} m`;
 
 export interface SizeTotals {
   /** Every size field filled in. */

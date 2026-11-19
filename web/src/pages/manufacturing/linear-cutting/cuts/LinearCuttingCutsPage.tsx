@@ -1,4 +1,15 @@
-import { Alert, Badge, Button, Grid, Group, Loader, Select, Text, TextInput } from '@mantine/core';
+import {
+  Alert,
+  Badge,
+  Button,
+  Grid,
+  Group,
+  Loader,
+  NumberInput,
+  Select,
+  Text,
+  TextInput,
+} from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router';
@@ -21,6 +32,7 @@ import {
   type LinearCuttingSession,
   type LinearOptimizationResult,
 } from '@/api/manufacturing/linearCuttingSessions';
+import { BAR_METRES_INPUT, metresToMm, mmToMetres } from '@/lib/format';
 import { confirm, FaIcon, notify, PageHeader, Panel } from '@/ui';
 import { ConfirmResultModal, CreatePlanModal, StockBarsModal } from './CutsModals';
 import { EmptyState, OptimizationResult } from './OptimizationResult';
@@ -37,7 +49,8 @@ import { PartsTable } from './PartsTable';
 
 interface PlanDetails {
   title: string;
-  stock: string;
+  /** The stock bar's length in metres (bars read in metres, never mm); sent in mm. */
+  stock: string | number;
   kerf: string;
   notes: string;
 }
@@ -45,7 +58,7 @@ interface PlanDetails {
 function planDetails(session: LinearCuttingSession): PlanDetails {
   return {
     title: session.title || '',
-    stock: session.stock_length_mm != null ? String(session.stock_length_mm) : '',
+    stock: mmToMetres(session.stock_length_mm),
     kerf: String(Number(session.kerf_mm ?? 0) || ''),
     notes: session.notes || '',
   };
@@ -171,7 +184,7 @@ export function LinearCuttingCutsPage() {
     try {
       const saved = await patchLinearSession(sessionKey, {
         title: details.title,
-        stock_length_mm: castNumber(details.stock, 6000),
+        stock_length_mm: castNumber(metresToMm(details.stock), 6000),
         kerf_mm: castNumber(details.kerf, 3),
         notes: details.notes,
       });
@@ -202,7 +215,7 @@ export function LinearCuttingCutsPage() {
     setBusy('optimize');
     try {
       const res = await optimizeLinearSession(sessionKey, {
-        stock_length_mm: castNumber(details.stock, null),
+        stock_length_mm: castNumber(metresToMm(details.stock), null),
         kerf_mm: castNumber(details.kerf, null),
       });
       setOptimized({ key: sessionKey, result: res, at: Date.now() });
@@ -531,12 +544,11 @@ export function LinearCuttingCutsPage() {
                 />
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 3 }}>
-                <TextInput
-                  label="Stok Boyu (mm)"
-                  type="number"
-                  min={1}
+                <NumberInput
+                  label="Stok Boyu (m)"
+                  {...BAR_METRES_INPUT}
                   value={details.stock}
-                  onChange={(e) => setDetails({ ...details, stock: e.currentTarget.value })}
+                  onChange={(value) => setDetails({ ...details, stock: value })}
                 />
               </Grid.Col>
               <Grid.Col span={{ base: 12, md: 3 }}>

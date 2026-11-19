@@ -3,7 +3,12 @@ import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { CncPlateStockPage, WarehouseBarStockPage, WarehousePlateStockPage } from './PiecesPage';
+import {
+  changeLines,
+  CncPlateStockPage,
+  WarehouseBarStockPage,
+  WarehousePlateStockPage,
+} from './PiecesPage';
 
 let warehouseUser = true;
 // "Page: /route/" grants of the signed-in user (a planner's Kesimler page).
@@ -103,8 +108,43 @@ const CARDS = [
     kg: '125.600',
   },
 ];
+// A pipe: bars read and are typed in metres, never mm (stored in mm).
+const BAR_LOT = {
+  ...LOT_BASE,
+  id: 2,
+  item: 20,
+  item_code: '0010 0114 0015 000 000',
+  item_name: '114,3*15 BORU',
+  item_unit: 'metre',
+  category_code: '0010',
+  kind: 'boy',
+  origin: 'manual',
+  origin_label: 'Elle giriş',
+  width_mm: null,
+  length_mm: '6000.0',
+  quantity: 3,
+  unit_kg: '231.000',
+  total_kg: '693.000',
+};
+const BAR_CARD = {
+  ...CARD_BASE,
+  id: 20,
+  code: BAR_LOT.item_code,
+  name: BAR_LOT.item_name,
+  unit: 'metre',
+  category_code: '0010',
+  category_name: 'Boru',
+  kind: 'boy',
+  kg_per_m: '38.500',
+  plate_thickness_mm: null,
+  missing: '',
+  pieces: 3,
+  lots: 1,
+  kg: '693.000',
+};
 
 let lots: unknown[] = [];
+let cards: unknown[] = CARDS;
 const CHANGE = {
   id: 1,
   piece: 2,
@@ -135,6 +175,7 @@ beforeEach(() => {
   warehouseUser = true;
   grantedPages = [];
   lots = [NO_WEIGHT_LOT, WEIGHED_LOT];
+  cards = CARDS;
   fetchMock.mockReset();
   fetchMock.mockImplementation((url, init) => {
     const method = init?.method ?? 'GET';
@@ -144,7 +185,8 @@ beforeEach(() => {
     }
     if (method === 'GET' && u.pathname === '/warehouse/pieces/cards/') {
       const search = (u.searchParams.get('search') ?? '').toUpperCase();
-      return json({ count: 2, results: CARDS.filter((c) => !search || c.name.includes(search)) });
+      const rows = (cards as typeof CARDS).filter((c) => !search || c.name.includes(search));
+      return json({ count: rows.length, results: rows });
     }
     if (method === 'POST' && u.pathname === '/warehouse/pieces/weight-preview/') {
       return json({
@@ -432,6 +474,72 @@ it('Boy Stoğu asks only for bars', async () => {
         .url.searchParams.get('kind'),
     ).toBe('boy');
   }
+});
+
+describe('Boy Stoğu reads and takes bar lengths in metres', () => {
+  beforeEach(() => {
+    lots = [BAR_LOT];
+    cards = [BAR_CARD];
+  });
+
+  it('lists a bar lot as "6 m" and filters its length in metres', async () => {
+    renderPage(
+      '/warehouse/bar-stock?min_length=2.5&max_length=6',
+      <WarehouseBarStockPage />,
+    );
+    expect(await screen.findByText('6 m')).toBeInTheDocument();
+    expect(screen.queryByText(/6000 mm/)).not.toBeInTheDocument();
+    const p = calls().find(
+      (c) => c.url.pathname === '/warehouse/pieces/' && c.url.searchParams.get('min_length_mm'),
+    )!.url.searchParams;
+    expect([p.get('min_length_mm'), p.get('max_length_mm')]).toEqual(['2500', '6000']);
+  });
+
+  it('adds bars with the length typed in metres ("2,5" sends 2500 mm)', async () => {
+    renderPage('/warehouse/bar-stock', <WarehouseBarStockPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Parça Ekle' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Parça Ekle' });
+    const picker = within(dialog).getByLabelText('Stok kartı');
+    picker.focus();
+    fireEvent.change(picker, { target: { value: 'boru' } });
+    fireEvent.click(await screen.findByRole('option', { name: /114,3\*15 BORU/, hidden: true }));
+    expect(within(dialog).queryByLabelText('Boy (mm)')).not.toBeInTheDocument();
+    fireEvent.change(within(dialog).getByLabelText('Boy (m)'), { target: { value: '2,5' } });
+    fireEvent.change(within(dialog).getByLabelText('Adet'), { target: { value: '2' } });
+    await waitFor(() =>
+      expect(
+        calls().find((c) => c.url.pathname === '/warehouse/pieces/weight-preview/')?.body,
+      ).toMatchObject({ item: 20, width_mm: null, length_mm: '2500' }),
+    );
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(notify.success).toHaveBeenCalled());
+    const post = calls().find(
+      (c) => c.method === 'POST' && c.url.pathname === '/warehouse/pieces/',
+    );
+    expect(post!.body).toMatchObject({ item: 20, quantity: 2, width_mm: null, length_mm: '2500' });
+  });
+
+  it('corrects a bar lot length in metres', async () => {
+    renderPage('/warehouse/bar-stock?piece=2', <WarehouseBarStockPage />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Düzenle' }));
+    const dialog = await screen.findByRole('dialog', { name: /Lotu Düzenle/ });
+    expect(within(dialog).getByLabelText('Boy (m)')).toHaveValue('6');
+    fireEvent.change(within(dialog).getByLabelText('Boy (m)'), { target: { value: '5,5' } });
+    fireEvent.change(within(dialog).getByLabelText(/Açıklama/), { target: { value: 'Ölçüldü' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+    await waitFor(() => expect(notify.success).toHaveBeenCalled());
+    expect(calls().find((c) => c.method === 'PATCH')!.body).toMatchObject({
+      length_mm: '5500',
+      change_note: 'Ölçüldü',
+    });
+    expect(calls().find((c) => c.method === 'PATCH')!.body).not.toHaveProperty('width_mm');
+  });
+
+  it("says a bar's size correction in metres in the lot history", () => {
+    const change = { ...CHANGE, changes: { length_mm: ['6000', '5500'] as [string, string] } };
+    expect(changeLines(change, 'boy')).toEqual(['Boy: 6 m → 5,5 m']);
+    expect(changeLines(change, 'plate')).toEqual(['Boy (mm): 6000 → 5500']);
+  });
 });
 
 it('the planning Sac Stoğu is the same page, back to CNC Kesim', async () => {

@@ -26,7 +26,7 @@ import {
 import type { JobOrder } from '@/api/projects/jobOrders';
 import { machinesQueryOptions } from '@/api/reference/machines';
 import { useAuth } from '@/auth/AuthProvider';
-import { formatDate, formatNumber, toNumber } from '@/lib/format';
+import { barMetres, formatDate, formatNumber, toNumber } from '@/lib/format';
 import { PageHeader, StatusBadge, type PageFigure } from '@/ui';
 import { useDepartmentTaskFigures } from '../hub/departmentTasks';
 import { countFigure, countValue, type CountQuery } from '../hubCount';
@@ -473,7 +473,8 @@ function linearRow(task: LinearCuttingTask): LaneRow {
     lead: task.key,
     main: task.item_name || task.name || task.material || '-',
     sub: task.session_title || task.session || undefined,
-    cells: [length ? `${formatNumber(length)} mm` : '-', est ? hours(est) : '-'],
+    // The stock bar's length, in metres like every bar length.
+    cells: [length ? barMetres(length) : '-', est ? hours(est) : '-'],
   };
 }
 

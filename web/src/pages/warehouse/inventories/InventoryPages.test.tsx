@@ -185,6 +185,9 @@ it('Hammadde: ticks a card and a bar lot, sets both aside for a job; plates stay
   );
   expect(await screen.findByText('CİVATA M12x40')).toBeInTheDocument();
   expect(await screen.findByText('10 mm SAC')).toBeInTheDocument();
+  // A plate lot reads in mm, a bar lot in metres (never "6000 mm").
+  expect(screen.getByText('1500 × 3000 mm')).toBeInTheDocument();
+  expect(screen.getByText('6 m')).toBeInTheDocument();
   const balances = calls().find((c) => c.url.pathname === '/warehouse/stock-balances/')!;
   expect(balances.url.searchParams.get('warehouse__code')).toBe('HAMMADDE');
   const lots = calls().find((c) => c.url.pathname === '/warehouse/pieces/')!;

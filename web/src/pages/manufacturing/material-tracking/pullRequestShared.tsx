@@ -10,7 +10,7 @@ import {
   type MaterialPullRequestItem,
 } from '@/api/materialTracking/pullRequests';
 import { hasPerm, type AuthUser } from '@/auth/authService';
-import { formatDateTime } from '@/lib/format';
+import { barMetres, formatDateTime } from '@/lib/format';
 import {
   confirm,
   DetailModal,
@@ -142,7 +142,7 @@ export function useCancelPullRequestFlow() {
   };
 }
 
-/** A bar line's bars from the job's İş Emri stock: "6000 mm × 2 boy · 4000 mm × 1 boy". */
+/** A bar line's bars from the job's İş Emri stock: "6 m × 2 boy · 4 m × 1 boy". */
 function PulledBars({ item }: { item: MaterialPullRequestItem }) {
   if (!item.pieces?.length) return null;
   return (
@@ -150,7 +150,7 @@ function PulledBars({ item }: { item: MaterialPullRequestItem }) {
       {item.pieces
         .map(
           (p) =>
-            `${String(Number(p.length_mm))} mm × ${p.quantity} boy` +
+            `${barMetres(p.length_mm)} × ${p.quantity} boy` +
             (p.heat_number ? ` (döküm ${p.heat_number})` : ''),
         )
         .join(' · ')}

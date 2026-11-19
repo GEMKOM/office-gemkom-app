@@ -16,6 +16,7 @@ import {
 } from '@mantine/core';
 import { Fragment, useState, type ReactNode } from 'react';
 import { searchOpenJobOrders, searchStockItems } from '@/api/manufacturing/linearCuttingSessions';
+import { barMetres, metresToMm } from '@/lib/format';
 import { FaIcon, SelectRemote } from '@/ui';
 import classes from './cuts.module.css';
 import {
@@ -39,7 +40,7 @@ export interface PartsTableProps {
   /** The saved row in inline edit, if any. */
   editingId: string | null;
   savingId: string | null;
-  /** The plan's stock length, the placeholder of the Stok (mm) inputs. */
+  /** The plan's stock length (mm), the placeholder of the Stok (m) inputs. */
   sessionStockMm?: number | null;
   onChange: (row: PartRow) => void;
   onEdit: (row: PartRow) => void;
@@ -55,7 +56,7 @@ type TextField =
   | 'profile_height_mm'
   | 'label'
   | 'image_no'
-  | 'stock_length_mm'
+  | 'stock_m'
   | 'nominal_length_mm'
   | 'quantity';
 
@@ -63,10 +64,14 @@ type TextField =
 // before the request goes out (see INTEGER_MM_FIELDS).
 const STEP: Partial<Record<TextField, string>> = {
   profile_height_mm: '1',
-  stock_length_mm: '1',
+  // A bar's stock length is typed in metres (rounded to whole mm when sent).
+  stock_m: '0.001',
   quantity: '1',
   nominal_length_mm: '0.01',
 };
+
+/** A part's stock override as it reads: "6,5 m". */
+const stockText = (row: PartRow) => barMetres(metresToMm(row.stock_m));
 
 function Dash({ center = false }: { center?: boolean }) {
   return (
@@ -387,7 +392,7 @@ export function PartsTable({
             <Table.Th w={stockOpen ? 110 : 40} ta="center">
               {stockOpen ? (
                 <Group gap={4} justify="center" wrap="nowrap">
-                  Stok (mm)
+                  Stok (m)
                   <ActionIcon
                     size="xs"
                     variant="subtle"
@@ -402,8 +407,8 @@ export function PartsTable({
                 <ActionIcon
                   size="xs"
                   variant="subtle"
-                  aria-label="Stok boyu (mm) sütununu genişlet"
-                  title="Stok boyu (mm) sütununu genişlet — özel durumlarda bar boyu satır bazında değiştirilebilir"
+                  aria-label="Stok boyu (m) sütununu genişlet"
+                  title="Stok boyu (m) sütununu genişlet — özel durumlarda bar boyu satır bazında değiştirilebilir"
                   onClick={() => setStockOpen(true)}
                 >
                   <FaIcon icon="fas fa-ruler-horizontal" />
@@ -456,7 +461,7 @@ export function PartsTable({
             const geomOpen = openGeom.has(row.rowId);
             const derived = row.setback_left_mm != null || row.setback_right_mm != null;
             const saving = savingId === row.rowId;
-            const stockPh = sessionStockMm ? `Varsayılan: ${sessionStockMm}` : '';
+            const stockPh = sessionStockMm ? `Varsayılan: ${barMetres(sessionStockMm)}` : '';
             return (
               <Fragment key={row.rowId}>
                 <Table.Tr data-row-id={row.rowId}>
@@ -548,9 +553,9 @@ export function PartsTable({
                   </Table.Td>
                   <Table.Td>
                     {!stockOpen ? (
-                      row.stock_length_mm !== '' ? (
-                        <Text ta="center" size="xs" title={`Stok boyu: ${row.stock_length_mm} mm`}>
-                          {row.stock_length_mm}
+                      row.stock_m !== '' ? (
+                        <Text ta="center" size="xs" title={`Stok boyu: ${stockText(row)}`}>
+                          {stockText(row)}
                         </Text>
                       ) : (
                         <Text ta="center" c="dimmed">
@@ -558,9 +563,9 @@ export function PartsTable({
                         </Text>
                       )
                     ) : editable ? (
-                      input(row, 'stock_length_mm', { placeholder: stockPh, min: 0 })
-                    ) : row.stock_length_mm !== '' ? (
-                      center(row.stock_length_mm)
+                      input(row, 'stock_m', { placeholder: stockPh, min: 0 })
+                    ) : row.stock_m !== '' ? (
+                      center(stockText(row))
                     ) : (
                       <Dash center />
                     )}
@@ -722,7 +727,7 @@ const FIELD_LABEL: Record<TextField, string> = {
   profile_height_mm: 'Kesit (mm)',
   label: 'Parça Adı',
   image_no: 'Resim No',
-  stock_length_mm: 'Stok (mm)',
+  stock_m: 'Stok (m)',
   nominal_length_mm: 'Uzunluk (mm)',
   quantity: 'Adet',
 };

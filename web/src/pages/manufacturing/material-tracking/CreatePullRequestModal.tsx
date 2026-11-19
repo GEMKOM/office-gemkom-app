@@ -23,6 +23,7 @@ import {
 import { subcontractorsQueryOptions } from '@/api/subcontracting/subcontractors';
 import { piecesQueryOptions, type MaterialPiece } from '@/api/warehouse/pieces';
 import { weldingTeamsQueryOptions } from '@/api/welding/teams';
+import { barMetres } from '@/lib/format';
 import { FormModal, ModalSection, notify, SizeNote } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
 import { availableToPull, isBarLine } from './columns';
@@ -124,8 +125,8 @@ export interface CreatePullRequestModalProps {
  * (subcontractor or welding team), one quantity per selected line (preset to
  * what is still in the warehouse) and a note. Mount it to open it.
  */
-/** "6000 mm" of a lot. */
-const lotLength = (lot: Pick<MaterialPiece, 'length_mm'>) => `${String(Number(lot.length_mm))} mm`;
+/** "6 m" of a lot (bars read in metres, never mm). */
+const lotLength = (lot: Pick<MaterialPiece, 'length_mm'>) => barMetres(lot.length_mm);
 
 /**
  * A bar line's bars from the job's İş Emri piece stock: one count per lot (length × free
