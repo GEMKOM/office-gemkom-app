@@ -267,6 +267,10 @@ it('sends a lot to a supplier (fason) from its detail', async () => {
   expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Taşı / Fasona Gönder' }));
   const dialog = await screen.findByRole('dialog', { name: /Taşı \/ Fasona Gönder/ });
+  // A plate is never put on a job: no İş Emri, Hammadde picked to start with.
+  expect(within(dialog).queryByRole('radio', { name: 'İş Emri' })).not.toBeInTheDocument();
+  expect(within(dialog).getByRole('radio', { name: 'Hammadde' })).toBeChecked();
+  expect(within(dialog).getByText(/Sac İş Emri'ne alınmaz/)).toBeInTheDocument();
 
   fireEvent.click(within(dialog).getByRole('radio', { name: 'Fasona' }));
   const supplier = within(dialog).getByLabelText('Fasoncu');

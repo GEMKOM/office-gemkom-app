@@ -618,6 +618,9 @@ export const PRICE_SOURCE_LABELS: Record<string, string> = {
   any_offer: 'Tedarikçi teklifi',
   historical_po: 'Geçmiş PO',
   procurement_line: 'Kayıtlı malzeme satırı',
+  cuts: 'Kesimlerden (sac)',
+  covered_by_cuts: 'Sac kesimlerden sayılıyor',
+  covered_by_manual_total: 'Elle girilen toplamda',
   none: 'Fiyat yok',
 };
 

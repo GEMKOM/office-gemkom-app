@@ -385,14 +385,20 @@ function placeToInput(place: PlaceDraft): PiecePlace | string {
   return { warehouse_code: place.kind };
 }
 
+/** Plate is never kept on a job: it waits in Hammadde for a cut, and the cut's jobs carry its cost. */
+const PLATE_PLACE_HINT = "Sac İş Emri'ne alınmaz; Hammadde'de tutulur ve kesime oradan seçilir.";
+
 function PlacePicker({
   place,
   onChange,
   allowFason,
+  plate = false,
 }: {
   place: PlaceDraft;
   onChange: (place: PlaceDraft) => void;
   allowFason: boolean;
+  /** A plate card: no İş Emri choice. */
+  plate?: boolean;
 }) {
   const jobOrders = useJobOrderOptions({ includeAll: true });
   const jobOptions = useMemo(
@@ -407,7 +413,7 @@ function PlacePicker({
   );
   const kinds = [
     { value: 'HAMMADDE', label: 'Hammadde' },
-    { value: 'IS_EMRI', label: 'İş Emri' },
+    ...(plate ? [] : [{ value: 'IS_EMRI', label: 'İş Emri' }]),
     { value: 'MAMUL', label: 'Mamul' },
     ...(allowFason ? [{ value: 'FASON', label: 'Fasona' }] : []),
   ];
@@ -421,6 +427,11 @@ function PlacePicker({
         onChange={(v) => onChange({ kind: v as PlaceKind, job: null, supplier: null })}
         data={kinds}
       />
+      {plate ? (
+        <Text size="xs" c="dimmed">
+          {PLATE_PLACE_HINT}
+        </Text>
+      ) : null}
       {place.kind === 'IS_EMRI' ? (
         <Select
           aria-label="İş no"
@@ -601,7 +612,12 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
             quantity={Number(quantity)}
           />
         ) : null}
-        <PlacePicker place={place} onChange={setPlace} allowFason={false} />
+        <PlacePicker
+          place={place}
+          onChange={setPlace}
+          allowFason={false}
+          plate={(card?.kind ?? kind) === 'plate'}
+        />
         <Group grow>
           <TextInput
             label="Döküm no"
@@ -639,7 +655,12 @@ function LotActionModal({
     action === 'adjust' ? piece.quantity : 1,
   );
   const [note, setNote] = useState('');
-  const [place, setPlace] = useState<PlaceDraft>({ kind: 'IS_EMRI', job: null, supplier: null });
+  const plate = piece.kind === 'plate';
+  const [place, setPlace] = useState<PlaceDraft>({
+    kind: plate ? 'HAMMADDE' : 'IS_EMRI',
+    job: null,
+    supplier: null,
+  });
   const run = useMutation({
     mutationFn: async () => {
       const n = Number(quantity);
@@ -698,7 +719,9 @@ function LotActionModal({
           value={quantity}
           onChange={setQuantity}
         />
-        {action === 'move' ? <PlacePicker place={place} onChange={setPlace} allowFason /> : null}
+        {action === 'move' ? (
+          <PlacePicker place={place} onChange={setPlace} allowFason plate={plate} />
+        ) : null}
         <Textarea
           label={action === 'adjust' ? 'Açıklama (zorunlu)' : 'Not'}
           value={note}
