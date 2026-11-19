@@ -266,9 +266,10 @@ test.describe('rail', () => {
     const sales = nav.getByRole('button', { name: 'Satış' });
     await sales.hover();
     await expect(page.getByRole('menuitem', { name: 'Müşteriler' })).toBeVisible();
-    // Personal pages live in the user menu, not under Genel.
-    await nav.getByRole('button', { name: 'Genel' }).hover();
-    await expect(page.getByRole('menuitem', { name: 'Makineler' })).toBeVisible();
+    // Talepler (was Genel) holds the requests; personal pages live in the user menu.
+    await nav.getByRole('button', { name: 'Talepler' }).hover();
+    await expect(page.getByRole('menuitem', { name: 'Fason' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Makineler' })).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'Tartışmalarım' })).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'İzin Taleplerim' })).toHaveCount(0);
     await sales.click();
@@ -280,9 +281,10 @@ test.describe('rail', () => {
     await expect(nav.getByRole('button', { name: 'Menüyü Daralt' })).toBeVisible();
     // Expanded: the top level only, as rows that open the hubs.
     await expect(nav.getByRole('button', { name: 'Müşteriler' })).toHaveCount(0);
-    await nav.getByRole('button', { name: 'E2E Admin' }).click();
+    await nav.getByRole('button', { name: /^E2E Admin/ }).click();
     await expect(page.getByRole('menuitem', { name: 'Tartışmalarım' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'İzin Taleplerim' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Mesai Taleplerim' })).toBeVisible();
     await page.keyboard.press('Escape');
 
     await nav.getByRole('button', { name: 'Menüyü Daralt' }).click();
