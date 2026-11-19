@@ -1,8 +1,6 @@
 import { authedFetch } from '@/auth/authService';
 import { screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
-import { CraneRequestsHubPage } from './CraneRequestsHubPage';
-import { DepartmentRequestsHubPage } from './DepartmentRequestsHubPage';
 import { GeneralHubPage } from './GeneralHubPage';
 import { OvertimeHubPage } from './OvertimeHubPage';
 import { VacationHubPage } from './VacationHubPage';
@@ -256,57 +254,5 @@ describe('Genel sub-hubs', () => {
     expect(balance).toHaveTextContent('Kullanılan6');
     expect(balance).toHaveTextContent('Kalan14');
     expect(balance).toHaveTextContent('Sıradaki: Yıllık İzin');
-  });
-
-  it("Vinç Talepleri: the user's own requests and the requests by status", async () => {
-    COUNTS['/cranes/requests/?status=approved'] = 4;
-    BODIES['/cranes/requests/my_requests/'] = {
-      count: 1,
-      results: [
-        {
-          id: 5,
-          request_number: 'VT-0005',
-          crane_type_name: 'Mobil Vinç 50t',
-          job_no: '265-01',
-          status: 'approved',
-          needed_date: '2026-11-07',
-        },
-      ],
-    };
-    renderWithProviders(<CraneRequestsHubPage />, { route: '/general/crane-requests/' });
-
-    const mine = screen.getByRole('heading', { name: 'Son Taleplerim' }).closest('section')!;
-    const row = await within(mine).findByRole('link', { name: /VT-0005/ });
-    expect(row).toHaveAttribute('href', '/general/crane-requests/list?request=5');
-    expect(within(mine).getByRole('link', { name: /Tümü/ })).toHaveAttribute(
-      'href',
-      '/general/crane-requests/list?requestor=42',
-    );
-    await waitFor(() => expect(document.getElementById('crane-approved')).toHaveTextContent('4'));
-    const status = screen.getByRole('heading', { name: 'Talep Durumu' }).closest('section')!;
-    expect(within(status).getByRole('link', { name: /Tamamlandı/ })).toHaveAttribute(
-      'href',
-      '/general/crane-requests/list?status=completed',
-    );
-    delete COUNTS['/cranes/requests/?status=approved'];
-  });
-
-  it('Vinç and Departman Talepleri: their cards and links', () => {
-    const { unmount } = renderWithProviders(<CraneRequestsHubPage />, {
-      route: '/general/crane-requests/',
-    });
-    expect(cardTitles()).toEqual(['Tüm Talepler', 'Bekleyen Talepler', 'Fiyat Listesi']);
-    expect(within(card('Fiyat Listesi')).getByRole('link')).toHaveAttribute(
-      'href',
-      '/general/crane-requests/prices',
-    );
-    unmount();
-
-    renderWithProviders(<DepartmentRequestsHubPage />, { route: '/general/department-requests/' });
-    expect(cardTitles()).toEqual(['Tüm Talepler', 'Bekleyen Talepler']);
-    expect(within(card('Bekleyen Talepler')).getByRole('link')).toHaveAttribute(
-      'href',
-      '/general/department-requests/pending',
-    );
   });
 });

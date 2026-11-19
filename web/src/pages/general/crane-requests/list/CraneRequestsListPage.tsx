@@ -1,4 +1,4 @@
-import { Button } from '@mantine/core';
+import { Button, SegmentedControl } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -13,7 +13,9 @@ import {
   type CraneType,
 } from '@/api/general/craneRequests';
 import { useJobOrderOptions, userLabel, useUsers, type JobOrderOption } from '@/api/reference';
+import { hasRouteAccess } from '@/auth/accessControl';
 import { useAuth } from '@/auth/AuthProvider';
+import { AppLink } from '@/shell/AppLink';
 import {
   confirm,
   DataTable,
@@ -47,8 +49,10 @@ import { CraneRequestCompleteModal } from './CraneRequestCompleteModal';
 import { CraneRequestCreateModal } from './CraneRequestCreateModal';
 
 // Filters, page and sort live in the URL; `request` is the legacy deep link
-// that opens the details modal (notification e-mails, daily summary).
+// that opens the details modal (notification e-mails, daily summary). `scope`
+// is whose requests are listed: the user's own unless they may see everyone's.
 const URL_DEFAULTS = {
+  scope: 'mine',
   status: '',
   crane_type: '',
   job_no: '',
@@ -71,6 +75,12 @@ const EMPTY_FILTERS: FilterState = {
 };
 
 const EMPTY_ROWS: CraneRequest[] = [];
+
+const PRICES = '/general/crane-requests/prices';
+const SCOPES = [
+  { value: 'mine', label: 'Benim Taleplerim' },
+  { value: 'all', label: 'Tüm Talepler' },
+];
 const EMPTY_TYPES: CraneType[] = [];
 const EMPTY_JOBS: JobOrderOption[] = [];
 
@@ -101,9 +111,14 @@ export function CraneRequestsListPage() {
   // ---- reference data (a failure only empties its dropdown, as legacy) ----
   const permissions = useQuery(craneMyPermissionsQueryOptions());
   const canComplete = permissions.data?.can_complete === true;
+  // The coordination team completes everyone's requests, and whoever keeps the
+  // price list follows them; the rest see their own.
+  const canSeeAll = canComplete || permissions.data?.can_manage_prices === true;
+  const showAll = canSeeAll && values.scope === 'all';
   const craneTypes = useQuery(craneTypesQueryOptions()).data ?? EMPTY_TYPES;
   const jobOrders = useJobOrderOptions().data ?? EMPTY_JOBS;
-  const users = useUsers().data;
+  // Talep Eden filters everyone's requests; the user's own need no picker.
+  const users = useUsers({}, { enabled: showAll }).data;
 
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(
     () => [
@@ -151,6 +166,9 @@ export function CraneRequestsListPage() {
     ],
     [craneTypes, jobOrders, users],
   );
+  const shownFilters = showAll
+    ? filterConfig
+    : filterConfig.filter((filter) => filter.key !== 'requestor');
 
   // ---- list ----
   const filters: FilterState = {
@@ -168,6 +186,8 @@ export function CraneRequestsListPage() {
     page_size: pageSize,
     ordering: toOrdering(sort.sortBy, sort.sortDir) ?? '-id',
     ...Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== '')),
+    // The user's own requests, or everyone's (narrowed by Talep Eden).
+    ...(showAll ? {} : { requestor: String(user.id) }),
   };
   const list = useQuery({
     ...craneRequestsQueryOptions(params),
@@ -295,10 +315,10 @@ export function CraneRequestsListPage() {
   return (
     <>
       <PageHeader
-        title="Tüm Vinç Talepleri"
+        title={showAll ? 'Tüm Vinç Talepleri' : 'Vinç Taleplerim'}
         subtitle="Kiralık vinç/platform taleplerinin yönetimi ve takibi"
         icon="fas fa-truck-pickup"
-        backTo="/general/crane-requests"
+        backTo="/general"
         stats={[
           {
             id: 'crane-requests-total',
@@ -307,19 +327,42 @@ export function CraneRequestsListPage() {
           },
         ]}
         actions={
-          <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating(true)}>
-            Yeni Vinç Talebi
-          </Button>
+          <>
+            {hasRouteAccess(PRICES) ? (
+              <Button
+                component={AppLink}
+                to={PRICES}
+                variant="default"
+                leftSection={<FaIcon icon="fas fa-tags" />}
+              >
+                Fiyat Listesi
+              </Button>
+            ) : null}
+            <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setCreating(true)}>
+              Yeni Vinç Talebi
+            </Button>
+          </>
         }
       />
 
       <DataTable
         title="Vinç Talepleri"
         icon="fas fa-truck-pickup"
+        toolbar={
+          canSeeAll ? (
+            <SegmentedControl
+              size="xs"
+              aria-label="Listelenen talepler"
+              value={showAll ? 'all' : 'mine'}
+              onChange={(scope) => apply({ scope, requestor: '', page: '1' })}
+              data={SCOPES}
+            />
+          ) : null
+        }
         filters={
           <FilterBar
             inline
-            filters={filterConfig}
+            filters={shownFilters}
             values={filters}
             onApply={(next) => apply({ ...next, page: '1' })}
             onClear={() => apply({ ...EMPTY_FILTERS, page: '1' })}

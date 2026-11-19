@@ -269,6 +269,14 @@ test.describe('rail', () => {
     // Talepler (was Genel) holds the requests; personal pages live in the user menu.
     await nav.getByRole('button', { name: 'Talepler' }).hover();
     await expect(page.getByRole('menuitem', { name: 'Fason' })).toBeVisible();
+    // Departman / Vinç Talepleri open their lists; pending pages are Onaylar tabs,
+    // the crane price list a button on its list.
+    await expect(page.getByRole('menuitem', { name: 'Departman Talepleri' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Vinç Talepleri' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Bekleyen Talepler' })).toHaveCount(0);
+    await expect(page.getByRole('menuitem', { name: 'Fiyat Listesi' })).toHaveCount(0);
+    // Günün Quizi is opened from the home page, not the rail.
+    await expect(nav.getByRole('button', { name: 'Günün Quizi' })).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'Makineler' })).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'Tartışmalarım' })).toHaveCount(0);
     await expect(page.getByRole('menuitem', { name: 'İzin Taleplerim' })).toHaveCount(0);
@@ -285,6 +293,7 @@ test.describe('rail', () => {
     await expect(page.getByRole('menuitem', { name: 'Tartışmalarım' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'İzin Taleplerim' })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: 'Mesai Taleplerim' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Onaylar' })).toBeVisible();
     await page.keyboard.press('Escape');
 
     await nav.getByRole('button', { name: 'Menüyü Daralt' }).click();

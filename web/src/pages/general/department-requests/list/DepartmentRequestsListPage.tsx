@@ -1,4 +1,4 @@
-import { Button, Group, Text } from '@mantine/core';
+import { Button, Group, SegmentedControl, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -13,6 +13,8 @@ import {
   type DepartmentRequestsParams,
 } from '@/api/general/departmentRequests';
 import { userLabel, useUsers } from '@/api/reference';
+import { hasRouteAccess } from '@/auth/accessControl';
+import { useAuth } from '@/auth/AuthProvider';
 import {
   confirm,
   DataTable,
@@ -32,8 +34,10 @@ import { DepartmentRequestDetailModal } from './DepartmentRequestDetailModal';
 import { DepartmentRequestFormModal } from './DepartmentRequestFormModal';
 
 // Page state lives in the URL. `request` opens the detail modal (the link
-// manufacturing/machining/tasks builds: ?request=<id>).
+// manufacturing/machining/tasks builds: ?request=<id>). `scope` is whose
+// requests are listed: the user's own unless they may see everyone's.
 const URL_DEFAULTS = {
+  scope: 'mine',
   search: '',
   status: '',
   department: '',
@@ -57,6 +61,13 @@ const EMPTY_FILTERS: FilterState = {
 };
 const EMPTY_ROWS: DepartmentRequest[] = [];
 
+// Planning turns the requests into purchases, so it follows every department's.
+const SEES_ALL_ROUTE = '/planning/department-requests';
+const SCOPES = [
+  { value: 'mine', label: 'Benim Taleplerim' },
+  { value: 'all', label: 'Tüm Talepler' },
+];
+
 const toOptions = (list: readonly { value: string; label: string }[]) =>
   list.map(({ value, label }) => ({ value, label }));
 
@@ -68,7 +79,10 @@ function positiveInt(value: string, fallback: number): number {
 /** Port of general/department-requests/list (list.js). */
 export function DepartmentRequestsListPage() {
   const queryClient = useQueryClient();
+  const { user } = useAuth();
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
+  const canSeeAll = hasRouteAccess(SEES_ALL_ROUTE);
+  const showAll = canSeeAll && values.scope === 'all';
 
   const filters = useMemo<FilterState>(
     () => ({
@@ -81,7 +95,8 @@ export function DepartmentRequestsListPage() {
     [values.search, values.status, values.department, values.priority, values.requestor],
   );
 
-  const users = useUsers();
+  // Talep Eden filters everyone's requests; the user's own need no picker.
+  const users = useUsers({}, { enabled: showAll });
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(
     () => [
       {
@@ -128,12 +143,17 @@ export function DepartmentRequestsListPage() {
     ],
     [users.data, users.isError],
   );
+  const shownFilters = showAll
+    ? filterConfig
+    : filterConfig.filter((filter) => filter.key !== 'requestor');
 
   const page = positiveInt(values.page, 1);
   const pageSize = positiveInt(values.page_size, 20);
   const sort = fromOrdering(values.ordering || '-id');
   const ordering = toOrdering(sort.sortBy, sort.sortDir) ?? '-id';
 
+  // The user's own requests, or everyone's (narrowed by Talep Eden).
+  const requestor = showAll ? filters.requestor : String(user.id);
   const params: DepartmentRequestsParams = {
     page,
     page_size: pageSize,
@@ -142,7 +162,7 @@ export function DepartmentRequestsListPage() {
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.department ? { department: filters.department } : {}),
     ...(filters.priority ? { priority: filters.priority } : {}),
-    ...(filters.requestor ? { requestor: filters.requestor } : {}),
+    ...(requestor ? { requestor } : {}),
   };
   const list = useQuery({
     ...departmentRequestsQueryOptions(params),
@@ -251,10 +271,10 @@ export function DepartmentRequestsListPage() {
   return (
     <>
       <PageHeader
-        title="Tüm Departman Talepleri"
+        title={showAll ? 'Tüm Departman Talepleri' : 'Departman Taleplerim'}
         subtitle="Departman taleplerinin yönetimi ve takibi"
         icon="boxes"
-        backTo="/general/department-requests"
+        backTo="/general"
         stats={[
           {
             id: 'total-requests-count',
@@ -272,10 +292,21 @@ export function DepartmentRequestsListPage() {
       <DataTable
         title="Departman Talepleri"
         icon="fas fa-boxes"
+        toolbar={
+          canSeeAll ? (
+            <SegmentedControl
+              size="xs"
+              aria-label="Listelenen talepler"
+              value={showAll ? 'all' : 'mine'}
+              onChange={(scope) => apply({ scope, requestor: '', page: '1' })}
+              data={SCOPES}
+            />
+          ) : null
+        }
         filters={
           <FilterBar
             inline
-            filters={filterConfig}
+            filters={shownFilters}
             values={filters}
             onApply={(next) => apply({ ...next, page: '1' })}
             onClear={() => {

@@ -1,15 +1,13 @@
 import { hasRouteAccess } from '@/auth/accessControl';
 import { logout, stopImpersonation } from '@/auth/authService';
 import { Badge, Menu, UnstyledButton, type FloatingPosition } from '@mantine/core';
-import { useQuery } from '@tanstack/react-query';
-import { pendingApprovalCountQueryOptions, type PendingApprovalKind } from '@/api/general/approvals';
 import { useDisclosure } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { displayName, useAuth } from '@/auth/AuthProvider';
 import { useAppNavigate } from './AppLink';
 import { badgeText } from '@/ui';
 import { FaIcon } from './FaIcon';
-import { useNavBadgeCount } from './navBadges';
+import { useWaitingSummary } from './navBadges';
 import { ProfileModal } from './ProfileModal';
 import { railMenuClassNames } from './railMenu';
 import classes from './shell.module.css';
@@ -43,63 +41,11 @@ export function ImpersonationBadge() {
 }
 
 /** The avatar and its menu; `row` is the expanded rail's version with the name next to it. */
-// Personal pages: the user's own leave / overtime requests and the approvals
-// waiting on them (moved here from Genel, 2026-11-19).
+// Personal pages: the user's own leave / overtime requests (moved here from
+// Genel, 2026-11-19) and Onaylar, every approval waiting on them in one page.
 const MY_LEAVE = '/general/vacation/requests';
 const MY_OVERTIME = '/human_resources/overtime/registry';
-const APPROVALS: { kind: PendingApprovalKind; label: string; icon: string; route: string }[] = [
-  { kind: 'vacation', label: 'İzin Onayları', icon: 'fas fa-user-check', route: '/general/vacation/pending' },
-  { kind: 'overtime', label: 'Mesai Onayları', icon: 'fas fa-user-clock', route: '/human_resources/overtime/pending' },
-];
-
-function ApprovalItem({
-  kind,
-  label,
-  icon,
-  route,
-  onOpen,
-}: (typeof APPROVALS)[number] & { onOpen: (route: string) => void }) {
-  // The dropdown mounts when opened, so the count is fetched only then.
-  const count = useQuery(pendingApprovalCountQueryOptions(kind));
-  return (
-    <Menu.Item
-      leftSection={<FaIcon icon={icon} />}
-      rightSection={
-        count.data ? (
-          <Badge size="sm" color="yellow" variant="filled" aria-label={`${count.data} bekliyor`}>
-            {count.data}
-          </Badge>
-        ) : null
-      }
-      onClick={() => onOpen(route)}
-    >
-      {label}
-    </Menu.Item>
-  );
-}
-
-/** Approvals waiting on the user in the queues the pop-up holds (the menu's counts). */
-function useUserMenuWaiting(): number {
-  const countFor = useNavBadgeCount();
-  return APPROVALS.reduce(
-    (sum, a) => sum + countFor(a.route, { label: a.label, icon: a.icon, children: {} }),
-    0,
-  );
-}
-
-/** "Onayımı Bekleyenler": only the queues the user may open. */
-function PendingApprovals({ onOpen }: { onOpen: (route: string) => void }) {
-  const mine = APPROVALS.filter((a) => hasRouteAccess(a.route));
-  if (mine.length === 0) return null;
-  return (
-    <>
-      <Menu.Label>Onayımı Bekleyenler</Menu.Label>
-      {mine.map((a) => (
-        <ApprovalItem key={a.kind} {...a} onOpen={onOpen} />
-      ))}
-    </>
-  );
-}
+const APPROVALS_ROUTE = '/approvals';
 
 export function UserMenu({
   position = 'bottom-end',
@@ -113,8 +59,8 @@ export function UserMenu({
   const [profileOpened, profile] = useDisclosure(false);
   const department = user.position?.department_code || user.department_code || 'Atanmamış';
   const name = displayName(user) || user.username;
-  // Leave / overtime approvals live in this pop-up, so their count sits on the avatar.
-  const waiting = useUserMenuWaiting();
+  // Onaylar lives in this pop-up, so everything waiting on the user sits on the avatar.
+  const { total: waiting, anyQueue } = useWaitingSummary();
   const label = waiting > 0 ? `${name}, ${waiting} onay bekliyor` : name;
   const avatar = (
     <span className={classes.avatar} style={{ position: 'relative' }}>
@@ -164,7 +110,21 @@ export function UserMenu({
               Mesai Taleplerim
             </Menu.Item>
           )}
-          <PendingApprovals onOpen={navigate} />
+          {anyQueue ? (
+            <Menu.Item
+              leftSection={<FaIcon icon="fas fa-check-double" />}
+              rightSection={
+                waiting > 0 ? (
+                  <Badge size="sm" color="yellow" variant="filled" aria-label={`${waiting} bekliyor`}>
+                    {badgeText(waiting)}
+                  </Badge>
+                ) : null
+              }
+              onClick={() => navigate(APPROVALS_ROUTE)}
+            >
+              Onaylar
+            </Menu.Item>
+          ) : null}
           <Menu.Label>Departman: {department}</Menu.Label>
           <Menu.Divider />
           {isImpersonating && (

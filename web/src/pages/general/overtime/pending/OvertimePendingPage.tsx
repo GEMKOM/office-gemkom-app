@@ -10,6 +10,7 @@ import { DataTable, PageHeader, useUrlFilters, type RowAction } from '@/ui';
 import { approveOvertimeWithConfirm, RejectOvertimeModal } from '../shared/decisions';
 import { OvertimeDetailModal } from '../shared/OvertimeDetailModal';
 import { requestColumns, useInvalidateOvertime } from '../shared/shared';
+import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 // `request` is the legacy deep link (notification e-mails) that opens the
 // details modal; the two table pages are kept in the URL too.
@@ -29,7 +30,7 @@ function positiveInt(value: string, fallback: number): number {
 const canDecide = () => true;
 
 /** Port of general/overtime/pending (pending.js + modals.js). */
-export function OvertimePendingPage() {
+export function OvertimePendingPage({ embedded = false }: EmbeddableProps = {}) {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const invalidate = useInvalidateOvertime();
   const page = positiveInt(values.page, 1);
@@ -87,19 +88,21 @@ export function OvertimePendingPage() {
 
   return (
     <>
-      <PageHeader
-        title="Onay Bekleyen Mesai Talepleri"
-        subtitle="Onayınızı bekleyen mesai taleplerinin yönetimi"
-        icon="clock"
-        backTo="/human_resources/overtime"
-        stats={[
-          {
-            id: 'pending-count',
-            label: 'Onay Bekleyen',
-            value: pending.isPending ? '–' : pendingTotal.toLocaleString('tr-TR'),
-          },
-        ]}
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="Onay Bekleyen Mesai Talepleri"
+          subtitle="Onayınızı bekleyen mesai taleplerinin yönetimi"
+          icon="clock"
+          backTo="/human_resources/overtime"
+          stats={[
+            {
+              id: 'pending-count',
+              label: 'Onay Bekleyen',
+              value: pending.isPending ? '–' : pendingTotal.toLocaleString('tr-TR'),
+            },
+          ]}
+        />
+      )}
 
       <Stack gap="lg">
         <DataTable

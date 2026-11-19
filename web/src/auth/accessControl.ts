@@ -32,6 +32,8 @@ const ALWAYS_ALLOWED_ROUTES = new Set([
   '/general/discussions',
   '/isg',
   '/isg/issues',
+  // Onaylar is personal: each tab shows only for a queue the user can open.
+  '/approvals',
   // Günün Quizi is personal too; the quiz API admits office users only.
   '/quiz',
   '/quiz/leaderboard',

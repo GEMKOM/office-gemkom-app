@@ -7,6 +7,7 @@
   "/quiz/leaderboard",
   "/quiz/review",
   "/quiz/manage",
+  "/approvals",
   "/general",
   "/general/crane-requests",
   "/general/department-requests",

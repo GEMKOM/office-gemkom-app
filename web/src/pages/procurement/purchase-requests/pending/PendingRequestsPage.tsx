@@ -34,6 +34,7 @@ import { baseColumns, listOrdering } from '../shared/columns';
 import { RequestDetailsModal } from '../shared/RequestDetailsModal';
 import { useTalepDeepLink } from '../shared/useTalepDeepLink';
 import { approvalInfo, userHasDecided } from './logic';
+import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 // Port of procurement/purchase-requests/pending/pending.js.
 
@@ -63,7 +64,7 @@ function useList(kind: 'pendingApproval' | 'approvedByMe', state: TableState) {
   return useQuery(purchaseRequestListQueryOptions(kind, params));
 }
 
-export function PendingRequestsPage() {
+export function PendingRequestsPage({ embedded = false }: EmbeddableProps = {}) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [pendingState, setPendingState] = useState(INITIAL);
@@ -224,12 +225,14 @@ export function PendingRequestsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Onay Bekleyen Satın Alma Talepleri"
-        subtitle="Onayınızı bekleyen taleplerin yönetimi ve karşılaştırması"
-        icon="clock"
-        backTo="/procurement/purchase-requests/"
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="Onay Bekleyen Satın Alma Talepleri"
+          subtitle="Onayınızı bekleyen taleplerin yönetimi ve karşılaştırması"
+          icon="clock"
+          backTo="/procurement/purchase-requests/"
+        />
+      )}
       <Stack gap="lg">
         <RequestTable
           title="Onay Bekleyen Talepler"

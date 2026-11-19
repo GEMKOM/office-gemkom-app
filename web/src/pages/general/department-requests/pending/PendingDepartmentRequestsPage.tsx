@@ -23,6 +23,7 @@ import { itemsCount, priorityLabel } from '../shared';
 import { approvedColumns, pendingColumns } from './columns';
 import { PendingRequestDetailModal } from './PendingRequestDetailModal';
 import { RejectDepartmentRequestModal } from './RejectDepartmentRequestModal';
+import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 // `request` is the legacy deep link (daily summary e-mails: ?request=<id>).
 const URL_DEFAULTS = { request: '', approved_page: '1' };
@@ -35,7 +36,7 @@ function positiveInt(value: string, fallback: number): number {
 }
 
 /** Port of general/department-requests/pending (pending.js + modals.js). */
-export function PendingDepartmentRequestsPage() {
+export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddableProps = {}) {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
 
   const pending = useQuery(pendingDepartmentRequestsQueryOptions());
@@ -160,24 +161,26 @@ export function PendingDepartmentRequestsPage() {
 
   return (
     <>
-      <PageHeader
-        title="Onay Bekleyen Departman Talepleri"
-        subtitle="Onayınızı bekleyen departman taleplerinin yönetimi"
-        icon="boxes"
-        backTo="/general/department-requests"
-        stats={[
-          {
-            id: 'pending-requests-count',
-            label: 'Onay Bekleyen',
-            value: figure(pending.isPending, pending.data?.count ?? 0),
-          },
-          {
-            id: 'approved-requests-count',
-            label: 'Onayladığım',
-            value: figure(approved.isPending, approved.data?.count ?? 0),
-          },
-        ]}
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="Onay Bekleyen Departman Talepleri"
+          subtitle="Onayınızı bekleyen departman taleplerinin yönetimi"
+          icon="boxes"
+          backTo="/general/department-requests/list"
+          stats={[
+            {
+              id: 'pending-requests-count',
+              label: 'Onay Bekleyen',
+              value: figure(pending.isPending, pending.data?.count ?? 0),
+            },
+            {
+              id: 'approved-requests-count',
+              label: 'Onayladığım',
+              value: figure(approved.isPending, approved.data?.count ?? 0),
+            },
+          ]}
+        />
+      )}
 
       <DataTable
         title="Onay Bekleyen Departman Talepleri"

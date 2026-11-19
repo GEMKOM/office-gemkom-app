@@ -27,6 +27,7 @@ import {
   formatClock,
   statusText,
 } from '../shared/vacationParts';
+import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 const EMPTY_ROWS: VacationRequest[] = [];
 
@@ -139,7 +140,7 @@ function RejectModal({ request, onClose }: { request: VacationRequest; onClose: 
 }
 
 /** Port of general/vacation/pending (pending.js). */
-export function VacationPendingPage() {
+export function VacationPendingPage({ embedded = false }: EmbeddableProps = {}) {
   const pending = useQuery(pendingVacationApprovalsQueryOptions());
   const decisions = useQuery(vacationDecisionsByMeQueryOptions());
   const pendingRows = pending.data?.results ?? EMPTY_ROWS;
@@ -217,15 +218,17 @@ export function VacationPendingPage() {
 
   return (
     <>
-      <PageHeader
-        title="Bekleyen İzin Onayları"
-        subtitle="Onayınızda olan izin taleplerini inceleyin ve karar verin"
-        backTo="/general/vacation"
-        stats={[
-          { id: 'pending-count', label: 'Onayımı Bekleyen', value: figure(pending) },
-          { id: 'decided-count', label: 'Karar Verdiğim', value: figure(decisions) },
-        ]}
-      />
+      {embedded ? null : (
+        <PageHeader
+          title="Bekleyen İzin Onayları"
+          subtitle="Onayınızda olan izin taleplerini inceleyin ve karar verin"
+          backTo="/general/vacation"
+          stats={[
+            { id: 'pending-count', label: 'Onayımı Bekleyen', value: figure(pending) },
+            { id: 'decided-count', label: 'Karar Verdiğim', value: figure(decisions) },
+          ]}
+        />
+      )}
 
       <DataTable
         title="Onayımı Bekleyen Talepler"

@@ -12,6 +12,8 @@ vi.setConfig({ testTimeout: 20_000 });
 vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn() }));
 vi.mock('@/lib/backend', () => ({ backendBase: 'https://api.test' }));
 vi.mock('@/auth/AuthProvider', () => ({ useAuth: () => ({ user: { id: 7, username: 'ben' } }) }));
+const access = vi.hoisted(() => ({ open: new Set<string>() }));
+vi.mock('@/auth/accessControl', () => ({ hasRouteAccess: (route: string) => access.open.has(route) }));
 
 const fetchMock = vi.mocked(authedFetch);
 
@@ -130,6 +132,7 @@ function renderPage(route = '/general/crane-requests/list') {
 beforeEach(() => {
   fetchMock.mockReset();
   permissions = { can_complete: true, can_manage_prices: false };
+  access.open = new Set();
   routes();
   vi.spyOn(notify, 'success');
   vi.spyOn(notify, 'error');
@@ -141,9 +144,9 @@ afterEach(() => {
 
 const search = () => new URLSearchParams(screen.getByTestId('location').textContent ?? '');
 
-it('lists the requests with the legacy default params', async () => {
+it("lists the user's own requests by default, with the legacy params", async () => {
   renderPage();
-  expect(screen.getByText('Tüm Vinç Talepleri')).toBeInTheDocument();
+  expect(screen.getByText('Vinç Taleplerim')).toBeInTheDocument();
   expect(await screen.findByText('VNC-011')).toBeInTheDocument();
   expect(screen.getByText('8 Saate Kadar')).toBeInTheDocument();
   expect(screen.getByText('3 Saate Kadar + Sapancı')).toBeInTheDocument();
@@ -153,7 +156,54 @@ it('lists the requests with the legacy default params', async () => {
     page: '1',
     page_size: '20',
     ordering: '-id',
+    requestor: '7',
   });
+});
+
+it("lets the coordination team switch to everyone's requests, then narrow them by Talep Eden", async () => {
+  renderPage();
+  await screen.findByText('VNC-011');
+  // Talep Eden only means something on everyone's requests.
+  expect(screen.queryByRole('button', { name: /^Talep Eden/ })).not.toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('radio', { name: 'Tüm Talepler' }));
+
+  await waitFor(() => expect(search().get('scope')).toBe('all'));
+  expect(await screen.findByText('Tüm Vinç Talepleri')).toBeInTheDocument();
+  await waitFor(() => expect(listCalls().at(-1)!.url.searchParams.has('requestor')).toBe(false));
+  expect(screen.getAllByRole('button', { name: /^Talep Eden/ }).length).toBeGreaterThan(0);
+
+  fireEvent.click(screen.getByRole('radio', { name: 'Benim Taleplerim' }));
+  await waitFor(() => expect(search().has('scope')).toBe(false));
+  // Back on the first page's query (cached): the user's own again.
+  expect(await screen.findByText('Vinç Taleplerim')).toBeInTheDocument();
+});
+
+it('shows a requester only their own requests, whatever the URL says', async () => {
+  permissions = { can_complete: false, can_manage_prices: false };
+  renderPage('/general/crane-requests/list?scope=all&requestor=8');
+  await screen.findByText('VNC-011');
+  await waitFor(() =>
+    expect(calls().some((c) => c.url.pathname === '/cranes/requests/my_permissions/')).toBe(true),
+  );
+  expect(screen.queryByRole('radio', { name: 'Tüm Talepler' })).not.toBeInTheDocument();
+  expect(screen.getByText('Vinç Taleplerim')).toBeInTheDocument();
+  expect(listCalls().every((c) => c.url.searchParams.get('requestor') === '7')).toBe(true);
+  // Nobody to pick from: the user list is not asked for.
+  expect(calls().some((c) => c.url.pathname === '/users/dropdown/')).toBe(false);
+});
+
+it('opens the price list from a button on the band, for whoever can open it', async () => {
+  const { unmount } = renderPage();
+  await screen.findByText('VNC-011');
+  expect(screen.queryByRole('link', { name: /Fiyat Listesi/ })).not.toBeInTheDocument();
+  unmount();
+
+  access.open = new Set(['/general/crane-requests/prices']);
+  renderPage();
+  expect(await screen.findByRole('link', { name: /Fiyat Listesi/ })).toHaveAttribute(
+    'href',
+    '/general/crane-requests/prices',
+  );
 });
 
 it('filters from the URL reach the request, and a pill writes the URL', async () => {
@@ -165,6 +215,7 @@ it('filters from the URL reach the request, and a pill writes the URL', async ()
     ordering: '-id',
     priority: 'urgent',
     job_no: 'J-100',
+    requestor: '7',
   });
 
   const pill = screen

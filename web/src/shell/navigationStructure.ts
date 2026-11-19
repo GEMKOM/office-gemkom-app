@@ -16,7 +16,16 @@ export const NAVIGATION_STRUCTURE: NavTree = {
     icon: 'fas fa-home',
     children: {},
   },
-  // Open to everyone (ALWAYS_ALLOWED_ROUTES); a click on the rail opens the quiz.
+  // Onaylar: every approval waiting on the user, a tab per queue. Opened from
+  // the user menu, not the rail (OFF_MENU_PATHS in navModel.ts); listed here
+  // for the search and the breadcrumbs. Open to everyone (ALWAYS_ALLOWED_ROUTES).
+  '/approvals': {
+    label: 'Onaylar',
+    icon: 'fas fa-check-double',
+    children: {},
+  },
+  // Open to everyone (ALWAYS_ALLOWED_ROUTES). Not on the rail (OFF_MENU_PATHS):
+  // the home page's quiz card opens it.
   '/quiz': {
     label: 'Günün Quizi',
     icon: 'fas fa-trophy',
@@ -46,48 +55,23 @@ export const NAVIGATION_STRUCTURE: NavTree = {
   },
   // Talepler (was Genel, reorganised 2026-11-19): the requests that cross
   // departments. Makineler moved to Depo, Mesailer to İnsan Kaynakları, İSG got
-  // its own section; personal leave / overtime requests and approvals are in
-  // the user menu (shell/UserMenu.tsx).
+  // its own section; personal leave / overtime requests and every approval
+  // (Onaylar) are in the user menu (shell/UserMenu.tsx). Departman and Vinç
+  // Talepleri open their lists (the user's own by default); their pending
+  // pages are Onaylar tabs, and the crane price list is a button on its list.
   '/general': {
     label: 'Talepler',
     icon: 'fas fa-inbox',
     children: {
-      '/general/department-requests': {
+      '/general/department-requests/list': {
         label: 'Departman Talepleri',
         icon: 'fas fa-boxes',
-        children: {
-          '/general/department-requests/list': {
-            label: 'Tüm Talepler',
-            icon: 'fas fa-list',
-            children: {},
-          },
-          '/general/department-requests/pending': {
-            label: 'Bekleyen Talepler',
-            icon: 'fas fa-clock',
-            children: {},
-          },
-        },
+        children: {},
       },
-      '/general/crane-requests': {
+      '/general/crane-requests/list': {
         label: 'Vinç Talepleri',
         icon: 'fas fa-truck-pickup',
-        children: {
-          '/general/crane-requests/list': {
-            label: 'Tüm Talepler',
-            icon: 'fas fa-list',
-            children: {},
-          },
-          '/general/crane-requests/pending': {
-            label: 'Bekleyen Talepler',
-            icon: 'fas fa-clock',
-            children: {},
-          },
-          '/general/crane-requests/prices': {
-            label: 'Fiyat Listesi',
-            icon: 'fas fa-tags',
-            children: {},
-          },
-        },
+        children: {},
       },
       // Fason: imalat, depo, planlama and satınalma all follow it (accessControl).
       '/general/fason': {
