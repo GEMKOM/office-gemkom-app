@@ -450,7 +450,8 @@ export function MaterialDetailsModal({ jobNo, onClose }: DrillModalProps) {
 
   let sections = pending;
   if (lines.data) {
-    const rows = lines.data;
+    // F-card lines are the Fason column's, not Malzeme's.
+    const rows = lines.data.filter((l) => !l.is_fason);
     sections = [
       {
         title: 'Özet',

@@ -569,7 +569,8 @@ export function WeldingDetailsModal({ jobNo, onClose }: DrillModalProps) {
 export function MaterialDetailsModal({ jobNo, onClose }: DrillModalProps) {
   const lines = useQuery(procurementLinesQueryOptions(jobNo));
   useFailClose(lines.isError, 'Malzeme detayları yüklenirken hata.', onClose);
-  const rows = lines.data ?? [];
+  // F-card lines are the Fason column's, not Malzeme's.
+  const rows = (lines.data ?? []).filter((l) => !l.is_fason);
   const total = rows.reduce((s, l) => s + num(l.amount_eur), 0);
 
   const content = rows.length ? (

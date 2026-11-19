@@ -22,6 +22,7 @@ const ROWS = [
     labor_cost: '1000',
     employee_overhead_cost: '200',
     material_cost: '3000',
+    fason_cost: '700',
     subcontractor_cost: '500',
     paint_cost: '100',
     paint_material_cost: '50',
@@ -46,6 +47,76 @@ const ROWS = [
     selling_price_display_source: 'rolled_up_from_children',
   },
 ];
+
+const FASON = {
+  job_order: '254-01',
+  total_eur: '700.00',
+  fason_cost: '700.00',
+  group_count: 2,
+  line_count: 3,
+  groups: [
+    {
+      item_id: 1,
+      item_code: 'F001 0000 0000 000 000',
+      item_name: 'BÜKÜM İŞLEMİ',
+      total_eur: '500.00',
+      line_count: 2,
+      lines: [
+        {
+          procurement_line_id: 11,
+          job_no: '254-01',
+          planning_request_number: 'PL-2026-0007',
+          department_request_number: 'DR-2026-0042',
+          part_no: 'PRÇ-001',
+          quantity: '4.00',
+          unit: 'adet',
+          supplier_name: 'Bükümcü A.Ş.',
+          po_number: 'PO-91',
+          unit_price_eur: '100.00',
+          amount_eur: '400.00',
+          original_unit_price: '110.00',
+          original_amount: '440.00',
+          original_currency: 'USD',
+          date: '2026-10-05',
+          files: [
+            {
+              id: 5,
+              file_name: 'proforma.pdf',
+              file_url: 'https://files.test/proforma.pdf',
+              source: 'purchase_order',
+            },
+          ],
+        },
+        {
+          procurement_line_id: 12,
+          job_no: '254-01-01',
+          part_no: 'PRÇ-003',
+          quantity: '1.00',
+          unit_price_eur: '100.00',
+          amount_eur: '100.00',
+          files: [],
+        },
+      ],
+    },
+    {
+      item_id: 2,
+      item_code: 'F014 0000 0000 000 000',
+      item_name: 'LAZER KESİM',
+      total_eur: '200.00',
+      line_count: 1,
+      lines: [
+        {
+          procurement_line_id: 13,
+          job_no: '254-01',
+          part_no: 'PRÇ-002',
+          quantity: '1.00',
+          amount_eur: '200.00',
+          files: [],
+        },
+      ],
+    },
+  ],
+};
 
 const CHILDREN = [
   { job_no: '254-01-01', title: 'Gövde', actual_total_cost: '2500', has_children: false },
@@ -138,7 +209,17 @@ beforeEach(() => {
         return json([
           { id: 1, item_code: 'M-1', item_name: 'Sac', quantity: '2', amount_eur: '1500' },
           { id: 2, item_code: 'M-2', item_name: 'Profil', quantity: '1', amount_eur: '1500' },
+          {
+            id: 3,
+            item_code: 'F001 0000 0000 000 000',
+            item_name: 'BÜKÜM İŞLEMİ',
+            quantity: '1',
+            amount_eur: '700',
+            is_fason: true,
+          },
         ]);
+      case '/projects/job-orders/254-01/fason_cost_breakdown/':
+        return json(FASON);
       case '/subcontracting/assignments/':
         return json({
           results: [
@@ -340,6 +421,8 @@ describe('CostTablePage', () => {
     const material = await screen.findByRole('dialog', { name: /Malzeme Detayları/ });
     expect(await within(material).findByText('Profil')).toBeInTheDocument();
     expect(within(material).getByText('€3.000,00')).toBeInTheDocument();
+    // The F-card line belongs to the Fason column.
+    expect(within(material).queryByText('BÜKÜM İŞLEMİ')).toBeNull();
     expect(urlsTo('/projects/procurement-lines/')[0]!.searchParams.get('job_order')).toBe('254-01');
     fireEvent.click(within(material).getAllByRole('button', { name: /Kapat/ })[0]!);
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -351,10 +434,40 @@ describe('CostTablePage', () => {
     expect(urlsTo('/subcontracting/assignments/')[0]!.searchParams.get('job_no')).toBe('254-01');
   });
 
+  it('shows the Fason column and its lines grouped by F card', async () => {
+    renderPage();
+    await screen.findByText('Tav Fırını');
+    const headers = Array.from(document.querySelectorAll('th')).map((th) => th.textContent);
+    expect(headers.indexOf('Fason')).toBe(headers.indexOf('Malzeme') + 1);
+    expect(cell('0-254-01', 'fason_cost')).toHaveTextContent('€700,00');
+
+    fireEvent.click(within(cell('0-254-01', 'fason_cost')).getByRole('button'));
+    const fason = await screen.findByRole('dialog', { name: /254-01 - Fason Detayları/ });
+    expect(calls('/projects/job-orders/254-01/fason_cost_breakdown/')).toHaveLength(1);
+    // One fold per card: its name and total.
+    const bending = await within(fason).findByRole('button', { name: /BÜKÜM İŞLEMİ/ });
+    expect(bending).toHaveTextContent('€500,00');
+    expect(within(fason).getByRole('button', { name: /LAZER KESİM/ })).toHaveTextContent('€200,00');
+    expect(within(fason).getByText('€700,00')).toBeInTheDocument();
+
+    fireEvent.click(bending);
+    expect(await within(fason).findByText('PRÇ-001')).toBeInTheDocument();
+    expect(within(fason).getByText('PL-2026-0007')).toBeInTheDocument();
+    expect(within(fason).getByText('DR-2026-0042')).toBeInTheDocument();
+    expect(within(fason).getByText('Bükümcü A.Ş.')).toBeInTheDocument();
+    expect(within(fason).getByText('PO-91')).toBeInTheDocument();
+    expect(within(fason).getByText('USD 440,00')).toBeInTheDocument();
+    expect(within(fason).getByRole('link', { name: /proforma\.pdf/ })).toHaveAttribute(
+      'href',
+      'https://files.test/proforma.pdf',
+    );
+  });
+
   it('shows no info button for a zero cost', async () => {
     renderPage();
     await screen.findByText('Pota Ocağı');
     expect(within(cell('0-254-02', 'labor_cost')).queryByRole('button')).toBeNull();
     expect(within(cell('0-254-02', 'material_cost')).queryByRole('button')).toBeNull();
+    expect(within(cell('0-254-02', 'fason_cost')).queryByRole('button')).toBeNull();
   });
 });

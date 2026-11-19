@@ -164,6 +164,7 @@ export interface CostTotals {
   rows: number;
   laborWithTax: number;
   material: number;
+  fason: number;
   subcontractor: number;
   paintWithMaterial: number;
   qc: number;
@@ -192,6 +193,7 @@ export function costTotals(displayed: TreeRow[]): CostTotals {
   const t = {
     laborWithTax: 0,
     material: 0,
+    fason: 0,
     subcontractor: 0,
     paintWithMaterial: 0,
     qc: 0,
@@ -208,6 +210,7 @@ export function costTotals(displayed: TreeRow[]): CostTotals {
   for (const r of rows) {
     t.laborWithTax += laborWithTax(r);
     t.material += num(r.material_cost);
+    t.fason += num(r.fason_cost);
     t.subcontractor += num(r.subcontractor_cost);
     t.paintWithMaterial += paintWithMaterial(r);
     t.qc += num(r.qc_cost);

@@ -33,6 +33,7 @@ import {
   type FilterConfig,
 } from '@/ui';
 import { costColumns, type DrillKind } from './columns';
+import { FasonDetailsModal } from './FasonDetailsModal';
 import { DEFAULT_ORDERING, samePrice, STATUS_OPTIONS, tableFilters } from './costTableData';
 import {
   JobDetailsModal,
@@ -389,6 +390,8 @@ export function CostTablePage() {
             return <WeldingDetailsModal key={index} jobNo={jobNo} onClose={closeDrill} />;
           case 'material':
             return <MaterialDetailsModal key={index} jobNo={jobNo} onClose={closeDrill} />;
+          case 'fason':
+            return <FasonDetailsModal key={index} jobNo={jobNo} onClose={closeDrill} />;
           case 'subcontractor':
             return <SubcontractorDetailsModal key={index} jobNo={jobNo} onClose={closeDrill} />;
           default:
