@@ -268,7 +268,7 @@ test.describe('rail', () => {
     await expect(page.getByRole('menuitem', { name: 'Müşteriler' })).toBeVisible();
     // Talepler (was Genel) holds the requests; personal pages live in the user menu.
     await nav.getByRole('button', { name: 'Talepler' }).hover();
-    await expect(page.getByRole('menuitem', { name: 'Fason' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Fason Talepleri' })).toBeVisible();
     // Departman / Vinç Talepleri open their lists; pending pages are Onaylar tabs,
     // the crane price list a button on its list.
     await expect(page.getByRole('menuitem', { name: 'Departman Talepleri' })).toBeVisible();

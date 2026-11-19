@@ -1,6 +1,6 @@
 import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query';
 import { hasPerm, isSuperuser } from '@/auth/authService';
-import { apiFetch, isApiError } from '../client';
+import { apiFetch, isApiError, type QueryParams } from '../client';
 import { extractResults, toPaginated } from '../types';
 
 // Stock cards (procurement items): the item part of apis/procurement.js, as
@@ -216,16 +216,48 @@ export function cardLabel(item: Pick<Item, 'code' | 'name' | 'unit' | 'is_active
  * then inactive ones (legacy plate / boy / service cards and Mikro codes
  * nobody holds stock of are inactive but still valid codes).
  */
-export async function searchStockCards(term: string, signal?: AbortSignal) {
+export function searchStockCards(term: string, signal?: AbortSignal) {
+  return searchCards(term, signal, {});
+}
+
+/**
+ * Departman Talepleri's search: material cards only. Service / FASON-family
+ * and fason-route F cards are left out (backend `material_only`); fason work
+ * is asked for on Fason Talepleri, planning-route F cards by planning.
+ */
+export function searchMaterialCards(term: string, signal?: AbortSignal) {
+  return searchCards(term, signal, { material_only: 'true' });
+}
+
+async function searchCards(term: string, signal: AbortSignal | undefined, extra: QueryParams) {
   const page = (is_active: 'true' | 'false', page_size: number) =>
     apiFetch<unknown>(BASE, {
-      params: { search: term, is_active, page_size, ordering: 'code' },
+      params: { ...extra, search: term, is_active, page_size, ordering: 'code' },
       signal,
     }).then((data) => extractResults<Item>(data));
   const [active, inactive] = await Promise.all([page('true', 20), page('false', 10)]);
   return [...active, ...inactive].map((item) => {
     rememberCard(item);
     return { value: item.code, label: cardLabel(item) };
+  });
+}
+
+/**
+ * The operations a fason request can ask for: the active workshop-route F
+ * cards (büküm, işleme, galvaniz…; backend `fason_route=workshop`), by name.
+ * Planning-route F cards (lazer, sac kesim…) are opened by planning instead.
+ */
+export function fasonOperationsQueryOptions() {
+  return queryOptions({
+    queryKey: [...itemKeys.all, 'fasonOperations'] as const,
+    queryFn: async ({ signal }) =>
+      extractResults<Item>(
+        await apiFetch<unknown>(BASE, {
+          params: { fason_route: 'workshop', is_active: 'true', ordering: 'name', page_size: 200 },
+          signal,
+        }),
+      ),
+    staleTime: 60 * 60 * 1000,
   });
 }
 

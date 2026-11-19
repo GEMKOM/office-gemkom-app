@@ -70,8 +70,11 @@ describe('Genel', () => {
 
     expect(screen.getByRole('heading', { level: 1, name: 'Talepler' })).toBeInTheDocument();
     // Talepler (was Genel): Makineler, Mesailer, İzin, İSG and Tartışmalarım moved out.
-    expect(cardTitles()).toEqual(['Departman Talepleri', 'Vinç Talepleri', 'Fason']);
-    expect(within(card('Fason')).getByRole('link')).toHaveAttribute('href', '/general/fason');
+    expect(cardTitles()).toEqual(['Departman Talepleri', 'Vinç Talepleri', 'Fason Talepleri']);
+    expect(within(card('Fason Talepleri')).getByRole('link')).toHaveAttribute(
+      'href',
+      '/general/fason',
+    );
     expect(within(card('Vinç Talepleri')).getByRole('link')).toHaveAttribute(
       'href',
       '/general/crane-requests',

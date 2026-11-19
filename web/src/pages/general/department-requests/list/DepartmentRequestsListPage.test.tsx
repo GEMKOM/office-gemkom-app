@@ -69,13 +69,20 @@ const CARDS = [
   { id: 31, code: 'F014 0000 0000 000 000', name: 'LAZER KESİM', unit: 'ADET', is_active: true },
 ];
 
-/** GET /procurement/items/: `code__in` lookups and active-card searches by code or name. */
+/**
+ * GET /procurement/items/: `code__in` lookups and active-card searches by code
+ * or name; `material_only` leaves the F (fason) cards out, as the backend does.
+ */
 function cardsFor(params: URLSearchParams) {
   const codes = params.get('code__in');
   if (codes !== null) return CARDS.filter((c) => codes.split(',').includes(c.code));
   if (params.get('is_active') !== 'true') return [];
   const term = (params.get('search') ?? '').toLocaleLowerCase('tr');
-  return CARDS.filter((c) => `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(term));
+  return CARDS.filter(
+    (c) =>
+      `${c.code} ${c.name}`.toLocaleLowerCase('tr').includes(term) &&
+      !(params.get('material_only') === 'true' && c.code.startsWith('F')),
+  );
 }
 
 // Mantine's combobox scrolls the active option into view; jsdom has no scrollIntoView.
@@ -164,6 +171,7 @@ it("renders the user's own rows with the legacy request and status-dependent act
     page_size: '20',
     ordering: '-id',
     requestor: '7',
+    kind: 'material',
   });
   // Only their own: no switch, no Talep Eden, and no user list asked for.
   expect(screen.queryByRole('radio', { name: 'Tüm Talepler' })).not.toBeInTheDocument();
@@ -192,6 +200,7 @@ it('sends URL filters with the legacy param names and writes typed search to the
     page: '2',
     page_size: '20',
     ordering: '-id',
+    kind: 'material',
     status: 'submitted',
     department: 'it',
     priority: 'urgent',
@@ -362,31 +371,35 @@ it('removing an item row keeps a file mapped to the later row', async () => {
   ).toEqual(['B', 'C']);
 });
 
-it('Hazır Ürün Ekle adds the preset from its stock card, or warns when there is none', async () => {
+it('searches material cards only: no F-card presets, no fason cards in the search', async () => {
   renderPage();
   await screen.findByText('Taslak talep');
   fireEvent.click(screen.getByRole('button', { name: 'Yeni Talep Oluştur' }));
   const dialog = await screen.findByRole('dialog', { name: 'Yeni Departman Talebi' });
+  // Fason work has its own form on Fason Talepleri.
+  expect(within(dialog).queryByLabelText('Hazır Ürün Ekle')).toBeNull();
 
-  fireEvent.click(within(dialog).getByLabelText('Hazır Ürün Ekle'));
-  fireEvent.click(await screen.findByRole('option', { name: 'LAZER KESİM', hidden: true }));
-  await waitFor(() => expect(within(dialog).getAllByTestId('item-row')).toHaveLength(1));
-  expect(within(dialog).getByLabelText('Ürün adı 1')).toHaveValue('LAZER KESİM');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Ürün Ekle' }));
+  const code = within(dialog).getByLabelText('Ürün kodu 1');
+  code.focus();
+  fireEvent.change(code, { target: { value: 'lazer' } });
+  await waitFor(() =>
+    expect(
+      calls().some(
+        (c) =>
+          c.url.pathname === '/procurement/items/' &&
+          c.url.searchParams.get('search') === 'lazer' &&
+          c.url.searchParams.get('material_only') === 'true',
+      ),
+    ).toBe(true),
+  );
+  expect(screen.queryByRole('option', { name: /LAZER KESİM/, hidden: true })).toBeNull();
+  // Every search of this form is a material one.
   expect(
     calls()
-      .find((c) => c.url.searchParams.has('code__in'))!
-      .url.searchParams.get('code__in'),
-  ).toBe('F014 0000 0000 000 000');
-
-  // No card with BÜKÜM's code in this mock: nothing is added with a guessed code.
-  fireEvent.click(within(dialog).getByLabelText('Hazır Ürün Ekle'));
-  fireEvent.click(await screen.findByRole('option', { name: 'BÜKÜM', hidden: true }));
-  await waitFor(() =>
-    expect(notify.warning).toHaveBeenCalledWith(
-      'BÜKÜM için stok kartı bulunamadı; kod veya ad ile arayın.',
-    ),
-  );
-  expect(within(dialog).getAllByTestId('item-row')).toHaveLength(1);
+      .filter((c) => c.url.pathname === '/procurement/items/' && c.url.searchParams.has('search'))
+      .every((c) => c.url.searchParams.get('material_only') === 'true'),
+  ).toBe(true);
 });
 
 it('edit patches the four basic fields', async () => {
