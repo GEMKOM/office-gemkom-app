@@ -37,8 +37,10 @@ import {
   type StatusFamily,
 } from '@/ui';
 import { TopicDiscussion } from '../../shared/topic-discussion/TopicDiscussion';
+import { FasonRequestFormModal } from './FasonRequestFormModal';
 
-const URL_DEFAULTS = { tab: 'open', search: '', job: '' };
+// `new=1` opens Yeni Fason Talebi (Departman Talepleri's form links here).
+const URL_DEFAULTS = { tab: 'open', search: '', job: '', new: '' };
 const EMPTY: FasonJob[] = [];
 
 const TABS: { value: FasonTab; label: string }[] = [
@@ -124,9 +126,11 @@ const columns: DataTableColumn<FasonJob>[] = [
 ];
 
 /**
- * Fason: the workshop's outsourced work (büküm, işleme, galvaniz…). Each row is
- * one department request; purchasing and the material are followed side by
- * side, and the warehouse sends the material once both are ready.
+ * Fason Talepleri: the workshop's outsourced work (büküm, işleme, galvaniz…),
+ * asked for here (Yeni Fason Talebi) rather than on Departman Talepleri, which
+ * is for material. Each row is one department request; purchasing and the
+ * material are followed side by side, and the warehouse sends the material
+ * once both are ready.
  */
 export function FasonPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
@@ -140,12 +144,17 @@ export function FasonPage() {
   return (
     <>
       <PageHeader
-        title="Fason"
+        title="Fason Talepleri"
         subtitle="Atölyenin fason işleri: satınalma ve malzeme yan yana; malzeme depodan tedarikçiye gider, döner"
         icon="people-carry"
+        actions={
+          <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => apply({ new: '1' })}>
+            Yeni Fason Talebi
+          </Button>
+        }
       />
       <DataTable
-        title="Fason İşleri"
+        title="Fason Talepleri"
         icon="fas fa-people-carry"
         toolbar={
           <SegmentedControl
@@ -169,8 +178,14 @@ export function FasonPage() {
         getRowId={(row) => String(row.id)}
         loading={list.isFetching}
         onRowClick={(row) => apply({ job: String(row.id) })}
-        emptyMessage="Bu sekmede fason işi yok"
+        emptyMessage="Bu sekmede fason talebi yok"
       />
+      {values.new ? (
+        <FasonRequestFormModal
+          onClose={() => apply({ new: '' })}
+          onCreated={(jobId) => apply({ new: '', ...(jobId ? { job: String(jobId) } : {}) })}
+        />
+      ) : null}
       {Number.isFinite(openId) && openId > 0 ? (
         <FasonJobModal key={openId} jobId={openId} onClose={() => apply({ job: '' })} />
       ) : null}

@@ -29,8 +29,12 @@ export function craneStatusCountQueryOptions(status: string) {
   return listCountQueryOptions(['craneRequests', 'list'], CRANES, { status });
 }
 
+/** Material requests only (`kind`): fason requests are counted on Fason Talepleri. */
 export function departmentRequestStatusCountQueryOptions(status: string) {
-  return listCountQueryOptions(['departmentRequests', 'list'], DEPARTMENT_REQUESTS, { status });
+  return listCountQueryOptions(['departmentRequests', 'list'], DEPARTMENT_REQUESTS, {
+    status,
+    kind: 'material',
+  });
 }
 
 /** The user's own latest crane requests (my_requests, newest first). */
@@ -41,12 +45,12 @@ export function myCraneRequestsQueryOptions(pageSize: number) {
   });
 }
 
-/** The user's own latest department requests (my_requests ignores filters; newest first). */
+/** The user's own latest material requests (my_requests ignores filters but `kind`; newest first). */
 export function myDepartmentRequestsQueryOptions(pageSize: number) {
   return listPageQueryOptions<DepartmentRequest>(
     ['departmentRequests', 'mine'],
     `${DEPARTMENT_REQUESTS}my_requests/`,
-    { page_size: pageSize },
+    { page_size: pageSize, kind: 'material' },
   );
 }
 

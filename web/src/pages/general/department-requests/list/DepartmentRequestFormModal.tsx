@@ -1,5 +1,6 @@
 import {
   ActionIcon,
+  Anchor,
   Badge,
   Box,
   Button,
@@ -17,6 +18,7 @@ import {
 } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router';
 import {
   DEPARTMENT_REQUEST_PRIORITY_OPTIONS,
   useCreateDepartmentRequest,
@@ -24,14 +26,9 @@ import {
   type DepartmentRequest,
   type DepartmentRequestItemInput,
 } from '@/api/general/departmentRequests';
-import {
-  cardFromSearch,
-  itemKeys,
-  lookupCardsByCode,
-  searchStockCards,
-  type Item,
-} from '@/api/procurement/items';
+import { cardFromSearch, itemKeys, searchMaterialCards } from '@/api/procurement/items';
 import { useJobOrderOptions } from '@/api/reference';
+import { hasRouteAccess } from '@/auth/accessControl';
 import {
   errorMessage,
   FaIcon,
@@ -42,7 +39,7 @@ import {
   SelectRemote,
 } from '@/ui';
 import { FileAttachmentList, ItemsTable } from '../shared';
-import { PREDEFINED_PROCESS_ITEMS, UNIT_CHOICES } from './constants';
+import { UNIT_CHOICES } from './constants';
 import { shiftAttachTargets, type AttachTarget } from './fileItemMapping';
 
 const REQUIRED = 'Bu alan gereklidir';
@@ -91,17 +88,6 @@ function emptyRow(fill: Partial<ItemRow> = {}): ItemRow {
     no_card: false,
     ...fill,
     key: nextKey++,
-  };
-}
-
-/** A row's card fields from a stock card. */
-export function cardFill(card: Pick<Item, 'id' | 'code' | 'name' | 'unit'>): Partial<ItemRow> {
-  return {
-    item_id: card.id,
-    item_code: card.code,
-    item_name: card.name,
-    item_unit: card.unit ? card.unit.toLowerCase() : null,
-    no_card: false,
   };
 }
 
@@ -166,10 +152,8 @@ export function buildItems(rows: ItemRow[]): {
 }
 
 const unitData = UNIT_CHOICES.map(({ value, label }) => ({ value, label }));
-const predefinedData = PREDEFINED_PROCESS_ITEMS.map((item, index) => ({
-  value: String(index),
-  label: item.name,
-}));
+// Material cards only: fason work (F cards) is asked for on Fason Talepleri.
+const MATERIAL_SEARCH_KEY = [...itemKeys.search, 'material'] as const;
 const priorityData = DEPARTMENT_REQUEST_PRIORITY_OPTIONS.map(({ value, label }) => ({
   value,
   label,
@@ -253,16 +237,6 @@ export function DepartmentRequestFormModal({
     form.setFieldValue(`items.${index}.item_unit`, noCard ? 'adet' : null);
     form.clearFieldError(`items.${index}.item_code`);
     form.clearFieldError(`items.${index}.item_name`);
-  };
-  /** "Hazır Ürün Ekle": the preset's stock card, found by its code. */
-  const addPreset = async (preset: (typeof PREDEFINED_PROCESS_ITEMS)[number]) => {
-    try {
-      const card = (await lookupCardsByCode([preset.code])).get(preset.code);
-      if (card) addRow(cardFill(card));
-      else notify.warning(`${preset.name} için stok kartı bulunamadı; kod veya ad ile arayın.`);
-    } catch (error) {
-      notify.error(`Stok kartı aranırken hata oluştu: ${errorMessage(error)}`);
-    }
   };
   const duplicateRow = (index: number) => {
     const source = rows[index];
@@ -427,25 +401,19 @@ export function DepartmentRequestFormModal({
           )
         ) : (
           <Stack gap="xs">
+            {hasRouteAccess('/general/fason') ? (
+              <Text size="xs" c="dimmed">
+                Bu form malzeme içindir. Büküm, işleme, galvaniz gibi fason işler:{' '}
+                <Anchor component={Link} to="/general/fason?new=1" size="xs">
+                  Yeni Fason Talebi
+                </Anchor>
+              </Text>
+            ) : null}
             <Group justify="space-between">
               <Text fw={600} size="sm">
                 Ürün Listesi
               </Text>
               <Group gap="xs">
-                <Select
-                  aria-label="Hazır Ürün Ekle"
-                  placeholder="Hazır Ürün Ekle"
-                  size="xs"
-                  w={200}
-                  searchable
-                  data={predefinedData}
-                  value={null}
-                  onChange={(value) => {
-                    const preset =
-                      value === null ? undefined : PREDEFINED_PROCESS_ITEMS[Number(value)];
-                    if (preset) void addPreset(preset);
-                  }}
-                />
                 <Button
                   size="xs"
                   variant="default"
@@ -520,8 +488,8 @@ export function DepartmentRequestFormModal({
                           aria-label={`Ürün kodu ${index + 1}`}
                           placeholder="Kod veya ad ile ara…"
                           minSearchLength={2}
-                          queryKey={itemKeys.search}
-                          search={searchStockCards}
+                          queryKey={MATERIAL_SEARCH_KEY}
+                          search={searchMaterialCards}
                           initialOptions={
                             row.item_code ? [{ value: row.item_code, label: row.item_code }] : []
                           }

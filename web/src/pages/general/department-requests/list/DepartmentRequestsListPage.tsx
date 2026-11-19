@@ -138,6 +138,8 @@ export function DepartmentRequestsListPage() {
     page,
     page_size: pageSize,
     ordering,
+    // Material requests only: fason requests live on Fason Talepleri.
+    kind: 'material',
     ...(filters.search.trim() ? { search: filters.search.trim() } : {}),
     ...(filters.status ? { status: filters.status } : {}),
     ...(filters.department ? { department: filters.department } : {}),

@@ -69,7 +69,7 @@ export function DepartmentRequestDetailModal({
               hidden: !r.fason_job_id,
               render: (
                 <Anchor component={Link} to={`/general/fason?job=${r.fason_job_id}`} size="sm">
-                  Fason sayfasında takip et →
+                  Fason Talepleri’nde takip et →
                 </Anchor>
               ),
             },

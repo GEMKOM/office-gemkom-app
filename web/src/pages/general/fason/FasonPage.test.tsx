@@ -87,12 +87,20 @@ const DETAIL = {
   },
 };
 
+const BUKUM = { id: 3, code: 'F001 0000 0000 000 000', name: 'BÜKÜM İŞLEMİ', unit: 'ADET' };
+const GALVANIZ = { id: 4, code: 'F026 0000 0000 000 000', name: 'GALVANİZ KAPLAMA İŞLEMİ' };
+
 const calls = () =>
   fetchMock.mock.calls.map(([url, init]) => ({
     url: new URL(String(url)),
     method: init?.method ?? 'GET',
-    body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
+    body: typeof init?.body === 'string' ? JSON.parse(init.body) : init?.body,
   }));
+
+// Mantine's combobox scrolls the active option into view; jsdom has no scrollIntoView.
+beforeAll(() => {
+  Element.prototype.scrollIntoView ??= () => {};
+});
 
 beforeEach(() => {
   fetchMock.mockReset();
@@ -119,6 +127,14 @@ beforeEach(() => {
       });
     if (path === '/fason/jobs/5/') return json(DETAIL);
     if (path === '/fason/jobs/') return json({ count: 1, results: [JOB] });
+    if (path === '/procurement/items/') return json({ count: 2, results: [BUKUM, GALVANIZ] });
+    if (path === '/projects/job-orders/dropdown/')
+      return json([
+        { job_no: '304-02', title: 'Kazan' },
+        { job_no: '305-01', title: 'Tank' },
+      ]);
+    if (init?.method === 'POST' && path === '/planning/department-requests/')
+      return json({ id: 9, request_number: 'DR-2026-0042', fason_job_id: 5 }, 201);
     return json({});
   });
   vi.spyOn(notify, 'success');
@@ -155,4 +171,75 @@ it('opens a job and sends its material to the order’s supplier', async () => {
   expect(
     await within(dialog).findByText(/Gönderildi → Sezgin Metal \(İrsaliye IRS-9\)/),
   ).toBeInTheDocument();
+});
+
+it('is Fason Talepleri and opens a fason request: one operation, its parts, submitted for approval', async () => {
+  renderWithProviders(<FasonPage />, { route: '/general/fason' });
+  expect(screen.getByRole('heading', { level: 1, name: 'Fason Talepleri' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Yeni Fason Talebi' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Yeni Fason Talebi' });
+
+  // Only the workshop-route operations are offered.
+  await waitFor(() =>
+    expect(
+      calls()
+        .find((c) => c.url.pathname === '/procurement/items/')
+        ?.url.searchParams.get('fason_route'),
+    ).toBe('workshop'),
+  );
+  const items = calls().find((c) => c.url.pathname === '/procurement/items/')!.url.searchParams;
+  expect(items.get('is_active')).toBe('true');
+
+  // Nothing is sent without an operation and a described part.
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Talep Oluştur' }));
+  expect(await within(dialog).findByText('İşlem seçin')).toBeInTheDocument();
+  expect(within(dialog).getByText('Bu alan gereklidir')).toBeInTheDocument();
+
+  fireEvent.click(within(dialog).getByRole('combobox', { name: /^İşlem/ }));
+  fireEvent.click(await screen.findByRole('option', { name: 'BÜKÜM İŞLEMİ', hidden: true }));
+  fireEvent.change(within(dialog).getByLabelText('Parça 1'), { target: { value: 'P-26' } });
+  fireEvent.change(within(dialog).getByLabelText('Adet 1'), { target: { value: '4' } });
+  fireEvent.click(within(dialog).getByRole('combobox', { name: 'İş No 1' }));
+  fireEvent.click(await screen.findByRole('option', { name: '304-02 - Kazan', hidden: true }));
+
+  // A second part, then a third one removed again.
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Parça Ekle' }));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Parça Ekle' }));
+  expect(within(dialog).getAllByTestId('fason-part-row')).toHaveLength(3);
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Parçayı kaldır 3' }));
+  expect(within(dialog).getAllByTestId('fason-part-row')).toHaveLength(2);
+  fireEvent.change(within(dialog).getByLabelText('Parça 2'), { target: { value: 'P-40 kapak' } });
+  fireEvent.change(within(dialog).getByLabelText('İhtiyaç Tarihi'), {
+    target: { value: '2026-12-01' },
+  });
+  fireEvent.change(within(dialog).getByLabelText(/^Not/), { target: { value: 'Kenarlar 90°' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Talep Oluştur' }));
+
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith(
+      'Fason talebi oluşturuldu; departman onayına gönderildi',
+    ),
+  );
+  // The same department-request endpoint as Departman Talepleri.
+  const post = calls().find((c) => c.method === 'POST')!;
+  expect(post.url.pathname).toBe('/planning/department-requests/');
+  const body = post.body as FormData;
+  expect(body.get('title')).toBe('BÜKÜM İŞLEMİ · 304-02');
+  expect(body.get('description')).toBe('Kenarlar 90°');
+  expect(body.get('needed_date')).toBe('2026-12-01');
+  expect(body.get('priority')).toBe('normal');
+  const card = { item_id: 3, item_code: BUKUM.code, item_name: 'BÜKÜM İŞLEMİ', item_unit: 'adet' };
+  expect(JSON.parse(String(body.get('items')))).toEqual([
+    { ...card, job_no: '304-02', quantity: 4, item_description: 'P-26', item_specifications: null },
+    // The next part keeps the job of the one before.
+    {
+      ...card,
+      job_no: '304-02',
+      quantity: 1,
+      item_description: 'P-40 kapak',
+      item_specifications: null,
+    },
+  ]);
+  // The new request's fason job opens.
+  expect(await screen.findByRole('dialog', { name: /Fason · DR-2026-0042/ })).toBeInTheDocument();
 });
