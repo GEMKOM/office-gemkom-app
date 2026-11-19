@@ -55,20 +55,23 @@ type Stage =
 
 /**
  * Whether a row's code is a stock card: found and active, found but inactive,
- * or none. A plate / bar card is not taken from Excel ('piece'): those lines
- * need a size and a count, entered in the form.
+ * or none. A plate card is not taken from Excel ('piece'): plates need a sheet
+ * size and a count, entered in the form. A bar card is taken ('bar'), with a
+ * warning: it comes in as a sized line whose length (m) and count the planner
+ * still picks, since the file's quantity can't tell mm from m.
  */
-type CardStatus = 'ok' | 'inactive' | 'missing' | 'unchecked' | 'piece';
+type CardStatus = 'ok' | 'inactive' | 'missing' | 'unchecked' | 'piece' | 'bar';
 
 function cardStatus(code: string, cards: Map<string, Item> | null): CardStatus {
   if (!cards) return 'unchecked';
   const card = cards.get(code.trim());
   if (!card) return 'missing';
-  if (card.material_class === 'plate' || card.material_class === 'boy') return 'piece';
-  return card.is_active === false ? 'inactive' : 'ok';
+  if (card.material_class === 'plate') return 'piece';
+  if (card.is_active === false) return 'inactive';
+  return card.material_class === 'boy' ? 'bar' : 'ok';
 }
 
-/** "Satır 4 (0100 …), Satır 7 (0010 …)" for the refused plate / bar rows. */
+/** "Satır 4 (0100 …), Satır 7 (0010 …)" for the refused plate rows (or the bar rows). */
 export function pieceRowsText(items: readonly ImportedItem[]) {
   return items
     .map((item, index) => `Satır ${item.line ?? index + 1} (${item.item_code})`)
@@ -94,8 +97,13 @@ const STATUS_BADGE: Record<CardStatus, { color: string; label: string; title: st
   },
   piece: {
     color: 'orange',
-    label: 'Sac / boy: alınmaz',
-    title: "Sac ve boy satırları Excel'den alınmaz: formda ölçü ve adetle girin",
+    label: 'Sac: alınmaz',
+    title: "Sac satırları Excel'den alınmaz: formda sac ölçüsü ve adetle girin",
+  },
+  bar: {
+    color: 'orange',
+    label: 'Boy: ölçü seçilecek',
+    title: 'Listeye alınır; formda boy (m) ve adet seçin. Dosyadaki miktar kullanılmaz.',
   },
 };
 
@@ -190,14 +198,26 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
     (item) => cardStatus(item.item_code, cards) === 'piece',
   );
 
+  const barRows = (preview ?? []).filter((item) => cardStatus(item.item_code, cards) === 'bar');
+
   const importItems = () => {
     if (!preview || preview.length === 0) return;
-    // Plate / bar rows stay out: the form asks their size and count.
+    // Plate rows stay out: the form asks their sheet size and count.
     const kept = preview.filter((item) => cardStatus(item.item_code, cards) !== 'piece');
-    // A code with no stock card comes in empty: the planner picks the card.
-    const items = kept.map((item) =>
-      cardStatus(item.item_code, cards) === 'missing' ? { ...item, item_code: '' } : item,
-    );
+    const items = kept.map((item) => {
+      const status = cardStatus(item.item_code, cards);
+      // A code with no stock card comes in empty: the planner picks the card.
+      if (status === 'missing') return { ...item, item_code: '' };
+      // A bar row comes in as a sized line (length in m × count still to pick).
+      if (status === 'bar') {
+        const card = cards!.get(item.item_code.trim())!;
+        return {
+          ...item,
+          card: { id: card.id, unit: card.unit ?? null, material_class: card.material_class ?? null },
+        };
+      }
+      return item;
+    });
     const missing = items.length - items.filter((item) => item.item_code).length;
     if (items.length > 0) {
       onImport(items);
@@ -205,7 +225,12 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
     }
     if (pieceRows.length > 0) {
       notify.warning(
-        `Sac / boy satırları içe aktarılmadı, formda ölçü ve adetle girin: ${pieceRowsText(pieceRows)}`,
+        `Sac satırları içe aktarılmadı, formda sac ölçüsü ve adetle girin: ${pieceRowsText(pieceRows)}`,
+      );
+    }
+    if (barRows.length > 0) {
+      notify.warning(
+        `${barRows.length} boy satırı listeye alındı: her biri için boy (m) ve adet seçin (${pieceRowsText(barRows)})`,
       );
     }
     if (missing > 0) {
@@ -368,11 +393,22 @@ export function ExcelImportModal({ onClose, onImport }: ExcelImportModalProps) {
                 <Alert
                   color="orange"
                   variant="light"
-                  title="Sac / boy satırları içe aktarılmayacak"
+                  title="Sac satırları içe aktarılmayacak"
                   icon={<FaIcon icon="fas fa-ruler-combined" />}
                 >
-                  Sac ve boy kalemleri ölçü (standart ya da özel) ve adetle istenir; bu satırları
+                  Sac kalemleri sac ölçüsü (standart ya da özel) ve adetle istenir; bu satırları
                   formda girin: {pieceRowsText(pieceRows)}. Diğer satırlar aktarılır.
+                </Alert>
+              ) : null}
+              {preview && barRows.length > 0 ? (
+                <Alert
+                  color="yellow"
+                  variant="light"
+                  title="Boy satırları ölçüsüz gelecek"
+                  icon={<FaIcon icon="fas fa-ruler-horizontal" />}
+                >
+                  Boy kalemleri listeye alınır ama dosyadaki miktar kullanılmaz (mm mi m mi belli
+                  değil). Formda her biri için boy (metre) ve adet seçin: {pieceRowsText(barRows)}.
                 </Alert>
               ) : null}
               {preview ? (

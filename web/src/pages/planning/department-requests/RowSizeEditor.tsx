@@ -23,6 +23,14 @@ const CUSTOM = '__custom';
 
 const kg = (value: number) => `${formatNumber(value, 2)} kg`;
 
+/**
+ * A bar length in metres ("6 m", "2,5 m"). Bars are ordered in metres: a length
+ * in mm next to a quantity in metres invites ordering 500 m of pipe instead of
+ * 500 mm. The line still stores the length in mm (piece_length).
+ */
+export const barMetres = (lengthMm: number) =>
+  `${String(Number((lengthMm / 1000).toFixed(3))).replace('.', ',')} m`;
+
 export interface SizeTotals {
   /** Every size field filled in. */
   complete: boolean;
@@ -155,7 +163,10 @@ export function RowSizeEditor({
           // All sizes are mm: the plate label without it fits the cell.
           label: s.label.replace(/\s*mm$/, ''),
         }))
-      : (sizes.data?.bar ?? []).map((s) => ({ value: String(s.length_mm), label: s.label }))),
+      : (sizes.data?.bar ?? []).map((s) => ({
+          value: String(s.length_mm),
+          label: barMetres(Number(s.length_mm)),
+        }))),
     { value: CUSTOM, label: 'Özel ölçü…' },
   ];
 
@@ -214,14 +225,38 @@ export function RowSizeEditor({
               </Text>
             </>
           ) : null}
-          <NumberInput
-            {...mm}
-            w={kind === 'plate' ? 64 : 84}
-            placeholder={kind === 'plate' ? 'Boy' : 'Boy (mm)'}
-            aria-label={`Boy (mm) ${index + 1}`}
-            value={row.piece_length ?? ''}
-            onChange={(value) => onChange({ piece_length: value })}
-          />
+          {kind === 'plate' ? (
+            <NumberInput
+              {...mm}
+              w={64}
+              placeholder="Boy"
+              aria-label={`Boy (mm) ${index + 1}`}
+              value={row.piece_length ?? ''}
+              onChange={(value) => onChange({ piece_length: value })}
+            />
+          ) : (
+            // A bar's length is typed in metres; the line keeps it in mm.
+            <NumberInput
+              {...mm}
+              w={84}
+              decimalScale={3}
+              decimalSeparator=","
+              placeholder="Boy (m)"
+              aria-label={`Boy (m) ${index + 1}`}
+              rightSection={
+                <Text size="xs" c="dimmed">
+                  m
+                </Text>
+              }
+              value={length > 0 ? length / 1000 : ''}
+              onChange={(value) =>
+                onChange({
+                  piece_length:
+                    value === '' || value === null ? '' : Math.round(Number(value) * 1000),
+                })
+              }
+            />
+          )}
           {disabled ? null : (
             <Tooltip label="Standart ölçüye dön" withArrow>
               <ActionIcon

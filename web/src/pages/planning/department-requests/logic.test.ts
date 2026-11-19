@@ -480,6 +480,24 @@ describe('plate / boy sizes', () => {
   });
 });
 
+describe('bar rows in metres', () => {
+  it('names a missing bar length in metres, before the quantity a size would give', () => {
+    const bar = itemRow({
+      item_code: '0010 0114 0015 000 000',
+      job_no: '254-01',
+      kind: 'boy',
+      size_mode: 'standard',
+      quantity: '',
+      piece_length: '',
+      piece_count: '',
+    });
+    expect(buildItems([bar])).toEqual({
+      ok: false,
+      error: '0010 0114 0015 000 000: boy (m) girilmeli',
+    });
+  });
+});
+
 describe('Excel import of plate / bar rows', () => {
   it('names the refused rows by their line in the file', async () => {
     const { pieceRowsText } = await import('./ExcelImportModal');
