@@ -87,60 +87,36 @@ describe('Genel', () => {
     // Nothing waiting for a crane approval: no pill at all.
     expect(card('Vinç Talepleri')).not.toHaveTextContent('bekliyor');
     const pending = calls().filter((url) => url.pathname.endsWith('/pending_approval/'));
-    expect(pending.map((url) => url.searchParams.get('page_size'))).toEqual(['1', '1', '1', '1']);
+    // Only the queues behind its own cards: department and crane requests.
+    expect(pending.map((url) => url.pathname).sort()).toEqual([
+      '/cranes/requests/pending_approval/',
+      '/planning/department-requests/pending_approval/',
+    ]);
   });
 
-  it('gathers every queue waiting on the user in Sizi Bekleyenler, each linking to its list', async () => {
+  it('carries no leave, İSG or approval panels: those live in the user menu and their own sections', async () => {
     renderWithProviders(<GeneralHubPage />, { route: '/general/' });
 
-    const panel = screen.getByRole('heading', { name: 'Sizi Bekleyenler' }).closest('section')!;
-    const row = (name: RegExp) => within(panel).getByRole('link', { name });
-    await waitFor(() => expect(row(/Mesai talepleri/)).toHaveTextContent('5'));
-    expect(row(/Mesai talepleri/)).toHaveAttribute('href', '/human_resources/overtime/pending');
-    await waitFor(() => expect(row(/Departman talepleri/)).toHaveTextContent('2'));
-    await waitFor(() => expect(row(/Vinç talepleri/)).toHaveAttribute('data-idle', 'true'));
-    expect(row(/İSG aksiyonları/)).toHaveAttribute('href', '/isg/issues?mine=true');
+    await waitFor(() =>
+      expect(card('Departman Talepleri')).toHaveTextContent('2 onayınızı bekliyor'),
+    );
+    expect(screen.queryByRole('heading', { name: 'Sizi Bekleyenler' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Bu Hafta İzinde' })).not.toBeInTheDocument();
+    expect(document.getElementById('leave-left')).toBeNull();
+    expect(document.getElementById('isg-mine')).toBeNull();
+    const asked = calls().map((url) => url.pathname);
+    expect(
+      asked.some((path) => path.startsWith('/vacation-requests/') || path.startsWith('/isg/')),
+    ).toBe(false);
   });
 
-  it('shows the leave balance on the band and who is away this week', async () => {
-    BODIES['/vacation-requests/my-summary/'] = {
-      annual_leave: { total_days: 20, used_days: 7.5, remaining_days: 12.5 },
-    };
-    BODIES['/vacation-requests/upcoming-leaves/'] = {
-      count: 1,
-      results: [
-        {
-          id: 3,
-          full_name: 'Ayşe Yılmaz',
-          team_label: 'Satın Alma',
-          leave_type_label: 'Yıllık İzin',
-          start_date: '2026-11-04',
-          end_date: '2026-11-06',
-        },
-      ],
-    };
-    renderWithProviders(<GeneralHubPage />, { route: '/general/' });
-
-    await waitFor(() => expect(document.getElementById('leave-left')).toHaveTextContent('12,5'));
-    const away = screen.getByRole('heading', { name: 'Bu Hafta İzinde' }).closest('section')!;
-    await within(away).findByText('Ayşe Yılmaz');
-    expect(away).toHaveTextContent('Satın Alma · Yıllık İzin');
-    const leaves = calls().find((url) => url.pathname === '/vacation-requests/upcoming-leaves/')!;
-    const from = leaves.searchParams.get('from_date')!;
-    expect(from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(leaves.searchParams.get('to_date')! >= from).toBe(true);
-  });
-
-  it('shows a user without Genel grants only the open cards, and asks nothing it cannot show', async () => {
+  it('shows a user without request grants no cards, and asks nothing', async () => {
     access.granted = new Set();
     renderWithProviders(<GeneralHubPage />, { route: '/general/' });
 
+    expect(screen.getByRole('heading', { level: 1, name: 'Talepler' })).toBeInTheDocument();
     expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
-    await waitFor(() =>
-      expect(calls().map((url) => url.pathname)).toEqual(['/isg/issues/summary/']),
-    );
-    expect(screen.queryByRole('heading', { name: 'Bu Hafta İzinde' })).not.toBeInTheDocument();
-    expect(document.getElementById('leave-left')).toBeNull();
+    expect(calls()).toHaveLength(0);
   });
 });
 
