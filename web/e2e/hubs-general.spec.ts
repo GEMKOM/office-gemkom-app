@@ -1,11 +1,12 @@
 import { expect, mockBackend, paginated, seedSession, test } from './fixtures';
 
-// The landing page and the Genel / Bilgi İşlem / İSG hubs (MenuCards).
+// The landing page and the Talepler (was Genel) / Bilgi İşlem / İSG hubs (MenuCards).
 // Contracts used here:
 //   /                       the personal home; no work-area cards (the menu has them)
-//   /general/               title "Genel Modülü"; Mesailer shows a pill when
-//                           GET /overtime/requests/pending_approval/ counts any
-//   /general/overtime/      title "Mesai Talepleri"
+//   /general/               title "Talepler": Departman / Vinç Talepleri, Fason
+//   user menu               the overtime approvals waiting (GET
+//                           /overtime/requests/pending_approval/) count on the avatar
+//   /human_resources/overtime/  title "Mesai Talepleri" (old /general/overtime/ forwards)
 //   /it/                    hub; needs a grant under /it
 
 declare global {
@@ -17,7 +18,10 @@ declare global {
 const cardTitles = (page: import('@playwright/test').Page) =>
   page.getByRole('main').getByRole('heading', { level: 3 }).allTextContents();
 
-test('admin: landing page -> Genel -> Mesailer, all client-side', async ({ page, consoleErrors }) => {
+test('admin: landing page -> Talepler, overtime approvals on the avatar, all client-side', async ({
+  page,
+  consoleErrors,
+}) => {
   const session = await seedSession(page, { admin: true });
   await mockBackend(
     page,
@@ -41,18 +45,18 @@ test('admin: landing page -> Genel -> Mesailer, all client-side', async ({ page,
   await page.evaluate(() => {
     window.__spaMarker = 'still-here';
   });
-  // The menu's Genel entry wears the red badge for the 4 overtime requests waiting.
-  const genel = page.getByRole('navigation', { name: 'Ana menü' }).getByRole('button', { name: 'Genel, 4 bekleyen' });
-  await expect(genel).toBeVisible();
-  await genel.click();
+  const menu = page.getByRole('navigation', { name: 'Ana menü' });
+  await menu.getByRole('button', { name: 'Talepler' }).click();
   await expect(page).toHaveURL(/\/general\/?$/);
-  await expect(main.getByRole('heading', { level: 1, name: 'Genel Modülü' })).toBeVisible();
-  const overtime = main.locator('article').filter({ has: page.getByRole('heading', { name: 'Mesailer' }) });
-  await expect(overtime).toContainText('4 onayınızı bekliyor');
+  await expect(main.getByRole('heading', { level: 1, name: 'Talepler' })).toBeVisible();
+  expect(await cardTitles(page)).toEqual(['Departman Talepleri', 'Vinç Talepleri', 'Fason']);
 
-  await overtime.getByRole('link', { name: 'Mesailer' }).click();
-  await expect(page).toHaveURL(/\/general\/overtime\/?$/);
-  await expect(main.getByRole('heading', { level: 1, name: 'Mesai Talepleri' })).toBeVisible();
+  // Overtime approvals moved to the user menu: the avatar wears their count.
+  const avatar = page.getByRole('button', { name: /, 4 onay bekliyor$/ }).first();
+  await expect(avatar).toBeVisible();
+  await avatar.click();
+  await page.getByRole('menuitem', { name: /Mesai Onayları/ }).click();
+  await expect(page).toHaveURL(/\/human_resources\/overtime\/pending\/?$/);
   expect(await page.evaluate(() => window.__spaMarker)).toBe('still-here');
   consoleErrors.expectNone();
 });
@@ -68,10 +72,14 @@ test.describe('a user with only some grants', () => {
     await expect(page.getByRole('main').getByRole('heading', { level: 1, name: /, E2E$/ })).toBeVisible();
     await expect(page.getByRole('main').getByRole('heading', { name: 'Çalışma Alanları' })).toHaveCount(0);
 
+    // Talepler has nothing for them (no department / crane / fason grant).
     await page.goto('/general/');
-    await expect.poll(() => cardTitles(page)).toEqual(['Mesailer', 'İSG Bildirimleri', 'Tartışmalarım']);
+    await expect(page.getByRole('main').getByRole('heading', { level: 1, name: 'Talepler' })).toBeVisible();
+    expect(await cardTitles(page)).toEqual([]);
 
+    // Mesailer moved to İnsan Kaynakları; the old address forwards, the old grants still open it.
     await page.goto('/general/overtime/');
+    await expect(page).toHaveURL(/\/human_resources\/overtime\/?$/);
     await expect.poll(() => cardTitles(page)).toEqual(['Mesai Maliyet Raporu']);
     // No grant for the pending list: its count is never asked for.
     expect(backend.callsTo('/overtime/requests/pending_approval/')).toHaveLength(0);

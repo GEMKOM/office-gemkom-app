@@ -1,12 +1,11 @@
 import { hasRouteAccess } from '@/auth/accessControl';
 import { MenuCards, PendingValue, type MenuCard, type PageFigure } from '@/ui';
 import { AttentionPanel, HubPanels } from '../hub/HubPanels';
-import { countValue, useIsgSummary, usePendingApprovalCount, waitingBadge } from '../hubFigures';
+import { countValue, useIsgSummary, waitingBadge } from '../hubFigures';
 import {
   AwayThisWeek,
   leaveDays,
   MY_LEAVE,
-  PENDING,
   useCranePendingCount,
   useDepartmentRequestPendingCount,
   useMyLeave,
@@ -17,8 +16,6 @@ export function GeneralHubPage() {
   // Each pill counts what is waiting on the user behind the card; the cards
   // hide themselves (and skip the request) when the user cannot open them.
   // The same cached queries feed the Sizi Bekleyenler panel.
-  const overtime = usePendingApprovalCount('overtime', PENDING.overtime);
-  const vacation = usePendingApprovalCount('vacation', PENDING.vacation);
   const department = useDepartmentRequestPendingCount();
   const crane = useCranePendingCount();
   const isg = useIsgSummary();
@@ -26,33 +23,12 @@ export function GeneralHubPage() {
   const leave = useMyLeave();
   const canLeave = hasRouteAccess(MY_LEAVE);
 
-  // Ported from general/management.js. The İSG and Tartışmalarım cards are
-  // open to everyone, so this hub is too (/general is always allowed); the
-  // other cards show only to users who can open them.
+  // Talepler (was Genel, reorganised 2026-11-19): the requests that cross
+  // departments. Makineler moved to Depo, Mesailer to İnsan Kaynakları, İSG has
+  // its own section; leave / overtime requests and approvals are in the user
+  // menu. /general stays always allowed; each card shows only to users who can
+  // open it.
   const cards: MenuCard[] = [
-    {
-      title: 'Makineler',
-      description: 'Şirket makinelerinin envanteri, durum takibi ve planlama yönetimi.',
-      icon: 'fas fa-cogs',
-      iconColor: 'success',
-      link: '/general/machines',
-    },
-    {
-      title: 'Mesailer',
-      description: 'Mesai talepleri, onay süreçleri ve mesai raporları yönetimi.',
-      icon: 'fas fa-clock',
-      iconColor: 'warning',
-      link: '/general/overtime',
-      badge: waitingBadge(overtime.data, 'onayınızı bekliyor', 'yellow'),
-    },
-    {
-      title: 'İzin Talepleri',
-      description: 'İzin taleplerinin oluşturulması, onay süreçleri ve bakiye takibi.',
-      icon: 'fas fa-calendar-check',
-      iconColor: 'primary',
-      link: '/general/vacation',
-      badge: waitingBadge(vacation.data, 'onayınızı bekliyor', 'yellow'),
-    },
     {
       title: 'Departman Talepleri',
       description: 'Departman taleplerinin oluşturulması, onay süreçleri ve takibi.',
@@ -70,21 +46,12 @@ export function GeneralHubPage() {
       badge: waitingBadge(crane.data, 'onayınızı bekliyor', 'yellow'),
     },
     {
-      title: 'İSG Bildirimleri',
+      title: 'Fason',
       description:
-        'İş sağlığı ve güvenliği bildirimlerini takip edin, üzerinize atanan aksiyonları kapatın.',
-      icon: 'fas fa-helmet-safety',
-      iconColor: 'danger',
-      link: '/isg/issues',
-      badge: waitingBadge(isg.data?.mine_open, 'size atanmış', 'orange'),
-    },
-    {
-      title: 'Tartışmalarım',
-      description:
-        'Açtığınız tartışma konuları ve yazdığınız yorumlar; yanıt gelenleri görün, yerinde yanıtlayın.',
-      icon: 'fas fa-comments',
-      iconColor: 'primary',
-      link: '/general/discussions',
+        'Atölyenin fason işleri: satınalma ve malzeme yan yana; depodan tedarikçiye gidiş ve dönüş.',
+      icon: 'fas fa-people-carry',
+      iconColor: 'warning',
+      link: '/general/fason',
     },
   ];
 
@@ -112,8 +79,8 @@ export function GeneralHubPage() {
 
   return (
     <MenuCards
-      title="Genel Modülü"
-      subtitle="Şirket geneli yönetim işlemlerinizi gerçekleştirin"
+      title="Talepler"
+      subtitle="Departman ve vinç talepleri, atölyenin fason işleri"
       stats={stats}
       compact
       cards={cards}

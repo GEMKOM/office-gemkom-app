@@ -81,13 +81,13 @@ export function timeEntriesLink(row: { user_id?: number; date: string }): string
 
 /** The overtime request's details modal in the registry. */
 export function requestLink(id: number): string {
-  return `/general/overtime/registry?request=${id}`;
+  return `/human_resources/overtime/registry?request=${id}`;
 }
 
 /** The registry narrowed to one welding day, for days with overtime but no request. */
 export function registryDayLink(date: string): string {
   const day = date.slice(0, 10);
-  return `/general/overtime/registry?start_date=${day}&end_date=${day}&team=welding`;
+  return `/human_resources/overtime/registry?start_date=${day}&end_date=${day}&team=welding`;
 }
 
 export function flagMeta(flag: string): FlagMeta {

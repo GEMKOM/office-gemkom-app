@@ -17,7 +17,7 @@ import { usePendingApprovalCount, useIsgSummary } from '../hubFigures';
 // balance and who is away this week.
 
 export const PENDING = {
-  overtime: '/general/overtime/pending',
+  overtime: '/human_resources/overtime/pending',
   vacation: '/general/vacation/pending',
   departmentRequests: '/general/department-requests/pending',
   craneRequests: '/general/crane-requests/pending',

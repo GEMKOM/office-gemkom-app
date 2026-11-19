@@ -488,7 +488,7 @@ export function CostReportPage() {
         title="Mesai Maliyet Raporu"
         subtitle="Seçilen dönemdeki toplam mesai maliyeti — ekip, kişi ve iş bazında dağılım"
         icon="coins"
-        backTo="/general/overtime"
+        backTo="/human_resources/overtime"
         stats={stats}
       />
 

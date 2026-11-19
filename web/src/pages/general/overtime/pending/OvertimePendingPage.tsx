@@ -91,7 +91,7 @@ export function OvertimePendingPage() {
         title="Onay Bekleyen Mesai Talepleri"
         subtitle="Onayınızı bekleyen mesai taleplerinin yönetimi"
         icon="clock"
-        backTo="/general/overtime"
+        backTo="/human_resources/overtime"
         stats={[
           {
             id: 'pending-count',

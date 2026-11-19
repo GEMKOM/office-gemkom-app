@@ -51,7 +51,10 @@ describe('moved pages', () => {
   });
 
   it('puts each moved page in its new section of the menu (cutting under Planlama, stock under Depo)', () => {
+    // Mesai onayları is reached from the user menu (Onayımı Bekleyenler), not a section.
+    const userMenuOnly = new Set(['/human_resources/overtime/pending']);
     for (const [oldRoute, newRoute] of moved) {
+      if (userMenuOnly.has(newRoute)) continue;
       expect(findTrail(NAVIGATION_STRUCTURE, newRoute).at(-1)?.path).toBe(newRoute);
       expect(findTrail(NAVIGATION_STRUCTURE, newRoute)[0]?.path).toBe(`/${newRoute.split('/')[1]}`);
       expect(findTrail(NAVIGATION_STRUCTURE, oldRoute).map((s) => s.path)).not.toContain(oldRoute);
@@ -61,8 +64,8 @@ describe('moved pages', () => {
   it('shows the menu entries an old grant opens', () => {
     legacy.grantedPages = new Set(['/manufacturing/cnc-cutting/cuts']);
     const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
-    // '/', '/quiz' and '/general' are open to everyone.
-    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning', '/warehouse']);
+    // '/', '/quiz', '/general' (Talepler) and '/isg' are open to everyone.
+    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/isg', '/planning', '/warehouse']);
     const planning = tree['/planning']!.children;
     expect(Object.keys(planning)).toEqual(['/planning/cnc-cutting']);
     // A CNC planner also sees Sac Stoğu, the Depo page under CNC Kesim.
@@ -80,7 +83,7 @@ describe('moved pages', () => {
   it('an old Stok Kartları grant shows Tüm Stok Kartları under Depo › Stoklar', () => {
     legacy.grantedPages = new Set(['/planning/inventory/cards']);
     const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
-    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/warehouse']);
+    expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/isg', '/warehouse']);
     expect(Object.keys(tree['/warehouse']!.children)).toEqual(['/warehouse#stoklar']);
     expect(Object.keys(tree['/warehouse']!.children['/warehouse#stoklar']!.children)).toEqual([
       '/warehouse/stock',
@@ -92,7 +95,7 @@ describe('moved pages', () => {
       expect(RETIRED_ROUTES[grant]).toBe('/warehouse/plate-stock');
       legacy.grantedPages = new Set([grant]);
       const tree = filterNavigationByAccess(NAVIGATION_STRUCTURE);
-      expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/planning', '/warehouse']);
+      expect(Object.keys(tree)).toEqual(['/', '/quiz', '/general', '/isg', '/planning', '/warehouse']);
       expect(Object.keys(tree['/warehouse']!.children['/warehouse#stoklar']!.children)).toEqual([
         '/warehouse/plate-stock',
       ]);

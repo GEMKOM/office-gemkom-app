@@ -67,7 +67,8 @@ describe('navModel', () => {
   });
 
   it('knows which /general pages are built', () => {
-    expect(isUnbuiltGeneralPage('/general/overtime/pending')).toBe(false);
+    expect(isUnbuiltGeneralPage('/general/vacation/pending')).toBe(false);
+    expect(isUnbuiltGeneralPage('/general/fason')).toBe(false);
     expect(isUnbuiltGeneralPage('/general/something-new')).toBe(true);
     expect(isUnbuiltGeneralPage('/sales')).toBe(false);
   });

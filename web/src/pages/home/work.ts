@@ -139,7 +139,7 @@ const requestStatus = (row: Row) => ({
 });
 
 export const VACATION_PAGE = '/general/vacation/requests';
-export const OVERTIME_PAGE = '/general/overtime/registry';
+export const OVERTIME_PAGE = '/human_resources/overtime/registry';
 
 /**
  * The user's latest leave and overtime requests, newest first, with where

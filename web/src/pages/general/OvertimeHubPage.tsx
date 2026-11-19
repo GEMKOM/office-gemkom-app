@@ -12,9 +12,9 @@ import { MenuCards, PendingValue, type MenuCard, type PageFigure } from '@/ui';
 import { BreakdownPanel, HubPanels, RecordsPanel, type HubRecord } from '../hub/HubPanels';
 import { countValue, usePendingApprovalCount } from '../hubFigures';
 
-const PENDING = '/general/overtime/pending';
-const REGISTRY = '/general/overtime/registry';
-const USERS = '/general/overtime/users';
+const PENDING = '/human_resources/overtime/pending';
+const REGISTRY = '/human_resources/overtime/registry';
+const USERS = '/human_resources/overtime/users';
 
 // This month's requests by status, as the registry filters them (on the start).
 const MONTH_STAGES = [
@@ -92,21 +92,21 @@ export function OvertimeHubPage() {
       description: 'Tüm mesai taleplerinin geçmişi ve kayıt defteri.',
       icon: 'fas fa-archive',
       iconColor: 'info',
-      link: '/general/overtime/registry',
+      link: '/human_resources/overtime/registry',
     },
     {
       title: 'Mesai Kullanıcıları',
       description: 'Belirli bir tarihte mesai yapacak kullanıcıların listesi.',
       icon: 'fas fa-users',
       iconColor: 'primary',
-      link: '/general/overtime/users',
+      link: '/human_resources/overtime/users',
     },
     {
       title: 'Talaşlı İmalat Mesai Raporu',
       description: 'Onaylı mesailerdeki operasyonların o gün çalışılıp çalışılmadığı ve süreleri.',
       icon: 'fas fa-cogs',
       iconColor: 'success',
-      link: '/general/overtime/machining-report',
+      link: '/human_resources/overtime/machining-report',
     },
     {
       title: 'Kaynaklı İmalat Mesai Raporu',
@@ -114,14 +114,14 @@ export function OvertimeHubPage() {
         'Onaylı mesai saatleri ile kaynak zaman kayıtlarının karşılaştırması ve sapmalar.',
       icon: 'fas fa-fire',
       iconColor: 'danger',
-      link: '/general/overtime/welding-report',
+      link: '/human_resources/overtime/welding-report',
     },
     {
       title: 'Mesai Maliyet Raporu',
       description: 'Seçilen dönemdeki toplam mesai maliyeti; ekip, kişi ve iş bazında dağılım.',
       icon: 'fas fa-coins',
       iconColor: 'warning',
-      link: '/general/overtime/cost-report',
+      link: '/human_resources/overtime/cost-report',
     },
   ];
 

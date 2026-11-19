@@ -178,7 +178,7 @@ export function OvertimeUsersPage() {
         title="Mesai Kullanıcıları"
         subtitle="Belirli bir tarihte mesai yapacak kullanıcıların listesi"
         icon="users"
-        backTo="/general/overtime"
+        backTo="/human_resources/overtime"
       />
 
       <DataTable

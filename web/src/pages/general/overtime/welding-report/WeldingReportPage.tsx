@@ -497,7 +497,7 @@ export function WeldingReportPage() {
         title="Kaynaklı İmalat Mesai Raporu"
         subtitle="Onaylı mesai saatleri ile kaynak zaman kayıtlarının karşılaştırması ve sapmalar"
         icon="fire"
-        backTo="/general/overtime"
+        backTo="/human_resources/overtime"
       />
 
       <Stack gap="lg">

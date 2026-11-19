@@ -114,7 +114,7 @@ export function ManagementHubPage() {
       label: 'Mesai talepleri',
       icon: 'fas fa-clock',
       color: 'yellow',
-      link: linkOr('/general/overtime/registry', '?status=submitted'),
+      link: linkOr('/human_resources/overtime/registry', '?status=submitted'),
       count: figure('approvals_pending', 'overtime_requests'),
     },
     {

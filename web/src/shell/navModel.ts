@@ -7,9 +7,8 @@ import type { NavItem, NavTree } from '@/shell/navigationStructure';
 // else under /general is a placeholder. Keep the two lists in sync until the
 // legacy navbar is gone.
 const BUILT_GENERAL_PAGES = [
-  '/general/machines',
-  '/general/overtime',
   '/general/vacation',
+  '/general/fason',
   '/general/department-requests',
   '/general/crane-requests',
   '/general/discussions',

@@ -68,7 +68,10 @@ it('has a hub for every manufacturing hub route', () => {
   // List pages under /manufacturing are their own routes, without the hub handle;
   // the report hubs are views of the Rapor Merkezi (REPORT_HUBS). CNC and linear
   // cutting kept their hubs when they moved under Planlama.
-  const moved = Object.values(MOVED_ROUTES);
+  // Only pages that moved out of İmalat (Mesailer moved from Genel to İK, a hub of its own).
+  const moved = Object.entries(MOVED_ROUTES)
+    .filter(([oldRoute]) => oldRoute.startsWith('/manufacturing'))
+    .map(([, newRoute]) => newRoute);
   const routes = appRoutes
     .filter((route) => route.handle?.access === 'hub')
     .filter((route) => route.path?.startsWith('/manufacturing') || moved.includes(route.path!))

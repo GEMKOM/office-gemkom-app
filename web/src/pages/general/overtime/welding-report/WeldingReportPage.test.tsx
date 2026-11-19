@@ -130,7 +130,7 @@ it('sends this month and the 0,5 tolerance by default; a cleared tolerance stays
 
 it('renders the notice, the summary, the flags and the rows; Detay opens the day', async () => {
   renderWithProviders(<WeldingReportPage />, {
-    route: '/general/overtime/welding-report?start_date=2026-10-01&end_date=2026-10-31',
+    route: '/human_resources/overtime/welding-report?start_date=2026-10-01&end_date=2026-10-31',
   });
   expect(await screen.findByText('Veli Can')).toBeInTheDocument();
   expect(Object.fromEntries(reportCalls()[0]!.searchParams)).toEqual({
@@ -154,9 +154,9 @@ it('links a flagged day to the pages that fix it', () => {
   expect(timeEntriesLink(veli!)).toBe(
     '/manufacturing/welding/time-entries?employee=2&date=2026-10-06',
   );
-  expect(requestLink(502)).toBe('/general/overtime/registry?request=502');
+  expect(requestLink(502)).toBe('/human_resources/overtime/registry?request=502');
   expect(registryDayLink('2026-10-06')).toBe(
-    '/general/overtime/registry?start_date=2026-10-06&end_date=2026-10-06&team=welding',
+    '/human_resources/overtime/registry?start_date=2026-10-06&end_date=2026-10-06&team=welding',
   );
   expect(rowsWithFlag(decorate(ROWS), 'no_record').map((r) => r.user_full_name)).toEqual([
     'Veli Can',
@@ -165,7 +165,7 @@ it('links a flagged day to the pages that fix it', () => {
 
 it('a Sapma Dağılımı row lists the records behind it with links to fix them', async () => {
   renderWithProviders(<WeldingReportPage />, {
-    route: '/general/overtime/welding-report?start_date=2026-10-01&end_date=2026-10-31',
+    route: '/human_resources/overtime/welding-report?start_date=2026-10-01&end_date=2026-10-31',
   });
   await screen.findByText('Veli Can');
   // The distribution table comes before the day list, which repeats the badge per row.
@@ -177,7 +177,7 @@ it('a Sapma Dağılımı row lists the records behind it with links to fix them'
   expect(within(dialog).queryByText('Ali Kaya')).not.toBeInTheDocument();
   expect(within(dialog).getByText('#502').closest('a')).toHaveAttribute(
     'href',
-    '/general/overtime/registry?request=502',
+    '/human_resources/overtime/registry?request=502',
   );
   expect(within(dialog).getByText('Zaman kayıtları').closest('a')).toHaveAttribute(
     'href',
@@ -191,7 +191,7 @@ it('a Sapma Dağılımı row lists the records behind it with links to fix them'
 
 it('the outlier pill reaches the request', async () => {
   renderWithProviders(<WeldingReportPage />, {
-    route: '/general/overtime/welding-report?only_outliers=1&user=1',
+    route: '/human_resources/overtime/welding-report?only_outliers=1&user=1',
   });
   await screen.findByText('Veli Can');
   expect(reportCalls()[0]!.searchParams.get('only_outliers')).toBe('1');
@@ -200,7 +200,7 @@ it('the outlier pill reaches the request', async () => {
 
 it('survives an empty response', async () => {
   fetchMock.mockImplementation(() => json({}));
-  renderWithProviders(<WeldingReportPage />, { route: '/general/overtime/welding-report' });
+  renderWithProviders(<WeldingReportPage />, { route: '/human_resources/overtime/welding-report' });
   await waitFor(() =>
     expect(
       screen.getByText('Seçilen kriterlerde kaynak mesai kaydı bulunamadı'),

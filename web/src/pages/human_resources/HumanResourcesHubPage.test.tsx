@@ -115,6 +115,7 @@ it('HR hub: one PDKS card opens the PDKS hub, with who is in and the approvals w
     'Organizasyon',
     'PDKS',
     'İzin Yönetimi',
+    'Mesailer',
     'Özel Günler',
   ]);
   const card = screen.getByRole('link', { name: 'PDKS' });

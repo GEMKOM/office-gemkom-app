@@ -57,6 +57,7 @@ export function WarehouseHubPage() {
         { label: 'Boy Stoğu', icon: 'fas fa-ruler-horizontal', link: BAR_STOCK_ROUTE },
         { label: 'Tüm Stok Kartları', icon: 'fas fa-boxes', link: STOCK },
         { label: 'Ekipman', icon: 'fas fa-toolbox', link: EQUIPMENT },
+        { label: 'Makineler', icon: 'fas fa-cogs', link: '/warehouse/machines' },
         { label: 'Mikro Karşılaştırması', icon: 'fas fa-balance-scale', link: MIKRO_COMPARISON },
       ],
     },

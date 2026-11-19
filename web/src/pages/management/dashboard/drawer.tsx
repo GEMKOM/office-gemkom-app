@@ -869,9 +869,9 @@ function People({ pp, ctx }: { pp: PeopleSection; ctx: PillarContext }) {
       </DrawerSection>
       <Links
         links={[
-          ['/general/overtime/cost-report', 'Mesai maliyet raporu'],
+          ['/human_resources/overtime/cost-report', 'Mesai maliyet raporu'],
           ['/general/vacation/pending', 'Bekleyen izinler'],
-          ['/general/overtime/pending', 'Bekleyen mesailer'],
+          ['/human_resources/overtime/pending', 'Bekleyen mesailer'],
         ]}
       />
     </>

@@ -415,7 +415,7 @@ export function MachiningReportPage() {
         title="Talaşlı İmalat Mesai Raporu"
         subtitle="Onaylı mesailerde seçilen operasyonların mesai saatleri içinde çalışılıp çalışılmadığı"
         icon="cogs"
-        backTo="/general/overtime"
+        backTo="/human_resources/overtime"
       />
 
       <Stack gap="lg">

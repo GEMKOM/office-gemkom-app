@@ -111,15 +111,15 @@ test('opens from the rail, answers, and keeps the conversation across pages', as
   });
   await page
     .getByRole('navigation', { name: 'Ana menü' })
-    .getByRole('button', { name: 'Genel' })
+    .getByRole('button', { name: 'Talepler' })
     .click();
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Genel Modülü' }),
+    page.getByRole('main').getByRole('heading', { level: 1, name: 'Talepler' }),
   ).toBeVisible();
   expect(await page.evaluate(() => window.__neoMarker)).toBe('still here');
   await expect(log.getByText(QUESTION)).toBeVisible();
   await expect(log.getByText(ANSWER)).toBeVisible();
-  // The pointer leaves the Genel section, whose hover flyout would also take Escape.
+  // The pointer leaves the Talepler section, whose hover flyout would also take Escape.
   await page.mouse.move(700, 600);
   await expect(page.getByRole('menu')).toHaveCount(0);
   await shot(page, '12-desktop-after-navigation');
@@ -133,7 +133,7 @@ test('opens from the rail, answers, and keeps the conversation across pages', as
   // A full reload: closed is remembered; Ctrl+K reopens on the same conversation.
   await page.reload();
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Genel Modülü' }),
+    page.getByRole('main').getByRole('heading', { level: 1, name: 'Talepler' }),
   ).toBeVisible();
   await expect(neoEntry(page)).toHaveAttribute('aria-expanded', 'false');
   await page.keyboard.press('Control+k');
@@ -306,7 +306,7 @@ test("the bell's Neo notification opens that report's questions in the panel", a
 
   await page.goto('/general/');
   await expect(
-    page.getByRole('main').getByRole('heading', { level: 1, name: 'Genel Modülü' }),
+    page.getByRole('main').getByRole('heading', { level: 1, name: 'Talepler' }),
   ).toBeVisible();
   await page.getByRole('button', { name: 'Bildirimler, 1 okunmamış' }).click();
   await page.getByRole('button', { name: /Neo bildiriminizle ilgili bilgi istiyor/ }).click();
