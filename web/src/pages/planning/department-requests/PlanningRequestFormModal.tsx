@@ -619,6 +619,7 @@ export function PlanningRequestFormModal({
                     {row.kind ? (
                       // A plate / boy line: size × count on the line itself; its
                       // quantity in the card's unit follows and is never typed.
+                      <>
                       <RowSizeEditor
                         row={row}
                         itemId={row.item_id ?? cardFromSearch(row.item_code)?.id ?? null}
@@ -633,6 +634,18 @@ export function PlanningRequestFormModal({
                           form.setFieldValue(`items.${index}.quantity`, quantity)
                         }
                       />
+                      {row.import_note && !(Number(row.piece_length) > 0 && Number(row.piece_count) >= 1) ? (
+                        <Text
+                          size="xs"
+                          c="orange.8"
+                          mt={2}
+                          data-testid={`import-note-${index + 1}`}
+                        >
+                          <FaIcon icon="fas fa-exclamation-triangle" /> {row.import_note}: boy (m) ve
+                          adet seçin
+                        </Text>
+                      ) : null}
+                      </>
                     ) : (
                       <Group gap={6} wrap="nowrap">
                         <NumberInput
@@ -837,17 +850,31 @@ export function PlanningRequestFormModal({
           onClose={() => setExcelOpen(false)}
           onImport={(imported) => {
             for (const item of imported) {
+              const base = {
+                item_code: item.item_code,
+                item_name: item.item_name,
+                item_description: item.item_description,
+                job_no: item.job_no || null,
+                specifications: item.specifications,
+              };
+              // A bar card: a sized line whose length (m) and count the planner
+              // picks; the file's quantity can't tell mm from m, so it is only noted.
+              const bar = item.card && pieceKindOf(item.card.material_class) === 'boy';
               form.insertListItem(
                 'items',
-                itemRow({
-                  item_code: item.item_code,
-                  item_name: item.item_name,
-                  item_description: item.item_description,
-                  job_no: item.job_no || null,
-                  quantity: item.quantity,
-                  item_unit: item.unit,
-                  specifications: item.specifications,
-                }),
+                bar
+                  ? itemRow({
+                      ...base,
+                      item_id: item.card!.id,
+                      kind: 'boy',
+                      size_mode: 'standard',
+                      piece_length: '',
+                      piece_count: '',
+                      quantity: '',
+                      item_unit: item.card!.unit?.toLowerCase() || item.unit,
+                      import_note: `Excel'de ${item.quantity} ${item.unit}`.trim(),
+                    })
+                  : itemRow({ ...base, quantity: item.quantity, item_unit: item.unit }),
               );
             }
           }}

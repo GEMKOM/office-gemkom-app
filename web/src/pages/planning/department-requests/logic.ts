@@ -158,6 +158,12 @@ export interface ItemRow {
   piece_width?: number | string;
   piece_length?: number | string;
   piece_count?: number | string;
+  /**
+   * A bar row imported from Excel: what the file said ("Excel'de 500 metre").
+   * The file's quantity is not trusted for a bar (mm or m?); the planner picks
+   * a length (m) and a count, which give the quantity.
+   */
+  import_note?: string;
 }
 
 /** 'plate' / 'boy' for a card class that holds pieces, else null. */
@@ -456,7 +462,8 @@ export function sizeOf(row: ItemRow): Built<Partial<PlanningRequestItemInput>> {
   if (!(length > 0) || (row.kind === 'plate' && !(width > 0))) {
     return {
       ok: false,
-      error: `${label}: ${row.kind === 'plate' ? 'en ve boy' : 'boy'} (mm) girilmeli`,
+      // Bars are ordered in metres (6 m), plates in mm (1500 × 6000).
+      error: `${label}: ${row.kind === 'plate' ? 'en ve boy (mm)' : 'boy (m)'} girilmeli`,
     };
   }
   if (!Number.isInteger(count) || count < 1) {
@@ -486,6 +493,10 @@ export function buildItems(
     const code = row.item_code.trim();
     const quantity = String(row.quantity ?? '').trim();
     if (!row.job_no) return { ok: false, error: 'Tüm ürünler için iş no gereklidir' };
+    // A plate / boy line's quantity follows from its size: a missing size is the
+    // problem to name (an imported bar row starts without one).
+    const size = row.kind ? sizeOf(row) : null;
+    if (size && !size.ok) return size;
     if (!quantity || !(Number.parseFloat(quantity) > 0)) {
       return { ok: false, error: 'Tüm ürünler için geçerli miktar gereklidir' };
     }
@@ -508,11 +519,7 @@ export function buildItems(
     if (options.fromDepartmentRequest && row.sourceIndex !== undefined) {
       item.source_item_index = row.sourceIndex;
     }
-    if (row.kind) {
-      const size = sizeOf(row);
-      if (!size.ok) return size;
-      Object.assign(item, size.value);
-    }
+    if (size?.ok) Object.assign(item, size.value);
     if (options.editing && row.id !== undefined) item.id = row.id;
     items.push(item);
   }
@@ -980,6 +987,11 @@ export interface ImportedItem {
   unit: string;
   item_description: string;
   specifications: string;
+  /**
+   * The row's stock card, when it is a bar card: the row comes in as a sized
+   * line (length in m × count to choose), not with the file's quantity.
+   */
+  card?: { id: number; unit?: string | null; material_class?: string | null } | null;
 }
 
 export interface ImportResult {

@@ -329,6 +329,29 @@ it('a bar line shows its total metres and kg on one row', async () => {
   expect(screen.queryByLabelText('Birim 1')).not.toBeInTheDocument();
 });
 
+it('a bar length is chosen and typed in metres, and saved in mm', async () => {
+  weightPreview = { ...WEIGHT, unit_kg: '91.825', total_kg: '91.825' };
+  renderWithProviders(
+    <PlanningRequestFormModal
+      mode={{ kind: 'edit', request: { ...MIXED, items: [BAR_LINE] } }}
+      onClose={() => {}}
+    />,
+  );
+  // The standard lengths read in metres (never "6000 mm" next to a quantity in m).
+  fireEvent.click(await screen.findByRole('combobox', { name: 'Ölçü 1' }));
+  expect(await screen.findByRole('option', { name: '6 m', hidden: true })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('option', { name: 'Özel ölçü…', hidden: true }));
+  fireEvent.change(screen.getByLabelText('Boy (m) 1'), { target: { value: '2,5' } });
+  fireEvent.change(screen.getByLabelText('Parça adedi 1'), { target: { value: '4' } });
+  await waitFor(() => expect(screen.getByLabelText('Miktar 1')).toHaveTextContent('10,00 m'));
+
+  fireEvent.click(screen.getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(patches()).toHaveLength(1));
+  expect(patches()[0]!.body).toMatchObject({
+    items: [{ id: 202, quantity: 10, size_mode: 'custom', piece_length_mm: '2500', piece_count: 4 }],
+  });
+});
+
 it('a kg plate card without a thickness asks for the kg and says why', async () => {
   weightPreview = {
     ...WEIGHT,
