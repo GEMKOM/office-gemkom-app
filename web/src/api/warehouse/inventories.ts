@@ -1,6 +1,6 @@
 import { queryOptions } from '@tanstack/react-query';
 import { apiFetch } from '../client';
-import { toPaginated } from '../types';
+import { extractResults, toPaginated } from '../types';
 import type { MaterialPiece } from './pieces';
 import type { TransferSlip } from './transfers';
 
@@ -92,10 +92,10 @@ export function jobHoldingsQueryOptions(search = '') {
   return queryOptions({
     queryKey: inventoryKeys.jobs(search),
     queryFn: ({ signal }) =>
-      apiFetch<JobHolding[]>('/warehouse/inventories/jobs/', {
+      apiFetch<unknown>('/warehouse/inventories/jobs/', {
         params: search ? { search } : {},
         signal,
-      }),
+      }).then((data) => extractResults<JobHolding>(data)),
   });
 }
 
