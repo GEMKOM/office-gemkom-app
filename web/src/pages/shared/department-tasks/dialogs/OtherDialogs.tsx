@@ -40,6 +40,7 @@ import {
   type InternalTeamAssignment,
 } from '@/api/welding/internalTeamAssignments';
 import { weldingTeamsQueryOptions } from '@/api/welding/teams';
+import { BAR_METRES_INPUT, barMetres } from '@/lib/format';
 import {
   downloadFilesAsZip,
   FaIcon,
@@ -368,7 +369,7 @@ export function DeliveryDialog({ task, onClose }: Props & { task: DepartmentTask
   const [busy, setBusy] = useState(false);
   // A boy line without a size: the bars that came, for İş Emri stock.
   const asksBars = Boolean(task.is_bar) && !task.bar_length_mm;
-  const [bars, setBars] = useState<BarDraft[]>([{ length_mm: '', quantity: '' }]);
+  const [bars, setBars] = useState<BarDraft[]>([{ length_m: '', quantity: '' }]);
 
   const confirmIt = async () => {
     // One receipt at a time: a double click must not post twice (legacy createExclusiveRun).
@@ -485,8 +486,8 @@ function DeliveryBarsSection({
     return (
       <Text size="sm" mt="sm" data-testid="delivery-bars-sized">
         {count
-          ? `${count} boy × ${fmtQty(sizedLength)} mm iş emri stoğuna girer.`
-          : `Bu miktar tam ${fmtQty(sizedLength)} mm boy etmiyor; boylar stoğa girmez.`}
+          ? `${count} boy × ${barMetres(sizedLength)} iş emri stoğuna girer.`
+          : `Bu miktar tam ${barMetres(sizedLength)} boy etmiyor; boylar stoğa girmez.`}
       </Text>
     );
   }
@@ -506,12 +507,11 @@ function DeliveryBarsSection({
           <Group key={index} gap="xs" wrap="nowrap" align="flex-end">
             <NumberInput
               size="xs"
-              label={index === 0 ? 'Uzunluk (mm)' : undefined}
+              label={index === 0 ? 'Uzunluk (m)' : undefined}
               aria-label={`Boy ${index + 1} uzunluk`}
-              min={1}
-              decimalSeparator=","
-              value={row.length_mm}
-              onChange={(value) => set(index, 'length_mm', value)}
+              {...BAR_METRES_INPUT}
+              value={row.length_m}
+              onChange={(value) => set(index, 'length_m', value)}
               style={{ flex: 1 }}
             />
             <NumberInput
@@ -541,7 +541,7 @@ function DeliveryBarsSection({
           size="compact-xs"
           variant="subtle"
           leftSection={<FaIcon icon="fas fa-plus" />}
-          onClick={() => onChange([...rows, { length_mm: '', quantity: '' }])}
+          onClick={() => onChange([...rows, { length_m: '', quantity: '' }])}
         >
           Başka uzunluk
         </Button>

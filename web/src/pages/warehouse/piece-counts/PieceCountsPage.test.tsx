@@ -230,8 +230,8 @@ it('counts lots, adds pieces the system did not know, and posts', async () => {
   expect(screen.getAllByText('1.059,75 kg')).toHaveLength(2); // the line and the band's total
   expect(screen.getByText('Ağırlık (2 parça hariç)')).toBeInTheDocument();
 
-  // Count the new bar line.
-  const counted = screen.getByLabelText('Sayılan 0008 0080 0050 005 000 6000 mm');
+  // Count the new bar line (bars read in metres, never mm).
+  const counted = screen.getByLabelText('Sayılan 0008 0080 0050 005 000 6 m');
   fireEvent.change(counted, { target: { value: '4' } });
   fireEvent.blur(counted);
   await waitFor(() =>
@@ -248,7 +248,8 @@ it('counts lots, adds pieces the system did not know, and posts', async () => {
     await screen.findByRole('option', { name: /KUTU PROFİL 80\*50\*5/, hidden: true }),
   );
   expect(await screen.findByText(/Bu kartın parçaları ağırlıksız kalır/)).toBeInTheDocument();
-  fireEvent.change(screen.getByLabelText('Boy (mm)'), { target: { value: '2500' } });
+  // A bar's length is typed in metres ("2,5") and sent in mm.
+  fireEvent.change(screen.getByLabelText('Boy (m)'), { target: { value: '2,5' } });
   fireEvent.change(screen.getByLabelText('Adet'), { target: { value: '3' } });
   fireEvent.click(screen.getByRole('button', { name: 'Ekle' }));
   await waitFor(() =>

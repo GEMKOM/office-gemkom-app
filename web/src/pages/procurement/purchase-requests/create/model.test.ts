@@ -11,6 +11,7 @@ import {
   fromStorage,
   isPlanningItemOnPage,
   mergeSelection,
+  pieceSizeText,
   removeItems,
   removeSupplier,
   stateFromDraft,
@@ -269,6 +270,14 @@ describe('merging sized plate / bar rows', () => {
     const outcome = mergeSelection('A1', [sheet('a'), unsized]);
     expect(outcome.kind).toBe('different');
     if (outcome.kind === 'different') expect(outcome.message).toContain('ölçüsüz');
+  });
+
+  it("reads a bar's size in metres, a plate's in mm", () => {
+    const sized = (over: Record<string, unknown>) =>
+      pieceSizeText({ piece_count: 2, ...over } as Parameters<typeof pieceSizeText>[0]);
+    expect(sized({ piece_length_mm: '6000.0' })).toBe('6 m');
+    expect(sized({ piece_length_mm: '2500.0' })).toBe('2,5 m');
+    expect(sized({ piece_width_mm: '1500.0', piece_length_mm: '6000.0' })).toBe('1500×6000 mm');
   });
 });
 

@@ -5,6 +5,7 @@ import type {
   LinearOptimizationResult,
   LinearOptimizedBar,
 } from '@/api/manufacturing/linearCuttingSessions';
+import { barMetres } from '@/lib/format';
 import { FaIcon } from '@/ui';
 import { BarCanvas, PassTable } from '../shared/BarDiagram';
 import classes from './cuts.module.css';
@@ -94,7 +95,7 @@ function BarCard({
           </span>
           <span>
             <FaIcon icon="fas fa-ruler-horizontal" style={{ marginRight: 4 }} />
-            {stock} mm
+            {barMetres(stock)}
           </span>
           <span>
             <FaIcon icon="fas fa-trash-alt" style={{ marginRight: 4 }} />
@@ -141,7 +142,7 @@ function GroupPane({ group }: { group: LinearOptimizationGroup }) {
   return (
     <>
       <Group gap={8} mb={8}>
-        <Chip icon="fas fa-ruler-horizontal">{groupStock || '—'} mm</Chip>
+        <Chip icon="fas fa-ruler-horizontal">{groupStock ? barMetres(groupStock) : '—'}</Chip>
         <Chip icon="fas fa-cut">Kerf {kerf}</Chip>
         <Chip icon="fas fa-layer-group">{group.bars_needed ?? '—'} bar</Chip>
         <Chip icon="fas fa-chart-line">

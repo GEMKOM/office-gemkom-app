@@ -2,7 +2,7 @@ import { ActionIcon, Button, Group, NumberInput, Stack, Text, TextInput } from '
 import { useQueries } from '@tanstack/react-query';
 import type { OrderLineState, ReceiptPieceInput } from '@/api/warehouse/goodsReceipts';
 import { missingWeightText, previewWeight } from '@/api/warehouse/pieces';
-import { formatNumber } from '@/lib/format';
+import { BAR_METRES_INPUT, formatNumber, metresToMm, mmToMetres } from '@/lib/format';
 import { FaIcon } from '@/ui';
 
 // The pieces that came on one plate / boy order line in Mal kabul: size,
@@ -11,6 +11,7 @@ import { FaIcon } from '@/ui';
 export interface PieceDraft {
   key: number;
   width: string | number;
+  /** A plate's length in mm; a bar's in metres (bars read in metres, never mm; sent in mm). */
   length: string | number;
   quantity: string | number;
   heat: string;
@@ -45,7 +46,8 @@ export function startPieces(
     {
       ...emptyPiece(),
       width: pieces.width_mm ? Number(pieces.width_mm) : '',
-      length: Number(pieces.length_mm),
+      // No width: a bar, in metres.
+      length: pieces.width_mm ? Number(pieces.length_mm) : mmToMetres(pieces.length_mm),
       quantity: count,
     },
   ];
@@ -53,13 +55,13 @@ export function startPieces(
 
 /** A row the backend can take, or null while it is incomplete. */
 export function pieceInput(kind: 'plate' | 'boy', row: PieceDraft): ReceiptPieceInput | null {
-  const length = Number(row.length);
+  const length = Number(kind === 'plate' ? row.length : metresToMm(row.length));
   const quantity = Number(row.quantity);
   if (!(length > 0) || !(quantity >= 1) || !Number.isInteger(quantity)) return null;
   if (kind === 'plate' && !(Number(row.width) > 0)) return null;
   return {
     width_mm: kind === 'plate' ? String(row.width) : null,
-    length_mm: String(row.length),
+    length_mm: String(length),
     quantity,
     heat_number: row.heat.trim(),
     certificate_no: row.certificate.trim(),
@@ -148,17 +150,29 @@ export function ReceiptPiecesEditor({
               onChange={(v) => update(row.key, { width: v })}
             />
           ) : null}
-          <NumberInput
-            size="xs"
-            w={90}
-            min={0}
-            decimalScale={1}
-            hideControls
-            placeholder="Boy (mm)"
-            aria-label={`${label} parça ${index + 1} boy`}
-            value={row.length}
-            onChange={(v) => update(row.key, { length: v })}
-          />
+          {kind === 'plate' ? (
+            <NumberInput
+              size="xs"
+              w={90}
+              min={0}
+              decimalScale={1}
+              hideControls
+              placeholder="Boy (mm)"
+              aria-label={`${label} parça ${index + 1} boy`}
+              value={row.length}
+              onChange={(v) => update(row.key, { length: v })}
+            />
+          ) : (
+            <NumberInput
+              size="xs"
+              w={90}
+              {...BAR_METRES_INPUT}
+              placeholder="Boy (m)"
+              aria-label={`${label} parça ${index + 1} boy`}
+              value={row.length}
+              onChange={(v) => update(row.key, { length: v })}
+            />
+          )}
           <NumberInput
             size="xs"
             w={70}

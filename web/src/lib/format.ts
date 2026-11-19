@@ -122,3 +122,40 @@ export function formatPercent(value: NumberInput, decimals = 1): string {
   if (n === null) return isEmpty(value) ? EMPTY : String(value);
   return `${numberFormat(fractionOptions(decimals)).format(n)}%`;
 }
+
+// --- bar lengths ----------------------------------------------------------------------
+// Length materials (pipe, lama, profile, mil: cards whose category is 'boy') are
+// read and typed in metres everywhere, never mm: "500 mm" next to quantities in
+// metres gets read as 500 m of pipe (user, 2026-11-19). Lengths are still stored
+// in mm (length_mm, piece_length_mm); plates keep mm.
+
+/** A bar length (stored in mm) in metres: "6 m", "2,5 m", "0,75 m" (backend planning.sizes.bar_length). */
+export function barMetres(lengthMm: NumberInput): string {
+  const n = toNumber(lengthMm);
+  if (n === null) return isEmpty(lengthMm) ? EMPTY : String(lengthMm);
+  return `${String(Number((n / 1000).toFixed(3))).replace('.', ',')} m`;
+}
+
+/** A bar length in mm as the metres a bar length input shows (6000 → 6); '' when there is none. */
+export function mmToMetres(lengthMm: NumberInput): number | '' {
+  const n = toNumber(lengthMm);
+  return n === null ? '' : Number((n / 1000).toFixed(3));
+}
+
+/**
+ * What a bar length input holds (metres, "2,5" or 2.5) as whole mm for the API
+ * (2500); '' when it is not a number.
+ */
+export function metresToMm(metres: NumberInput): number | '' {
+  if (isEmpty(metres)) return '';
+  const n = typeof metres === 'number' ? metres : Number(String(metres).replace(',', '.'));
+  return Number.isFinite(n) ? Math.round(n * 1000) : '';
+}
+
+/** Props for a Mantine NumberInput that takes a bar length in metres ("2,5"). */
+export const BAR_METRES_INPUT = {
+  decimalSeparator: ',',
+  decimalScale: 3,
+  min: 0,
+  hideControls: true,
+} as const;

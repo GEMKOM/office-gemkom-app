@@ -1,6 +1,7 @@
 import { FLIPPED_TITLE, formatAngleTr } from '@/pages/manufacturing/linear-cutting/shared/lcGeometry';
 import { UnstyledButton } from '@mantine/core';
 import type { LinearCut, LinearCuttingTask } from '@/api/manufacturing/linearCutting';
+import { barMetres, mmToMetres } from '@/lib/format';
 import { StatusBadge, type DataTableColumn } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
 
@@ -45,10 +46,11 @@ export function taskColumns({
     },
     {
       key: 'stock_length_mm',
-      header: 'Stok (mm)',
+      // The stock bar reads in metres, like every bar length.
+      header: 'Stok (m)',
       align: 'right',
-      render: (row) => (row.stock_length_mm != null ? `${row.stock_length_mm} mm` : '-'),
-      exportValue: (row) => row.stock_length_mm ?? null,
+      render: (row) => (row.stock_length_mm != null ? barMetres(row.stock_length_mm) : '-'),
+      exportValue: (row) => (row.stock_length_mm != null ? mmToMetres(row.stock_length_mm) : null),
     },
     {
       key: 'machine_name',
