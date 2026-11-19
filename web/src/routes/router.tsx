@@ -627,6 +627,12 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    path: '/general/fason',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/fason/FasonPage')).FasonPage,
+    }),
+  },
+  {
     path: '/general/department-requests/list',
     lazy: async () => ({
       Component: (

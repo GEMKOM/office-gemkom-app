@@ -121,6 +121,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
           },
         },
       },
+      // Fason: imalat, depo, planlama and satınalma all follow it (accessControl).
+      '/general/fason': {
+        label: 'Fason',
+        icon: 'fas fa-people-carry',
+        children: {},
+      },
       '/general/crane-requests': {
         label: 'Vinç Talepleri',
         icon: 'fas fa-truck-pickup',
