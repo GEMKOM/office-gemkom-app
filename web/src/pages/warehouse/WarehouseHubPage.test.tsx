@@ -43,9 +43,11 @@ it('groups Depo into Stoklar, Giriş / Çıkış, Sayım and Raporlar', async ()
       .map((a) => a.textContent?.trim());
   expect(links('Stoklar')).toEqual(
     expect.arrayContaining([
-      'Ana Stok',
+      'Hammadde',
+      'İş Emri',
       'Sac Stoğu',
       'Boy Stoğu',
+      'Tüm Stok Kartları',
       'Ekipman',
       'Mikro Karşılaştırması',
     ]),
@@ -67,7 +69,7 @@ it('groups Depo into Stoklar, Giriş / Çıkış, Sayım and Raporlar', async ()
 });
 
 it('shows a planner only the stock pages they can open', async () => {
-  // A planner who had Planlama › Stok › Stok Kartları (now Ana Stok).
+  // A planner who had Planlama › Stok › Stok Kartları (now Tüm Stok Kartları).
   granted.routes = new Set(['/warehouse/stock']);
   renderWithProviders(<WarehouseHubPage />, { route: '/warehouse/' });
 
@@ -77,7 +79,7 @@ it('shows a planner only the stock pages they can open', async () => {
     within(card('Stoklar'))
       .getAllByRole('link')
       .map((a) => a.textContent?.trim()),
-  ).toEqual(['Ana Stok']);
+  ).toEqual(['Tüm Stok Kartları']);
   await waitFor(() => expect(card('Stoklar')).toHaveTextContent('1.240 stok kartı'));
   expect(calls().some((url) => url.pathname === '/warehouse/stock-counts/')).toBe(false);
 });

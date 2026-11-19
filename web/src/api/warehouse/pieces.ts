@@ -139,6 +139,8 @@ export interface PiecesParams {
   at_supplier?: 'true';
   item?: number;
   job_no?: string;
+  /** İş Emri lots with no job (atanmamış), which job_no cannot ask for. */
+  unassigned?: 'true';
   origin?: string;
   include_empty?: 'true';
   ordering?: string;

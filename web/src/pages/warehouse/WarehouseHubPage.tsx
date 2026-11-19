@@ -6,6 +6,8 @@ import { BAR_STOCK_ROUTE, PLATE_STOCK_ROUTE } from '@/routes/movedRoutes';
 import { MenuCards, visibleMenuCards, type MenuCard } from '@/ui';
 import { countValue } from '../hubCount';
 
+const HAMMADDE = '/warehouse/hammadde';
+const IS_EMRI = '/warehouse/is-emri';
 const STOCK = '/warehouse/stock';
 const EQUIPMENT = '/warehouse/equipment';
 const MIKRO_COMPARISON = '/warehouse/mikro-comparison';
@@ -40,7 +42,7 @@ export function WarehouseHubPage() {
     {
       title: 'Stoklar',
       description:
-        'Ana stok (kartlar ve Hammadde / İş Emri / Mamul bakiyeleri), sac ve boy parçaları, ekipman.',
+        'Hammadde: serbest stok. İş Emri: işlere ayrılmış stok, iş iş. İkisi arasında birkaç tıkla taşıma; sac ve boy parçaları, tüm stok kartları, ekipman.',
       icon: 'fas fa-boxes',
       iconColor: 'blue',
       stat: hasRouteAccess(STOCK)
@@ -49,9 +51,11 @@ export function WarehouseHubPage() {
           ? { value: countValue(equipment), label: 'aktif ekipman' }
           : undefined,
       features: [
-        { label: 'Ana Stok', icon: 'fas fa-boxes', link: STOCK },
+        { label: 'Hammadde', icon: 'fas fa-cubes', link: HAMMADDE },
+        { label: 'İş Emri', icon: 'fas fa-clipboard-list', link: IS_EMRI },
         { label: 'Sac Stoğu', icon: 'fas fa-layer-group', link: PLATE_STOCK_ROUTE },
         { label: 'Boy Stoğu', icon: 'fas fa-ruler-horizontal', link: BAR_STOCK_ROUTE },
+        { label: 'Tüm Stok Kartları', icon: 'fas fa-boxes', link: STOCK },
         { label: 'Ekipman', icon: 'fas fa-toolbox', link: EQUIPMENT },
         { label: 'Mikro Karşılaştırması', icon: 'fas fa-balance-scale', link: MIKRO_COMPARISON },
       ],
