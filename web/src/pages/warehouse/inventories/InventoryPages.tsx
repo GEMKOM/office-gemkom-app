@@ -653,6 +653,12 @@ export function HammaddePage() {
   );
 }
 
+function closedJobLabel(row: JobHolding): string {
+  return row.job_status === 'cancelled' ? 'İş iptal' : 'İş tamamlandı';
+}
+
+const CLOSED_JOB_ROW = { background: 'var(--mantine-color-red-0)' };
+
 function kgText(row: JobHolding): string {
   if (row.lots === 0) return '–';
   return `${formatNumber(row.kg, 2)} kg${row.kg_unknown ? ' +' : ''}`;
@@ -665,9 +671,12 @@ const jobColumns: DataTableColumn<JobHolding>[] = [
     exportValue: (row) => row.job_no || 'Atanmamış',
     render: (row) =>
       row.job_no ? (
-        <Text size="sm" fw={600} style={mono}>
-          {row.job_no}
-        </Text>
+        <Group gap={6} wrap="nowrap">
+          <Text size="sm" fw={600} style={mono}>
+            {row.job_no}
+          </Text>
+          {row.job_closed ? <StatusBadge color="red">{closedJobLabel(row)}</StatusBadge> : null}
+        </Group>
       ) : (
         <StatusBadge color="orange">Atanmamış</StatusBadge>
       ),
@@ -737,6 +746,18 @@ export function IsEmriPage() {
           backTo={IS_EMRI_ROUTE}
           backLabel="Tüm işler"
         />
+        {row?.job_closed ? (
+          <Alert
+            color="red"
+            variant="light"
+            mb="md"
+            icon={<FaIcon icon="fas fa-exclamation-triangle" />}
+          >
+            {row.job_status === 'cancelled' ? 'Bu iş emri iptal edildi' : 'Bu iş emri tamamlandı'}{' '}
+            ama İş Emri deposunda stoğu duruyor. Kalan malzemeyi Hammaddeye iade edin ya da başka
+            işe aktarın.
+          </Alert>
+        ) : null}
         <PlaceStock
           key={values.job}
           place={{ warehouse: 'IS_EMRI', jobNo }}
@@ -749,6 +770,7 @@ export function IsEmriPage() {
   }
 
   const assigned = all.filter((j) => j.job_no);
+  const closed = assigned.filter((j) => j.job_closed);
   return (
     <>
       <PageHeader
@@ -761,6 +783,11 @@ export function IsEmriPage() {
             id: 'unassigned',
             label: 'Atanmamış kart',
             value: jobs.isSuccess ? (all.find((j) => !j.job_no)?.cards ?? 0) : '–',
+          },
+          {
+            id: 'closed',
+            label: 'Kapanmış işte stok',
+            value: jobs.isSuccess ? closed.length : '–',
           },
         ]}
       />
@@ -781,6 +808,7 @@ export function IsEmriPage() {
         data={all}
         columns={jobColumns}
         getRowId={(row) => row.job_no || UNASSIGNED}
+        rowStyle={(row) => (row.job_closed ? CLOSED_JOB_ROW : undefined)}
         loading={jobs.isFetching}
         onRowClick={(row) =>
           apply({ job: row.job_no || UNASSIGNED, card_page: '1', lot_page: '1' })
