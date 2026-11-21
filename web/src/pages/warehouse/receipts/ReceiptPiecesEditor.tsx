@@ -51,6 +51,32 @@ export function startPieces(
   ];
 }
 
+/**
+ * When "Bu Teslimat" changes, keep a still-automatic piece row in sync.
+ * Filling döküm / sertifika stores the row, but that must not freeze the
+ * derived sheet count; a split, resized, or hand-counted row is left alone.
+ */
+export function followReceiptQuantity(
+  rows: PieceDraft[],
+  line: Pick<OrderLineState, 'outstanding_pieces' | 'outstanding'>,
+  previousQuantity: number,
+  quantity: number,
+): PieceDraft[] {
+  const previous = startPieces(line, previousQuantity);
+  const next = startPieces(line, quantity);
+  if (rows.length !== 1 || previous.length !== 1 || next.length !== 1) return rows;
+  const row = rows[0]!;
+  const from = previous[0]!;
+  const to = next[0]!;
+  if (isBlankPiece(from) || isBlankPiece(to)) return rows;
+  if (Number(row.width) !== Number(from.width) || Number(row.length) !== Number(from.length)) {
+    return rows;
+  }
+  if (Number(row.quantity) !== Number(from.quantity)) return rows;
+  if (Number(to.quantity) === Number(row.quantity)) return rows;
+  return [{ ...row, quantity: to.quantity }];
+}
+
 /** A row the backend can take, or null while it is incomplete. */
 export function pieceInput(kind: 'plate' | 'boy', row: PieceDraft): ReceiptPieceInput | null {
   const length = Number(row.length);

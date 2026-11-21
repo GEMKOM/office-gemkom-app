@@ -475,4 +475,90 @@ describe('a sized plate / bar order line', () => {
       quantity: '',
     });
   });
+
+  it('still follows teslimat after a döküm no, not after a hand-counted adet', async () => {
+    const { followReceiptQuantity, startPieces } = await import('./ReceiptPiecesEditor');
+    const line = {
+      outstanding: '1413.00',
+      outstanding_pieces: { width_mm: '1500.0', length_mm: '6000.0', count: 2 },
+    };
+    const untouched = startPieces(line, 1413);
+    const withHeat = [{ ...untouched[0]!, heat: 'H-77' }];
+    expect(followReceiptQuantity(withHeat, line, 1413, 706.5)[0]).toMatchObject({
+      width: 1500,
+      length: 6000,
+      quantity: 1,
+      heat: 'H-77',
+    });
+    const handCounted = [{ ...untouched[0]!, quantity: 3, heat: 'H-77' }];
+    expect(followReceiptQuantity(handCounted, line, 1413, 706.5)).toBe(handCounted);
+  });
+});
+
+it('a sized plate line posts one sheet when teslimat is lowered after a döküm no', async () => {
+  plateOrder = true;
+  const sized = {
+    ...PLATE_LINE,
+    outstanding: '1413.00',
+    receivable: '1413.00',
+    outstanding_pieces: { width_mm: '1500.0', length_mm: '6000.0', count: 2 },
+  };
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    const u = new URL(String(url), 'https://api.test');
+    if (u.pathname === '/warehouse/goods-receipts/order-lines/') return json([sized]);
+    if (init?.method === 'POST' && u.pathname === '/warehouse/pieces/weight-preview/') {
+      return json({
+        unit_kg: '706.500',
+        total_kg: '706.500',
+        density_g_cm3: '7.850',
+        plate_thickness_mm: '10.00',
+        kg_per_m: null,
+        missing: '',
+      });
+    }
+    return base(url, init);
+  });
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'Yeni Mal Kabul' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Yeni Mal Kabul' });
+  const order = within(dialog).getByLabelText(/Sipariş/);
+  order.focus();
+  fireEvent.change(order, { target: { value: 'Tedarik' } });
+  fireEvent.click(await screen.findByRole('option', { name: /#41 · Tedarikçi A/, hidden: true }));
+  fireEvent.change(within(dialog).getByLabelText(/İrsaliye No/), { target: { value: 'IRS-9' } });
+  const piece = (field: string) =>
+    within(dialog).getByLabelText(`0100 0000 0010 000 000 parça 1 ${field}`);
+  expect(await within(dialog).findByLabelText('Bu teslimat 0100 0000 0010 000 000')).toHaveValue(
+    '1413.00',
+  );
+  expect(piece('adet')).toHaveValue('2');
+  fireEvent.change(piece('döküm no'), { target: { value: 'H-77' } });
+  fireEvent.change(within(dialog).getByLabelText('Bu teslimat 0100 0000 0010 000 000'), {
+    target: { value: '706.5' },
+  });
+  expect(piece('adet')).toHaveValue('1');
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet ve İşle' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('MK-2026-0003 işlendi'));
+  const create = calls().find(
+    (c) => c.method === 'POST' && c.url.pathname === '/warehouse/goods-receipts/',
+  )!;
+  expect(create.body).toMatchObject({
+    lines: [
+      {
+        po_line: 401,
+        quantity: '706.5',
+        pieces: [
+          {
+            width_mm: '1500',
+            length_mm: '6000',
+            quantity: 1,
+            heat_number: 'H-77',
+            certificate_no: '',
+          },
+        ],
+      },
+    ],
+  });
 });
