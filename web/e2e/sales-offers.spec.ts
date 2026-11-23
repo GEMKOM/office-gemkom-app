@@ -5,6 +5,7 @@ import { expect, MOCK_CUSTOMERS, mockBackend, paginated, seedSession, test } fro
 //   GET  /sales/offers/<id>/ · items/ · files/ · consultations/ · price-history/ · approval-status/
 //   POST /sales/offers/<id>/add-items/ · set-prices/ · mark-won/ …
 //   GET  /sales/offer-templates/ · <id>/nodes/ · <id>/nodes/<node>/
+//   GET  /users/me/table-preferences/ · PUT/DELETE /users/me/table-preferences/sales-offers/
 
 const customer = MOCK_CUSTOMERS[0]!;
 
@@ -52,11 +53,15 @@ const ITEMS = [
   },
 ];
 
-async function openPage(page: import('@playwright/test').Page) {
+async function openPage(
+  page: import('@playwright/test').Page,
+  extra: Parameters<typeof mockBackend>[1] = {},
+) {
   const session = await seedSession(page, { admin: true });
   const backend = await mockBackend(
     page,
     {
+      ...extra,
       'GET /sales/offers/': { json: paginated([OFFER]) },
       [`GET /sales/offers/${OFFER.id}/`]: { json: OFFER },
       [`GET /sales/offers/${OFFER.id}/items/`]: { json: ITEMS },
@@ -187,5 +192,83 @@ test('a file dropped on Dosya Yükle is uploaded with its type', async ({ page, 
   const [sent] = backend.callsTo(`/sales/offers/${OFFER.id}/files/`, 'POST');
   expect(String(sent!.body)).toContain('filename="cizim.pdf"');
   expect(String(sent!.body)).toContain('drawing');
+  consoleErrors.expectNone();
+});
+
+test('each user picks and orders the list columns, saved to their account', async ({
+  page,
+  consoleErrors,
+}) => {
+  const PREFS = '/users/me/table-preferences/sales-offers/';
+  const backend = await openPage(page, {
+    // Saved earlier: Başlık first, Kalem hidden.
+    'GET /users/me/table-preferences/': {
+      json: {
+        'sales-offers': {
+          columns: [
+            { key: 'title' },
+            { key: 'offer_no' },
+            { key: 'customer_name' },
+            { key: 'status_display' },
+            { key: 'total_price' },
+            { key: 'item_count', visible: false },
+            { key: 'delivery_date_requested' },
+            { key: 'offer_expiry_date' },
+            { key: 'created_by_name' },
+            { key: 'created_at' },
+          ],
+          updated_at: '2026-11-20T08:00:00Z',
+        },
+      },
+    },
+    [`PUT ${PREFS}`]: { json: {} },
+    [`DELETE ${PREFS}`]: { status: 204 },
+  });
+  const headers = page.locator('thead th');
+  await expect(headers.first()).toHaveText('Başlık');
+  await expect(headers.nth(1)).toHaveText('Teklif No');
+  await expect(page.locator('thead th', { hasText: 'Kalem' })).toHaveCount(0);
+
+  await page.getByRole('button', { name: 'Sütunlar (1 gizli)' }).click();
+  const menu = page.getByRole('group', { name: 'Görünen sütunlar' });
+  await expect(menu.getByRole('checkbox', { name: 'Kalem' })).not.toBeChecked();
+  await page.screenshot({ path: 'test-results/offers-columns-menu.png' });
+
+  // Drag Durum above Başlık with the grip.
+  const item = (key: string) => menu.locator(`[data-column-item="${key}"]`);
+  await item('status_display')
+    .locator('[draggable="true"]')
+    .dragTo(item('title'), { targetPosition: { x: 40, y: 2 } });
+  await expect(headers.first()).toHaveText('Durum');
+  await expect(headers.nth(1)).toHaveText('Başlık');
+
+  // Hide Oluşturan; the layout is saved whole after each burst of changes.
+  await menu.getByRole('checkbox', { name: 'Oluşturan' }).click();
+  await expect(page.locator('thead th', { hasText: 'Oluşturan' })).toHaveCount(0);
+  const lastSaved = () =>
+    (backend.callsTo(PREFS, 'PUT').at(-1)?.body as { columns: object[] } | undefined)?.columns ??
+    [];
+  await expect
+    .poll(() => lastSaved().some((c) => JSON.stringify(c).includes('created_by_name')))
+    .toBe(true);
+  const columns = lastSaved();
+  expect(columns.slice(0, 3)).toEqual([
+    { key: 'status_display' },
+    { key: 'title' },
+    { key: 'offer_no' },
+  ]);
+  expect(columns).toContainEqual({ key: 'item_count', visible: false });
+  expect(columns).toContainEqual({ key: 'created_by_name', visible: false });
+  await page.screenshot({ path: 'test-results/offers-columns-reordered.png' });
+
+  // Keyboard path: move Durum back down one place.
+  await menu.getByRole('button', { name: 'Durum sütununu aşağı taşı' }).click();
+  await expect(headers.first()).toHaveText('Başlık');
+
+  // Varsayılana dön: the page's own order, and the saved layout is deleted.
+  await page.getByRole('button', { name: 'Varsayılana dön' }).click();
+  await expect(headers.first()).toHaveText('Teklif No');
+  await expect(page.locator('thead th', { hasText: 'Kalem' })).toHaveCount(1);
+  await expect.poll(() => backend.callsTo(PREFS, 'DELETE').length).toBe(1);
   consoleErrors.expectNone();
 });

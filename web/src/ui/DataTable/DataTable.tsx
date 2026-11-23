@@ -54,6 +54,14 @@ import { mantineColor } from '../StatCards';
 import uiClasses from '../ui.module.css';
 import tableClasses from './DataTable.module.css';
 import {
+  arrangeColumns,
+  buildLayout,
+  layoutChoices,
+  moveKey,
+  useColumnLayout,
+  type ColumnLayout,
+} from './columnLayout';
+import {
   applyCellValue,
   CellEditor,
   editorOf,
@@ -286,43 +294,56 @@ function useNarrowerThan(widths: readonly number[]): ReadonlySet<number> {
   return useMemo(() => new Set(matched ? matched.split(',').map(Number) : []), [matched]);
 }
 
-const COLUMNS_STORAGE = 'gk.tableColumns.';
-
-/** Sütunlar choices: column key -> shown. Storage can be off; then nothing is remembered. */
-function readColumnChoice(columnsKey: string | undefined): Record<string, boolean> {
-  if (!columnsKey) return {};
-  try {
-    const stored: unknown = JSON.parse(localStorage.getItem(COLUMNS_STORAGE + columnsKey) ?? '{}');
-    return stored && typeof stored === 'object' ? (stored as Record<string, boolean>) : {};
-  } catch {
-    return {};
-  }
-}
-
-function writeColumnChoice(columnsKey: string | undefined, choice: Record<string, boolean>) {
-  if (!columnsKey) return;
-  try {
-    if (Object.keys(choice).length === 0) localStorage.removeItem(COLUMNS_STORAGE + columnsKey);
-    else localStorage.setItem(COLUMNS_STORAGE + columnsKey, JSON.stringify(choice));
-  } catch {
-    // Private mode or full storage: the choice lasts until the page closes.
-  }
-}
-
-/** The Sütunlar menu: a checkbox per column, and the count hidden on the button. */
+/**
+ * The Sütunlar menu: a checkbox per column in the table's order, a handle to
+ * drag a column to a new place and arrow buttons for the keyboard. The button
+ * shows how many columns are hidden.
+ */
 function ColumnMenu<T>({
   columns,
   isShown,
   onToggle,
+  onMove,
   onReset,
+  canReset,
+  orderable,
 }: {
+  /** In the order the table shows them. */
   columns: readonly DataTableColumn<T>[];
   isShown: (column: DataTableColumn<T>) => boolean;
   onToggle: (column: DataTableColumn<T>) => void;
+  /** Moves the column to `to` in the list without it. */
+  onMove: (key: string, to: number) => void;
   onReset: () => void;
+  canReset: boolean;
+  /** false: visibility only (a table without a columnsKey cannot save an order). */
+  orderable: boolean;
 }) {
+  const [dragKey, setDragKey] = useState<string | null>(null);
+  const [over, setOver] = useState<{ key: string; position: 'before' | 'after' } | null>(null);
   const hiddenCount = columns.filter((column) => !isShown(column)).length;
   const shownCount = columns.length - hiddenCount;
+  const keys = columns.map((column) => column.key);
+  const label = (column: DataTableColumn<T>) => column.exportHeader ?? headerText(column.header);
+
+  const dropAt = (event: DragEvent<HTMLElement>, key: string) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      key,
+      position:
+        event.clientY < rect.top + rect.height / 2 ? ('before' as const) : ('after' as const),
+    };
+  };
+  const finishDrop = (target: { key: string; position: 'before' | 'after' } | null) => {
+    if (dragKey && target && target.key !== dragKey) {
+      const rest = keys.filter((k) => k !== dragKey);
+      const to = rest.indexOf(target.key) + (target.position === 'after' ? 1 : 0);
+      if (moveKey(keys, dragKey, to).join('\u0000') !== keys.join('\u0000')) onMove(dragKey, to);
+    }
+    setDragKey(null);
+    setOver(null);
+  };
+
   return (
     <Popover position="bottom-end" withinPortal shadow="md" hideDetached={false}>
       <Popover.Target>
@@ -330,34 +351,107 @@ function ColumnMenu<T>({
           Sütunlar{hiddenCount > 0 ? ` (${hiddenCount} gizli)` : ''}
         </Button>
       </Popover.Target>
-      <Popover.Dropdown>
+      <Popover.Dropdown p={8} miw={orderable ? 260 : undefined}>
+        {orderable ? (
+          <Text size="xs" c="dimmed" px={4} pb={6}>
+            Sürükleyerek ya da oklarla sıralayın. Seçimleriniz hesabınıza kaydedilir.
+          </Text>
+        ) : null}
         <Stack
-          gap={8}
+          gap={orderable ? 0 : 8}
           role="group"
           aria-label="Görünen sütunlar"
-          mah={360}
+          mah={380}
+          px={orderable ? 0 : 4}
           style={{ overflowY: 'auto' }}
         >
-          {columns.map((column) => {
+          {columns.map((column, i) => {
             const shown = isShown(column);
-            return (
+            const name = label(column);
+            const checkbox = (
               <Checkbox
-                key={column.key}
                 size="xs"
-                label={column.exportHeader ?? headerText(column.header)}
+                label={name}
                 checked={shown}
                 // The last column on screen stays.
                 disabled={shown && shownCount === 1}
                 onChange={() => onToggle(column)}
+                style={{ flex: 1, minWidth: 0 }}
               />
+            );
+            if (!orderable) return <div key={column.key}>{checkbox}</div>;
+            return (
+              <div
+                key={column.key}
+                className={tableClasses.columnItem}
+                data-column-item={column.key}
+                data-drag={dragKey === column.key ? 'dragging' : undefined}
+                data-drop={over?.key === column.key ? over.position : undefined}
+                onDragOver={(event) => {
+                  if (!dragKey || dragKey === column.key) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  const target = dropAt(event, column.key);
+                  setOver((prev) =>
+                    prev?.key === target.key && prev.position === target.position ? prev : target,
+                  );
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  finishDrop(dragKey && dragKey !== column.key ? dropAt(event, column.key) : over);
+                }}
+              >
+                <span
+                  className={tableClasses.columnGrip}
+                  draggable
+                  aria-hidden
+                  title="Sürükleyerek taşıyın"
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', column.key);
+                    const item = event.currentTarget.parentElement;
+                    if (item && typeof event.dataTransfer.setDragImage === 'function')
+                      event.dataTransfer.setDragImage(item, 12, 12);
+                    setDragKey(column.key);
+                  }}
+                  onDragEnd={() => {
+                    setDragKey(null);
+                    setOver(null);
+                  }}
+                >
+                  <FaIcon icon="fas fa-grip-vertical" />
+                </span>
+                {checkbox}
+                <ActionIcon
+                  size={22}
+                  variant="subtle"
+                  color="gray"
+                  aria-label={`${name} sütununu yukarı taşı`}
+                  disabled={i === 0}
+                  onClick={() => onMove(column.key, i - 1)}
+                >
+                  <FaIcon icon="fas fa-chevron-up" />
+                </ActionIcon>
+                <ActionIcon
+                  size={22}
+                  variant="subtle"
+                  color="gray"
+                  aria-label={`${name} sütununu aşağı taşı`}
+                  disabled={i === columns.length - 1}
+                  onClick={() => onMove(column.key, i + 1)}
+                >
+                  <FaIcon icon="fas fa-chevron-down" />
+                </ActionIcon>
+              </div>
             );
           })}
         </Stack>
         <Button
-          mt="sm"
+          mt="xs"
           size="compact-xs"
           variant="subtle"
           leftSection={<FaIcon icon="fas fa-undo" />}
+          disabled={!canReset}
           onClick={onReset}
         >
           Varsayılana dön
@@ -816,7 +910,20 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
     [choosableColumns],
   );
   const narrowerThan = useNarrowerThan(hideWidths);
-  const [columnChoice, setColumnChoice] = useState(() => readColumnChoice(columnsKey));
+  // With a columnsKey the layout is the signed-in user's saved one; without,
+  // the menu's choices last as long as the table is on screen.
+  const [savedLayout, saveLayout] = useColumnLayout(columnsKey);
+  const [localLayout, setLocalLayout] = useState<ColumnLayout | undefined>(undefined);
+  const layout = columnsKey ? savedLayout : localLayout;
+  const storeLayout = (next: ColumnLayout | null) => {
+    if (columnsKey) saveLayout(next);
+    else setLocalLayout(next ?? undefined);
+  };
+  const orderedColumns = useMemo(
+    () => arrangeColumns(choosableColumns, layout),
+    [choosableColumns, layout],
+  );
+  const columnChoice = useMemo(() => layoutChoices(layout), [layout]);
   const isColumnShown = useCallback(
     (column: DataTableColumn<T>) =>
       columnChoice[column.key] ??
@@ -824,19 +931,29 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
     [columnChoice, narrowerThan],
   );
   const visibleColumns = useMemo(
-    () => choosableColumns.filter(isColumnShown),
-    [choosableColumns, isColumnShown],
+    () => orderedColumns.filter(isColumnShown),
+    [orderedColumns, isColumnShown],
   );
   const hasColumnMenu = Boolean(columnsKey) || hideWidths.length > 0;
   const toggleColumn = (column: DataTableColumn<T>) => {
-    const next = { ...columnChoice, [column.key]: !isColumnShown(column) };
-    setColumnChoice(next);
-    writeColumnChoice(columnsKey, next);
+    storeLayout(
+      buildLayout(orderedColumns, { ...columnChoice, [column.key]: !isColumnShown(column) }),
+    );
   };
-  const resetColumns = () => {
-    setColumnChoice({});
-    writeColumnChoice(columnsKey, {});
+  const moveColumn = (key: string, to: number) => {
+    const keys = moveKey(
+      orderedColumns.map((column) => column.key),
+      key,
+      to,
+    );
+    storeLayout(
+      buildLayout(
+        keys.map((k) => ({ key: k })),
+        columnChoice,
+      ),
+    );
   };
+  const resetColumns = () => storeLayout(null);
   const exportColumns = useMemo(() => columns.filter((column) => !column.hidden), [columns]);
   const virtualOptions = virtualize ? (typeof virtualize === 'object' ? virtualize : {}) : null;
   const server = isServerPagination(pagination) ? pagination : null;
@@ -1632,10 +1749,13 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
             {toolbar}
             {hasColumnMenu ? (
               <ColumnMenu
-                columns={choosableColumns}
+                columns={orderedColumns}
                 isShown={isColumnShown}
                 onToggle={toggleColumn}
+                onMove={moveColumn}
                 onReset={resetColumns}
+                canReset={Boolean(layout?.length)}
+                orderable={Boolean(columnsKey)}
               />
             ) : null}
             {onRefresh ? (

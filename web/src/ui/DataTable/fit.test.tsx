@@ -1,6 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { Table } from '@mantine/core';
 import { renderWithProviders } from '@/test/render';
+import { resetColumnLayoutStore } from './columnLayout';
 import { DataTable } from './DataTable';
 import type { DataTableColumn } from './types';
 
@@ -47,6 +48,7 @@ function headers() {
 afterEach(() => {
   window.matchMedia = realMatchMedia;
   localStorage.clear();
+  resetColumnLayoutStore();
 });
 
 describe('DataTable maxWidth', () => {
@@ -187,5 +189,48 @@ describe('DataTable hideBelow and the Sütunlar menu', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: /Sütunlar/ })).not.toBeInTheDocument();
+  });
+
+  it('reorders columns with the arrows and remembers the order', async () => {
+    viewport(1920);
+    const { unmount } = renderWithProviders(
+      <DataTable data={parts} columns={columns} getRowId={getRowId} columnsKey="test-parts" />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Sütunlar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Ağırlık sütununu yukarı taşı' }));
+    expect(headers()).toEqual(['Ad', 'Ağırlık', 'Not']);
+    fireEvent.click(screen.getByRole('button', { name: 'Ad sütununu aşağı taşı' }));
+    expect(headers()).toEqual(['Ağırlık', 'Ad', 'Not']);
+    // The first column cannot go further up.
+    expect(screen.getByRole('button', { name: 'Ağırlık sütununu yukarı taşı' })).toBeDisabled();
+    // Hiding keeps the order.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ad' }));
+    expect(headers()).toEqual(['Ağırlık', 'Not']);
+    unmount();
+
+    renderWithProviders(
+      <DataTable data={parts} columns={columns} getRowId={getRowId} columnsKey="test-parts" />,
+    );
+    expect(headers()).toEqual(['Ağırlık', 'Not']);
+    fireEvent.click(screen.getByRole('button', { name: 'Sütunlar (1 gizli)' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Varsayılana dön' }));
+    expect(headers()).toEqual(['Ad', 'Not', 'Ağırlık']);
+  });
+
+  it('keeps visibility-only choices saved by the old menu', () => {
+    viewport(1920);
+    localStorage.setItem('gk.tableColumns.test-parts', JSON.stringify({ note: false }));
+    renderWithProviders(
+      <DataTable data={parts} columns={columns} getRowId={getRowId} columnsKey="test-parts" />,
+    );
+    expect(headers()).toEqual(['Ad', 'Ağırlık']);
+  });
+
+  it('offers no ordering without a columnsKey', async () => {
+    viewport(1440);
+    renderWithProviders(<DataTable data={parts} columns={columns} getRowId={getRowId} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sütunlar (1 gizli)' }));
+    await screen.findByRole('checkbox', { name: 'Ağırlık' });
+    expect(screen.queryByRole('button', { name: /sütununu yukarı taşı/ })).not.toBeInTheDocument();
   });
 });

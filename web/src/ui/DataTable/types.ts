@@ -305,7 +305,9 @@ export interface DataTableProps<T extends RowData> {
   onRefresh?: () => void;
   /**
    * Shows the Sütunlar menu (it shows anyway when a column has `hideBelow`)
-   * and remembers its choices in this browser under this key.
+   * with column ordering, and saves each user's choices under this key on the
+   * backend (/users/me/table-preferences/<key>/). Unique per table and never
+   * renamed, or users lose their layout: lowercase, e.g. 'sales-offers'.
    */
   columnsKey?: string;
 
