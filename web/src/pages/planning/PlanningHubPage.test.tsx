@@ -147,7 +147,7 @@ it('leads with what waits on planning: its tasks, the request flow and the reque
     within(within(waiting).getByRole('navigation'))
       .getAllByRole('link')
       .map((link) => link.textContent),
-  ).toEqual(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları']);
+  ).toEqual(['Departman Talepleri', 'Malzeme Maliyeti Satırları']);
 
   // The active tasks first, then the steps in the order a request passes them.
   const figure = (name: RegExp) => within(waiting).getByRole('link', { name });

@@ -181,61 +181,11 @@ it('Temizle empties the filters, resets the ordering and says so', async () => {
   expect(notify.info).toHaveBeenCalledWith('Filtreler temizlendi');
 });
 
-it('marks an item consumed after the confirm and reloads the list', async () => {
+it('is a report: the lines are shown, never marked from here', async () => {
   renderPage();
   await screen.findByText('PLT-001');
-  const before = listCalls().length;
-
-  fireEvent.click(within(rowOf('PLT-001')).getByRole('button', { name: 'Kullanıldı' }));
-  expect(
-    await screen.findByText('PLT-001 kalemi "kullanıldı" olarak işaretlenecek.'),
-  ).toBeInTheDocument();
-  expect(screen.getByRole('dialog', { name: 'Kullanıldı İşareti' })).toBeInTheDocument();
+  // Kullanıldı is set by the CNC cut form (old unsized plate lines); sized
+  // lines count their sheets on their own.
+  expect(within(rowOf('PLT-001')).queryByRole('button', { name: 'Kullanıldı' })).toBeNull();
   expect(postCalls()).toHaveLength(0);
-
-  fireEvent.click(screen.getByRole('button', { name: 'Evet' }));
-  await waitFor(() =>
-    expect(notify.success).toHaveBeenCalledWith('Kalem kullanıldı olarak işaretlendi'),
-  );
-  expect(postCalls().map((c) => c.url.pathname)).toEqual(['/planning/items/1/mark_consumed/']);
-  await waitFor(() => expect(listCalls().length).toBeGreaterThan(before));
-});
-
-it('unmarks a consumed item after the confirm', async () => {
-  renderPage();
-  await screen.findByText('PLT-002');
-  fireEvent.click(within(rowOf('PLT-002')).getByRole('button', { name: 'Kullanıldı' }));
-  expect(
-    await screen.findByText('PLT-002 kaleminin "kullanıldı" işareti kaldırılacak.'),
-  ).toBeInTheDocument();
-  expect(
-    screen.getByText('Kalem yeniden CNC kesimleri için seçilebilir hale gelir.'),
-  ).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Evet' }));
-  await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Kullanıldı işareti kaldırıldı'));
-  expect(postCalls().map((c) => c.url.pathname)).toEqual(['/planning/items/2/unmark_consumed/']);
-});
-
-it('cancelling the confirm sends nothing; a failed request shows the backend message', async () => {
-  renderPage();
-  await screen.findByText('PLT-001');
-  fireEvent.click(within(rowOf('PLT-001')).getByRole('button', { name: 'Kullanıldı' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'İptal' }));
-  await waitFor(() =>
-    expect(screen.queryByText('PLT-001 kalemi "kullanıldı" olarak işaretlenecek.')).toBeNull(),
-  );
-  expect(postCalls()).toHaveLength(0);
-
-  fetchMock.mockImplementation((_url, init) =>
-    init?.method === 'POST'
-      ? json({ detail: 'Kalem zaten kullanıldı.' }, 400)
-      : json({ count: 2, next: null, previous: null, results: ITEMS }),
-  );
-  vi.spyOn(console, 'error').mockImplementation(() => {});
-  fireEvent.click(within(rowOf('PLT-001')).getByRole('button', { name: 'Kullanıldı' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Evet' }));
-  await waitFor(() => expect(notify.error).toHaveBeenCalled());
-  expect(vi.mocked(notify.error).mock.calls[0]![0]).toMatchObject({
-    message: 'Kalem zaten kullanıldı.',
-  });
 });

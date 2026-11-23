@@ -81,11 +81,17 @@ describe('the Planlama menu', () => {
   it('groups the request pages and puts project planning under Projeler', () => {
     expect(Object.keys(planning['/planning']!.children)).toEqual([
       '/planning/department-requests',
-      '/planning/items',
       '/planning/procurement-lines',
       '/planning/projects',
       '/planning/cnc-cutting',
       '/planning/linear-cutting',
+      '/planning#raporlar',
+    ]);
+    // Planlama Kalemleri is a report now (no actions on it).
+    expect(findTrail(planning, '/planning/items').map((step) => step.label)).toEqual([
+      'Planlama',
+      'Raporlar',
+      'Planlama Kalemleri',
     ]);
     // A parent is a heading only, so the Projeler page is a row of its own.
     expect(
