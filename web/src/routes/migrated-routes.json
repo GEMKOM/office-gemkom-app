@@ -119,6 +119,7 @@
   "/manufacturing/reports/job-costs",
   "/manufacturing/material-tracking",
   "/manufacturing/material-tracking/pull-requests",
+  "/warehouse/pull-requests",
   "/manufacturing/maintenance/dashboard",
   "/manufacturing/maintenance/fault-requests",
   "/manufacturing/maintenance/reports/faults",

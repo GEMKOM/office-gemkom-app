@@ -28,7 +28,12 @@ export const DEPARTMENT_LABELS: Record<string, string> = {
 
 /** Everyday pages per department (users' department_code). */
 const DEPARTMENT_PAGES: Record<string, string[]> = {
-  design: ['/design/projects', '/design/release-approvals', '/design/revision-requests', '/projects/project-tracking'],
+  design: [
+    '/design/projects',
+    '/design/release-approvals',
+    '/design/revision-requests',
+    '/projects/project-tracking',
+  ],
   planning: [
     '/planning/projects',
     '/planning/department-requests',
@@ -51,25 +56,54 @@ const DEPARTMENT_PAGES: Record<string, string[]> = {
     '/manufacturing/material-tracking',
     '/manufacturing/subcontracting/statements',
   ],
-  welding: ['/manufacturing/welding/time-entries', '/manufacturing/welding/timesheets', '/manufacturing/welding/teams'],
+  welding: [
+    '/manufacturing/welding/time-entries',
+    '/manufacturing/welding/timesheets',
+    '/manufacturing/welding/teams',
+  ],
   machining: [
     '/manufacturing/machining/dashboard',
     '/manufacturing/machining/tasks/list',
     '/manufacturing/machining/capacity/planning',
   ],
-  maintenance: ['/manufacturing/maintenance/fault-requests', '/manufacturing/maintenance/dashboard', '/warehouse/machines'],
+  maintenance: [
+    '/manufacturing/maintenance/fault-requests',
+    '/manufacturing/maintenance/dashboard',
+    '/warehouse/machines',
+  ],
   logistics: ['/logistics/projects', '/logistics/cost-lines'],
-  qualitycontrol: ['/quality-control/qc-reviews', '/quality-control/ncrs', '/quality-control/documents'],
-  cutting: ['/planning/cnc-cutting/cuts', '/planning/cnc-cutting/plate-stock', '/planning/cnc-cutting/capacity'],
-  warehouse: ['/warehouse/goods-receipts', '/manufacturing/material-tracking/pull-requests', '/warehouse/stock'],
+  qualitycontrol: [
+    '/quality-control/qc-reviews',
+    '/quality-control/ncrs',
+    '/quality-control/documents',
+  ],
+  cutting: [
+    '/planning/cnc-cutting/cuts',
+    '/planning/cnc-cutting/plate-stock',
+    '/planning/cnc-cutting/capacity',
+  ],
+  warehouse: ['/warehouse/goods-receipts', '/warehouse/pull-requests', '/warehouse/stock'],
   sales: ['/sales/offers', '/sales/customers', '/sales/cost-table'],
-  human_resources: ['/human_resources/users', '/human_resources/attendance/records', '/human_resources/vacation'],
+  human_resources: [
+    '/human_resources/users',
+    '/human_resources/attendance/records',
+    '/human_resources/vacation',
+  ],
   it: ['/it/inventory', '/it/permissions', '/it/password-resets'],
-  management: ['/management/dashboard', '/management/reports/overview', '/projects/project-tracking'],
+  management: [
+    '/management/dashboard',
+    '/management/reports/overview',
+    '/projects/project-tracking',
+  ],
 };
 
 /** For everyone, after the department's own. */
-const COMMON_PAGES = ['/general/vacation/requests', '/human_resources/overtime/registry', '/isg/issues', '/general/discussions'];
+const COMMON_PAGES = [
+  '/general/vacation/requests',
+  '/human_resources/overtime/registry',
+  '/isg/issues',
+  '/general/discussions',
+];
 
 export const SHORTCUT_COUNT = 6;
 

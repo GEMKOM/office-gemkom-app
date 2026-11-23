@@ -206,13 +206,16 @@ it('Hammadde: ticks a card and a bar lot, sets both aside for a job; plates stay
   expect(lots.url.searchParams.get('warehouse')).toBe('HAMMADDE');
 
   expect(screen.getByRole('button', { name: 'İşe Ayır' })).toBeDisabled();
+  // The band carries the figures; the search sits in the first table's card.
+  expect(screen.getByText('Stok kartı').parentElement).toHaveTextContent('1');
   // Rows: the card, the plate lot, the bar lot. A plate never goes on a job.
   const boxes = screen.getAllByLabelText('Satırı seç');
   expect(boxes[1]).toBeDisabled();
   expect(screen.getByText(/Sac İş Emri deposuna alınmaz/)).toBeInTheDocument();
   fireEvent.click(boxes[0]!);
   fireEvent.click(boxes[2]!);
-  expect(screen.getByText('2 satır seçili')).toBeInTheDocument();
+  // The selection count is a figure on the band, next to the move button.
+  expect(screen.getByText('Seçili').parentElement).toHaveTextContent('2');
   fireEvent.click(screen.getByRole('button', { name: 'İşe Ayır' }));
 
   const dialog = await screen.findByRole('dialog', { name: 'İşe Ayır' });

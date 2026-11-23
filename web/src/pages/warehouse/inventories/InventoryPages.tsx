@@ -11,7 +11,7 @@ import {
   Textarea,
 } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { stockKeys } from '@/api/procurement/stock';
 import { useJobOrderOptions } from '@/api/reference';
 import { countErrorMessage } from '@/api/warehouse/counts';
@@ -49,6 +49,8 @@ import {
   notify,
   PageHeader,
   StatusBadge,
+  type PageFigure,
+  type PageHeaderProps,
   useUrlFilters,
   type DataTableColumn,
   type FilterConfig,
@@ -478,11 +480,17 @@ const EMPTY_LOTS: MaterialPiece[] = [];
 /** One place's cards and lots, with the move buttons for the ticked rows. */
 function PlaceStock({
   place,
+  header,
+  notice,
   actions,
   values,
   apply,
 }: {
   place: InventoryPlace;
+  /** The band: title, subtitle, back link. Its figures and buttons come from here. */
+  header: Pick<PageHeaderProps, 'title' | 'subtitle' | 'icon' | 'backTo' | 'backLabel'>;
+  /** Shown above the tables (e.g. a closed job still holding stock). */
+  notice?: ReactNode;
   actions: MoveAction[];
   values: { search: string; kind: string; card_page: string; lot_page: string };
   apply: (
@@ -543,92 +551,114 @@ function PlaceStock({
     />
   );
 
+  // Same as the other list pages: figures and the move buttons on the band,
+  // the search inside the first table's card.
+  const figure = (loaded: boolean, value: number | undefined) =>
+    loaded ? (value ?? 0).toLocaleString('tr-TR') : '–';
+  const stats: PageFigure[] = [
+    ...(showCards
+      ? [
+          {
+            id: 'cards',
+            label: 'Stok kartı',
+            value: figure(balances.isSuccess, balances.data?.count),
+          },
+        ]
+      : []),
+    ...(showLots
+      ? [{ id: 'lots', label: 'Sac / boy lotu', value: figure(lots.isSuccess, lots.data?.count) }]
+      : []),
+    ...(count ? [{ id: 'selected', label: 'Seçili', value: count }] : []),
+  ];
+
   return (
-    <Stack gap="md">
-      <Group justify="space-between" wrap="wrap">
-        {filters}
-        <Group gap="xs">
-          <Text size="sm" c="dimmed">
-            {count ? `${count} satır seçili` : 'Taşımak için satırları işaretleyin'}
+    <>
+      <PageHeader
+        {...header}
+        stats={stats}
+        actions={actions.map((a) => (
+          <Button
+            key={a.label}
+            leftSection={<FaIcon icon={a.icon} />}
+            disabled={count === 0}
+            title={count === 0 ? 'Taşımak için tablodan satırları işaretleyin' : undefined}
+            onClick={() => setMoving(a)}
+          >
+            {a.label}
+          </Button>
+        ))}
+      />
+      <Stack gap="md">
+        {notice}
+        {showCards ? (
+          <DataTable
+            title="Stok Kartları"
+            icon="fas fa-boxes"
+            filters={filters}
+            data={cardRows}
+            columns={balanceColumns}
+            getRowId={(row) => String(row.id)}
+            loading={balances.isFetching}
+            selection={{
+              selectedIds: cardSel.ids,
+              onChange: cardSel.onChange(cardRows),
+              isRowSelectable: () => canCards,
+            }}
+            pagination={{
+              page: cardPage,
+              pageSize: PAGE_SIZE,
+              total: balances.data?.count ?? 0,
+              onPageChange: (next) => apply({ card_page: String(next) }),
+            }}
+            emptyMessage={search ? 'Bu aramayla stok kartı yok' : 'Burada stok kartı yok'}
+          />
+        ) : null}
+        {showLots ? (
+          <DataTable
+            title="Sac ve Boy Lotları"
+            icon="fas fa-layer-group"
+            filters={showCards ? undefined : filters}
+            data={lotRows}
+            columns={lotColumns}
+            getRowId={(row) => String(row.id)}
+            loading={lots.isFetching}
+            selection={{
+              selectedIds: lotSel.ids,
+              onChange: lotSel.onChange(lotRows),
+              // On Hammadde (moves only go to a job) a plate cannot be picked: it stays here.
+              isRowSelectable: (row) =>
+                canWriteKind(row.kind) && (row.kind !== 'plate' || platesCanMove),
+            }}
+            pagination={{
+              page: lotPage,
+              pageSize: PAGE_SIZE,
+              total: lots.data?.count ?? 0,
+              onPageChange: (next) => apply({ lot_page: String(next) }),
+            }}
+            emptyMessage={search ? 'Bu aramayla lot yok' : 'Burada sac veya boy lotu yok'}
+          />
+        ) : null}
+        {showLots && !platesCanMove && kind !== 'boy' ? (
+          <Text size="xs" c="dimmed">
+            {PLATE_NOT_IN_JOB}
           </Text>
-          {actions.map((a) => (
-            <Button
-              key={a.label}
-              leftSection={<FaIcon icon={a.icon} />}
-              disabled={count === 0}
-              onClick={() => setMoving(a)}
-            >
-              {a.label}
-            </Button>
-          ))}
-        </Group>
-      </Group>
-      {showCards ? (
-        <DataTable
-          title="Stok Kartları"
-          icon="fas fa-boxes"
-          data={cardRows}
-          columns={balanceColumns}
-          getRowId={(row) => String(row.id)}
-          loading={balances.isFetching}
-          selection={{
-            selectedIds: cardSel.ids,
-            onChange: cardSel.onChange(cardRows),
-            isRowSelectable: () => canCards,
-          }}
-          pagination={{
-            page: cardPage,
-            pageSize: PAGE_SIZE,
-            total: balances.data?.count ?? 0,
-            onPageChange: (next) => apply({ card_page: String(next) }),
-          }}
-          emptyMessage={search ? 'Bu aramayla stok kartı yok' : 'Burada stok kartı yok'}
-        />
-      ) : null}
-      {showLots ? (
-        <DataTable
-          title="Sac ve Boy Lotları"
-          icon="fas fa-layer-group"
-          data={lotRows}
-          columns={lotColumns}
-          getRowId={(row) => String(row.id)}
-          loading={lots.isFetching}
-          selection={{
-            selectedIds: lotSel.ids,
-            onChange: lotSel.onChange(lotRows),
-            // On Hammadde (moves only go to a job) a plate cannot be picked: it stays here.
-            isRowSelectable: (row) =>
-              canWriteKind(row.kind) && (row.kind !== 'plate' || platesCanMove),
-          }}
-          pagination={{
-            page: lotPage,
-            pageSize: PAGE_SIZE,
-            total: lots.data?.count ?? 0,
-            onPageChange: (next) => apply({ lot_page: String(next) }),
-          }}
-          emptyMessage={search ? 'Bu aramayla lot yok' : 'Burada sac veya boy lotu yok'}
-        />
-      ) : null}
-      {showLots && !platesCanMove && kind !== 'boy' ? (
-        <Text size="xs" c="dimmed">
-          {PLATE_NOT_IN_JOB}
-        </Text>
-      ) : null}
-      {moving ? (
-        <MoveModal
-          source={place}
-          target={moving.target}
-          title={moving.label}
-          cards={selectedCards}
-          lots={selectedLots}
-          onClose={() => setMoving(null)}
-          onDone={() => {
-            cardSel.clear();
-            lotSel.clear();
-          }}
-        />
-      ) : null}
-    </Stack>
+        ) : null}
+        {moving ? (
+          <MoveModal
+            source={place}
+            target={moving.target}
+            title={moving.label}
+            cards={selectedCards}
+            lots={selectedLots}
+            onClose={() => setMoving(null)}
+            onDone={() => {
+              cardSel.clear();
+              lotSel.clear();
+            }}
+          />
+        ) : null}
+      </Stack>
+    </>
   );
 }
 
@@ -638,13 +668,13 @@ export function HammaddePage() {
   const { values, apply } = useUrlFilters(PLACE_DEFAULTS);
   return (
     <>
-      <PageHeader
-        title="Hammadde"
-        subtitle="Serbest stok: hiçbir işe ayrılmamış stok kartları ile sac ve boy lotları"
-        icon="fas fa-cubes"
-      />
       <PlaceStock
         place={{ warehouse: 'HAMMADDE', jobNo: '' }}
+        header={{
+          title: 'Hammadde',
+          subtitle: 'Serbest stok: hiçbir işe ayrılmamış stok kartları ile sac ve boy lotları',
+          icon: 'fas fa-cubes',
+        }}
         actions={[{ target: 'job', label: 'İşe Ayır', icon: 'fas fa-arrow-right' }]}
         values={values}
         apply={apply}
@@ -735,32 +765,33 @@ export function IsEmriPage() {
     ];
     return (
       <>
-        <PageHeader
-          title={jobNo ? `İş Emri · ${jobNo}` : 'İş Emri · Atanmamış'}
-          subtitle={
-            jobNo
-              ? row?.job_title || 'Bu işe ayrılmış stok'
-              : 'İş Emri deposunda olup hiçbir işe bağlı olmayan stok'
-          }
-          icon="fas fa-clipboard-list"
-          backTo={IS_EMRI_ROUTE}
-          backLabel="Tüm işler"
-        />
-        {row?.job_closed ? (
-          <Alert
-            color="red"
-            variant="light"
-            mb="md"
-            icon={<FaIcon icon="fas fa-exclamation-triangle" />}
-          >
-            {row.job_status === 'cancelled' ? 'Bu iş emri iptal edildi' : 'Bu iş emri tamamlandı'}{' '}
-            ama İş Emri deposunda stoğu duruyor. Kalan malzemeyi Hammaddeye iade edin ya da başka
-            işe aktarın.
-          </Alert>
-        ) : null}
         <PlaceStock
           key={values.job}
           place={{ warehouse: 'IS_EMRI', jobNo }}
+          header={{
+            title: jobNo ? `İş Emri · ${jobNo}` : 'İş Emri · Atanmamış',
+            subtitle: jobNo
+              ? row?.job_title || 'Bu işe ayrılmış stok'
+              : 'İş Emri deposunda olup hiçbir işe bağlı olmayan stok',
+            icon: 'fas fa-clipboard-list',
+            backTo: IS_EMRI_ROUTE,
+            backLabel: 'Tüm işler',
+          }}
+          notice={
+            row?.job_closed ? (
+              <Alert
+                color="red"
+                variant="white"
+                icon={<FaIcon icon="fas fa-exclamation-triangle" />}
+              >
+                {row.job_status === 'cancelled'
+                  ? 'Bu iş emri iptal edildi'
+                  : 'Bu iş emri tamamlandı'}{' '}
+                ama İş Emri deposunda stoğu duruyor. Kalan malzemeyi Hammaddeye iade edin ya da
+                başka işe aktarın.
+              </Alert>
+            ) : undefined
+          }
           actions={actions}
           values={values}
           apply={apply}
