@@ -392,6 +392,18 @@ it('create needs a plate source and a part, then posts the multipart body', asyn
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kesim Oluştur' }));
   await waitFor(() => expect(notify.error).toHaveBeenCalledWith('En az bir parça eklemelisiniz'));
 
+  // A job number that is not a job order ("114-09-") refuses the whole paste.
+  fireEvent.change(within(dialog).getByLabelText(/^Toplu Yapıştır/), {
+    target: { value: PASTE.replace('114-10 ', '114-09- ') },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Yapıştırılanı Ayrıştır ve Ekle' }));
+  await waitFor(() =>
+    expect(notify.error).toHaveBeenCalledWith(
+      expect.stringContaining("Bunu mu demek istediniz: '114-09-' yerine '114-09'?"),
+    ),
+  );
+  expect(within(dialog).queryAllByTestId('part-row')).toHaveLength(0);
+
   // Paste three parts, then drop the middle one: the others keep their jobs.
   fireEvent.change(within(dialog).getByLabelText(/^Toplu Yapıştır/), { target: { value: PASTE } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Yapıştırılanı Ayrıştır ve Ekle' }));

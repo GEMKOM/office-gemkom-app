@@ -1,4 +1,31 @@
-import { parsePartsFromText, planPastedParts } from './partsPaste';
+import { parsePartsFromText, pastedJobNoProblem, planPastedParts } from './partsPaste';
+
+describe('pastedJobNoProblem', () => {
+  const known = new Set(['293-15', '114-09']);
+  const part = (job_no: string) => ({
+    job_no,
+    image_no: '0101',
+    position_no: 'P1',
+    weight_kg: 1,
+    quantity: 1,
+  });
+
+  it('accepts parts whose jobs are job orders', () => {
+    expect(pastedJobNoProblem([part('293-15'), part('114-09')], known)).toBeNull();
+  });
+
+  it('refuses a job number with no job order and names the one it was meant to be', () => {
+    const message = pastedJobNoProblem([part('293-15-'), part('293-15-'), part('999-01')], known);
+    expect(message).toContain("bulunamadı: '293-15-', '999-01'.");
+    expect(message).toContain("Bunu mu demek istediniz: '293-15-' yerine '293-15'?");
+  });
+
+  it('refuses a part with no job number', () => {
+    expect(pastedJobNoProblem([part('293-15'), part('')], known)).toContain(
+      'İş numarası olmayan parça var',
+    );
+  });
+});
 
 // A nesting report copied from Excel (legacy test-paste-parser.html sample):
 // the Geometry cell is empty, so data rows start with a tab.
