@@ -173,11 +173,17 @@ export function warehouseRequestsQueryOptions(params: QueryParams) {
  * The warehouse's stock check, in one go: how much of each line was found in
  * Hammadde. The backend moves that stock to İş Emri on each line's job and
  * closes the check (completed when everything came from stock, otherwise on
- * to purchasing). Plate / bar lines can't be filled from stock.
+ * to purchasing). Plate lines can't be filled from stock; bar lines are given
+ * by picking Hammadde lots (`pieces`), which move to the line's job.
  */
 export function submitStockCheck(
   id: number,
-  items: { planning_request_item_id: number; quantity_found: string }[],
+  items: {
+    planning_request_item_id: number;
+    quantity_found: string;
+    /** Bar lines: Hammadde lots picked to go to the line's job. */
+    pieces?: { piece: number; quantity: number }[];
+  }[],
 ) {
   return apiFetch<{ detail?: string; planning_request?: PlanningRequest }>(
     `${BASE}${id}/update_inventory_quantities/`,

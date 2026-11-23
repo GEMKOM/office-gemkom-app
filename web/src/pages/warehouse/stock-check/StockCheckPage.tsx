@@ -1,6 +1,6 @@
 import { Alert, Button, Group, NumberInput, SegmentedControl, Table, Text } from '@mantine/core';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import {
   planningRequestKeys,
   planningRequestQueryOptions,
@@ -10,7 +10,8 @@ import {
   type PlanningRequestItem,
 } from '@/api/planning/planningRequests';
 import { lookupCardsByCode } from '@/api/procurement/items';
-import { formatDate, formatNumber } from '@/lib/format';
+import { piecesQueryOptions, type MaterialPiece } from '@/api/warehouse/pieces';
+import { barMetres, formatDate, formatNumber } from '@/lib/format';
 import {
   confirm,
   DataTable,
@@ -40,9 +41,29 @@ const num = (value: unknown) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/** Plate / bar cards are stocked as pieces: "found in stock" is refused for them. */
+/** Plate / bar cards are stocked as pieces, not as a free balance. */
 const isPieceLine = (item: PlanningRequestItem) =>
   item.item_material_class === 'plate' || item.item_material_class === 'boy';
+/** Bars are given from stock by picking Hammadde lots; plates are not. */
+const isBarLine = (item: PlanningRequestItem) => item.item_material_class === 'boy';
+
+/** Bars picked per lot: piece id → count. */
+type Picks = Record<number, number | string>;
+
+const freeBars = (lot: MaterialPiece) => lot.available_quantity ?? lot.quantity;
+
+/** What `count` bars of a lot come to in the card's unit (null: no kg/m on the card). */
+function barsQuantity(lot: MaterialPiece, count: number, unit: string): number | null {
+  const u = unit.toLowerCase();
+  if (u === 'metre') return (num(lot.length_mm) * count) / 1000;
+  if (u === 'adet') return count;
+  return lot.unit_kg === null ? null : num(lot.unit_kg) * count;
+}
+
+const pickList = (picks: Picks | undefined) =>
+  Object.entries(picks ?? {})
+    .map(([piece, count]) => ({ piece: Number(piece), quantity: Math.trunc(num(count)) }))
+    .filter((p) => p.quantity > 0);
 
 const filters: FilterConfig<'search'>[] = [
   { type: 'text', key: 'search', label: 'Ara', placeholder: 'Talep no, başlık…', span: 3 },
@@ -183,6 +204,8 @@ export function StockCheckModal({
   const pending = request.data?.status === 'pending_inventory';
   // Only what the user typed; untouched lines start at what was found before (0).
   const [found, setFound] = useState<Record<number, number | string>>({});
+  // Bar lines: the Hammadde lots picked per line.
+  const [bars, setBars] = useState<Record<number, Picks>>({});
   const foundOf = (item: PlanningRequestItem) =>
     found[item.id!] ?? num(item.quantity_from_inventory);
   const hammadde = (item: PlanningRequestItem) =>
@@ -192,10 +215,14 @@ export function StockCheckModal({
     mutationFn: () =>
       submitStockCheck(
         requestId,
-        items.map((item) => ({
-          planning_request_item_id: item.id!,
-          quantity_found: num(foundOf(item)).toFixed(2),
-        })),
+        items.map((item) => {
+          const pieces = isBarLine(item) ? pickList(bars[item.id!]) : [];
+          return {
+            planning_request_item_id: item.id!,
+            quantity_found: num(foundOf(item)).toFixed(2),
+            ...(pieces.length ? { pieces } : {}),
+          };
+        }),
       ),
     onSuccess: (result) => {
       const status = result.planning_request?.status;
@@ -227,7 +254,9 @@ export function StockCheckModal({
       notify.warning(`${over.item_code}: bulunan miktar talep edilenden fazla olamaz`);
       return;
     }
-    const total = items.reduce((sum, item) => sum + num(foundOf(item)), 0);
+    const total =
+      items.reduce((sum, item) => sum + num(foundOf(item)), 0) +
+      items.reduce((sum, item) => sum + pickList(bars[item.id!]).length, 0);
     const ok = await confirm({
       title: 'Stok kontrolünü tamamla',
       message:
@@ -313,51 +342,75 @@ export function StockCheckModal({
                         {items.map((item, index) => {
                           const unit = item.item_unit || '';
                           const piece = isPieceLine(item);
+                          const bar = isBarLine(item) && pending;
                           return (
-                            <Table.Tr key={item.id}>
-                              <Table.Td>
-                                <Text size="sm" fw={600}>
-                                  {item.item_code}
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                  {item.item_name}
-                                </Text>
-                              </Table.Td>
-                              <Table.Td>{item.job_no || '-'}</Table.Td>
-                              <Table.Td ta="right">
-                                {formatNumber(num(item.quantity), 2)} {unit}
-                              </Table.Td>
-                              <Table.Td ta="right" data-testid={`hammadde-${index + 1}`}>
-                                {piece
-                                  ? '—'
-                                  : cards.isPending
-                                    ? '…'
-                                    : `${formatNumber(hammadde(item), 2)} ${unit}`}
-                              </Table.Td>
-                              <Table.Td ta="right">
-                                {piece ? (
-                                  <Text size="xs" c="dimmed">
-                                    Sac / boy stoktan karşılanmaz
+                            <Fragment key={item.id}>
+                              <Table.Tr>
+                                <Table.Td>
+                                  <Text size="sm" fw={600}>
+                                    {item.item_code}
                                   </Text>
-                                ) : pending ? (
-                                  <NumberInput
-                                    size="xs"
-                                    min={0}
-                                    max={num(item.quantity)}
-                                    decimalScale={2}
-                                    decimalSeparator=","
-                                    hideControls
-                                    aria-label={`Bulunan ${index + 1}`}
-                                    value={foundOf(item)}
-                                    onChange={(value) =>
-                                      setFound((prev) => ({ ...prev, [item.id!]: value }))
-                                    }
-                                  />
-                                ) : (
-                                  `${formatNumber(num(item.quantity_from_inventory), 2)} ${unit}`
-                                )}
-                              </Table.Td>
-                            </Table.Tr>
+                                  <Text size="xs" c="dimmed">
+                                    {item.item_name}
+                                  </Text>
+                                </Table.Td>
+                                <Table.Td>{item.job_no || '-'}</Table.Td>
+                                <Table.Td ta="right">
+                                  {formatNumber(num(item.quantity), 2)} {unit}
+                                </Table.Td>
+                                <Table.Td ta="right" data-testid={`hammadde-${index + 1}`}>
+                                  {piece
+                                    ? '—'
+                                    : cards.isPending
+                                      ? '…'
+                                      : `${formatNumber(hammadde(item), 2)} ${unit}`}
+                                </Table.Td>
+                                <Table.Td ta="right">
+                                  {bar ? (
+                                    <Text size="xs" c="dimmed">
+                                      {num(item.quantity_from_inventory) > 0
+                                        ? `${formatNumber(num(item.quantity_from_inventory), 2)} ${unit} + `
+                                        : ''}
+                                      aşağıdan boy seçin
+                                    </Text>
+                                  ) : piece && pending ? (
+                                    <Text size="xs" c="dimmed">
+                                      Sac stoktan karşılanmaz
+                                    </Text>
+                                  ) : pending ? (
+                                    <NumberInput
+                                      size="xs"
+                                      min={0}
+                                      max={num(item.quantity)}
+                                      decimalScale={2}
+                                      decimalSeparator=","
+                                      hideControls
+                                      aria-label={`Bulunan ${index + 1}`}
+                                      value={foundOf(item)}
+                                      onChange={(value) =>
+                                        setFound((prev) => ({ ...prev, [item.id!]: value }))
+                                      }
+                                    />
+                                  ) : (
+                                    `${formatNumber(num(item.quantity_from_inventory), 2)} ${unit}`
+                                  )}
+                                </Table.Td>
+                              </Table.Tr>
+                              {bar ? (
+                                <Table.Tr>
+                                  <Table.Td colSpan={5}>
+                                    <BarPicker
+                                      item={item}
+                                      index={index}
+                                      picks={bars[item.id!] ?? {}}
+                                      onChange={(picks) =>
+                                        setBars((prev) => ({ ...prev, [item.id!]: picks }))
+                                      }
+                                    />
+                                  </Table.Td>
+                                </Table.Tr>
+                              ) : null}
+                            </Fragment>
                           );
                         })}
                       </Table.Tbody>
@@ -369,5 +422,95 @@ export function StockCheckModal({
           : []
       }
     />
+  );
+}
+
+/**
+ * A bar line's Hammadde lots: how many bars of each go to the line's job.
+ * Whole bars move; what they come to counts as found (capped at the line).
+ */
+function BarPicker({
+  item,
+  index,
+  picks,
+  onChange,
+}: {
+  item: PlanningRequestItem;
+  index: number;
+  picks: Picks;
+  onChange: (picks: Picks) => void;
+}) {
+  const unit = item.item_unit || '';
+  const lots = useQuery({
+    ...piecesQueryOptions({
+      item: item.item_id ?? undefined,
+      warehouse: 'HAMMADDE',
+      page_size: 100,
+    }),
+    enabled: !!item.item_id,
+  });
+  const free = (lots.data?.results ?? []).filter((lot) => freeBars(lot) > 0);
+  if (lots.isPending) {
+    return (
+      <Text size="xs" c="dimmed">
+        Hammadde boyları yükleniyor…
+      </Text>
+    );
+  }
+  if (!free.length) {
+    return (
+      <Text size="xs" c="dimmed" data-testid={`bars-${index + 1}`}>
+        Hammadde’de bu karttan boy yok: satınalmaya gidecek.
+      </Text>
+    );
+  }
+  let total = 0;
+  let unknown = false;
+  for (const lot of free) {
+    const count = Math.trunc(num(picks[lot.id]));
+    if (count < 1) continue;
+    const q = barsQuantity(lot, count, unit);
+    if (q === null) unknown = true;
+    else total += q;
+  }
+  const requested = num(item.quantity);
+  return (
+    <Group gap="md" align="center" data-testid={`bars-${index + 1}`}>
+      <Text size="xs" c="dimmed">
+        Hammadde boyları:
+      </Text>
+      {free.map((lot) => (
+        <Group key={lot.id} gap={4} wrap="nowrap">
+          <Text size="xs" fw={600}>
+            {barMetres(lot.length_mm)}
+          </Text>
+          <Text size="xs" c="dimmed">
+            ({freeBars(lot)} boy)
+          </Text>
+          <NumberInput
+            size="xs"
+            w={60}
+            min={0}
+            max={freeBars(lot)}
+            allowDecimal={false}
+            allowNegative={false}
+            clampBehavior="strict"
+            hideControls
+            placeholder="0"
+            aria-label={`Boy ${index + 1} ${barMetres(lot.length_mm)}`}
+            value={picks[lot.id] ?? ''}
+            onChange={(value) => onChange({ ...picks, [lot.id]: value })}
+          />
+        </Group>
+      ))}
+      {total > 0 || unknown ? (
+        <Text size="xs" fw={600} data-testid={`bars-total-${index + 1}`}>
+          {unknown
+            ? 'Kartta kg/m yok: miktar hesaplanamaz'
+            : `= ${formatNumber(Math.min(total, requested), 2)} ${unit}` +
+              (total > requested ? ' (talebin tamamı)' : '')}
+        </Text>
+      ) : null}
+    </Group>
   );
 }

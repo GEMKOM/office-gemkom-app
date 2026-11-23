@@ -59,7 +59,30 @@ const REQUEST = {
       quantity: '400.00',
       quantity_from_inventory: '0.00',
     },
+    {
+      id: 4,
+      item_id: 9,
+      item_code: 'PIPE',
+      item_name: '114,3*15 BORU',
+      item_unit: 'metre',
+      item_material_class: 'boy',
+      job_no: '304-01',
+      quantity: '10.00',
+      quantity_from_inventory: '0.00',
+    },
   ],
+};
+
+const BAR_LOT = {
+  id: 50,
+  item: 9,
+  item_code: 'PIPE',
+  length_mm: '6000.0',
+  width_mm: null,
+  quantity: 3,
+  available_quantity: 3,
+  unit_kg: '240.00',
+  warehouse_code: 'HAMMADDE',
 };
 
 const calls = () =>
@@ -81,6 +104,8 @@ beforeEach(() => {
     if (u.pathname === '/planning/requests/warehouse_requests/')
       return json({ count: 1, next: null, previous: null, results: [REQUEST] });
     if (u.pathname === '/planning/requests/41/') return json(REQUEST);
+    if (u.pathname === '/warehouse/pieces/')
+      return json({ count: 1, next: null, previous: null, results: [BAR_LOT] });
     if (u.pathname === '/procurement/items/')
       return json({
         count: 2,
@@ -123,7 +148,19 @@ it('shows Hammadde per line, fills what is in stock and finishes the check', asy
   );
   expect(within(dialog).getByTestId('hammadde-2')).toHaveTextContent('50,00 adet');
   // Plate lines are stocked as pieces: not filled from stock here.
-  expect(within(dialog).getByText('Sac / boy stoktan karşılanmaz')).toBeInTheDocument();
+  expect(within(dialog).getByText('Sac stoktan karşılanmaz')).toBeInTheDocument();
+
+  // Bars are given by picking Hammadde lots: 2 × 6 m of the 10 m line.
+  const bars = await within(dialog).findByTestId('bars-4');
+  expect(bars).toHaveTextContent('6 m');
+  expect(bars).toHaveTextContent('(3 boy)');
+  const lots = calls().find((c) => c.url.pathname === '/warehouse/pieces/')!;
+  expect(lots.url.searchParams.get('item')).toBe('9');
+  expect(lots.url.searchParams.get('warehouse')).toBe('HAMMADDE');
+  fireEvent.change(within(dialog).getByLabelText('Boy 4 6 m'), { target: { value: '2' } });
+  expect(within(dialog).getByTestId('bars-total-4')).toHaveTextContent(
+    '= 10,00 metre (talebin tamamı)',
+  );
 
   // Fill takes what Hammadde has, never more than requested.
   fireEvent.click(within(dialog).getByRole('button', { name: 'Stokta Olanı Doldur' }));
@@ -145,6 +182,11 @@ it('shows Hammadde per line, fills what is in stock and finishes the check', asy
       { planning_request_item_id: 1, quantity_found: '12.00' },
       { planning_request_item_id: 2, quantity_found: '6.00' },
       { planning_request_item_id: 3, quantity_found: '0.00' },
+      {
+        planning_request_item_id: 4,
+        quantity_found: '0.00',
+        pieces: [{ piece: 50, quantity: 2 }],
+      },
     ],
   });
 });
