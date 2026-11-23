@@ -94,7 +94,9 @@ export const appRoutes: RouteObject[] = [
     // Onaylar: a tab per approval queue. Open to everyone (accessControl.ts);
     // each tab shows only for a queue the user can open.
     path: '/approvals',
-    lazy: async () => ({ Component: (await import('@/pages/approvals/ApprovalsPage')).ApprovalsPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/approvals/ApprovalsPage')).ApprovalsPage,
+    }),
   },
   {
     path: '/general',
@@ -291,7 +293,9 @@ export const appRoutes: RouteObject[] = [
         url.searchParams.get('kind') === 'boy' ? BAR_STOCK_ROUTE : PIECES_FORWARD[PIECES_ROUTE]!;
       url.searchParams.delete('kind');
       const query = url.searchParams.toString();
-      return redirect(`${target}/${query ? `?${query}` : ''}${url.hash || addressBarHash(request)}`);
+      return redirect(
+        `${target}/${query ? `?${query}` : ''}${url.hash || addressBarHash(request)}`,
+      );
     },
   },
   {
@@ -714,7 +718,9 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/quiz/leaderboard',
-    lazy: async () => ({ Component: (await import('@/pages/quiz/LeaderboardPage')).LeaderboardPage }),
+    lazy: async () => ({
+      Component: (await import('@/pages/quiz/LeaderboardPage')).LeaderboardPage,
+    }),
   },
   {
     path: '/quiz/review',
@@ -809,8 +815,8 @@ export const appRoutes: RouteObject[] = [
   ...Object.entries(MERGED_REPORT_ROUTES).map(([path, { to, preset }]) =>
     mergedInto(path, to, preset),
   ),
-  ...Object.entries({ ...MOVED_ROUTES, ...REPLACED_HUB_ROUTES, ...RETIRED_ROUTES }).map(([path, to]) =>
-    movedTo(path, to),
+  ...Object.entries({ ...MOVED_ROUTES, ...REPLACED_HUB_ROUTES, ...RETIRED_ROUTES }).map(
+    ([path, to]) => movedTo(path, to),
   ),
   // Manufacturing shop-floor lists and reports (Phase 3b).
   {
@@ -852,6 +858,15 @@ export const appRoutes: RouteObject[] = [
   },
   {
     path: '/manufacturing/material-tracking/pull-requests',
+    lazy: async () => ({
+      Component: (
+        await import('@/pages/manufacturing/material-tracking/pull-requests/PullRequestsPage')
+      ).PullRequestsPage,
+    }),
+  },
+  {
+    // The same page under Depo, so its back arrow and trail stay in Depo.
+    path: '/warehouse/pull-requests',
     lazy: async () => ({
       Component: (
         await import('@/pages/manufacturing/material-tracking/pull-requests/PullRequestsPage')

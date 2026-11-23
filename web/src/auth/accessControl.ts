@@ -114,7 +114,16 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
   '/warehouse/weight-reduction': ['/warehouse'],
   // İmalata Çıkış Talepleri lists what Malzeme Takibi creates — same audience — and the
   // warehouse hands them out there (Teslim Et), so the warehouse grant opens it too.
-  '/manufacturing/material-tracking/pull-requests': ['/manufacturing/material-tracking', '/warehouse'],
+  '/manufacturing/material-tracking/pull-requests': [
+    '/manufacturing/material-tracking',
+    '/warehouse',
+  ],
+  // The same page under Depo: whoever opens it under İmalat opens it here.
+  '/warehouse/pull-requests': [
+    '/manufacturing/material-tracking/pull-requests',
+    '/manufacturing/material-tracking',
+    '/warehouse',
+  ],
   // Reports merged from one page per department: the grants stay on the old
   // pages, and the merged page shows each user only the views whose old page
   // they can open (useReportView in pages/manufacturing/reports-shared).

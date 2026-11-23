@@ -136,6 +136,12 @@ it('renders the requests and sends the legacy default params', async () => {
   });
 });
 
+it('under its Depo URL the back arrow leads to Depo, not İmalat', async () => {
+  renderPage('/warehouse/pull-requests');
+  const back = await screen.findByRole('link', { name: /Geri Dön|sayfasına dön/ });
+  expect(back.getAttribute('href')).toMatch(/^\/warehouse\/?$/);
+});
+
 it('?talep= and ?status= deep links fill the filters, as legacy applyUrlParams did', async () => {
   renderPage('/manufacturing/material-tracking/pull-requests?talep=MPR-2026-0055&status=pending');
   await screen.findByText('MPR-2026-0055');
@@ -205,7 +211,9 @@ it('Detay shows the lines with the warehouse ledger', async () => {
   await screen.findByText('MPR-2026-0055');
   fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
 
-  const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
+  const dialog = await screen.findByRole('dialog', {
+    name: 'İmalata Çıkış Talebi — MPR-2026-0055',
+  });
   expect(within(dialog).getByText('Kalemler (1)')).toBeInTheDocument();
   expect(within(dialog).getByText('STK-001')).toBeInTheDocument();
   expect(within(dialog).getByText('600 kg')).toBeInTheDocument();
@@ -262,7 +270,9 @@ it('the detail lists the bars a bar line took from İş Emri', async () => {
   renderPage();
   await screen.findByText('MPR-2026-0055');
   fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
-  const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
+  const dialog = await screen.findByRole('dialog', {
+    name: 'İmalata Çıkış Talebi — MPR-2026-0055',
+  });
   expect(within(dialog).getByTestId('pulled-bars')).toHaveTextContent(
     '6 m × 2 boy (döküm H-7) · 4 m × 1 boy',
   );

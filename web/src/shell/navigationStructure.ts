@@ -568,8 +568,9 @@ export const NAVIGATION_STRUCTURE: NavTree = {
             icon: 'fas fa-truck-loading',
             children: {},
           },
-          // Also under İmalat, where Malzeme Takibi creates them.
-          '/manufacturing/material-tracking/pull-requests': {
+          // Also under İmalat (its own URL there), where Malzeme Takibi creates
+          // them; here under a Depo URL so the back arrow stays in Depo.
+          '/warehouse/pull-requests': {
             label: 'İmalata Çıkış Talepleri',
             icon: 'fas fa-dolly',
             children: {},

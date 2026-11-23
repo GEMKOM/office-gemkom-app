@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useLocation } from 'react-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_STALE_TIME } from '@/api/queryClient';
 import { materialTrackingErrorMessage } from '@/api/materialTracking/errors';
@@ -143,6 +144,7 @@ export function PullRequestsPage() {
   const queryClient = useQueryClient();
   const { user, isAdmin } = useAuth();
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
+  const underWarehouse = useLocation().pathname.startsWith('/warehouse/');
 
   const filters = useMemo<FilterState>(
     () => ({
@@ -247,7 +249,8 @@ export function PullRequestsPage() {
         title="İmalata Çıkış Talepleri"
         subtitle="Atölyenin istediği, deponun taşeron ve kaynak ekiplerine teslim ettiği malzemeler: bekleyen, teslim edilen ve iptal edilen talepler"
         icon="dolly"
-        backTo="/manufacturing/material-tracking/"
+        // Under Depo the menu leads back to Depo; under İmalat, to Malzeme Takibi.
+        backTo={underWarehouse ? '/warehouse/' : '/manufacturing/material-tracking/'}
       />
 
       <DataTable

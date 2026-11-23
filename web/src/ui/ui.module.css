@@ -237,6 +237,15 @@ a.figureTile:focus-visible {
   background: var(--gk-red-050);
 }
 
+/* A disabled button on the band reads as unavailable (white would look ready),
+   e.g. Hammadde's İşe Ayır before any row is ticked. */
+.bandActions :global(.mantine-Button-root):disabled,
+.bandActions :global(.mantine-Button-root)[data-disabled] {
+  opacity: 0.55;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
 .bandActions [data-variant='default'],
 .bandActions :global(.mantine-Button-root)[data-variant='default'] {
   background: transparent;
