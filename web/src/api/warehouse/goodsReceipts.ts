@@ -12,6 +12,8 @@ import { extractResults, toPaginated } from '../types';
 /** A piece lot a receipt line brought. */
 export interface ReceiptPiece {
   id: number;
+  /** A plate sheet's own code (S26-00001); each sheet is a row of its own. Null for bars. */
+  code?: string | null;
   width_mm: string | null;
   length_mm: string;
   /** How many arrived (the receipt movement). */

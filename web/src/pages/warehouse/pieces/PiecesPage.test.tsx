@@ -292,16 +292,53 @@ it('adds plate pieces with the backend weight preview', async () => {
     expect(notify.success).toHaveBeenCalledWith('0100 0000 0008 000 005: 2 adet eklendi'),
   );
   const post = calls().find((c) => c.method === 'POST' && c.url.pathname === '/warehouse/pieces/');
-  expect(post!.body).toEqual({
-    item: 11,
-    quantity: 2,
-    width_mm: '1000',
-    length_mm: '2000',
-    heat_number: '',
-    certificate_no: '',
-    note: '',
-    warehouse_code: 'HAMMADDE',
+  // Sent as a list: every sheet made comes back with its code.
+  expect(post!.body).toEqual([
+    {
+      item: 11,
+      quantity: 2,
+      width_mm: '1000',
+      length_mm: '2000',
+      heat_number: '',
+      certificate_no: '',
+      note: '',
+      warehouse_code: 'HAMMADDE',
+    },
+  ]);
+});
+
+it('shows the new sheets their codes to write on them, with a print', async () => {
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    const u = new URL(String(url), 'http://x');
+    if (init?.method === 'POST' && u.pathname === '/warehouse/pieces/') {
+      return json(
+        [
+          { ...WEIGHED_LOT, id: 30, quantity: 1, code: 'S26-00041', heat_number: 'H7' },
+          { ...WEIGHED_LOT, id: 31, quantity: 1, code: 'S26-00042', heat_number: 'H7' },
+        ],
+        201,
+      );
+    }
+    return base(url, init);
   });
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'Parça Ekle' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Parça Ekle' });
+  const picker = within(dialog).getByLabelText('Stok kartı');
+  picker.focus();
+  fireEvent.change(picker, { target: { value: 'hardox' } });
+  fireEvent.click(await screen.findByRole('option', { name: /8 mm HARDOX 400 SAC/, hidden: true }));
+  fireEvent.change(within(dialog).getByLabelText('En (mm)'), { target: { value: '1000' } });
+  fireEvent.change(within(dialog).getByLabelText('Boy (mm)'), { target: { value: '2000' } });
+  fireEvent.change(within(dialog).getByLabelText('Adet'), { target: { value: '2' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+
+  const codes = await screen.findByRole('dialog', { name: 'Sac kodları' });
+  expect(within(codes).getByText('S26-00041')).toBeInTheDocument();
+  expect(within(codes).getByText('S26-00042')).toBeInTheDocument();
+  expect(within(codes).getAllByText('H7')).toHaveLength(2);
+  expect(within(codes).getByRole('button', { name: 'Yazdır' })).toBeInTheDocument();
 });
 
 it('sends a lot to a supplier (fason) from its detail', async () => {
@@ -347,7 +384,7 @@ it('explains the Kartlar "Lot" column: a count of lots, not a lot number', async
   expect(screen.getByRole('columnheader', { name: /Lot/ })).toBeInTheDocument();
   fireEvent.mouseEnter(screen.getByRole('button', { name: 'Lot nedir?' }));
   expect(
-    await screen.findByText(/özdeş parçaların tek kaydı\. Bu sütun kartta kaç lot olduğunu/),
+    await screen.findByText(/özdeş boyların tek kaydı; her sac kendi kodlu kaydıdır\. Bu sütun/),
   ).toBeInTheDocument();
 });
 
@@ -483,10 +520,7 @@ describe('Boy Stoğu reads and takes bar lengths in metres', () => {
   });
 
   it('lists a bar lot as "6 m" and filters its length in metres', async () => {
-    renderPage(
-      '/warehouse/bar-stock?min_length=2.5&max_length=6',
-      <WarehouseBarStockPage />,
-    );
+    renderPage('/warehouse/bar-stock?min_length=2.5&max_length=6', <WarehouseBarStockPage />);
     expect(await screen.findByText('6 m')).toBeInTheDocument();
     expect(screen.queryByText(/6000 mm/)).not.toBeInTheDocument();
     const p = calls().find(
@@ -516,7 +550,9 @@ describe('Boy Stoğu reads and takes bar lengths in metres', () => {
     const post = calls().find(
       (c) => c.method === 'POST' && c.url.pathname === '/warehouse/pieces/',
     );
-    expect(post!.body).toMatchObject({ item: 20, quantity: 2, width_mm: null, length_mm: '2500' });
+    expect(post!.body).toMatchObject([
+      { item: 20, quantity: 2, width_mm: null, length_mm: '2500' },
+    ]);
   });
 
   it('corrects a bar lot length in metres', async () => {

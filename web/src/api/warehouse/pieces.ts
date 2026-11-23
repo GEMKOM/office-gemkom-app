@@ -8,11 +8,17 @@ import { extractResults, toPaginated } from '../types';
 // size at one place: Hammadde, İş Emri on a job, Mamul, or at a supplier
 // (Fasonda: held there, not consumed). Weights come from the backend; a card
 // without thickness (plate) or kg/m (boy) gives no weight, never 0.
+// Every plate sheet is a row of its own (quantity 1) with its own code
+// (S26-00001), written on the sheet; bars stay lots of identical pieces.
 
 export type PieceKind = 'plate' | 'boy';
 
 export interface MaterialPiece {
   id: number;
+  /** A plate sheet's own code (S26-00001), written on the sheet; null for bars. */
+  code?: string | null;
+  /** The code of the sheet this one was cut or split from (a remnant's sheet). */
+  parent_code?: string | null;
   item: number;
   item_code: string;
   item_name: string;
@@ -321,10 +327,15 @@ export const ORIGIN_OPTIONS = [
   { value: 'converted', label: 'Planlama kaleminden' },
 ];
 
+/** What the Sac Kodu column is. */
+export const SHEET_CODE_HELP =
+  'Her sacın kendi kodu (S26-00001): sacın üzerine yazılır. Kodla aratınca kartı, ölçüsü ve döküm ' +
+  "no'su bulunur; fire sac yeni kod alır ve kesildiği sacın döküm no'sunu taşır.";
+
 /** What a "Lot" column counts (people read it as a lot number). */
 export const LOT_HELP =
-  "Lot: aynı kart, aynı ölçü, aynı yer ve aynı döküm no'lu özdeş parçaların tek kaydı. " +
-  'Bu sütun kartta kaç lot olduğunu gösterir.';
+  "Lot: aynı kart, aynı ölçü, aynı yer ve aynı döküm no'lu özdeş boyların tek kaydı; her sac kendi " +
+  'kodlu kaydıdır. Bu sütun kartta kaç kayıt olduğunu gösterir.';
 
 const PLACE_NAMES: Record<string, string> = {
   HAMMADDE: 'Hammadde',

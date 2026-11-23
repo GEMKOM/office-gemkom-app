@@ -12,6 +12,7 @@ import {
   type ProcessInput,
   type ProcessPart,
   type ProcessRemnantInput,
+  type ProcessResult,
 } from '@/api/manufacturing/cncTasks';
 import {
   pieceKeys,
@@ -35,7 +36,24 @@ import {
   StatusBadge,
   type DataTableColumn,
 } from '@/ui';
-import { isOrderedLine, pieceText, SHEETS_WAITING_FINISH } from './PlateSource';
+import { SheetCodesModal, type CodedSheet } from '@/pages/warehouse/pieces/SheetCodes';
+import { isOrderedLine, pieceText, sheetsText, SHEETS_WAITING_FINISH } from './PlateSource';
+
+/** The remnant sheets a finish made, each with its new code. */
+export function remnantSheets(booked: ProcessResult | undefined): CodedSheet[] {
+  return (booked?.remnants ?? []).flatMap((r) =>
+    (r.sheets ?? [])
+      .filter((s): s is { id: number; code: string; heat_number: string } => Boolean(s.code))
+      .map((s) => ({
+        code: s.code,
+        item_code: r.item_code,
+        item_name: r.item_name,
+        width_mm: r.width_mm,
+        length_mm: r.length_mm,
+        heat_number: s.heat_number,
+      })),
+  );
+}
 
 // Finishing a cut ("Kesimi Bitir"). The operator enters the remnants the cut
 // left; none entered means it left none. On finish the backend issues the reserved
@@ -391,15 +409,31 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   const waiting = Number(t?.sheets_waiting || 0) > 0;
   const previewError = preview.isError ? errorMessage(preview.error, 'Hesaplanamadı') : '';
 
+  // The remnants' new codes, shown once the cut is finished.
+  const [coded, setCoded] = useState<CodedSheet[] | null>(null);
+
   const save = async () => {
     try {
-      await finish.mutateAsync();
+      const done = await finish.mutateAsync();
       notify.success('Kesim tamamlandı olarak işaretlendi');
-      onClose();
+      const sheets = remnantSheets(done.booked);
+      if (sheets.length) setCoded(sheets);
+      else onClose();
     } catch (error) {
       notify.error(errorMessage(error, 'Kesim tamamlanamadı'));
     }
   };
+
+  if (coded) {
+    return (
+      <SheetCodesModal
+        opened
+        onClose={onClose}
+        title={`${cutKey} kesiminden fire saclar`}
+        sheets={coded}
+      />
+    );
+  }
 
   return (
     <Modal opened onClose={onClose} size="90%" withCloseButton={false} classNames={modalClassNames}>
@@ -421,7 +455,7 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
               </Text>
               <Text size="sm" c="dimmed">
                 {reservation
-                  ? `${pieceText(reservation.piece_details)} × ${reservation.quantity} sac stoktan düşülecek.`
+                  ? `${sheetsText(t.piece_reservations ?? [])} — stoktan düşülecek.`
                   : consumed.length > 0
                     ? 'Seçilen saclar stoktan düşülecek.'
                     : 'Kesime ayrılmış sac partisi yok; kullanılan sacın ağırlığı kesimin ölçüsünden tahmin edilir.'}

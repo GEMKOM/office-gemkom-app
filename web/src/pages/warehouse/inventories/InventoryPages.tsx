@@ -147,7 +147,17 @@ const lotColumns: DataTableColumn<MaterialPiece>[] = [
         </StatusBadge>
       ) : null,
   },
-  { key: 'size', header: 'Ölçü', render: (row) => <span style={mono}>{sizeLabel(row)}</span> },
+  {
+    key: 'size',
+    header: 'Ölçü',
+    exportValue: (row) => (row.code ? `${row.code} · ${sizeLabel(row)}` : sizeLabel(row)),
+    render: (row) => (
+      <span style={mono}>
+        {row.code ? <strong>{row.code} · </strong> : null}
+        {sizeLabel(row)}
+      </span>
+    ),
+  },
   {
     key: 'quantity',
     header: 'Adet',
@@ -411,7 +421,10 @@ function MoveModal({ source, target, title, cards, lots, onClose, onDone }: Move
                 <Table.Td>
                   <CardCell code={l.item_code} name={l.item_name} />
                 </Table.Td>
-                <Table.Td style={mono}>{sizeLabel(l)}</Table.Td>
+                <Table.Td style={mono}>
+                  {l.code ? `${l.code} · ` : ''}
+                  {sizeLabel(l)}
+                </Table.Td>
                 <Table.Td>
                   <NumberInput
                     aria-label={`Lot ${l.id} adet`}

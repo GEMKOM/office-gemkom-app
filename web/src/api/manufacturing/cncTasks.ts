@@ -54,6 +54,8 @@ export interface PlateUsageRecord {
 /** A plate lot as the cut sees it (warehouse.MaterialPiece, trimmed). */
 export interface CncPieceDetails {
   id: number;
+  /** The plate sheet's code (S26-00001); null for an old uncoded lot. */
+  code?: string | null;
   item: number;
   item_code: string;
   item_name: string;
@@ -208,6 +210,8 @@ export interface CncTaskInput {
   planning_request_item_id: number | null;
   /** A plate lot from piece stock; quantity_used sheets of it are reserved. */
   selected_piece_id: number | null;
+  /** The coded sheets the cut is cut from, one id each (the cut's Adet is their count). */
+  selected_piece_ids?: number[];
   /** Sent only with a planning item. */
   mark_item_consumed?: boolean;
   /** Leave the plate source as it is (a processed cut's source is fixed). */
@@ -242,7 +246,11 @@ export function createCncTask(input: CncTaskCreateInput) {
   appendIf(form, 'selected_plate_id', input.selected_plate_id);
   appendIf(form, 'quantity_used', input.quantity_used);
   appendIf(form, 'planning_request_item_id', input.planning_request_item_id);
-  appendIf(form, 'selected_piece_id', input.selected_piece_id);
+  if (input.selected_piece_ids?.length) {
+    form.append('selected_piece_ids', input.selected_piece_ids.join(','));
+  } else {
+    appendIf(form, 'selected_piece_id', input.selected_piece_id);
+  }
   appendConsumed(form, input.mark_item_consumed);
   for (const file of input.files) form.append('files', file);
   if (input.parts_data.length) form.append('parts_data', JSON.stringify(input.parts_data));
@@ -267,7 +275,11 @@ export function updateCncTask(key: string, input: CncTaskInput) {
     form.append('selected_plate_id', id(input.selected_plate_id));
     appendIf(form, 'quantity_used', input.quantity_used);
     form.append('planning_request_item_id', id(input.planning_request_item_id));
-    form.append('selected_piece_id', id(input.selected_piece_id));
+    if (input.selected_piece_ids?.length) {
+      form.append('selected_piece_ids', input.selected_piece_ids.join(','));
+    } else {
+      form.append('selected_piece_id', id(input.selected_piece_id));
+    }
     appendConsumed(form, input.mark_item_consumed);
   }
   return apiFetch<CncTask>(taskPath(key), { method: 'PATCH', body: form });
@@ -314,6 +326,8 @@ export interface ProcessResult {
   sheets: number;
   consumed: {
     piece: number;
+    /** The sheet's code (S26-00001); null for an old uncoded lot. */
+    code?: string | null;
     item: number;
     item_code: string;
     item_name: string;
@@ -331,6 +345,7 @@ export interface ProcessResult {
   remnants: {
     item: number;
     item_code: string;
+    item_name?: string;
     width_mm: string;
     length_mm: string;
     quantity: number;
@@ -339,6 +354,8 @@ export interface ProcessResult {
     kept: boolean;
     unit_kg: string | null;
     total_kg: string | null;
+    /** Finish only: the new remnant sheets, one per remnant, with the code to write on each. */
+    sheets?: { id: number; code: string | null; heat_number: string }[];
   }[];
   remnant_kg: string | null;
   fire_kg: string | null;

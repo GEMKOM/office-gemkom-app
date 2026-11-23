@@ -83,7 +83,13 @@ export interface PieceChoice extends CncPieceDetails {
 }
 
 export interface PlateSourceValue {
+  /** The first picked sheet (or an old uncoded lot). */
   piece: PieceChoice | null;
+  /**
+   * The coded sheets picked for the cut, one each (S26-…); the cut's Adet is
+   * their count. Empty for an old uncoded lot (piece + quantityUsed).
+   */
+  sheets?: PieceChoice[];
   /** Old remnant plate source (cuts from before piece stock). */
   remnant: RemnantChoice | null;
   quantityUsed: number;
@@ -97,6 +103,7 @@ export interface PlateSourceValue {
 
 export const EMPTY_PLATE_SOURCE: PlateSourceValue = {
   piece: null,
+  sheets: [],
   remnant: null,
   quantityUsed: 1,
   planningItem: null,
@@ -127,9 +134,15 @@ export function plateSourceFromTask(task: CncTask): PlateSourceValue {
     : issue
       ? { ...issue.piece_details, available: null }
       : null;
-  const used = reservation?.quantity ?? issue?.quantity ?? usage?.quantity_used;
+  // Coded sheets: the cut holds one row per sheet.
+  const held = task.piece_reservations?.length
+    ? task.piece_reservations.map((r) => ({ ...r.piece_details, available: r.available_quantity }))
+    : (task.piece_issues ?? []).map((r) => ({ ...r.piece_details, available: null }));
+  const sheets = held.length && held.every((p) => p.code) ? held : [];
+  const used = sheets.length || (reservation?.quantity ?? issue?.quantity ?? usage?.quantity_used);
   return {
     piece,
+    sheets,
     remnant,
     quantityUsed: used !== undefined && used !== null ? parseInt(String(used), 10) : 1,
     planningItem: task.plate_item ?? null,
@@ -144,13 +157,16 @@ export function plateSourceInput(
   CncTaskInput,
   | 'selected_plate_id'
   | 'selected_piece_id'
+  | 'selected_piece_ids'
   | 'quantity_used'
   | 'planning_request_item_id'
   | 'mark_item_consumed'
   | 'keepSource'
 > {
+  const sheets = value.sheets ?? [];
   return {
     selected_piece_id: value.piece ? value.piece.id : null,
+    ...(sheets.length ? { selected_piece_ids: sheets.map((s) => s.id) } : {}),
     selected_plate_id: value.remnant ? value.remnant.id : null,
     quantity_used: value.piece || value.remnant ? value.quantityUsed : null,
     planning_request_item_id: value.planningItem ? value.planningItem.id : null,
@@ -161,8 +177,10 @@ export function plateSourceInput(
 
 /** The plate source as the user left it equals the one the cut was opened with. */
 export function samePlateSource(a: PlateSourceValue, b: PlateSourceValue) {
+  const ids = (v: PlateSourceValue) => (v.sheets ?? []).map((s) => s.id).join(',');
   return (
     (a.piece?.id ?? null) === (b.piece?.id ?? null) &&
+    ids(a) === ids(b) &&
     (a.remnant?.id ?? null) === (b.remnant?.id ?? null) &&
     (a.planningItem?.id ?? null) === (b.planningItem?.id ?? null) &&
     a.markConsumed === b.markConsumed &&
@@ -186,8 +204,55 @@ function availableOf(value: PlateSourceValue): number | null {
   return raw !== undefined && raw !== null ? parseInt(String(raw), 10) : null;
 }
 
-export function pieceText(p: Pick<CncPieceDetails, 'item_code' | 'width_mm' | 'length_mm'>) {
-  return `${p.item_code} · ${sizeLabel(p)}`;
+export function pieceText(
+  p: Pick<CncPieceDetails, 'item_code' | 'width_mm' | 'length_mm'> & { code?: string | null },
+) {
+  return `${p.code ? `${p.code} · ` : ''}${p.item_code} · ${sizeLabel(p)}`;
+}
+
+/**
+ * A cut's sheets in one line: "S26-00001, S26-00002 · 0100… · 1500 × 3000 mm"
+ * per card and size; an old uncoded lot reads "0100… · 1500 × 3000 mm × 3".
+ */
+export function sheetsText(
+  rows: {
+    quantity: number;
+    piece_details: Pick<CncPieceDetails, 'code' | 'item_code' | 'width_mm' | 'length_mm'>;
+  }[],
+): string {
+  const groups = new Map<
+    string,
+    { codes: string[]; uncoded: number; p: (typeof rows)[number]['piece_details'] }
+  >();
+  for (const r of rows) {
+    const p = r.piece_details;
+    const key = `${p.item_code}|${p.width_mm}|${p.length_mm}`;
+    const g = groups.get(key) ?? { codes: [], uncoded: 0, p };
+    if (p.code) g.codes.push(p.code);
+    else g.uncoded += r.quantity;
+    groups.set(key, g);
+  }
+  return [...groups.values()]
+    .map(({ codes, uncoded, p }) => {
+      const what = pieceText({ ...p, code: null });
+      const parts = [
+        codes.length ? `${codes.join(', ')} · ${what}` : '',
+        uncoded ? `${what} × ${uncoded}` : '',
+      ];
+      return parts.filter(Boolean).join(' · ');
+    })
+    .join(' · ');
+}
+
+/** The value with these coded sheets as the cut's plate (Adet = their count). */
+export function withSheets(value: PlateSourceValue, sheets: PieceChoice[]): PlateSourceValue {
+  return {
+    ...value,
+    sheets,
+    piece: sheets[0] ?? null,
+    remnant: sheets.length ? null : value.remnant,
+    quantityUsed: Math.max(1, sheets.length),
+  };
 }
 
 export function remnantText(r: RemnantChoice) {
@@ -225,7 +290,25 @@ export function PlateSourceSection({
   const [picking, setPicking] = useState<'piece' | 'item' | 'ordered' | null>(null);
   const [quantityError, setQuantityError] = useState('');
   const { piece, remnant, planningItem, locked } = value;
+  const sheets = value.sheets ?? [];
   const available = availableOf(value);
+  const pickedText = sheets.length
+    ? sheetsText(sheets.map((s) => ({ quantity: 1, piece_details: s })))
+    : piece
+      ? `${pieceText(piece)} × ${value.quantityUsed}`
+      : '';
+  // A line's received sheet picked or dropped (coded sheets: one each).
+  const toggleSheet = (lot: PieceChoice) => {
+    setQuantityError('');
+    if (!lot.code) {
+      onChange({ ...value, sheets: [], piece: lot, remnant: null, quantityUsed: 1 });
+      return;
+    }
+    const next = sheets.some((s) => s.id === lot.id)
+      ? sheets.filter((s) => s.id !== lot.id)
+      : [...sheets, lot];
+    onChange(withSheets(value, next));
+  };
 
   const setQuantity = (raw: string | number) => {
     const entered = parseInt(String(raw), 10) || 0;
@@ -255,9 +338,9 @@ export function PlateSourceSection({
       <ModalSection title="Plaka Kaynağı" icon="fas fa-layer-group">
         <Text size="sm">
           {piece && planningItem
-            ? `Plaka kalemi: ${itemLabel} · gelen sac: ${pieceText(piece)} × ${value.quantityUsed}`
+            ? `Plaka kalemi: ${itemLabel} · gelen sac: ${pickedText}`
             : piece
-              ? `Stoktan sac: ${pieceText(piece)} × ${value.quantityUsed}`
+              ? `Stoktan sac: ${pickedText}`
               : planningItem
                 ? `Plaka kalemi: ${itemLabel}`
                 : remnant
@@ -299,16 +382,23 @@ export function PlateSourceSection({
           {planningItem && !ordered ? 'Plaka Kalemi Değiştir' : 'Plaka Kalemi Seç'}
         </Button>
         {piece ? (
-          <Group gap={4}>
-            <Badge color="green" leftSection={<FaIcon icon="fas fa-check" />}>
-              Seçili: {pieceText(piece)}
+          <Group gap={4} wrap="nowrap" maw="100%">
+            <Badge
+              color="green"
+              leftSection={<FaIcon icon="fas fa-check" />}
+              maw={560}
+              title={pickedText}
+            >
+              {sheets.length
+                ? `Seçili (${sheets.length} sac): ${pickedText}`
+                : `Seçili: ${pieceText(piece)}`}
             </Badge>
             <CloseButton
               size="sm"
               aria-label="Sacı kaldır"
               onClick={() => {
                 setQuantityError('');
-                onChange({ ...value, piece: null, quantityUsed: 1 });
+                onChange({ ...value, piece: null, sheets: [], quantityUsed: 1 });
               }}
             />
           </Group>
@@ -357,13 +447,18 @@ export function PlateSourceSection({
             sheetsWaiting ? (
               <LineLots
                 planningItemId={planningItem.id}
-                selectedId={piece?.id ?? null}
+                selectedIds={sheets.length ? sheets.map((s) => s.id) : piece ? [piece.id] : []}
                 hideEmpty
                 pickLabel="Bu kesime ayır"
                 onPick={(lot) => {
+                  if (lot.code) {
+                    toggleSheet(lot);
+                    return;
+                  }
                   setQuantityError('');
                   onChange({
                     ...value,
+                    sheets: [],
                     piece: lot,
                     remnant: null,
                     quantityUsed: Math.max(1, Math.min(lot.available ?? 1, sheetsWaiting)),
@@ -392,16 +487,13 @@ export function PlateSourceSection({
           />
           <LineLots
             planningItemId={planningItem.id}
-            selectedId={piece?.id ?? null}
-            onPick={(lot) => {
-              setQuantityError('');
-              onChange({ ...value, piece: lot, remnant: null, quantityUsed: 1 });
-            }}
+            selectedIds={sheets.length ? sheets.map((s) => s.id) : piece ? [piece.id] : []}
+            onPick={toggleSheet}
           />
         </Stack>
       ) : null}
 
-      {piece || remnant ? (
+      {(piece && !sheets.length) || remnant ? (
         <NumberInput
           label="Kullanılacak Adet"
           min={1}
@@ -423,16 +515,18 @@ export function PlateSourceSection({
 
       {picking === 'piece' ? (
         <PieceLotPickerModal
+          initial={sheets.length ? sheets : piece ? [piece] : []}
           onClose={() => setPicking(null)}
           onPick={(picked) => {
             setQuantityError('');
-            onChange({
-              ...EMPTY_PLATE_SOURCE,
-              piece: picked,
-              quantityUsed: 1,
-            });
+            const coded = picked.every((p) => p.code);
+            onChange(
+              coded
+                ? withSheets(EMPTY_PLATE_SOURCE, picked)
+                : { ...EMPTY_PLATE_SOURCE, piece: picked[0] ?? null, quantityUsed: 1 },
+            );
             setPicking(null);
-            notify.success('Sac seçildi');
+            notify.success(picked.length > 1 ? `${picked.length} sac seçildi` : 'Sac seçildi');
           }}
         />
       ) : null}
@@ -496,12 +590,7 @@ function OrderedLineInfo({
         kesime kendiliğinden ayrılır. Sac Mal Kabul&apos;den geçmeden kesim başlatılamaz ve
         bitirilemez.
       </Text>
-      {reserved.length > 0 ? (
-        <Text size="xs">
-          Ayrılan saclar:{' '}
-          {reserved.map((r) => `${pieceText(r.piece_details)} × ${r.quantity}`).join(' · ')}
-        </Text>
-      ) : null}
+      {reserved.length > 0 ? <Text size="xs">Ayrılan saclar: {sheetsText(reserved)}</Text> : null}
       {sheetsWaiting ? (
         <Badge color="orange" variant="light" leftSection={<FaIcon icon="fas fa-hourglass-half" />}>
           Sac bekleniyor: {sheetsWaiting} sac
@@ -680,13 +769,14 @@ const EMPTY_LINE_LOTS: MaterialPiece[] = [];
 /** The lots received for a planning line, to cut from (the line stays on the cut). */
 export function LineLots({
   planningItemId,
-  selectedId,
+  selectedIds,
   onPick,
   hideEmpty = false,
   pickLabel = 'Bu sacı kullan',
 }: {
   planningItemId: number;
-  selectedId: number | null;
+  /** The sheets picked (a picked coded sheet is dropped by picking it again). */
+  selectedIds: number[];
   onPick: (lot: PieceChoice) => void;
   /** Talep Edilen Sac: arrivals are reserved by themselves; say nothing while none came. */
   hideEmpty?: boolean;
@@ -713,14 +803,25 @@ export function LineLots({
       </Text>
       {rows.map((lot) => {
         const free = lot.available_quantity ?? lot.quantity;
-        const chosen = lot.id === selectedId;
+        const chosen = selectedIds.includes(lot.id);
         return (
           <Group key={lot.id} gap="xs">
             <Text size="sm">
-              {pieceText(lot)} · {placeLabel(lot)} · boş {free} / {lot.quantity}
-              {lot.heat_number ? ` · şarj ${lot.heat_number}` : ''}
+              {pieceText(lot)} · {placeLabel(lot)} ·{' '}
+              {lot.code ? (free > 0 ? 'boş' : 'ayrılmış') : `boş ${free} / ${lot.quantity}`}
+              {lot.heat_number ? ` · döküm ${lot.heat_number}` : ''}
             </Text>
-            {chosen ? (
+            {chosen && lot.code ? (
+              <Button
+                size="compact-xs"
+                variant="light"
+                color="green"
+                leftSection={<FaIcon icon="fas fa-check" />}
+                onClick={() => onPick(pieceChoice(lot))}
+              >
+                Seçili (kaldır)
+              </Button>
+            ) : chosen ? (
               <Badge color="green" leftSection={<FaIcon icon="fas fa-check" />}>
                 Seçili
               </Badge>
@@ -747,7 +848,12 @@ type PieceFilters = { search: string; thickness_mm: string };
 const EMPTY_PIECE_FILTERS: PieceFilters = { search: '', thickness_mm: '' };
 
 const PIECE_FILTERS: FilterConfig<keyof PieceFilters>[] = [
-  { type: 'text', key: 'search', label: 'Kart / Şarj / İş Emri', placeholder: 'örn. ST 37' },
+  {
+    type: 'text',
+    key: 'search',
+    label: 'Sac kodu / Kart / Döküm no',
+    placeholder: 'örn. S26-00012 veya ST 37',
+  },
   { type: 'text', key: 'thickness_mm', label: 'Kalınlık (mm)', placeholder: 'örn. 10' },
 ];
 
@@ -756,9 +862,19 @@ const kgText = (value: string | null) =>
 
 const PIECE_COLUMNS: DataTableColumn<MaterialPiece>[] = [
   {
+    key: 'code',
+    header: 'Sac Kodu',
+    width: '12%',
+    render: (p) => (
+      <Text size="sm" fw={700} ff="monospace" style={{ whiteSpace: 'nowrap' }}>
+        {p.code || '-'}
+      </Text>
+    ),
+  },
+  {
     key: 'item_code',
     header: 'Sac Kartı',
-    width: '30%',
+    width: '26%',
     render: (p) => (
       <Stack gap={0}>
         <Text size="sm" fw={600}>
@@ -780,12 +896,13 @@ const PIECE_COLUMNS: DataTableColumn<MaterialPiece>[] = [
   {
     key: 'available_quantity',
     header: 'Boş / Adet',
-    width: '10%',
-    render: (p) => `${p.available_quantity ?? p.quantity} / ${p.quantity}`,
+    width: '8%',
+    // A coded sheet is one sheet; an old lot shows its free sheets.
+    render: (p) => (p.code ? '1' : `${p.available_quantity ?? p.quantity} / ${p.quantity}`),
   },
-  { key: 'warehouse_code', header: 'Yer', width: '14%', render: (p) => placeLabel(p) },
-  { key: 'heat_number', header: 'Şarj No', width: '10%', render: (p) => p.heat_number || '-' },
-  { key: 'unit_kg', header: 'kg / adet', width: '12%', render: (p) => kgText(p.unit_kg) },
+  { key: 'warehouse_code', header: 'Yer', width: '12%', render: (p) => placeLabel(p) },
+  { key: 'heat_number', header: 'Döküm No', width: '10%', render: (p) => p.heat_number || '-' },
+  { key: 'unit_kg', header: 'kg / adet', width: '10%', render: (p) => kgText(p.unit_kg) },
 ];
 
 const EMPTY_PIECES: MaterialPiece[] = [];
@@ -793,6 +910,7 @@ const EMPTY_PIECES: MaterialPiece[] = [];
 export function pieceChoice(p: MaterialPiece): PieceChoice {
   return {
     id: p.id,
+    code: p.code ?? null,
     item: p.item,
     item_code: p.item_code,
     item_name: p.item_name,
@@ -807,14 +925,23 @@ export function pieceChoice(p: MaterialPiece): PieceChoice {
 }
 
 export function PieceLotPickerModal({
+  initial = [],
   onClose,
   onPick,
 }: {
+  /** The sheets the cut has now (ticked when the picker opens). */
+  initial?: PieceChoice[];
   onClose: () => void;
-  onPick: (piece: PieceChoice) => void;
+  /** The ticked sheets (an old uncoded lot alone). */
+  onPick: (pieces: PieceChoice[]) => void;
 }) {
   const [filters, setFilters] = useState<PieceFilters>(EMPTY_PIECE_FILTERS);
   const [page, setPage] = useState(1);
+  // Ticked sheets by id; kept across pages and searches.
+  const [ticked, setTicked] = useState<Map<number, PieceChoice>>(
+    () => new Map(initial.filter((p) => p.code).map((p) => [p.id, p])),
+  );
+  const tickedList = [...ticked.values()];
   const params: PiecesParams = {
     kind: 'plate',
     available: 'true',
@@ -828,22 +955,42 @@ export function PieceLotPickerModal({
     if (list.isError) notify.error('Sac stoğu yüklenirken hata oluştu');
   }, [list.isError, list.errorUpdatedAt]);
 
-  const rowActions = (): RowAction<MaterialPiece>[] => [
+  const rows = list.data?.results ?? EMPTY_PIECES;
+  // An old uncoded lot (several sheets in one row) is picked alone, with an Adet.
+  const rowActions = (lot: MaterialPiece): RowAction<MaterialPiece>[] => [
     {
       key: 'select',
       label: 'Seç',
       icon: 'fas fa-check',
       color: 'success',
+      hidden: Boolean(lot.code),
       // Lots at a supplier (Fasonda) can't go to a cut.
       onClick: (row) => {
         if (!row.warehouse_code) {
           notify.warning('Fasoncudaki sac kesime ayrılamaz; önce depoya dönmeli.');
           return;
         }
-        onPick(pieceChoice(row));
+        onPick([pieceChoice(row)]);
       },
     },
   ];
+  const tick = (ids: string[]) => {
+    const next = new Map(ticked);
+    const onPage = new Set(rows.map((r) => r.id));
+    // Rows on this page follow the boxes; ticked rows on other pages stay.
+    for (const id of onPage) if (!ids.includes(String(id))) next.delete(id);
+    for (const row of rows) if (ids.includes(String(row.id))) next.set(row.id, pieceChoice(row));
+    setTicked(next);
+  };
+  const confirmPick = () => {
+    if (!tickedList.length) return notify.warning('Kesim için sac işaretleyin.');
+    const cards = new Set(tickedList.map((p) => p.item_code));
+    if (cards.size > 1) return notify.warning('Bir kesimin sacları aynı sac kartından olmalı.');
+    const sizes = new Set(tickedList.map((p) => `${Number(p.width_mm)}x${Number(p.length_mm)}`));
+    if (sizes.size > 1)
+      notify.warning('İşaretli saclar farklı ölçüde; kesimin ölçüsü ilk sacdan alınır.');
+    onPick(tickedList);
+  };
 
   return (
     <Modal opened onClose={onClose} size="xl" withCloseButton={false} classNames={modalClassNames}>
@@ -851,7 +998,12 @@ export function PieceLotPickerModal({
       <ModalBody>
         <ModalSection title="Sac Stoğu" icon="fas fa-table">
           <DataTable
-            title="Boş sacı olan partiler"
+            title="Boş saclar"
+            selection={{
+              selectedIds: rows.filter((r) => ticked.has(r.id)).map((r) => String(r.id)),
+              onChange: tick,
+              isRowSelectable: (row) => Boolean(row.code && row.warehouse_code),
+            }}
             filters={
               <FilterBar
                 inline
@@ -867,22 +1019,42 @@ export function PieceLotPickerModal({
                 }}
               />
             }
-            data={list.data?.results ?? EMPTY_PIECES}
+            data={rows}
             columns={PIECE_COLUMNS}
             getRowId={(row) => String(row.id)}
             loading={list.isFetching}
             pagination={{ page, pageSize: 20, total: list.data?.count ?? 0, onPageChange: setPage }}
             rowActions={rowActions}
-            emptyMessage="Boş sacı olan parti bulunamadı"
+            extraData={ticked}
+            emptyMessage="Boş sac bulunamadı"
           />
           <Text size="xs" c="dimmed" mt={4}>
-            Listede olmayan sac (fire sac dahil) önce Sac &amp; Boy Stoğu sayfasından girilir.
+            Kesilecek sacları kodlarıyla işaretleyin; kesimin adedi işaretli sac sayısıdır. Listede
+            olmayan sac (fire sac dahil) önce Sac &amp; Boy Stoğu sayfasından girilir.
           </Text>
         </ModalSection>
-        <Group justify="flex-end" mt="md">
-          <Button variant="default" onClick={onClose} leftSection={<FaIcon icon="fas fa-times" />}>
-            İptal
-          </Button>
+        <Group justify="space-between" mt="md">
+          <Text size="sm" c={tickedList.length ? undefined : 'dimmed'}>
+            {tickedList.length
+              ? `${tickedList.length} sac: ${tickedList.map((p) => p.code).join(', ')}`
+              : 'Sac işaretlenmedi'}
+          </Text>
+          <Group gap="xs">
+            <Button
+              variant="default"
+              onClick={onClose}
+              leftSection={<FaIcon icon="fas fa-times" />}
+            >
+              İptal
+            </Button>
+            <Button
+              leftSection={<FaIcon icon="fas fa-check" />}
+              disabled={!tickedList.length}
+              onClick={confirmPick}
+            >
+              {tickedList.length ? `${tickedList.length} sacı kesime al` : 'İşaretli sacları al'}
+            </Button>
+          </Group>
         </Group>
       </ModalBody>
     </Modal>
