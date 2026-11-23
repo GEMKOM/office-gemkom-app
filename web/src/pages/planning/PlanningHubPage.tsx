@@ -67,10 +67,10 @@ const TRACKING = '/projects/project-tracking';
 const TRACKING_OPEN = `${TRACKING}?status=active&status=on_hold&ordering=target_completion_date`;
 
 const LINKS = {
-  // Requests, materials and cost lines: one group on the hub (stock is in Depo).
+  // Requests and cost lines: one group on the hub (stock is in Depo). Planlama
+  // Kalemleri is a report now, under Planlama › Raporlar in the menu.
   waiting: [
     { label: 'Departman Talepleri', link: REQUESTS },
-    { label: 'Planlama Kalemleri', link: ITEMS },
     { label: 'Malzeme Maliyeti Satırları', link: PROCUREMENT_LINES },
   ],
   cnc: [

@@ -1,9 +1,9 @@
 import { expect, mockBackend, paginated, seedSession, test } from './fixtures';
 
 // Planlama Kalemleri (/planning/items/), the busiest list of the planning and
-// procurement batch: filters travel in the URL and reach the request, and the
-// Kullanıldı action posts after its confirm. The admin load of every migrated
-// route lives in smoke.spec.ts.
+// procurement batch: filters travel in the URL and reach the request. It is a
+// report: no row actions. The admin load of every migrated route lives in
+// smoke.spec.ts.
 
 const ITEMS = [
   {
@@ -24,7 +24,7 @@ const ITEMS = [
   },
 ];
 
-test('admin: planning items filter through the URL and mark an item consumed', async ({
+test('admin: planning items filter through the URL, with no row actions', async ({
   page,
   consoleErrors,
 }) => {
@@ -40,7 +40,6 @@ test('admin: planning items filter through the URL and mark an item consumed', a
           { count: 2 },
         ),
       }),
-      'POST /planning/items/11/mark_consumed/': { json: { ...ITEMS[0], is_consumed: true } },
     },
     { session },
   );
@@ -58,18 +57,11 @@ test('admin: planning items filter through the URL and mark an item consumed', a
   expect(query.get('ordering')).toBe('-id');
   expect(query.get('page')).toBe('1');
 
-  await main
-    .getByRole('row')
-    .filter({ hasText: '0100-SAC-10' })
-    .getByRole('button', { name: 'Kullanıldı' })
-    .click();
-  const dialog = page.getByRole('dialog', { name: 'Kullanıldı İşareti' });
-  await expect(dialog).toContainText('0100-SAC-10 kalemi "kullanıldı" olarak işaretlenecek.');
-  await dialog.getByRole('button', { name: 'Evet' }).click();
-
-  await expect(page.getByText('Kalem kullanıldı olarak işaretlendi')).toBeVisible();
-  expect(backend.callsTo('/planning/items/11/mark_consumed/', 'POST')).toHaveLength(1);
-  // The list reloads after the change.
-  await expect.poll(() => backend.callsTo('/planning/items/', 'GET').length).toBeGreaterThan(1);
+  await expect(
+    main
+      .getByRole('row')
+      .filter({ hasText: '0100-SAC-10' })
+      .getByRole('button', { name: 'Kullanıldı' }),
+  ).toHaveCount(0);
   consoleErrors.expectNone();
 });

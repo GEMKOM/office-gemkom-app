@@ -4,12 +4,10 @@ import { useEffect, useMemo } from 'react';
 import {
   planningItemKeys,
   planningItemsQueryOptions,
-  useSetPlanningItemConsumed,
   type PlanningItem,
   type PlanningItemsParams,
 } from '@/api/planning/planningItems';
 import {
-  confirm,
   DataTable,
   FilterBar,
   fromOrdering,
@@ -19,7 +17,6 @@ import {
   useUrlFilters,
   type DataTableFooterContext,
   type FilterConfig,
-  type RowAction,
 } from '@/ui';
 import { formatEuro } from './cells';
 import { planningItemColumns, sumTotalEur, TOTAL_COLUMN_KEY } from './columns';
@@ -263,44 +260,6 @@ export function PlanningItemsPage() {
     if (list.isError) notify.error(list.error, { fallback: 'Kalemler yüklenirken hata oluştu' });
   }, [list.isError, list.error, list.errorUpdatedAt]);
 
-  // ---- consumed toggle ----
-  const setConsumed = useSetPlanningItemConsumed();
-  const toggleConsumed = async (row: PlanningItem) => {
-    const isConsumed = row.is_consumed === true;
-    const ok = await confirm({
-      title: 'Kullanıldı İşareti',
-      icon: 'fas fa-box',
-      message: isConsumed
-        ? `${row.item_code || ''} kaleminin "kullanıldı" işareti kaldırılacak.`
-        : `${row.item_code || ''} kalemi "kullanıldı" olarak işaretlenecek.`,
-      description: isConsumed
-        ? 'Kalem yeniden CNC kesimleri için seçilebilir hale gelir.'
-        : 'Kullanıldı işaretlenen kalemler yeni CNC kesimleri için seçilemez. Kesim oluşturmadan da işaretlenebilir (eski talepler için).',
-      confirmLabel: 'Evet',
-      cancelLabel: 'İptal',
-    });
-    if (!ok) return;
-    try {
-      await setConsumed.mutateAsync({ id: row.id, consumed: !isConsumed });
-      notify.success(
-        isConsumed ? 'Kullanıldı işareti kaldırıldı' : 'Kalem kullanıldı olarak işaretlendi',
-      );
-    } catch (error) {
-      console.error('Error toggling consumed flag:', error);
-      notify.error(error, { fallback: 'İşlem sırasında hata oluştu' });
-    }
-  };
-
-  const rowActions = (): RowAction<PlanningItem>[] => [
-    {
-      key: 'toggle-consumed',
-      label: 'Kullanıldı',
-      icon: 'fas fa-box',
-      color: 'secondary',
-      onClick: (row) => void toggleConsumed(row),
-    },
-  ];
-
   const refresh = () => {
     // Legacy refresh goes back to page 1 and reloads.
     if (page === 1) {
@@ -315,7 +274,7 @@ export function PlanningItemsPage() {
     <>
       <PageHeader
         title="Planlama Kalemleri"
-        subtitle="Planlama taleplerindeki ürün/kalem listesini filtreleyin ve takip edin"
+        subtitle="Planlama taleplerindeki kalemlerin raporu: stoktan, satınalma, teslim ve fiyat"
         icon="list"
         backTo="/planning/"
         stats={[
@@ -362,7 +321,6 @@ export function PlanningItemsPage() {
           onPageChange: (next) => apply({ page: String(next) }),
           onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
-        rowActions={rowActions}
         footer={totalFooter}
         exportable={{ fileName: `planlama_kalemleri_${new Date().toISOString().slice(0, 10)}` }}
         emptyMessage="Kalem bulunamadı."

@@ -104,7 +104,7 @@ test('admin: the planning hub leads with its queue, then a lane per area; financ
   // project planning and the task templates sit under Projeler.
   await expect(
     main.getByRole('navigation', { name: 'Planlamayı Bekleyenler sayfaları' }).getByRole('link'),
-  ).toHaveText(['Departman Talepleri', 'Planlama Kalemleri', 'Malzeme Maliyeti Satırları']);
+  ).toHaveText(['Departman Talepleri', 'Malzeme Maliyeti Satırları']);
   await expect(
     main.getByRole('navigation', { name: 'Projeler sayfaları' }).getByRole('link'),
   ).toHaveText(['Görevler', 'Proje Planlama', 'Görev Şablonları']);

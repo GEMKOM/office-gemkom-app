@@ -149,11 +149,6 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-boxes',
         children: {},
       },
-      '/planning/items': {
-        label: 'Planlama Kalemleri',
-        icon: 'fas fa-list',
-        children: {},
-      },
       '/planning/procurement-lines': {
         label: 'Malzeme Maliyeti Satırları',
         icon: 'fas fa-shopping-cart',
@@ -247,6 +242,19 @@ export const NAVIGATION_STRUCTURE: NavTree = {
           '/planning/linear-cutting/bar-stock': {
             label: 'Boy Stoğu',
             icon: 'fas fa-ruler-horizontal',
+            children: {},
+          },
+        },
+      },
+      // A heading only: the planning reports. Planlama Kalemleri lists request
+      // lines (stock, purchase, delivery, price) to filter and export.
+      '/planning#raporlar': {
+        label: 'Raporlar',
+        icon: 'fas fa-chart-bar',
+        children: {
+          '/planning/items': {
+            label: 'Planlama Kalemleri',
+            icon: 'fas fa-list',
             children: {},
           },
         },
