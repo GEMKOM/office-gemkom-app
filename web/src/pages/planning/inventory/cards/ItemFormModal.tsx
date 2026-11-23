@@ -26,6 +26,18 @@ const optionalNumber = z
   .string()
   .refine((v) => v.trim() === '' || !Number.isNaN(Number.parseFloat(v)), NUMBER);
 
+/** "60,5" or "60.5" as the backend's decimal; '' stays empty. */
+const decimal = (v: string) => v.trim().replace(',', '.');
+
+const POSITIVE = 'Sıfırdan büyük bir sayı girin';
+/** A weight figure: empty, or a positive number typed with a comma or a dot. */
+const optionalPositive = z
+  .string()
+  .refine(
+    (v) => decimal(v) === '' || (/^\d*\.?\d+$/.test(decimal(v)) && Number(decimal(v)) > 0),
+    POSITIVE,
+  );
+
 export const itemSchema = z.object({
   code: z.string().trim().min(1, REQUIRED),
   name: z.string().trim().min(1, REQUIRED),
@@ -34,7 +46,18 @@ export const itemSchema = z.object({
   category: z.string(),
   is_active: z.boolean(),
   min_stock: optionalNumber,
+  plate_thickness_mm: optionalPositive,
+  kg_per_m: optionalPositive,
+  density_g_cm3: optionalPositive,
 });
+
+/** Plate / bar cards weigh their pieces from the card: the kind the form asks about. */
+export type WeightKind = 'plate' | 'boy' | null;
+export const weightKind = (materialClass: string | null | undefined): WeightKind =>
+  materialClass === 'plate' || materialClass === 'boy' ? materialClass : null;
+
+const shown = (value: number | string | null | undefined) =>
+  value === null || value === undefined ? '' : String(Number(value)).replace('.', ',');
 
 export type ItemFormValues = z.infer<typeof itemSchema>;
 
@@ -51,11 +74,29 @@ export function itemFormValues(item?: Partial<Item>): ItemFormValues {
     is_active: item?.is_active ?? true,
     min_stock:
       item?.min_stock === null || item?.min_stock === undefined ? '' : String(item.min_stock),
+    plate_thickness_mm: shown(item?.plate_thickness_mm),
+    kg_per_m: shown(item?.kg_per_m),
+    density_g_cm3: shown(item?.density_g_cm3),
   };
 }
 
-export function itemInput(values: ItemFormValues): ItemInput {
+/**
+ * What the form sends. The weight fields go only for a plate / bar card (its
+ * pieces are weighed with them), so other cards are saved as before.
+ */
+export function itemInput(values: ItemFormValues, kind: WeightKind = null): ItemInput {
+  const orNull = (v: string) => (decimal(v) === '' ? null : decimal(v));
+  const weight =
+    kind === 'plate'
+      ? {
+          plate_thickness_mm: orNull(values.plate_thickness_mm),
+          density_g_cm3: orNull(values.density_g_cm3),
+        }
+      : kind === 'boy'
+        ? { kg_per_m: orNull(values.kg_per_m) }
+        : {};
   return {
+    ...weight,
     code: values.code.trim(),
     name: values.name.trim(),
     unit: values.unit,
@@ -118,8 +159,17 @@ export function ItemFormModal({ item, initial, onClose, onSaved }: ItemFormModal
     }
   };
 
+  // The family picked on the form decides; until families load, the card's own class.
+  const pickedCategory = categories.data?.find((c) => String(c.id) === form.values.category);
+  const kind = weightKind(
+    pickedCategory?.material_class ??
+      (form.values.category === (item?.category ? String(item.category) : '')
+        ? (item ?? initial)?.material_class
+        : null),
+  );
+
   const save = async (values: ItemFormValues) => {
-    const data = itemInput(values);
+    const data = itemInput(values, kind);
     try {
       const saved = item
         ? await update.mutateAsync({ id: item.id, data })
@@ -245,6 +295,50 @@ export function ItemFormModal({ item, initial, onClose, onSaved }: ItemFormModal
           ) : null}
         </Grid>
       </ModalSection>
+      {kind ? (
+        <ModalSection title="Ağırlık" icon="fas fa-weight-hanging">
+          <Text size="xs" c="dimmed" mb="xs">
+            {kind === 'plate'
+              ? 'Sacın ağırlığı en × boy × kalınlık × yoğunluktan hesaplanır. Kalınlık boşsa bu karttan talep açılamaz, sacların ağırlığı çıkmaz.'
+              : 'Boyun ağırlığı uzunluk × metre ağırlığından hesaplanır. Metre ağırlığı boşsa kg birimli talep açılamaz, boyların ağırlığı çıkmaz.'}
+          </Text>
+          <Grid gap="sm">
+            {kind === 'plate' ? (
+              <>
+                <Grid.Col span={{ base: 12, sm: 6 }}>
+                  <TextInput
+                    label="Sac Kalınlığı (mm)"
+                    placeholder="Örn. 10 veya 2,5"
+                    inputMode="decimal"
+                    leftSection={<FaIcon icon="fas fa-layer-group" />}
+                    {...form.getInputProps('plate_thickness_mm')}
+                  />
+                </Grid.Col>
+                <Grid.Col span={{ base: 12, sm: 6 }}>
+                  <TextInput
+                    label="Yoğunluk (g/cm³)"
+                    placeholder="Boşsa ailenin yoğunluğu"
+                    description="Paslanmaz, alüminyum, bakır gibi farklı malzemeler için"
+                    inputMode="decimal"
+                    leftSection={<FaIcon icon="fas fa-flask" />}
+                    {...form.getInputProps('density_g_cm3')}
+                  />
+                </Grid.Col>
+              </>
+            ) : (
+              <Grid.Col span={{ base: 12, sm: 6 }}>
+                <TextInput
+                  label="Metre Ağırlığı (kg/m)"
+                  placeholder="Örn. 4,5"
+                  inputMode="decimal"
+                  leftSection={<FaIcon icon="fas fa-ruler-horizontal" />}
+                  {...form.getInputProps('kg_per_m')}
+                />
+              </Grid.Col>
+            )}
+          </Grid>
+        </ModalSection>
+      ) : null}
     </FormModal>
   );
 }
