@@ -328,6 +328,46 @@ it('the edit form validates and then PUTs every field', async () => {
   );
 });
 
+it('a plate card asks for its thickness and sends it with a comma read as a dot', async () => {
+  const plate = {
+    ...ITEMS[0]!,
+    id: 5,
+    code: '0100 0000 0060 000 025',
+    name: '60mm P235GH SAC',
+    unit: 'kg',
+    category: 100,
+    category_code: '0100',
+    material_class: 'plate',
+    plate_thickness_mm: null,
+    density_g_cm3: null,
+  };
+  fetchMock.mockImplementation((url, init) => {
+    const path = new URL(String(url)).pathname;
+    if ((init?.method ?? 'GET') === 'PUT') return json({ ...plate, plate_thickness_mm: '60.00' });
+    if (path === '/procurement/items/')
+      return json({ count: 1, next: null, previous: null, results: [plate] });
+    return json([]);
+  });
+  renderPage();
+  await screen.findByText('0100 0000 0060 000 025');
+  fireEvent.click(screen.getAllByRole('button', { name: 'Düzenle' })[0]!);
+  const dialog = await screen.findByRole('dialog', { name: 'Stok Kartı Düzenle' });
+  const thickness = within(dialog).getByLabelText('Sac Kalınlığı (mm)');
+  expect(thickness).toHaveValue('');
+  expect(within(dialog).queryByLabelText('Metre Ağırlığı (kg/m)')).toBeNull();
+
+  fireEvent.change(thickness, { target: { value: '0' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  expect(await within(dialog).findByText('Sıfırdan büyük bir sayı girin')).toBeInTheDocument();
+
+  fireEvent.change(thickness, { target: { value: '60,5' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(calls().some((c) => c.method === 'PUT')).toBe(true));
+  const put = calls().find((c) => c.method === 'PUT')!;
+  expect(put.body).toMatchObject({ plate_thickness_mm: '60.5', density_g_cm3: null });
+  expect(put.body).not.toHaveProperty('kg_per_m');
+});
+
 it('shows the backend error when the update fails and keeps the modal open', async () => {
   fetchMock.mockImplementation((_url, init) =>
     init?.method === 'PUT'

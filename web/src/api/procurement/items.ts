@@ -58,6 +58,10 @@ export interface Item {
   /** Stock ledger (item list only): stock_quantity is the Hammadde (free) balance. */
   job_area_quantity?: number | string | null;
   finished_quantity?: number | string | null;
+  /** Plate / bar cards: what their pieces are weighed with (density empty = the family's). */
+  plate_thickness_mm?: number | string | null;
+  kg_per_m?: number | string | null;
+  density_g_cm3?: number | string | null;
 }
 
 export type MaterialClass =
@@ -85,6 +89,9 @@ export interface ItemInput {
   category?: number | null;
   is_active?: boolean;
   min_stock?: string | null;
+  plate_thickness_mm?: string | null;
+  kg_per_m?: string | null;
+  density_g_cm3?: string | null;
 }
 
 /** getItems params as legacy loadItems built them. */
