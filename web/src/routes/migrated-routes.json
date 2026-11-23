@@ -213,5 +213,6 @@
   "/human_resources/overtime/users",
   "/human_resources/overtime/welding-report",
   "/human_resources/overtime/cost-report",
-  "/human_resources/overtime/machining-report"
+  "/human_resources/overtime/machining-report",
+  "/warehouse/stock-check"
 ]

@@ -155,6 +155,36 @@ export function planningRequestsQueryOptions(params: QueryParams) {
   });
 }
 
+/**
+ * Depo › Stok Kontrolü: planning requests sent for a warehouse stock check
+ * (check_inventory). `status: 'pending_inventory'` lists those still waiting.
+ */
+export function warehouseRequestsQueryOptions(params: QueryParams) {
+  return queryOptions({
+    queryKey: ['planningRequests', 'warehouse', params] as const,
+    queryFn: async ({ signal }) =>
+      toPaginated<PlanningRequest>(
+        await apiFetch<unknown>(`${BASE}warehouse_requests/`, { params, signal }),
+      ),
+  });
+}
+
+/**
+ * The warehouse's stock check, in one go: how much of each line was found in
+ * Hammadde. The backend moves that stock to İş Emri on each line's job and
+ * closes the check (completed when everything came from stock, otherwise on
+ * to purchasing). Plate / bar lines can't be filled from stock.
+ */
+export function submitStockCheck(
+  id: number,
+  items: { planning_request_item_id: number; quantity_found: string }[],
+) {
+  return apiFetch<{ detail?: string; planning_request?: PlanningRequest }>(
+    `${BASE}${id}/update_inventory_quantities/`,
+    { method: 'POST', body: { items } },
+  );
+}
+
 /** Port of getPlanningRequest. */
 export function planningRequestQueryOptions(id: number | string) {
   return queryOptions({

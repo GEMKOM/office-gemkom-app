@@ -68,6 +68,7 @@ export function WarehouseHubPage() {
       icon: 'fas fa-exchange-alt',
       iconColor: 'teal',
       features: [
+        { label: 'Stok Kontrolü', icon: 'fas fa-clipboard-check', link: '/warehouse/stock-check' },
         { label: 'Mal Kabul', icon: 'fas fa-truck-loading', link: RECEIPTS },
         { label: 'İmalata Çıkış Talepleri', icon: 'fas fa-dolly', link: PULLS },
         { label: 'İmalattan İade', icon: 'fas fa-undo', link: SLIPS },

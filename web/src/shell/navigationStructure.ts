@@ -549,6 +549,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         label: 'Giriş / Çıkış',
         icon: 'fas fa-exchange-alt',
         children: {
+          // Planning requests sent for a stock check (check_inventory).
+          '/warehouse/stock-check': {
+            label: 'Stok Kontrolü',
+            icon: 'fas fa-clipboard-check',
+            children: {},
+          },
           '/warehouse/goods-receipts': {
             label: 'Mal Kabul',
             icon: 'fas fa-truck-loading',

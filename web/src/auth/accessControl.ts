@@ -52,6 +52,8 @@ const ROUTE_EXTRA_CODENAMES: Record<string, string[]> = {
   // Dönemsel iş maliyeti reads the cost table's data; the endpoint needs
   // view_job_costs, so holders of it can open the page.
   '/accounting/job-cost-by-period': ['view_job_costs'],
+  // Stok Kontrolü replaces blue-app's inventory-allocation page: its grant, or the warehouse.
+  '/warehouse/stock-check': ['access_warehouse_inventory_allocation', 'access_warehouse'],
   // Fason: the workshop's outsourced work is followed by manufacturing, the
   // warehouse, planning and procurement (the API checks the same four).
   '/general/fason': [
