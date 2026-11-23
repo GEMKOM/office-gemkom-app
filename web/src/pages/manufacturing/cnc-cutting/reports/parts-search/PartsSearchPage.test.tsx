@@ -18,6 +18,7 @@ const PARTS = [
     position_no: 'P1',
     weight_kg: '1.5',
     quantity: 2,
+    cnc_task_key: 'CNC-999',
     nesting_id: 'N-7',
     planning_request_item: 44,
     plate_item_name: '10 mm S235JR',
@@ -66,6 +67,16 @@ beforeEach(() => {
   fetchMock.mockImplementation(() =>
     json({ count: 2, next: null, previous: null, results: PARTS }),
   );
+});
+
+it('shows the CNC code linking to its cut in a new tab, and the nesting id', async () => {
+  renderPage();
+  const link = await screen.findByRole('link', { name: 'CNC-999' });
+  expect(link).toHaveAttribute('href', '/planning/cnc-cutting/cuts?cut=CNC-999');
+  expect(link).toHaveAttribute('target', '_blank');
+  expect(screen.getByText('N-7')).toBeInTheDocument();
+  expect(screen.queryByRole('columnheader', { name: 'ID' })).not.toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: /CNC Kodu/ })).toBeInTheDocument();
 });
 
 it('loads the first page, shows plate sources and the weight total', async () => {

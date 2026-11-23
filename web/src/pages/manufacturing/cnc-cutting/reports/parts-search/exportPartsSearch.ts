@@ -16,7 +16,8 @@ const orDash = (value: unknown) =>
 
 // The legacy export's columns, including Durum which the table doesn't show.
 const exportColumns: DataTableColumn<CncPartSearchRow>[] = [
-  { key: 'id', header: 'ID', exportValue: (r) => orDash(r.id) },
+  { key: 'cnc_task_key', header: 'CNC Kodu', exportValue: (r) => orDash(r.cnc_task_key) },
+  { key: 'nesting_id', header: 'Nesting ID', exportValue: (r) => orDash(r.nesting_id) },
   { key: 'job_no', header: 'İş No', exportValue: (r) => orDash(r.job_no) },
   { key: 'image_no', header: 'Resim No', exportValue: (r) => orDash(r.image_no) },
   { key: 'position_no', header: 'Pozisyon No', exportValue: (r) => orDash(r.position_no) },
@@ -27,7 +28,6 @@ const exportColumns: DataTableColumn<CncPartSearchRow>[] = [
     exportFormat: '0.000',
   },
   { key: 'quantity', header: 'Adet', exportValue: (r) => (r.quantity ? Number(r.quantity) : '-') },
-  { key: 'nesting_id', header: 'Nesting ID', exportValue: (r) => orDash(r.nesting_id) },
   { key: 'plate_source', header: 'Plaka Kaynağı', exportValue: plateSourceText },
   {
     key: 'planned_start_ms',

@@ -10,6 +10,8 @@ export interface CncPartSearchRow {
   position_no?: string | null;
   weight_kg?: string | number | null;
   quantity?: number | string | null;
+  /** The cut's key ("CNC-999"), for /planning/cnc-cutting/cuts?cut=KEY. */
+  cnc_task_key?: string | null;
   nesting_id?: string | null;
   material?: string | null;
   thickness_mm?: string | number | null;
