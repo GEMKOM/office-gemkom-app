@@ -134,10 +134,11 @@ export function jobStockQueryOptions(jobNo: string) {
   return queryOptions({
     queryKey: pullRequestKeys.jobStock(jobNo),
     queryFn: ({ signal }) =>
-      apiFetch<JobStockCard[]>('/warehouse/pull-requests/job-stock/', {
+      // Anything but a list (an older backend, a mock) reads as no cards.
+      apiFetch<unknown>('/warehouse/pull-requests/job-stock/', {
         params: { job_no: jobNo },
         signal,
-      }),
+      }).then((data) => (Array.isArray(data) ? (data as JobStockCard[]) : [])),
   });
 }
 
