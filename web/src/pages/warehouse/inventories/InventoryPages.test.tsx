@@ -102,6 +102,18 @@ const JOBS = [
     kg: '440.760',
     kg_unknown: false,
   },
+  {
+    job_no: '200-01',
+    job_title: 'Eski Vinç',
+    job_status: 'completed',
+    job_closed: true,
+    cards: 2,
+    negative_cards: 0,
+    lots: 0,
+    pieces: 0,
+    kg: '0',
+    kg_unknown: false,
+  },
 ];
 
 function json(body: unknown, status = 200) {
@@ -252,6 +264,15 @@ it('İş Emri: lists jobs with Atanmamış first and opens one', async () => {
   expect(balances.url.searchParams.get('job_no')).toBe('254-01');
   expect(screen.getByRole('button', { name: 'Başka İşe Aktar' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Hammaddeye İade' })).toBeInTheDocument();
+});
+
+it('İş Emri: a completed job that still holds stock is marked, and warns when opened', async () => {
+  renderWithProviders(<IsEmriPage />, { route: '/warehouse/is-emri' });
+  expect(await screen.findByText('İş tamamlandı')).toBeInTheDocument();
+  expect(screen.getAllByText('İş tamamlandı')).toHaveLength(1); // open jobs carry no badge
+  fireEvent.click(screen.getByText('Eski Vinç'));
+  expect(await screen.findByText('İş Emri · 200-01')).toBeInTheDocument();
+  expect(screen.getByText(/Bu iş emri tamamlandı/)).toBeInTheDocument();
 });
 
 it('İş Emri · Atanmamış: assigns the unassigned stock to a job, or returns it to Hammadde', async () => {
