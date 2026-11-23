@@ -1,4 +1,4 @@
-import { Button, Table, Text, Tooltip } from '@mantine/core';
+import { Anchor, Button, Table, Text, Tooltip } from '@mantine/core';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import {
@@ -18,6 +18,7 @@ import {
   type DataTableColumn,
   type FilterConfig,
 } from '@/ui';
+import uiClasses from '@/ui/ui.module.css';
 import { exportPartsSearch } from './exportPartsSearch';
 import { plateSource, plateSourceText } from './plateSource';
 
@@ -122,8 +123,30 @@ function PlateSourceCell({ row }: { row: CncPartSearchRow }) {
   );
 }
 
+/** The cut's key, opening that cut in a new tab. */
+function CutKeyCell({ row }: { row: CncPartSearchRow }) {
+  if (!row.cnc_task_key) return <>-</>;
+  return (
+    <Anchor
+      href={`/planning/cnc-cutting/cuts?cut=${encodeURIComponent(row.cnc_task_key)}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={uiClasses.code}
+      title="Kesimi yeni sekmede aç"
+      onClick={(event) => event.stopPropagation()}
+    >
+      {row.cnc_task_key}
+    </Anchor>
+  );
+}
+
 const columns: DataTableColumn<CncPartSearchRow>[] = [
-  { key: 'id', header: 'ID', width: 60 },
+  {
+    key: 'cnc_task_key',
+    header: 'CNC Kodu',
+    render: (row) => <CutKeyCell row={row} />,
+  },
+  { key: 'nesting_id', header: 'Nesting ID' },
   { key: 'job_no', header: 'İş No' },
   { key: 'image_no', header: 'Resim No' },
   { key: 'position_no', header: 'Pozisyon No' },
@@ -134,7 +157,6 @@ const columns: DataTableColumn<CncPartSearchRow>[] = [
     render: (row) => formatWeight(row.weight_kg),
   },
   { key: 'quantity', header: 'Adet', accessor: (row) => toNumber(row.quantity, 0) },
-  { key: 'nesting_id', header: 'Nesting ID' },
   {
     key: 'plate_item_name',
     header: 'Plaka Kaynağı',
