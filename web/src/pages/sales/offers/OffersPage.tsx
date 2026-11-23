@@ -485,6 +485,7 @@ function OffersTable({
       }}
       emptyMessage="Teklif bulunamadı"
       onRefresh={onRefresh}
+      columnsKey="sales-offers"
     />
   );
 }
