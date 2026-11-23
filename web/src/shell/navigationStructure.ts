@@ -491,11 +491,6 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-box',
         children: {},
       },
-      '/manufacturing/material-tracking/pull-requests': {
-        label: 'İmalata Çıkış Talepleri',
-        icon: 'fas fa-dolly',
-        children: {},
-      },
     },
   },
   // Depo in four groups. A group key is a heading only (no page of its own),

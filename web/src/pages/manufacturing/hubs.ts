@@ -127,17 +127,11 @@ export const MANUFACTURING_HUBS: Record<string, ManufacturingHub> = {
       },
       {
         title: 'Malzeme Takibi',
-        description: 'Teslim edilmiş planlama talebi kalemlerini görüntüleyin ve takip edin.',
+        description:
+          'Bir işin İş Emri stoğundan imalata çıkış talebi oluşturun; önceki talepleri ve gelmeyen kalemleri izleyin.',
         icon: 'fas fa-box',
         iconColor: 'info',
         link: '/manufacturing/material-tracking',
-      },
-      {
-        title: 'İmalata Çıkış Talepleri',
-        description: 'Taşeron ve kaynak ekiplerine imalata çıkan malzeme taleplerini izleyin.',
-        icon: 'fas fa-dolly',
-        iconColor: 'info',
-        link: '/manufacturing/material-tracking/pull-requests',
         figure: 'pendingPullRequests',
       },
     ],

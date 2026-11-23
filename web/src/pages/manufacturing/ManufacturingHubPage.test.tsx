@@ -92,7 +92,6 @@ it('renders the section hub with its cards in legacy order and live figures', as
     'Raporlar',
     'Taşeron',
     'Malzeme Takibi',
-    'İmalata Çıkış Talepleri',
   ]);
 
   await waitFor(() => expect(document.getElementById('openFaults')).toHaveTextContent('1.284'));
@@ -130,7 +129,7 @@ it('shows the open faults and what waits on the shop under the section cards', a
   await waitFor(() => expect(pulls).toHaveTextContent('4'));
   expect(pulls).toHaveAttribute(
     'href',
-    '/manufacturing/material-tracking/pull-requests?status=pending',
+    '/manufacturing/material-tracking?status=pending',
   );
   await waitFor(() =>
     expect(within(queues).getByRole('link', { name: /CNC kesimleri/ })).toHaveTextContent('12'),
@@ -140,7 +139,7 @@ it('shows the open faults and what waits on the shop under the section cards', a
   )!;
   expect(late).toContain('completion_date__isnull=true');
   expect(
-    screen.getByRole('heading', { name: 'İmalata Çıkış Talepleri' }).closest('article'),
+    screen.getByRole('heading', { name: 'Malzeme Takibi' }).closest('article'),
   ).toHaveTextContent('4 talep depoda bekliyor');
 });
 

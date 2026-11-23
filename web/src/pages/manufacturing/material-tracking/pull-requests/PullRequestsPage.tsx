@@ -139,12 +139,32 @@ function exportFileName() {
   return `depo_cekme_talepleri_${new Date().toISOString().slice(0, 10)}`;
 }
 
-/** Port of manufacturing/material-tracking/pull-requests (pullRequests.js). */
+/** İmalata Çıkış Talepleri under Depo (the warehouse hands them out here). */
 export function PullRequestsPage() {
+  const underWarehouse = useLocation().pathname.startsWith('/warehouse/');
+  return (
+    <>
+      <PageHeader
+        title="İmalata Çıkış Talepleri"
+        subtitle="Atölyenin istediği, deponun taşeron ve kaynak ekiplerine teslim ettiği malzemeler: bekleyen, teslim edilen ve iptal edilen talepler"
+        icon="dolly"
+        // Under Depo the menu leads back to Depo; under İmalat, to Malzeme Takibi.
+        backTo={underWarehouse ? '/warehouse/' : '/manufacturing/material-tracking/'}
+      />
+      <PullRequestsList />
+    </>
+  );
+}
+
+/**
+ * Every İmalata Çıkış Talebi (pending, handed over, cancelled), with detail,
+ * cancel and a per-request Excel; filters live in the URL. Port of
+ * manufacturing/material-tracking/pull-requests (pullRequests.js).
+ */
+export function PullRequestsList() {
   const queryClient = useQueryClient();
   const { user, isAdmin } = useAuth();
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
-  const underWarehouse = useLocation().pathname.startsWith('/warehouse/');
 
   const filters = useMemo<FilterState>(
     () => ({
@@ -245,14 +265,6 @@ export function PullRequestsPage() {
 
   return (
     <>
-      <PageHeader
-        title="İmalata Çıkış Talepleri"
-        subtitle="Atölyenin istediği, deponun taşeron ve kaynak ekiplerine teslim ettiği malzemeler: bekleyen, teslim edilen ve iptal edilen talepler"
-        icon="dolly"
-        // Under Depo the menu leads back to Depo; under İmalat, to Malzeme Takibi.
-        backTo={underWarehouse ? '/warehouse/' : '/manufacturing/material-tracking/'}
-      />
-
       <DataTable
         title="Talepler"
         icon="fas fa-dolly"

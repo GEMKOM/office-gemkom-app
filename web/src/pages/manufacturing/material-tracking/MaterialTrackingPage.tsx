@@ -1,259 +1,162 @@
-import { Button, Text } from '@mantine/core';
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button, Stack, Text } from '@mantine/core';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DEFAULT_STALE_TIME } from '@/api/queryClient';
 import { materialTrackingErrorMessage } from '@/api/materialTracking/errors';
+import {
+  jobStockQueryOptions,
+  materialPullRequestsQueryOptions,
+  pullRequestKeys,
+} from '@/api/materialTracking/pullRequests';
 import {
   planningItemKeys,
   planningItemsQueryOptions,
   useSetPlanningItemCritical,
   type PlanningItem,
-  type PlanningItemsParams,
 } from '@/api/planning/planningItems';
+import { pieceKeys, piecesQueryOptions } from '@/api/warehouse/pieces';
 import { useAuth } from '@/auth/AuthProvider';
-import { AppLink } from '@/shell/AppLink';
-import {
-  DataTable,
-  FaIcon,
-  FilterBar,
-  fromOrdering,
-  notify,
-  PageHeader,
-  toOrdering,
-  useUrlFilters,
-  type FilterConfig,
-} from '@/ui';
-import { canPull, materialTrackingColumns } from './columns';
+import { FaIcon, notify, PageHeader, Panel, useUrlFilters, type PageFigure } from '@/ui';
+import { SuggestField } from '@/ui/FilterBar/SuggestField';
 import { CreatePullRequestModal } from './CreatePullRequestModal';
-import { DELIVERY_FILTER_OPTIONS, deliveryFilterParams } from './deliveryState';
+import { JobPlanningPanel, JobPullsPanel, JobStockPanel } from './jobPanels';
+import { canRequest, jobStockRows, type JobStockRow } from './jobStock';
 import { PullRequestDetailModal } from './pullRequestShared';
+import { PullRequestsList } from './pull-requests/PullRequestsPage';
 
-const DEFAULT_ORDERING = '-id';
+// Malzeme Takibi (2026-11-23): the workshop picks a job, sees what is in its
+// İş Emri stock (stock cards and bar / plate lots, less what pending requests
+// hold), asks the warehouse for it on an İmalata Çıkış Talebi, and follows the
+// job's earlier requests and the planning lines that have not arrived yet.
+// With no job picked the page lists every request (the old İmalata Çıkış
+// Talepleri page, which forwards here).
 
-// Legacy kept its filters in memory only; the URL keys are the legacy filter ids.
-const URL_DEFAULTS = {
-  search: '',
-  planning_request: '',
-  planning_request_number: '',
-  item_type: '',
-  planning_request_status: '',
-  job_no: '',
-  item_code: '',
-  item_name: '',
-  is_delivered: '',
-  is_critical: '',
-  pull_state: '',
-  from_inventory: '',
-  is_available: '',
-  ordering: DEFAULT_ORDERING,
-  page: '1',
-  page_size: '20',
-};
+export const MATERIAL_TRACKING_ROUTE = '/manufacturing/material-tracking';
+const URL_DEFAULTS = { job: '' };
 
-type FilterKeys = Exclude<keyof typeof URL_DEFAULTS, 'page' | 'page_size'>;
-type FilterState = Record<FilterKeys, string>;
+const EMPTY_ROWS: JobStockRow[] = [];
+const LOT_PARAMS = { warehouse: 'IS_EMRI', page_size: 1000, ordering: 'item__code' } as const;
 
-const ORDERING_OPTIONS = [
-  { value: 'id', label: 'Eski → Yeni' },
-  { value: 'order', label: 'Sıra (Artan)' },
-  { value: 'job_no', label: 'İş No (A→Z)' },
-  { value: '-job_no', label: 'İş No (Z→A)' },
-  { value: 'item_code', label: 'Ürün Kodu (A→Z)' },
-  { value: '-item_code', label: 'Ürün Kodu (Z→A)' },
-  { value: 'item_name', label: 'Ürün Adı (A→Z)' },
-  { value: '-item_name', label: 'Ürün Adı (Z→A)' },
-];
-
-const filterConfig: FilterConfig<FilterKeys>[] = [
-  { type: 'text', key: 'search', label: 'Arama', placeholder: 'Ürün kodu veya adı...' },
-  {
-    type: 'text',
-    key: 'planning_request',
-    label: 'Planlama Talep ID',
-    placeholder: 'örn. 5',
-    inputType: 'number',
-  },
-  {
-    type: 'text',
-    key: 'planning_request_number',
-    label: 'Talep No',
-    placeholder: 'Talep numarası...',
-  },
-  {
-    type: 'select',
-    key: 'item_type',
-    label: 'Kalem Tipi',
-    placeholder: 'Tümü',
-    options: [
-      { value: 'stock', label: 'Stok' },
-      { value: 'expenditure', label: 'Masraf' },
-      { value: 'subcontracting', label: 'Alt Yüklenici' },
-    ],
-  },
-  {
-    type: 'select',
-    key: 'planning_request_status',
-    label: 'Talep Durumu',
-    placeholder: 'Tümü',
-    options: [
-      { value: 'draft', label: 'Taslak' },
-      { value: 'ready', label: 'Satın Almaya Hazır' },
-      { value: 'converted', label: 'Onaya Gönderildi' },
-      { value: 'completed', label: 'Tamamlandı' },
-      { value: 'cancelled', label: 'İptal' },
-    ],
-  },
-  {
-    type: 'text',
-    key: 'job_no',
-    label: 'İş No',
-    placeholder: 'İş no...',
-    suggestions: 'jobOrders',
-  },
-  { type: 'text', key: 'item_code', label: 'Ürün Kodu', placeholder: 'Ürün kodu...' },
-  { type: 'text', key: 'item_name', label: 'Ürün Adı', placeholder: 'Ürün adı...' },
-  {
-    type: 'select',
-    key: 'is_delivered',
-    label: 'Teslim',
-    placeholder: 'Tümü',
-    options: DELIVERY_FILTER_OPTIONS,
-  },
-  {
-    type: 'select',
-    key: 'is_critical',
-    label: 'Kritik',
-    placeholder: 'Tümü',
-    options: [
-      { value: 'true', label: 'Kritik' },
-      { value: 'false', label: 'Kritik Değil' },
-    ],
-  },
-  {
-    type: 'select',
-    key: 'pull_state',
-    label: 'İmalata Çıkış',
-    placeholder: 'Tümü',
-    options: [
-      { value: 'available', label: 'Depoda kalan var' },
-      { value: 'none', label: 'Hiç çıkmadı' },
-      { value: 'partial', label: 'Kısmen çıktı' },
-      { value: 'full', label: 'Tamamı çıktı' },
-    ],
-  },
-  {
-    type: 'select',
-    key: 'from_inventory',
-    label: 'Stoktan Karşılandı',
-    placeholder: 'Tümü',
-    options: [
-      { value: 'true', label: 'Evet (stok ayrıldı)' },
-      { value: 'false', label: 'Hayır (stok ayrılmadı)' },
-    ],
-  },
-  {
-    type: 'select',
-    key: 'is_available',
-    label: 'Kalan (Satın Alma)',
-    placeholder: 'Tümü',
-    options: [
-      { value: 'true', label: 'Var' },
-      { value: 'false', label: 'Yok' },
-    ],
-  },
-  // The default (Yeni → Eski) is the pill's clear option.
-  {
-    type: 'select',
-    key: 'ordering',
-    label: 'Sıralama',
-    placeholder: 'Yeni → Eski',
-    options: ORDERING_OPTIONS,
-  },
-];
-
-const EMPTY_FILTERS = Object.fromEntries(filterConfig.map((f) => [f.key, ''])) as FilterState;
-const EMPTY_ROWS: PlanningItem[] = [];
-
-/** The list params as legacy loadItems built them (unset ones are left out). */
-function listParams(values: FilterState): PlanningItemsParams {
-  return {
-    search: values.search || undefined,
-    item_code: values.item_code || undefined,
-    item_name: values.item_name || undefined,
-    item_type: values.item_type || undefined,
-    planning_request: values.planning_request || undefined,
-    planning_request_number: values.planning_request_number || undefined,
-    planning_request_status: values.planning_request_status || undefined,
-    job_no: values.job_no || undefined,
-    ...deliveryFilterParams(values.is_delivered),
-    is_critical: values.is_critical || undefined,
-    from_inventory: values.from_inventory || undefined,
-    is_available: values.is_available || undefined,
-    pull_state: values.pull_state || undefined,
-    include_price: false,
-  };
+function JobPicker({
+  onPick,
+  current = '',
+}: {
+  onPick: (jobNo: string) => void;
+  current?: string;
+}) {
+  const [text, setText] = useState(current);
+  return (
+    <SuggestField
+      source="jobOrders"
+      value={text}
+      applied={current}
+      onType={setText}
+      onApply={(value) => {
+        const jobNo = value.trim();
+        setText(jobNo);
+        if (jobNo) onPick(jobNo);
+      }}
+      label="İş No"
+      placeholder="İş no veya iş adı yazın…"
+      ariaLabel="İş No"
+      leftSection={<FaIcon icon="fas fa-search" />}
+      w={360}
+    />
+  );
 }
 
-function positiveInt(value: string, fallback: number): number {
-  const n = Number.parseInt(value, 10);
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
-
-function exportFileName() {
-  return `malzeme_takip_${new Date().toISOString().slice(0, 10)}`;
-}
-
-/** Port of manufacturing/material-tracking (materialTracking.js). */
 export function MaterialTrackingPage() {
+  const { values, apply } = useUrlFilters(URL_DEFAULTS);
+  const jobNo = values.job.trim();
+  const pick = (next: string) => apply({ job: next });
+
+  if (jobNo) return <JobMaterial key={jobNo} jobNo={jobNo} onPick={pick} />;
+  return (
+    <>
+      <PageHeader
+        title="Malzeme Takibi"
+        subtitle="Bir iş seçin: o işin İş Emri stoğu, imalata çıkış talepleri ve gelmeyen planlama kalemleri"
+        icon="fas fa-box"
+      />
+      <Stack gap="md">
+        <Panel title="İş Seçin" icon="fas fa-clipboard-list">
+          <JobPicker onPick={pick} />
+          <Text size="xs" c="dimmed" mt={6}>
+            Seçtiğiniz işin İş Emri deposundaki malzemeyi kaynak ekibine veya taşerona imalata çıkış
+            talebiyle istersiniz.
+          </Text>
+        </Panel>
+        <PullRequestsList />
+      </Stack>
+    </>
+  );
+}
+
+function JobMaterial({ jobNo, onPick }: { jobNo: string; onPick: (jobNo: string) => void }) {
   const queryClient = useQueryClient();
   const { user, isAdmin } = useAuth();
-  const { values, apply } = useUrlFilters(URL_DEFAULTS);
 
-  const filters = useMemo<FilterState>(() => {
-    const picked = Object.fromEntries(
-      filterConfig.map((f) => [f.key, values[f.key]]),
-    ) as FilterState;
-    // The default ordering shows as an unset pill.
-    if (picked.ordering === DEFAULT_ORDERING) picked.ordering = '';
-    return picked;
-  }, [values]);
-  const page = positiveInt(values.page, 1);
-  const pageSize = positiveInt(values.page_size, 20);
-  const ordering = values.ordering || DEFAULT_ORDERING;
-  const sort = fromOrdering(ordering);
-
-  const params: PlanningItemsParams = {
-    ...listParams(filters),
-    ordering,
-    page,
-    page_size: pageSize,
-  };
-  const list = useQuery({
-    ...planningItemsQueryOptions(params),
+  const cards = useQuery({ ...jobStockQueryOptions(jobNo), staleTime: DEFAULT_STALE_TIME });
+  const lots = useQuery({
+    ...piecesQueryOptions({ ...LOT_PARAMS, job_no: jobNo }),
     staleTime: DEFAULT_STALE_TIME,
-    placeholderData: keepPreviousData,
   });
-  const rows = list.data?.results ?? EMPTY_ROWS;
-  const total = list.data?.count ?? 0;
+  const pulls = useQuery({
+    ...materialPullRequestsQueryOptions({ job: jobNo, ordering: '-requested_at', page_size: 200 }),
+    staleTime: DEFAULT_STALE_TIME,
+  });
+  const planning = useQuery({
+    ...planningItemsQueryOptions({
+      job_no: jobNo,
+      is_delivered: 'false',
+      include_procurement: true,
+      include_price: false,
+      ordering: 'id',
+      page_size: 500,
+    }),
+    staleTime: DEFAULT_STALE_TIME,
+  });
 
   useEffect(() => {
-    if (list.isError) notify.error(list.error, { fallback: 'Kalemler yüklenirken hata oluştu' });
-  }, [list.isError, list.error, list.errorUpdatedAt]);
+    const failed = [cards, lots, pulls, planning].find((q) => q.isError);
+    if (failed) notify.error(failed.error, { fallback: `${jobNo} malzemeleri yüklenemedi` });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cards.isError, lots.isError, pulls.isError, planning.isError, jobNo]);
 
-  // ---- selection: only lines with something left in the warehouse ----
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  // Rows that left the page drop out of the selection (legacy updateData).
-  const selectedRows = useMemo(() => {
-    const picked = new Set(selectedIds);
-    return rows.filter((row) => picked.has(String(row.id)) && canPull(row));
-  }, [rows, selectedIds]);
-  const visibleSelectedIds = useMemo(
-    () => selectedRows.map((row) => String(row.id)),
-    [selectedRows],
+  const stockRows = useMemo(
+    () =>
+      cards.data || lots.data
+        ? jobStockRows(cards.data ?? [], lots.data?.results ?? [])
+        : EMPTY_ROWS,
+    [cards.data, lots.data],
   );
-  const clearSelection = () => setSelectedIds([]);
+  // job_no on planning lines matches any job containing the text.
+  const waiting = useMemo(
+    () => (planning.data?.results ?? []).filter((row) => row.job_no === jobNo),
+    [planning.data, jobNo],
+  );
+  const pullRows = pulls.data?.results ?? [];
 
-  // ---- critical toggle ----
+  // ---- selection and the request form ----
+  const [selected, setSelected] = useState<string[]>([]);
+  const pickedRows = useMemo(
+    () => stockRows.filter((row) => selected.includes(row.key) && canRequest(row)),
+    [stockRows, selected],
+  );
+  const [creating, setCreating] = useState(false);
+  const openCreate = () => {
+    if (pickedRows.length === 0) {
+      notify.warning('Lütfen İş Emri stoğundan en az bir kalem seçin');
+      return;
+    }
+    setCreating(true);
+  };
+  const closeCreate = useCallback(() => setCreating(false), []);
+
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const closeDetail = useCallback(() => setDetailId(null), []);
+
+  // ---- critical toggle on the waiting planning lines ----
   const { mutateAsync: saveCritical } = useSetPlanningItemCritical();
   const [pendingCritical, setPendingCritical] = useState<ReadonlySet<number>>(() => new Set());
   const toggleCritical = useCallback(
@@ -287,125 +190,77 @@ export function MaterialTrackingPage() {
     [saveCritical],
   );
 
-  // ---- modals ----
-  const [detailId, setDetailId] = useState<number | null>(null);
-  const closeDetail = useCallback(() => setDetailId(null), []);
-  const [creating, setCreating] = useState(false);
-  const openCreate = () => {
-    if (selectedRows.length === 0) {
-      notify.warning('Lütfen en az bir kalem seçin');
-      return;
-    }
-    setCreating(true);
-  };
-  const closeCreate = useCallback(() => setCreating(false), []);
-
-  const columns = useMemo(
-    () =>
-      materialTrackingColumns({
-        onOpenPullRequest: setDetailId,
-        onToggleCritical: (row, critical) => void toggleCritical(row, critical),
-        pendingCritical,
-      }),
-    [toggleCritical, pendingCritical],
-  );
-
-  const refresh = () => {
-    // Legacy refresh goes back to page 1 and reloads.
-    if (page === 1) {
-      void list.refetch();
-    } else {
-      void queryClient.invalidateQueries({ queryKey: planningItemKeys.all, refetchType: 'none' });
-      apply({ page: '1' });
-    }
+  const refreshStock = () => {
+    void queryClient.invalidateQueries({ queryKey: pullRequestKeys.all });
+    void queryClient.invalidateQueries({ queryKey: pieceKeys.all });
+    void queryClient.invalidateQueries({ queryKey: planningItemKeys.all });
   };
 
-  const selectionBar =
-    selectedRows.length > 0 ? (
-      <>
-        <Text size="sm" c="dimmed">
-          {selectedRows.length} kalem seçildi
-        </Text>
-        <Button size="xs" leftSection={<FaIcon icon="fas fa-dolly" />} onClick={openCreate}>
-          İmalata Çıkış Talebi Oluştur
-        </Button>
-        <Button size="xs" variant="default" onClick={clearSelection}>
-          Seçimi Temizle
-        </Button>
-      </>
-    ) : null;
+  const pending = pullRows.filter((p) => p.status === 'pending').length;
+  const done = cards.isSuccess && lots.isSuccess;
+  const stats: PageFigure[] = [
+    {
+      id: 'cards',
+      label: 'Çıkabilecek kalem',
+      value: done ? stockRows.filter(canRequest).length : '–',
+    },
+    { id: 'pending', label: 'Bekleyen talep', value: pulls.isSuccess ? pending : '–' },
+    { id: 'waiting', label: 'Gelmeyen kalem', value: planning.isSuccess ? waiting.length : '–' },
+  ];
 
   return (
     <>
       <PageHeader
-        title="Planlama Kalemleri"
-        subtitle="Planlama taleplerindeki ürün/kalem listesini filtreleyin ve takip edin"
-        icon="list"
-        backTo="/planning/"
+        title={`Malzeme Takibi · ${jobNo}`}
+        subtitle="Bu işin İş Emri stoğundan imalata çıkış talebi oluşturun; önceki talepler ve gelmeyen kalemler aşağıda"
+        icon="fas fa-box"
+        stats={stats}
+        backTo={`${MATERIAL_TRACKING_ROUTE}/`}
+        backLabel="İş seç"
         actions={
           <Button
-            component={AppLink}
-            to="/manufacturing/material-tracking/pull-requests/"
             variant="default"
-            leftSection={<FaIcon icon="fas fa-dolly" />}
+            leftSection={<FaIcon icon="fas fa-exchange-alt" />}
+            onClick={() => onPick('')}
           >
-            İmalata Çıkış Talepleri
+            İş Değiştir
           </Button>
         }
       />
-
-      <DataTable
-        title="Kalemler"
-        icon="fas fa-list"
-        filters={
-          <FilterBar
-            inline
-            filters={filterConfig}
-            values={filters}
-            onApply={(next) =>
-              apply({ ...next, ordering: next.ordering || DEFAULT_ORDERING, page: '1' })
-            }
-            onClear={() => apply({ ...EMPTY_FILTERS, ordering: DEFAULT_ORDERING, page: '1' })}
-          />
-        }
-        data={rows}
-        columns={columns}
-        getRowId={(row) => String(row.id)}
-        loading={list.isFetching}
-        selection={{
-          selectedIds: visibleSelectedIds,
-          onChange: setSelectedIds,
-          isRowSelectable: canPull,
-        }}
-        sort={{
-          sortBy: sort.sortBy,
-          sortDir: sort.sortDir,
-          onSortChange: (sortBy, sortDir) =>
-            apply({ ordering: toOrdering(sortBy, sortDir) ?? DEFAULT_ORDERING, page: '1' }),
-        }}
-        pagination={{
-          page,
-          pageSize,
-          total,
-          onPageChange: (next) => {
-            // Legacy clears the selection on a page change.
-            clearSelection();
-            apply({ page: String(next) });
-          },
-          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
-        }}
-        emptyMessage="Kalem bulunamadı."
-        onRefresh={refresh}
-        toolbar={selectionBar}
-        // Legacy exports the loaded page.
-        exportable={{ fileName: exportFileName() }}
-      />
+      <Stack gap="md">
+        <JobStockPanel
+          jobNo={jobNo}
+          rows={stockRows}
+          loading={cards.isFetching || lots.isFetching}
+          selectedKeys={selected}
+          onSelect={setSelected}
+          onCreate={openCreate}
+          onRefresh={refreshStock}
+        />
+        <JobPullsPanel
+          jobNo={jobNo}
+          rows={pullRows}
+          loading={pulls.isFetching}
+          onOpen={setDetailId}
+        />
+        <JobPlanningPanel
+          jobNo={jobNo}
+          rows={waiting}
+          loading={planning.isFetching}
+          pendingCritical={pendingCritical}
+          onToggleCritical={(row, critical) => void toggleCritical(row, critical)}
+        />
+      </Stack>
 
       {creating ? (
         <CreatePullRequestModal
-          items={selectedRows}
+          jobNo={jobNo}
+          rows={pickedRows}
           onClose={closeCreate}
-          onCreated={clearSelection}
+          onCreated={(request) => {
+            setSelected([]);
+            setDetailId(request.id);
+          }}
         />
       ) : null}
 

@@ -42,6 +42,10 @@ export const RETIRED_ROUTES: Record<string, string> = {
   '/manufacturing/cnc-cutting/remnants': '/warehouse/plate-stock',
   // Planlama › Stok held Stok Kartları and Ekipman, both now in Depo.
   '/planning/inventory': '/warehouse',
+  // İmalata Çıkış Talepleri became part of Malzeme Takibi (2026-11-23): with no
+  // job picked it lists every request (?status= carries over). Depo keeps
+  // its own copy at /warehouse/pull-requests.
+  '/manufacturing/material-tracking/pull-requests': '/manufacturing/material-tracking',
 };
 
 // Sac ve Boy Stoğu split into Sac Stoğu and Boy Stoğu (the same page, one kind

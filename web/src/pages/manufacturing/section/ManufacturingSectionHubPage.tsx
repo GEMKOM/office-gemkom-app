@@ -52,7 +52,8 @@ const SUBCONTRACTING = '/manufacturing/subcontracting';
 const STATEMENTS = '/manufacturing/subcontracting/statements';
 const SUBCONTRACTORS = '/manufacturing/subcontracting/subcontractors';
 const MATERIALS = '/manufacturing/material-tracking';
-const PULL_REQUESTS = '/manufacturing/material-tracking/pull-requests';
+// İmalata Çıkış Talepleri is part of Malzeme Takibi (2026-11-23): with no job picked it lists them.
+const PULL_REQUESTS = MATERIALS;
 const PROJECTS = '/manufacturing/projects';
 const PLANNING_BOARD = '/planning/project-planning';
 const REPORTS = '/manufacturing/reports';
@@ -90,7 +91,6 @@ const LINKS = {
   ],
   materials: [
     { label: 'Malzeme Takibi', link: MATERIALS },
-    { label: 'İmalata Çıkış Talepleri', link: PULL_REQUESTS },
   ],
   projects: [{ label: 'İmalat Görevleri', link: PROJECTS }],
 } satisfies Record<string, LaneLink[]>;
