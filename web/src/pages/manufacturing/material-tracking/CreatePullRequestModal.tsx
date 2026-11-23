@@ -1,33 +1,21 @@
-import {
-  Box,
-  Checkbox,
-  Grid,
-  Group,
-  NumberInput,
-  Radio,
-  Select,
-  Stack,
-  Text,
-  Textarea,
-} from '@mantine/core';
+import { Box, Grid, Group, NumberInput, Radio, Select, Stack, Text, Textarea } from '@mantine/core';
 import { useForm } from '@mantine/form';
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { materialTrackingErrorMessage } from '@/api/materialTracking/errors';
-import type { PlanningItem } from '@/api/planning/planningItems';
 import {
   useCreateMaterialPullRequest,
   type MaterialPullRequest,
   type MaterialPullRequestInput,
 } from '@/api/materialTracking/pullRequests';
 import { subcontractorsQueryOptions } from '@/api/subcontracting/subcontractors';
-import { piecesQueryOptions, type MaterialPiece } from '@/api/warehouse/pieces';
+import type { MaterialPiece } from '@/api/warehouse/pieces';
 import { weldingTeamsQueryOptions } from '@/api/welding/teams';
 import { barMetres } from '@/lib/format';
-import { FormModal, ModalSection, notify, SizeNote } from '@/ui';
+import { FormModal, ModalSection, notify } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
-import { availableToPull, isBarLine } from './columns';
-import { fmtQty, isPartiallyDelivered, qty } from './deliveryState';
+import { fmtQty } from './deliveryState';
+import { amountText, type JobStockRow } from './jobStock';
 
 const REQUIRED = 'Bu alan gereklidir';
 
@@ -41,61 +29,14 @@ interface PullFormValues {
   destination_type: DestinationType;
   subcontractor: string | null;
   team: string | null;
+  /** Cards: quantity per row key. */
   quantities: Record<string, number | string>;
-  /** Bar lines: bars picked per lot (line id → lot id → count). */
+  /** Bars: bars picked per lot (row key → lot id → count). */
   bars: Record<string, Record<string, number | string>>;
-  /** Bar lines handed over without pieces ("parçasız": bars that are not in piece stock). */
-  parcasiz: Record<string, boolean>;
   note: string;
 }
 
-interface PullLine {
-  id: number;
-  /** The stock card (bar lines: whose lots to list). */
-  item: number | null;
-  bar: boolean;
-  item_code?: string;
-  item_name?: string;
-  size_summary?: string;
-  job_no?: string;
-  item_unit?: string;
-  received: number;
-  pulled: number;
-  available: number;
-  partial: boolean;
-  planned: PlanningItem['quantity'];
-}
-
-function toLine(row: PlanningItem): PullLine {
-  return {
-    id: row.id,
-    item: row.item ?? null,
-    bar: isBarLine(row),
-    item_code: row.item_code ?? undefined,
-    item_name: row.item_name ?? undefined,
-    size_summary: row.size_summary ?? undefined,
-    job_no: row.job_no ?? undefined,
-    item_unit: row.item_unit ?? undefined,
-    received: qty(row.delivered_quantity),
-    pulled: qty(row.pulled_quantity),
-    // What can still leave the warehouse: received minus what earlier pulls
-    // claimed (the backend refuses more than that).
-    available: availableToPull(row),
-    partial: isPartiallyDelivered(row),
-    planned: row.quantity,
-  };
-}
-
-function lineHelp(line: PullLine): string {
-  return (
-    `İş No: ${line.job_no || '-'} · Birim: ${line.item_unit || '-'}` +
-    ` · Teslim alınan ${fmtQty(line.received)}${line.partial ? ` / ${fmtQty(line.planned)} (kısmi teslim)` : ''}` +
-    (line.pulled > 0 ? ` · Daha önce çıkan ${fmtQty(line.pulled)}` : '') +
-    ` · Çıkabilir ${fmtQty(line.available)}`
-  );
-}
-
-/** "3 boy · 16 m" for the bars picked on a line (lengths from its lots). */
+/** "3 boy · 36 m" for the bars picked on a row (lengths from its lots). */
 export function pickedText(
   picked: Record<string, number | string> | undefined,
   lots: Pick<MaterialPiece, 'id' | 'length_mm'>[] | undefined,
@@ -113,81 +54,44 @@ export function pickedText(
   return `${bars} boy · ${fmtQty(Math.round(mm / 10) / 100)} m`;
 }
 
-export interface CreatePullRequestModalProps {
-  /** The selected planning item rows (only pullable ones). */
-  items: PlanningItem[];
-  onClose: () => void;
-  onCreated?: (request: MaterialPullRequest) => void;
-}
+const freeBars = (lot: MaterialPiece) => lot.available_quantity ?? lot.quantity;
 
-/**
- * Port of openCreatePullRequestModal / submitPullRequest: a destination
- * (subcontractor or welding team), one quantity per selected line (preset to
- * what is still in the warehouse) and a note. Mount it to open it.
- */
-/** "6 m" of a lot (bars read in metres, never mm). */
-const lotLength = (lot: Pick<MaterialPiece, 'length_mm'>) => barMetres(lot.length_mm);
-
-/**
- * A bar line's bars from the job's İş Emri piece stock: one count per lot (length × free
- * bars). The quantity follows from them on the backend.
- */
 function BarPicker({
-  line,
+  row,
+  jobNo,
   picked,
   onPick,
-  onLots,
 }: {
-  line: PullLine;
+  row: JobStockRow;
+  jobNo: string;
   picked: Record<string, number | string>;
   onPick: (lotId: number, count: number | string) => void;
-  onLots: (lots: MaterialPiece[]) => void;
 }) {
-  const lots = useQuery({
-    ...piecesQueryOptions({
-      item: line.item ?? 0,
-      warehouse: 'IS_EMRI',
-      job_no: line.job_no || '',
-      available: 'true',
-      page_size: 100,
-    }),
-    enabled: line.item !== null && Boolean(line.job_no),
-  });
-  const rows = lots.data?.results ?? [];
-  useEffect(() => {
-    if (lots.data) onLots(lots.data.results);
-  }, [lots.data, onLots]);
-  if (lots.isPending) return <Text size="xs">İş emri stoğu yükleniyor…</Text>;
-  if (rows.length === 0)
-    return (
-      <Text size="xs" c="dimmed">
-        {line.job_no} iş emri stoğunda bu karttan boy yok.
-      </Text>
-    );
+  const lots = row.lots.filter((lot) => freeBars(lot) > 0);
   return (
-    <Stack gap={4}>
+    <Stack gap={4} mt={6}>
       <Text size="xs" fw={600}>
-        {line.job_no} iş emri stoğundaki boylar
+        {jobNo} iş emri stoğundaki boylar
       </Text>
-      {rows.map((lot) => (
+      {lots.map((lot) => (
         <Group key={lot.id} gap="xs" wrap="nowrap">
           <Text size="sm" w={120} style={{ fontFamily: 'var(--gk-font-mono)' }}>
-            {lotLength(lot)}
+            {barMetres(lot.length_mm)}
           </Text>
           <NumberInput
             size="xs"
             w={90}
             min={0}
-            max={lot.available_quantity ?? lot.quantity}
+            max={freeBars(lot)}
             allowDecimal={false}
             hideControls
             placeholder="0"
-            aria-label={`${line.item_code || line.id} ${lotLength(lot)} boy adedi`}
+            aria-label={`${row.item_code} ${barMetres(lot.length_mm)} boy adedi`}
             value={picked[String(lot.id)] ?? ''}
             onChange={(value) => onPick(lot.id, value)}
           />
           <Text size="xs" c="dimmed">
-            / {lot.available_quantity ?? lot.quantity} boş boy
+            / {freeBars(lot)} boş boy
             {lot.heat_number ? ` · döküm ${lot.heat_number}` : ''}
           </Text>
         </Group>
@@ -196,22 +100,28 @@ function BarPicker({
   );
 }
 
-export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePullRequestModalProps) {
-  const lines = useMemo(() => items.map(toLine), [items]);
+export interface CreatePullRequestModalProps {
+  jobNo: string;
+  /** The picked rows of the job's İş Emri stock (cards and bars, never plate). */
+  rows: JobStockRow[];
+  onClose: () => void;
+  onCreated?: (request: MaterialPullRequest) => void;
+}
+
+/**
+ * İmalata Çıkış Talebi from a job's İş Emri stock: a destination (welding team
+ * or subcontractor), a quantity per card (preset to what can still go out),
+ * the bars per lot for a bar card, and a note. Mount it to open it.
+ */
+export function CreatePullRequestModal({
+  jobNo,
+  rows,
+  onClose,
+  onCreated,
+}: CreatePullRequestModalProps) {
   const subcontractors = useQuery(subcontractorsQueryOptions(SUBCONTRACTOR_PARAMS));
   const teams = useQuery(weldingTeamsQueryOptions(TEAM_PARAMS));
   const create = useCreateMaterialPullRequest();
-  // The lots each bar line found in its job's İş Emri stock (line id → lots).
-  const [barLots, setBarLots] = useState<Record<string, MaterialPiece[]>>({});
-  const setLotsOf = useCallback(
-    (lineId: number) => (lots: MaterialPiece[]) =>
-      setBarLots((prev) => (prev[String(lineId)] === lots ? prev : { ...prev, [lineId]: lots })),
-    [],
-  );
-  const lotSetters = useMemo(
-    () => Object.fromEntries(lines.map((line) => [String(line.id), setLotsOf(line.id)])),
-    [lines, setLotsOf],
-  );
 
   const subcontractorOptions = useMemo(
     () =>
@@ -241,33 +151,34 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
 
   const form = useForm<PullFormValues>({
     initialValues: {
-      destination_type: 'subcontractor',
+      // The workshop mostly hands material to its own welding teams.
+      destination_type: 'team',
       subcontractor: null,
       team: null,
-      quantities: Object.fromEntries(lines.map((line) => [String(line.id), line.available || ''])),
+      quantities: Object.fromEntries(
+        rows.filter((r) => r.kind === 'card').map((r) => [r.key, r.available || '']),
+      ),
       bars: {},
-      parcasiz: {},
       note: '',
     },
     validate: (values) => {
       const errors: Record<string, string> = {};
-      // Only the visible destination dropdown is required (legacy skips hidden fields).
+      // Only the visible destination dropdown is required.
       if (values.destination_type === 'subcontractor' && !values.subcontractor)
         errors.subcontractor = REQUIRED;
       if (values.destination_type === 'team' && !values.team) errors.team = REQUIRED;
-      for (const line of lines) {
-        // A bar line by its picked bars (checked on save), unless handed over parçasız.
-        if (line.bar && !values.parcasiz[String(line.id)]) continue;
-        const raw = values.quantities[String(line.id)];
-        const path = `quantities.${line.id}`;
+      for (const row of rows) {
+        if (row.kind !== 'card') continue;
+        const raw = values.quantities[row.key];
+        const path = `quantities.${row.key}`;
         if (raw === '' || raw === undefined || raw === null) {
           errors[path] = REQUIRED;
           continue;
         }
         const n = typeof raw === 'number' ? raw : Number.parseFloat(raw);
         if (!Number.isFinite(n) || n <= 0) errors[path] = "Miktar 0'dan büyük olmalıdır";
-        else if (line.available > 0 && n > line.available)
-          errors[path] = `En fazla ${fmtQty(line.available)} imalata çıkabilir`;
+        else if (n > row.available)
+          errors[path] = `En fazla ${amountText(row, row.available)} imalata çıkabilir`;
       }
       return errors;
     },
@@ -282,41 +193,25 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
       );
       return;
     }
-    if (lines.length === 0) {
-      notify.warning('Lütfen en az bir kalem ekleyin');
-      return;
-    }
-    const byPieces = (line: PullLine) => line.bar && !values.parcasiz[String(line.id)];
-    const picksOf = (line: PullLine) =>
-      Object.entries(values.bars[String(line.id)] ?? {})
+    const picksOf = (row: JobStockRow) =>
+      Object.entries(values.bars[row.key] ?? {})
         .map(([piece, count]) => ({ piece: Number(piece), quantity: Math.trunc(Number(count)) }))
         .filter((pick) => pick.quantity > 0);
-    const noBars = lines.find((line) => byPieces(line) && picksOf(line).length === 0);
+    const noBars = rows.find((row) => row.kind === 'bar' && picksOf(row).length === 0);
     if (noBars) {
-      notify.warning(
-        `${noBars.item_code || noBars.id}: iş emri stoğundan en az bir boy seçin ` +
-          '(stokta parça kaydı olmayan boylar için "Parçasız" işaretleyin)',
-      );
+      notify.warning(`${noBars.item_code}: iş emri stoğundan en az bir boy seçin`);
       return;
     }
-    const payloadItems: MaterialPullRequestInput['items'] = lines.map((line) =>
-      byPieces(line)
-        ? { planning_item: line.id, pieces: picksOf(line) }
+    const items: MaterialPullRequestInput['items'] = rows.map((row) =>
+      row.kind === 'bar'
+        ? { item: row.item, job_no: jobNo, pieces: picksOf(row) }
         : {
-            planning_item: line.id,
-            quantity: Number.parseFloat(String(values.quantities[String(line.id)])),
+            item: row.item,
+            job_no: jobNo,
+            quantity: Number.parseFloat(String(values.quantities[row.key])),
           },
     );
-    if (
-      payloadItems.some(
-        (item) => 'quantity' in item && (!Number.isFinite(item.quantity) || item.quantity <= 0),
-      )
-    ) {
-      notify.warning("Tüm kalemlerin miktarı 0'dan büyük olmalıdır");
-      return;
-    }
-
-    const payload: MaterialPullRequestInput = { note: values.note.trim(), items: payloadItems };
+    const payload: MaterialPullRequestInput = { note: values.note.trim(), items };
     payload[destinationType] = Number(destinationId);
 
     try {
@@ -338,7 +233,7 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
     <FormModal
       opened={!listError}
       onClose={onClose}
-      title="İmalata Çıkış Talebi Oluştur"
+      title={`İmalata Çıkış Talebi · ${jobNo}`}
       icon="fas fa-dolly"
       size="lg"
       submitLabel="Talep Gönder"
@@ -351,8 +246,8 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
           <Grid.Col span={12}>
             <Radio.Group label="Hedef Tipi" {...form.getInputProps('destination_type')}>
               <Group gap="lg" mt={6}>
-                <Radio value="subcontractor" label="Taşeron" />
                 <Radio value="team" label="Kaynak Ekibi" />
+                <Radio value="subcontractor" label="Taşeron" />
               </Group>
             </Radio.Group>
           </Grid.Col>
@@ -384,10 +279,10 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
         </Grid>
       </ModalSection>
 
-      <ModalSection title={`Kalemler (${lines.length})`} icon="fas fa-list">
-        {lines.map((line, index) => (
+      <ModalSection title={`Kalemler (${rows.length})`} icon="fas fa-list">
+        {rows.map((row, index) => (
           <Box
-            key={line.id}
+            key={row.key}
             py="xs"
             style={{
               display: 'grid',
@@ -395,60 +290,54 @@ export function CreatePullRequestModal({ items, onClose, onCreated }: CreatePull
               columnGap: 12,
               alignItems: 'center',
               borderBottom:
-                index < lines.length - 1 ? '1px solid var(--mantine-color-gray-2)' : undefined,
+                index < rows.length - 1 ? '1px solid var(--mantine-color-gray-2)' : undefined,
             }}
           >
             <div style={{ minWidth: 0 }}>
-              <Text size="sm" fw={500} component="label" htmlFor={`pull-qty-${line.id}`}>
-                <span className={uiClasses.code}>{line.item_code || '-'}</span> —{' '}
-                {line.item_name || '-'}
+              <Text size="sm" fw={500} component="label" htmlFor={`pull-qty-${row.key}`}>
+                <span className={uiClasses.code}>{row.item_code}</span> — {row.item_name || '-'}
               </Text>
-              <SizeNote text={line.size_summary} />
               <Text size="xs" c="dimmed">
-                {lineHelp(line)}
+                Stokta {amountText(row, row.onHand)}
+                {row.held > 0 ? ` · bekleyen taleplerde ${amountText(row, row.held)}` : ''} ·
+                çıkabilir {amountText(row, row.available)}
               </Text>
-              {line.bar ? (
-                <Stack gap={4} mt={6}>
-                  {!form.values.parcasiz[String(line.id)] ? (
-                    <BarPicker
-                      line={line}
-                      picked={form.values.bars[String(line.id)] ?? {}}
-                      onPick={(lotId, count) =>
-                        // The whole line's picks: a nested path fails while the line has none.
-                        form.setFieldValue(`bars.${line.id}`, {
-                          ...(form.values.bars[String(line.id)] ?? {}),
-                          [lotId]: count,
-                        })
-                      }
-                      onLots={lotSetters[String(line.id)]!}
-                    />
-                  ) : null}
-                  <Checkbox
-                    size="xs"
-                    label="Parçasız (stokta parça kaydı olmayan boylar, miktarla)"
-                    checked={Boolean(form.values.parcasiz[String(line.id)])}
-                    onChange={(event) =>
-                      form.setFieldValue(`parcasiz.${line.id}`, event.currentTarget.checked)
-                    }
-                  />
-                </Stack>
+              {row.kind === 'bar' ? (
+                <BarPicker
+                  row={row}
+                  jobNo={jobNo}
+                  picked={form.values.bars[row.key] ?? {}}
+                  onPick={(lotId, count) =>
+                    // The whole row's picks: a nested path fails while the row has none.
+                    form.setFieldValue(`bars.${row.key}`, {
+                      ...(form.values.bars[row.key] ?? {}),
+                      [lotId]: count,
+                    })
+                  }
+                />
               ) : null}
             </div>
-            {line.bar && !form.values.parcasiz[String(line.id)] ? (
+            {row.kind === 'bar' ? (
               <Text size="xs" c="dimmed" ta="right">
-                {pickedText(form.values.bars[String(line.id)], barLots[String(line.id)])}
+                {pickedText(form.values.bars[row.key], row.lots)}
               </Text>
             ) : (
               <NumberInput
-                id={`pull-qty-${line.id}`}
-                aria-label={`Miktar: ${line.item_code || line.id}`}
+                id={`pull-qty-${row.key}`}
+                aria-label={`Miktar: ${row.item_code}`}
                 min={0.01}
-                max={line.available || undefined}
+                max={row.available || undefined}
                 step={0.01}
                 decimalScale={2}
                 clampBehavior="none"
                 hideControls
-                {...form.getInputProps(`quantities.${line.id}`)}
+                rightSection={
+                  <Text size="xs" c="dimmed" pr={6}>
+                    {row.item_unit}
+                  </Text>
+                }
+                rightSectionWidth={52}
+                {...form.getInputProps(`quantities.${row.key}`)}
               />
             )}
           </Box>

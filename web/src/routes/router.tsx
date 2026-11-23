@@ -857,14 +857,6 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
-    path: '/manufacturing/material-tracking/pull-requests',
-    lazy: async () => ({
-      Component: (
-        await import('@/pages/manufacturing/material-tracking/pull-requests/PullRequestsPage')
-      ).PullRequestsPage,
-    }),
-  },
-  {
     // The same page under Depo, so its back arrow and trail stay in Depo.
     path: '/warehouse/pull-requests',
     lazy: async () => ({

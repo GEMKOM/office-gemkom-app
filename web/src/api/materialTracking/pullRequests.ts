@@ -2,6 +2,7 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 import { apiFetch } from '../client';
 import { toPaginated } from '../types';
 import { planningItemKeys } from '../planning/planningItems';
+import { pieceKeys } from '../warehouse/pieces';
 
 // Port of apis/warehouse/pullRequests.js (warehouse material pull requests).
 // mark_transferred is left out: only the saha warehouse screen calls it.
@@ -21,7 +22,10 @@ export interface MaterialPullPiece {
 
 export interface MaterialPullRequestItem {
   id?: number;
-  planning_item?: number;
+  /** The planning line (older path); null on a line straight from the job's İş Emri stock. */
+  planning_item?: number | null;
+  /** The stock card handed over. */
+  item?: number | null;
   item_code?: string;
   item_name?: string;
   job_no?: string;
@@ -75,6 +79,8 @@ export type MaterialPullRequestsParams = {
   team?: number;
   requested_by?: number;
   job_no?: string;
+  /** One job exactly (job_no matches any job containing the text). */
+  job?: string;
   search?: string;
   requested_after?: string;
   requested_before?: string;
@@ -94,7 +100,24 @@ export interface MaterialPullRequestInput {
   items: (
     | { planning_item: number; quantity: number }
     | { planning_item: number; pieces: { piece: number; quantity: number }[] }
+    // Straight from the job's İş Emri stock: a card by quantity, a bar card by its lots.
+    | { item: number; job_no: string; quantity: number }
+    | { item: number; job_no: string; pieces: { piece: number; quantity: number }[] }
   )[];
+}
+
+/** A stock card in a job's İş Emri stock (GET /warehouse/pull-requests/job-stock/). */
+export interface JobStockCard {
+  item: number;
+  item_code: string;
+  item_name: string;
+  item_unit: string;
+  material_class: string | null;
+  on_hand: string;
+  /** Claimed by pending İmalata Çıkış Talepleri. */
+  held: string;
+  /** Still requestable: on hand less held (never below 0). */
+  available: string;
 }
 
 export const pullRequestKeys = {
@@ -103,7 +126,20 @@ export const pullRequestKeys = {
     ['materialTracking', 'pullRequests', 'list', params] as const,
   detail: (id: number | string) =>
     ['materialTracking', 'pullRequests', 'detail', String(id)] as const,
+  jobStock: (jobNo: string) => ['materialTracking', 'pullRequests', 'job-stock', jobNo] as const,
 };
+
+/** A job's İş Emri stock cards with what pending requests hold (bars and plates: pieces). */
+export function jobStockQueryOptions(jobNo: string) {
+  return queryOptions({
+    queryKey: pullRequestKeys.jobStock(jobNo),
+    queryFn: ({ signal }) =>
+      apiFetch<JobStockCard[]>('/warehouse/pull-requests/job-stock/', {
+        params: { job_no: jobNo },
+        signal,
+      }),
+  });
+}
 
 /** Legacy getMaterialPullRequests. */
 export function fetchMaterialPullRequests(
@@ -158,13 +194,15 @@ export function cancelMaterialPullRequest(id: number | string): Promise<Material
   });
 }
 
-// A pull request changes the planning item ledger (pulled / available) too.
+// A pull request changes the planning item ledger (pulled / available) and the
+// bars it holds (pieces) too.
 function useInvalidatePullRequests() {
   const queryClient = useQueryClient();
   return () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: pullRequestKeys.all }),
       queryClient.invalidateQueries({ queryKey: planningItemKeys.all }),
+      queryClient.invalidateQueries({ queryKey: pieceKeys.all }),
     ]);
 }
 
