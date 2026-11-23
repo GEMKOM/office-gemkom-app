@@ -3,6 +3,7 @@ import type {
   ProcurementPlanningItem,
   PurchaseRequestDraft,
 } from '@/api/procurement/purchaseRequests';
+import { barMetres } from '@/lib/format';
 import type { ComparisonData, ComparisonOffer } from '../shared/comparison';
 
 // The create page's state and everything computed from it, as pure
@@ -282,13 +283,13 @@ export function itemFromDraft(draft: ItemDraft): PrItem {
 }
 
 /** Rows from the planning modal (addSelectedPlanningItems). */
-/** "1500×6000 mm" / "6000 mm" for a sized planning line, else null. */
+/** "1500×6000 mm" / "6 m" (bars read in metres, never mm) for a sized planning line, else null. */
 export function pieceSizeText(planning: ProcurementPlanningItem): string | null {
   const n = (v: string | null | undefined) => String(Number(v));
   if (!planning.piece_length_mm || !planning.piece_count) return null;
   return planning.piece_width_mm
     ? `${n(planning.piece_width_mm)}×${n(planning.piece_length_mm)} mm`
-    : `${n(planning.piece_length_mm)} mm`;
+    : barMetres(planning.piece_length_mm);
 }
 
 /** One piece of a sized line in its card's unit (null: not counted in pieces). */

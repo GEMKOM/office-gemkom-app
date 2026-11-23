@@ -50,7 +50,14 @@ import {
 } from '@/api/warehouse/pieces';
 import { hasRouteAccess } from '@/auth/accessControl';
 import { hasPerm, isAdmin } from '@/auth/authService';
-import { formatDateTime, formatNumber } from '@/lib/format';
+import {
+  BAR_METRES_INPUT,
+  barMetres,
+  formatDateTime,
+  formatNumber,
+  metresToMm,
+  mmToMetres,
+} from '@/lib/format';
 import {
   DataTable,
   DetailModal,
@@ -111,18 +118,20 @@ const FILTER_KEYS: FilterKeys[] = [
 
 /** One box for anything on a lot; the backend splits it into words that all must match. */
 export const SEARCH_PLACEHOLDER = 'Kod, ad, ölçü (1500x3000), döküm no, iş no, CNC-…, #fire no…';
-const SEARCH_FILTER: FilterConfig<FilterKeys> = {
+/** Boy Stoğu: a bar's length is searched in metres ("6 m"), like it reads. */
+export const BAR_SEARCH_PLACEHOLDER = 'Kod, ad, boy (6 m), döküm no, iş no, #no…';
+const searchFilter = (kind: PieceKind): FilterConfig<FilterKeys> => ({
   type: 'text',
   key: 'search',
   label: 'Arama',
-  placeholder: SEARCH_PLACEHOLDER,
-};
-const mmFilter = (key: FilterKeys, label: string): FilterConfig<FilterKeys> => ({
+  placeholder: kind === 'boy' ? BAR_SEARCH_PLACEHOLDER : SEARCH_PLACEHOLDER,
+});
+const mmFilter = (key: FilterKeys, label: string, unit = 'mm'): FilterConfig<FilterKeys> => ({
   type: 'text',
   inputType: 'number',
   key,
   label,
-  placeholder: 'mm',
+  placeholder: unit,
 });
 
 const PLACE_FILTERS: FilterConfig<FilterKeys>[] = [
@@ -144,7 +153,7 @@ const PLACE_FILTERS: FilterConfig<FilterKeys>[] = [
 
 function filterConfig(kind: PieceKind): FilterConfig<FilterKeys>[] {
   return [
-    SEARCH_FILTER,
+    searchFilter(kind),
     ...PLACE_FILTERS,
     ...(kind === 'plate'
       ? [
@@ -153,8 +162,9 @@ function filterConfig(kind: PieceKind): FilterConfig<FilterKeys>[] {
           mmFilter('max_width', 'En ≤'),
         ]
       : []),
-    mmFilter('min_length', 'Boy ≥'),
-    mmFilter('max_length', 'Boy ≤'),
+    // Bars: typed in metres (sent in mm).
+    mmFilter('min_length', 'Boy ≥', kind === 'plate' ? 'mm' : 'm'),
+    mmFilter('max_length', 'Boy ≤', kind === 'plate' ? 'mm' : 'm'),
     {
       type: 'select',
       key: 'origin',
@@ -515,6 +525,7 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
   const invalidate = useInvalidatePieces();
   const [cardId, setCardId] = useState<string | null>(null);
   const [width, setWidth] = useState<string | number>('');
+  // A plate's length in mm; a bar's in metres (stored in mm).
   const [length, setLength] = useState<string | number>('');
   const [quantity, setQuantity] = useState<string | number>(1);
   const [place, setPlace] = useState<PlaceDraft>({ kind: 'HAMMADDE', job: null, supplier: null });
@@ -523,10 +534,12 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
   const [note, setNote] = useState('');
   const card = cardId ? pieceCardFromSearch(cardId) : undefined;
   const create = useMutation({ mutationFn: createPieces, onSuccess: invalidate });
+  const lengthMm = card?.kind === 'plate' ? length : metresToMm(length);
 
   const save = async () => {
     if (!card) return notify.warning('Stok kartı seçin');
-    if (!(Number(length) > 0)) return notify.warning('Boy (mm) girin');
+    if (!(Number(lengthMm) > 0))
+      return notify.warning(card.kind === 'plate' ? 'Boy (mm) girin' : 'Boy (m) girin');
     if (card.kind === 'plate' && !(Number(width) > 0))
       return notify.warning('Sac için en (mm) girin');
     if (!(Number(quantity) >= 1)) return notify.warning('Adet en az 1 olmalı');
@@ -537,7 +550,7 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
         item: card.id,
         quantity: Number(quantity),
         width_mm: card.kind === 'plate' ? String(width) : null,
-        length_mm: String(length),
+        length_mm: String(lengthMm),
         heat_number: heat,
         certificate_no: certificate,
         note,
@@ -587,14 +600,23 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
                 onChange={setWidth}
               />
             ) : null}
-            <NumberInput
-              label="Boy (mm)"
-              min={0}
-              decimalScale={1}
-              hideControls
-              value={length}
-              onChange={setLength}
-            />
+            {card.kind === 'plate' ? (
+              <NumberInput
+                label="Boy (mm)"
+                min={0}
+                decimalScale={1}
+                hideControls
+                value={length}
+                onChange={setLength}
+              />
+            ) : (
+              <NumberInput
+                label="Boy (m)"
+                {...BAR_METRES_INPUT}
+                value={length}
+                onChange={setLength}
+              />
+            )}
             <NumberInput
               label="Adet"
               min={1}
@@ -608,7 +630,7 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
           <WeightPreviewLine
             card={card}
             width={String(width)}
-            length={String(length)}
+            length={String(lengthMm)}
             quantity={Number(quantity)}
           />
         ) : null}
@@ -741,9 +763,13 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
   const [changeNote, setChangeNote] = useState('');
   const plate = piece.kind === 'plate';
   const [width, setWidth] = useState<string | number>(piece.width_mm ? Number(piece.width_mm) : '');
-  const [length, setLength] = useState<string | number>(Number(piece.length_mm));
+  // A plate's length in mm; a bar's in metres (stored in mm).
+  const [length, setLength] = useState<string | number>(
+    plate ? Number(piece.length_mm) : mmToMetres(piece.length_mm),
+  );
+  const lengthMm = plate ? length : metresToMm(length);
   const resized =
-    Number(length) !== Number(piece.length_mm) ||
+    Number(lengthMm) !== Number(piece.length_mm) ||
     (plate && Number(width) !== Number(piece.width_mm));
   // What the page knows of the backend's size guard (it also refuses a lot that was cut).
   const sizeLock = piece.reserved_quantity
@@ -758,8 +784,8 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
   const save = async () => {
     if (checked && !changeNote.trim()) return notify.warning('Kontrol edildi için açıklama girin');
     if (resized) {
-      if (!(Number(length) > 0) || (plate && !(Number(width) > 0)))
-        return notify.warning(plate ? 'En ve boy (mm) girin' : 'Boy (mm) girin');
+      if (!(Number(lengthMm) > 0) || (plate && !(Number(width) > 0)))
+        return notify.warning(plate ? 'En ve boy (mm) girin' : 'Boy (m) girin');
       if (!changeNote.trim()) return notify.warning('Ölçü düzeltmesi için açıklama girin');
     }
     try {
@@ -769,7 +795,7 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
         note,
         ...(checked ? { needs_review: false as const } : {}),
         ...(resized
-          ? { ...(plate ? { width_mm: String(width) } : {}), length_mm: String(length) }
+          ? { ...(plate ? { width_mm: String(width) } : {}), length_mm: String(lengthMm) }
           : {}),
         change_note: changeNote,
       });
@@ -811,15 +837,25 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
               onChange={setWidth}
             />
           ) : null}
-          <NumberInput
-            label="Boy (mm)"
-            min={0}
-            decimalScale={1}
-            hideControls
-            disabled={Boolean(sizeLock)}
-            value={length}
-            onChange={setLength}
-          />
+          {plate ? (
+            <NumberInput
+              label="Boy (mm)"
+              min={0}
+              decimalScale={1}
+              hideControls
+              disabled={Boolean(sizeLock)}
+              value={length}
+              onChange={setLength}
+            />
+          ) : (
+            <NumberInput
+              label="Boy (m)"
+              {...BAR_METRES_INPUT}
+              disabled={Boolean(sizeLock)}
+              value={length}
+              onChange={setLength}
+            />
+          )}
         </Group>
         <Text size="xs" c={sizeLock ? 'orange.8' : 'dimmed'}>
           {sizeLock
@@ -881,12 +917,19 @@ const CHANGE_LABELS: Record<string, string> = {
   length_mm: 'Boy (mm)',
 };
 
-/** "Döküm no: – → D-901" lines of an edit (needs_review is the row's own label). */
-export function changeLines(change: PieceChange): string[] {
+/**
+ * "Döküm no: – → D-901" lines of an edit (needs_review is the row's own label). A bar's
+ * length reads in metres ("Boy: 6 m → 5,5 m"); the change keeps mm.
+ */
+export function changeLines(change: PieceChange, kind: PieceKind | null = 'plate'): string[] {
   return Object.entries(change.changes)
     .filter(([field]) => field in CHANGE_LABELS)
     .map(([field, pair]) => {
       const [before, after] = pair ?? ['', ''];
+      if (field === 'length_mm' && kind === 'boy') {
+        const m = (v: unknown) => (v ? barMetres(String(v)) : '–');
+        return `Boy: ${m(before)} → ${m(after)}`;
+      }
       return `${CHANGE_LABELS[field]}: ${String(before || '–')} → ${String(after || '–')}`;
     });
 }
@@ -1001,7 +1044,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
                               : c.changes.width_mm || c.changes.length_mm
                                 ? 'Ölçü düzeltildi'
                                 : 'Bilgi düzenlendi'}
-                            {[...changeLines(c), c.note].filter(Boolean).map((line) => (
+                            {[...changeLines(c, piece.kind), c.note].filter(Boolean).map((line) => (
                               <Text key={line} size="xs" c="dimmed">
                                 {line}
                               </Text>
@@ -1163,7 +1206,13 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
   const mm = (
     key: 'thickness' | 'min_width' | 'max_width' | 'min_length' | 'max_length',
     param: string,
-  ) => (values[key] ? { [param]: values[key] } : {});
+  ) => {
+    if (!values[key]) return {};
+    // A bar's length is filtered in metres; the API takes mm.
+    const bar = kind === 'boy' && (key === 'min_length' || key === 'max_length');
+    const value = bar ? metresToMm(values[key]) : values[key];
+    return value === '' ? {} : { [param]: String(value) };
+  };
   const list = useQuery({
     ...piecesQueryOptions({
       page,
@@ -1231,7 +1280,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
   const filters = (
     <FilterBar
       inline
-      filters={view === 'pieces' ? filterConfig(kind) : [SEARCH_FILTER]}
+      filters={view === 'pieces' ? filterConfig(kind) : [searchFilter(kind)]}
       values={pickFilters(values)}
       onApply={(next) => apply({ ...next, page: '1' })}
       onClear={() => apply({ ...pickFilters(URL_DEFAULTS), item: '', page: '1' })}

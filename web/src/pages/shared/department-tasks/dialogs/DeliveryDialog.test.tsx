@@ -60,11 +60,13 @@ it('asks a bar line without a size for the bars that came and sends them', async
   // No lengths yet: refused.
   fireEvent.click(confirm);
   expect(notify.error).toHaveBeenCalledWith('Gelen boyların uzunluğunu ve adedini girin');
-  fireEvent.change(screen.getByLabelText('Boy 1 uzunluk'), { target: { value: '6000' } });
+  // Lengths are typed in metres (comma decimals) and sent in mm.
+  expect(screen.getByText('Uzunluk (m)')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Boy 1 uzunluk'), { target: { value: '6' } });
   fireEvent.change(screen.getByLabelText('Boy 1 adet'), { target: { value: '2' } });
   fireEvent.click(screen.getByRole('button', { name: 'Başka uzunluk' }));
-  fireEvent.change(screen.getByLabelText('Boy 2 uzunluk'), { target: { value: '4000' } });
-  fireEvent.change(screen.getByLabelText('Boy 2 adet'), { target: { value: '1' } });
+  fireEvent.change(screen.getByLabelText('Boy 2 uzunluk'), { target: { value: '0,8' } });
+  fireEvent.change(screen.getByLabelText('Boy 2 adet'), { target: { value: '5' } });
   expect(screen.getByTestId('delivery-bars-metres')).toHaveTextContent('16 / 16 m');
   fireEvent.click(confirm);
   await waitFor(() => expect(notify.success).toHaveBeenCalled());
@@ -75,7 +77,7 @@ it('asks a bar line without a size for the bars that came and sends them', async
         quantity: '16',
         bars: [
           { length_mm: 6000, quantity: 2 },
-          { length_mm: 4000, quantity: 1 },
+          { length_mm: 800, quantity: 5 },
         ],
       },
     },
@@ -85,7 +87,7 @@ it('asks a bar line without a size for the bars that came and sends them', async
 it('a line ordered in sizes says its bars and asks nothing', async () => {
   renderDialog({ ...TASK, quantity: 18, bar_length_mm: 6000 } as DepartmentTask);
   expect(await screen.findByTestId('delivery-bars-sized')).toHaveTextContent(
-    '3 boy × 6.000 mm iş emri stoğuna girer.',
+    '3 boy × 6 m iş emri stoğuna girer.',
   );
   expect(screen.queryByLabelText('Boy 1 uzunluk')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Evet, Teslim Alındı' }));

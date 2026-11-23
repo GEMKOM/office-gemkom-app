@@ -176,7 +176,8 @@ it('loads the plan from ?session=: details, parts in order, stock bars and the r
   renderPage();
   expect(await screen.findByDisplayValue('Korkuluk')).toBeInTheDocument();
   expect(screen.getByLabelText('Plan No')).toHaveValue('LC-0001');
-  expect(screen.getByDisplayValue('6000')).toBeInTheDocument();
+  // The stock bar reads in metres (never mm); the cut lengths stay in mm.
+  expect(screen.getByLabelText('Stok Boyu (m)')).toHaveValue('6');
   expect(screen.getByDisplayValue('3')).toBeInTheDocument();
   expect(screen.getByDisplayValue('not')).toBeInTheDocument();
   // (The matcher collapses the label's double spaces.)
@@ -199,6 +200,7 @@ it('loads the plan from ?session=: details, parts in order, stock bars and the r
   expect(notify.warning).toHaveBeenCalledWith('Kesit şüpheli görünüyor');
   expect(screen.getByRole('tab', { name: 'NPU-80' })).toBeInTheDocument();
   expect(screen.getByText('Bar #1')).toBeInTheDocument();
+  expect(screen.getAllByText('6 m').length).toBeGreaterThan(0);
   expect(screen.getByText('Stoktan')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Kesim sırası (1)' }));
   expect(await screen.findByText('Parça ayırma')).toBeInTheDocument();
@@ -206,7 +208,8 @@ it('loads the plan from ?session=: details, parts in order, stock bars and the r
   fireEvent.click(screen.getByRole('button', { name: 'Stok Barlar (3)' }));
   const modal = await screen.findByRole('dialog');
   expect(within(modal).getByText('ayse')).toBeInTheDocument();
-  expect(within(modal).getByText('3000')).toBeInTheDocument();
+  // A stock bar's length reads in metres.
+  expect(within(modal).getByText('3 m')).toBeInTheDocument();
 });
 
 it('opens the plan of a ?task= link', async () => {
@@ -393,16 +396,16 @@ it('optimizes with the plan inputs, but not while new rows are unsaved', async (
     .find((r) => r.getAttribute('data-row-id')?.startsWith('new-'))!;
   fireEvent.click(within(newRow).getByRole('button', { name: 'Satırı Kaldır' }));
 
-  fireEvent.change(screen.getByLabelText('Stok Boyu (mm)'), { target: { value: '12000' } });
+  fireEvent.change(screen.getByLabelText('Stok Boyu (m)'), { target: { value: '12,5' } });
   fireEvent.click(screen.getByRole('button', { name: 'Optimize Et' }));
   await waitFor(() => expect(notify.success).toHaveBeenCalledWith('Optimizasyon tamamlandı.'));
   expect(callsTo('POST', '/linear_cutting/sessions/LC-0001/optimize/')[0]!.body).toEqual({
-    stock_length_mm: 12000,
+    stock_length_mm: 12500,
     kerf_mm: 3,
   });
   expect(await screen.findByRole('tab', { name: 'Yeni Sonuç' })).toBeInTheDocument();
   // The typed stock length survives the new result.
-  expect(screen.getByLabelText('Stok Boyu (mm)')).toHaveValue(12000);
+  expect(screen.getByLabelText('Stok Boyu (m)')).toHaveValue('12,5');
 });
 
 it('confirms the plan and lists what was created', async () => {

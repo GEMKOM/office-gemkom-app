@@ -36,7 +36,7 @@ import {
   type PieceKind,
 } from '@/api/warehouse/pieces';
 import { hasPerm, isAdmin } from '@/auth/authService';
-import { formatDate, formatNumber } from '@/lib/format';
+import { BAR_METRES_INPUT, formatDate, formatNumber, metresToMm } from '@/lib/format';
 import {
   confirm,
   DataTable,
@@ -182,22 +182,30 @@ function AddLinePanel({
 }) {
   const [cardId, setCardId] = useState<string | null>(null);
   const [width, setWidth] = useState<string | number>('');
+  // A plate's length in mm; a bar's in metres (bars read in metres, never mm; sent in mm).
   const [length, setLength] = useState<string | number>('');
   const [quantity, setQuantity] = useState<string | number>('');
   const [jobNo, setJobNo] = useState('');
   const [heat, setHeat] = useState('');
   const card = cardId ? pieceCardFromSearch(cardId) : undefined;
+  const bar = card?.kind === 'boy';
+  const lengthMm = bar ? metresToMm(length) : length;
+  const pickCard = (value: string | null) => {
+    // The length's unit follows the card: a typed length does not carry over.
+    if ((value ? pieceCardFromSearch(value)?.kind : undefined) !== card?.kind) setLength('');
+    setCardId(value);
+  };
 
   const add = async () => {
     if (!card) return notify.warning('Stok kartı seçin');
-    if (!(Number(length) > 0)) return notify.warning('Boy (mm) girin');
+    if (!(Number(lengthMm) > 0)) return notify.warning(bar ? 'Boy (m) girin' : 'Boy (mm) girin');
     if (card.kind === 'plate' && !(Number(width) > 0))
       return notify.warning('Sac için en (mm) girin');
     const ok = await onAdd(
       {
         item: card.id,
         width_mm: card.kind === 'plate' ? String(width) : null,
-        length_mm: String(length),
+        length_mm: String(lengthMm),
         ...(perJob ? { job_no: jobNo.trim() } : {}),
         counted_quantity: quantity === '' ? null : Number(quantity),
         heat_number: heat,
@@ -225,7 +233,7 @@ function AddLinePanel({
           queryKey={pieceKeys.cardSearch}
           search={searchPieceCards}
           value={cardId}
-          onChange={setCardId}
+          onChange={pickCard}
         />
         <NumberInput
           label="En (mm)"
@@ -236,14 +244,18 @@ function AddLinePanel({
           value={width}
           onChange={setWidth}
         />
-        <NumberInput
-          label="Boy (mm)"
-          min={0}
-          decimalScale={1}
-          hideControls
-          value={length}
-          onChange={setLength}
-        />
+        {bar ? (
+          <NumberInput label="Boy (m)" {...BAR_METRES_INPUT} value={length} onChange={setLength} />
+        ) : (
+          <NumberInput
+            label="Boy (mm)"
+            min={0}
+            decimalScale={1}
+            hideControls
+            value={length}
+            onChange={setLength}
+          />
+        )}
         <NumberInput
           label="Adet"
           min={0}

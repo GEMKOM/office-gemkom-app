@@ -1,15 +1,17 @@
 import { barsProblem, draftBars, sizedBarCount } from './deliveryBars';
 
-it('reads the typed rows, dropping empty ones', () => {
+it('reads the typed rows (metres) as mm, dropping empty ones', () => {
   expect(
     draftBars([
-      { length_mm: 6000, quantity: 2 },
-      { length_mm: '', quantity: '' },
-      { length_mm: '4000', quantity: '1' },
+      { length_m: 6, quantity: 2 },
+      { length_m: '', quantity: '' },
+      { length_m: '2,5', quantity: '1' },
+      { length_m: 0.75, quantity: 1 },
     ]),
   ).toEqual([
     { length_mm: 6000, quantity: 2 },
-    { length_mm: 4000, quantity: 1 },
+    { length_mm: 2500, quantity: 1 },
+    { length_mm: 750, quantity: 1 },
   ]);
 });
 

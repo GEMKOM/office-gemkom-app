@@ -1,16 +1,18 @@
 import type { DeliveredBar } from '@/api/planning/planningItems';
+import { metresToMm } from '@/lib/format';
 
 /** One row of the Teslim Al bar editor, as typed. */
 export interface BarDraft {
-  length_mm: number | string;
+  /** In metres ("2,5"): bars are read and typed in metres, never mm. */
+  length_m: number | string;
   quantity: number | string;
 }
 
-/** The typed rows as bars; rows left empty are dropped. */
+/** The typed rows as bars (lengths in mm for the API); rows left empty are dropped. */
 export function draftBars(rows: readonly BarDraft[]): DeliveredBar[] {
   return rows
-    .filter((r) => r.length_mm !== '' && r.quantity !== '')
-    .map((r) => ({ length_mm: Number(r.length_mm), quantity: Number(r.quantity) }));
+    .filter((r) => r.length_m !== '' && r.quantity !== '')
+    .map((r) => ({ length_mm: Number(metresToMm(r.length_m)), quantity: Number(r.quantity) }));
 }
 
 /** Metres of the bars. */

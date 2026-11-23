@@ -63,7 +63,7 @@ it('builds the legacy payload: casts, defaults and an explicit null setback', ()
       label: '',
       image_no: ' R-1 ',
       jobNo: '254-01',
-      stock_length_mm: '',
+      stock_m: '',
       quantity: '',
       angle_left_deg: '',
       order: '',
@@ -88,6 +88,17 @@ it('builds the legacy payload: casts, defaults and an explicit null setback', ()
     requires_bending: false,
     order: 1,
   });
+});
+
+it("holds a part's stock bar override in metres and sends it in whole mm", () => {
+  const part = partToRow({ id: 4, item: 5, nominal_length_mm: '800', stock_length_mm: 6500 } as Parameters<
+    typeof partToRow
+  >[0]);
+  // Bar lengths read in metres, never mm; the cut length stays in mm.
+  expect(part).toMatchObject({ stock_m: '6.5', nominal_length_mm: '800' });
+  expect(toPayload(row({ stock_m: '6,5' }), 'LC-1').stock_length_mm).toBe(6500);
+  expect(toPayload(row({ stock_m: '12' }), 'LC-1').stock_length_mm).toBe(12000);
+  expect(toPayload(row({ stock_m: '' }), 'LC-1').stock_length_mm).toBeNull();
 });
 
 describe('validatePayload', () => {

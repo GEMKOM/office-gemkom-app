@@ -264,7 +264,7 @@ it('the detail lists the bars a bar line took from İş Emri', async () => {
   fireEvent.click(screen.getAllByRole('button', { name: 'Detay' })[0]!);
   const dialog = await screen.findByRole('dialog', { name: 'İmalata Çıkış Talebi — MPR-2026-0055' });
   expect(within(dialog).getByTestId('pulled-bars')).toHaveTextContent(
-    '6000 mm × 2 boy (döküm H-7) · 4000 mm × 1 boy',
+    '6 m × 2 boy (döküm H-7) · 4 m × 1 boy',
   );
   // What came back on an İmalattan İade.
   expect(within(dialog).getByTestId('returned-note')).toHaveTextContent('İmalattan iade: 4 metre');

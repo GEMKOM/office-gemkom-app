@@ -1,4 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
+import { barMetres } from '@/lib/format';
 import { apiFetch } from '../client';
 import { extractResults, toPaginated } from '../types';
 
@@ -351,8 +352,8 @@ export function missingWeightText(kind: PieceKind | null): string {
   return kind === 'boy' ? 'Kartta metre ağırlığı (kg/m) yok' : 'Kartta sac kalınlığı yok';
 }
 
-/** "1500 × 3000 mm" for a plate, "6000 mm" for a bar. */
+/** "1500 × 3000 mm" for a plate, "6 m" / "2,5 m" for a bar (bars read in metres, never mm). */
 export function sizeLabel(p: { width_mm: string | null; length_mm: string }): string {
   const n = (v: string) => String(Number(v));
-  return p.width_mm ? `${n(p.width_mm)} × ${n(p.length_mm)} mm` : `${n(p.length_mm)} mm`;
+  return p.width_mm ? `${n(p.width_mm)} × ${n(p.length_mm)} mm` : barMetres(p.length_mm);
 }

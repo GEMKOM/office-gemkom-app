@@ -73,10 +73,12 @@ it('a bar line picks its bars from the job İş Emri stock', async () => {
   await waitFor(() => expect(notify.warning).toHaveBeenCalled());
   expect(posts()).toHaveLength(0);
 
-  fireEvent.change(within(dialog).getByLabelText('0010 0114 0015 000 000 6000 mm boy adedi'), {
+  // The lots read in metres, never mm.
+  expect(within(dialog).queryByText(/6000 mm/)).not.toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('0010 0114 0015 000 000 6 m boy adedi'), {
     target: { value: '2' },
   });
-  fireEvent.change(within(dialog).getByLabelText('0010 0114 0015 000 000 4000 mm boy adedi'), {
+  fireEvent.change(within(dialog).getByLabelText('0010 0114 0015 000 000 4 m boy adedi'), {
     target: { value: '1' },
   });
   expect(within(dialog).getByText('3 boy · 16 m')).toBeInTheDocument();

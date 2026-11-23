@@ -4,6 +4,7 @@ import {
   setbackFromAngle,
 } from '@/pages/manufacturing/linear-cutting/shared/lcGeometry';
 import type { LinearPart, LinearPartPayload } from '@/api/manufacturing/linearCuttingSessions';
+import { metresToMm, mmToMetres } from '@/lib/format';
 
 /**
  * One row of the parts table. The typed fields hold the input text, as the
@@ -24,7 +25,12 @@ export interface PartRow {
   profile_height_mm: string;
   label: string;
   image_no: string;
-  stock_length_mm: string;
+  /**
+   * The part's stock bar length override in metres ("6", "6,5"): bar lengths read in
+   * metres, never mm. Sent in mm. The cut lengths (nominal_length_mm, Kesit, offsets)
+   * are drawing dimensions and stay in mm.
+   */
+  stock_m: string;
   nominal_length_mm: string;
   quantity: string;
   angle_left_deg: string;
@@ -48,10 +54,10 @@ export type SideConfig = (typeof SIDES)[number];
 export const sideConfig = (side: Side): SideConfig => (side === 'left' ? SIDES[0] : SIDES[1]);
 
 // Stored as IntegerField on LinearCuttingPart — a decimal here 400s.
-// (nominal_length_mm is NOT one of these: cut lengths are fractional.)
+// (nominal_length_mm is NOT one of these: cut lengths are fractional. The stock
+// length is typed in metres and rounded to whole mm on the way out.)
 export const INTEGER_MM_FIELDS = [
   ['profile_height_mm', 'Kesit'],
-  ['stock_length_mm', 'Stok boyu'],
   ['quantity', 'Adet'],
 ] as const;
 
@@ -87,7 +93,7 @@ export function partToRow(p: LinearPart): PartRow {
     profile_height_mm: text(p.profile_height_mm ?? 0),
     label: p.label ?? '',
     image_no: p.image_no ?? '',
-    stock_length_mm: text(p.stock_length_mm),
+    stock_m: text(mmToMetres(p.stock_length_mm)),
     nominal_length_mm: text(p.nominal_length_mm),
     quantity: text(p.quantity),
     angle_left_deg: text(p.angle_left_deg ?? 0),
@@ -132,7 +138,7 @@ export function emptyRow(rows: readonly PartRow[]): PartRow {
     profile_height_mm: '0',
     label: '',
     image_no: '',
-    stock_length_mm: '',
+    stock_m: '',
     nominal_length_mm: '',
     quantity: '1',
     angle_left_deg: '0',
@@ -240,11 +246,11 @@ export function pickItem(
 
 /** Port of buildPartPayloadFromRowId. */
 export function toPayload(row: PartRow, session: string): LinearPartPayload {
-  const stock = row.stock_length_mm.trim();
+  const stock = metresToMm(row.stock_m.trim());
   return {
     session,
     item: row.item ? Number(row.item) : null,
-    stock_length_mm: stock === '' ? null : castNumber(stock, null),
+    stock_length_mm: stock === '' ? null : stock,
     label: row.label || '',
     image_no: row.image_no.trim(),
     job_no: row.jobNo || '',

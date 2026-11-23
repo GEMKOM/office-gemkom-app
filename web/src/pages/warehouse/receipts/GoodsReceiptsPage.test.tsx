@@ -475,4 +475,24 @@ describe('a sized plate / bar order line', () => {
       quantity: '',
     });
   });
+
+  it("takes a bar's length in metres and sends it in mm", async () => {
+    const { emptyPiece, pieceInput, startPieces } = await import('./ReceiptPiecesEditor');
+    const bars = {
+      outstanding: '18.00',
+      outstanding_pieces: { width_mm: null, length_mm: '6000.0', count: 3 },
+    };
+    // Bars read in metres, never mm.
+    expect(startPieces(bars, 18)[0]).toMatchObject({ width: '', length: 6, quantity: 3 });
+    expect(pieceInput('boy', { ...emptyPiece(), length: '2,5', quantity: 2 })).toMatchObject({
+      width_mm: null,
+      length_mm: '2500',
+      quantity: 2,
+    });
+    expect(pieceInput('boy', { ...emptyPiece(), length: 0.75, quantity: 1 })?.length_mm).toBe('750');
+    // A plate stays in mm.
+    expect(
+      pieceInput('plate', { ...emptyPiece(), width: 1500, length: 3000, quantity: 1 })?.length_mm,
+    ).toBe('3000');
+  });
 });
