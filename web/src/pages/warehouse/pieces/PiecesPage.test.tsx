@@ -630,6 +630,31 @@ it('groups the sheets of a card and size in one row, opened to each sheet', asyn
   expect(screen.getByText('H-2')).toBeInTheDocument();
 });
 
+it("a sheet split off a lot shows the lot's source, noted as bölünmüş", async () => {
+  const sheet = { ...WEIGHED_LOT, quantity: 1, warehouse_code: 'HAMMADDE' };
+  lots = [
+    { ...sheet, id: 41, code: 'S26-00041' },
+    {
+      ...sheet,
+      id: 42,
+      code: 'S26-00042',
+      origin: 'split',
+      source_origin: 'remnant',
+      origin_label: 'Fire sac',
+      parent: 41,
+      parent_code: 'S26-00041',
+    },
+  ];
+  renderPage();
+  const header = await screen.findByText('2 plaka');
+  // One source for the group: the split sheet came from the same fire sac.
+  expect(within(header.closest('tr')!).getByText('Fire sac')).toBeInTheDocument();
+  fireEvent.click(header.closest('tr')!);
+  const split = (await screen.findByText('S26-00042')).closest('tr')!;
+  expect(within(split).getByText('Fire sac')).toBeInTheDocument();
+  expect(within(split).getByText('· bölünmüş')).toBeInTheDocument();
+});
+
 it('Sac Stoğu shows each sheet with its shape and one weight column, no Tür', async () => {
   const sheet = { ...WEIGHED_LOT, quantity: 1, warehouse_code: 'HAMMADDE' };
   lots = [
