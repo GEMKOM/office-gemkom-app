@@ -1,6 +1,7 @@
 import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { pickShape } from '@/test/plateShape';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import {
@@ -154,12 +155,18 @@ const CHANGE = {
   created_at: '2026-11-12T09:00:00Z',
 };
 
-type Lot = { item: number; width_mm: string | null; length_mm: string; quantity: number };
-/** The backend's pieces/groups/: lots by card + size, in the order they come. */
+type Lot = {
+  item: number;
+  width_mm: string | null;
+  length_mm: string;
+  shape?: string;
+  quantity: number;
+};
+/** The backend's pieces/groups/: lots by card + size + shape, in the order they come. */
 function sizeGroups(rows: unknown[]) {
   const out = new Map<string, { key: string; lots: number; quantity: number; pieces: Lot[] }>();
   for (const row of rows as Lot[]) {
-    const key = `${row.item}:${row.width_mm ?? ''}:${row.length_mm}`;
+    const key = `${row.item}:${row.width_mm ?? ''}:${row.length_mm}:${row.shape ?? 'rectangle'}`;
     const group = out.get(key) ?? { key, lots: 0, quantity: 0, pieces: [] };
     group.lots += 1;
     group.quantity += row.quantity;
@@ -317,12 +324,96 @@ it('adds plate pieces with the backend weight preview', async () => {
       quantity: 2,
       width_mm: '1000',
       length_mm: '2000',
+      shape: 'rectangle',
       heat_number: '',
       certificate_no: '',
       note: '',
       warehouse_code: 'HAMMADDE',
     },
   ]);
+});
+
+/** Parça Ekle open with the HARDOX plate card picked. */
+async function openNewPlate() {
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'Parça Ekle' }));
+  const dialog = await screen.findByRole('dialog', { name: 'Parça Ekle' });
+  const picker = within(dialog).getByLabelText('Stok kartı');
+  picker.focus();
+  fireEvent.change(picker, { target: { value: 'hardox' } });
+  fireEvent.click(await screen.findByRole('option', { name: /8 mm HARDOX 400 SAC/, hidden: true }));
+  return dialog;
+}
+
+const previews = () =>
+  calls().filter((c) => c.url.pathname === '/warehouse/pieces/weight-preview/');
+const piecePost = () =>
+  calls().find((c) => c.method === 'POST' && c.url.pathname === '/warehouse/pieces/');
+
+it('adds a circle by its diameter (sent as width and length), weighed by its shape', async () => {
+  const dialog = await openNewPlate();
+  await pickShape(dialog, 'Şekil', 'Daire');
+  expect(within(dialog).queryByLabelText('En (mm)')).not.toBeInTheDocument();
+  expect(within(dialog).queryByLabelText('Boy (mm)')).not.toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('Çap (mm)'), { target: { value: '600' } });
+  await waitFor(() =>
+    expect(previews().at(-1)?.body).toEqual({
+      item: 11,
+      width_mm: '600',
+      length_mm: '600',
+      shape: 'circle',
+      quantity: 1,
+    }),
+  );
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(piecePost()).toBeDefined());
+  expect(piecePost()!.body).toEqual([
+    expect.objectContaining({ width_mm: '600', length_mm: '600', shape: 'circle' }),
+  ]);
+});
+
+it('a triangle takes its base and height', async () => {
+  const dialog = await openNewPlate();
+  await pickShape(dialog, 'Şekil', 'Üçgen');
+  fireEvent.change(within(dialog).getByLabelText('Taban (mm)'), { target: { value: '600' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(notify.warning).toHaveBeenCalledWith('Yükseklik (mm) girin'));
+  fireEvent.change(within(dialog).getByLabelText('Yükseklik (mm)'), { target: { value: '800' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(piecePost()).toBeDefined());
+  expect(piecePost()!.body).toEqual([
+    expect.objectContaining({ width_mm: '600', length_mm: '800', shape: 'triangle' }),
+  ]);
+});
+
+it('an irregular plate needs its estimated area, at most its box', async () => {
+  const dialog = await openNewPlate();
+  await pickShape(dialog, 'Şekil', 'Şekilsiz');
+  expect(within(dialog).getByText('Ağırlık bu alandan hesaplanır')).toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('En (mm)'), { target: { value: '800' } });
+  fireEvent.change(within(dialog).getByLabelText('Boy (mm)'), { target: { value: '900' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(notify.warning).toHaveBeenCalledWith('Tahmini alan (m²) girin'));
+
+  fireEvent.change(within(dialog).getByLabelText('Tahmini alan (m²)'), {
+    target: { value: '0,8' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() =>
+    expect(notify.warning).toHaveBeenCalledWith('Tahmini alan en × boydan (0,72 m²) büyük olamaz'),
+  );
+  expect(piecePost()).toBeUndefined();
+  // Not weighed until the size can be sent.
+  expect(previews()).toHaveLength(0);
+
+  fireEvent.change(within(dialog).getByLabelText('Tahmini alan (m²)'), {
+    target: { value: '0,45' },
+  });
+  const sent = { width_mm: '800', length_mm: '900', shape: 'irregular', area_m2: '0.45' };
+  await waitFor(() => expect(previews().at(-1)?.body).toMatchObject(sent));
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(piecePost()).toBeDefined());
+  expect(piecePost()!.body).toEqual([expect.objectContaining(sent)]);
 });
 
 it('shows the new sheets their codes to write on them, with a print', async () => {
@@ -700,8 +791,80 @@ it('corrects a lot size with a required note', async () => {
     note: '',
     width_mm: '1250',
     length_mm: '2500',
+    shape: 'rectangle',
     change_note: 'Ölçüldü',
   });
+});
+
+it("corrects a lot's shape: a rectangle read wrong becomes irregular with its area", async () => {
+  renderPage('/warehouse/plate-stock?piece=2');
+  expect(await screen.findByText('Fire sac #1053')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Düzenle' }));
+  const dialog = await screen.findByRole('dialog', { name: /Lotu Düzenle/ });
+  expect(within(dialog).getByRole('combobox', { name: 'Şekil' })).toHaveValue('Dikdörtgen');
+  await pickShape(dialog, 'Şekil', 'Şekilsiz');
+  fireEvent.change(within(dialog).getByLabelText(/Açıklama/), { target: { value: 'Ölçüldü' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(notify.warning).toHaveBeenCalledWith('Tahmini alan (m²) girin'));
+  expect(calls().some((c) => c.method === 'PATCH')).toBe(false);
+
+  fireEvent.change(within(dialog).getByLabelText('Tahmini alan (m²)'), {
+    target: { value: '1,5' },
+  });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kaydet' }));
+  await waitFor(() => expect(notify.success).toHaveBeenCalled());
+  expect(calls().find((c) => c.method === 'PATCH')!.body).toMatchObject({
+    width_mm: '1000',
+    length_mm: '2000',
+    shape: 'irregular',
+    area_m2: '1.5',
+    change_note: 'Ölçüldü',
+  });
+});
+
+it("says a lot's shape and area change in Turkish in its history", async () => {
+  const change = {
+    ...CHANGE,
+    changes: {
+      shape: ['rectangle', 'irregular'] as [string, string],
+      area_m2: [null, '3.0000'] as [null, string],
+    },
+  };
+  expect(changeLines(change)).toEqual(['Şekil: Dikdörtgen → Şekilsiz', 'Tahmini alan: – → 3 m²']);
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    if (new URL(String(url), 'http://x').pathname === '/warehouse/pieces/2/changes/')
+      return json([change]);
+    return base(url, init);
+  });
+  renderPage('/warehouse/plate-stock?piece=2');
+  expect(await screen.findByText('Şekil: Dikdörtgen → Şekilsiz')).toBeInTheDocument();
+  expect(screen.getByText('Ölçü düzeltildi')).toBeInTheDocument();
+});
+
+it('keeps a circle and a rectangle of the same box apart, each read by its shape', async () => {
+  const sheet = { ...WEIGHED_LOT, quantity: 1, width_mm: '600.0', length_mm: '600.0' };
+  lots = [
+    { ...sheet, id: 21, code: 'S26-00021', shape: 'circle' },
+    { ...sheet, id: 22, code: 'S26-00022', shape: 'rectangle' },
+    {
+      ...sheet,
+      id: 23,
+      code: 'S26-00023',
+      width_mm: '800.0',
+      length_mm: '900.0',
+      shape: 'irregular',
+      area_m2: '0.4500',
+    },
+  ];
+  renderPage();
+  // Each is a size of its own: no "2 sac" group.
+  expect(await screen.findByText('S26-00021')).toBeInTheDocument();
+  expect(screen.getByText('S26-00022')).toBeInTheDocument();
+  expect(screen.queryByText('2 sac')).not.toBeInTheDocument();
+  expect(screen.getByText('Ø 600 mm')).toBeInTheDocument();
+  expect(screen.getByText('600 × 600 mm')).toBeInTheDocument();
+  expect(screen.getByText('Şekilsiz 800 × 900 mm · ~0,45 m²')).toBeInTheDocument();
 });
 
 it('locks the size of a lot a cut has reserved', async () => {

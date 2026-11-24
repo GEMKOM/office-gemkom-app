@@ -203,19 +203,24 @@ function availableOf(value: PlateSourceValue): number | null {
 }
 
 export function pieceText(
-  p: Pick<CncPieceDetails, 'item_code' | 'width_mm' | 'length_mm'> & { code?: string | null },
+  p: Pick<CncPieceDetails, 'item_code' | 'width_mm' | 'length_mm' | 'shape' | 'area_m2'> & {
+    code?: string | null;
+  },
 ) {
   return `${p.code ? `${p.code} · ` : ''}${p.item_code} · ${sizeLabel(p)}`;
 }
 
 /**
  * A cut's sheets in one line: "S26-00001, S26-00002 · 0100… · 1500 × 3000 mm"
- * per card and size; an old uncoded lot reads "0100… · 1500 × 3000 mm × 3".
+ * per card, size and shape ("Ø 600 mm"); an old uncoded lot reads "0100… · 1500 × 3000 mm × 3".
  */
 export function sheetsText(
   rows: {
     quantity: number;
-    piece_details: Pick<CncPieceDetails, 'code' | 'item_code' | 'width_mm' | 'length_mm'>;
+    piece_details: Pick<
+      CncPieceDetails,
+      'code' | 'item_code' | 'width_mm' | 'length_mm' | 'shape' | 'area_m2'
+    >;
   }[],
 ): string {
   const groups = new Map<
@@ -224,7 +229,7 @@ export function sheetsText(
   >();
   for (const r of rows) {
     const p = r.piece_details;
-    const key = `${p.item_code}|${p.width_mm}|${p.length_mm}`;
+    const key = `${p.item_code}|${p.width_mm}|${p.length_mm}|${p.shape ?? 'rectangle'}|${p.area_m2 ?? ''}`;
     const g = groups.get(key) ?? { codes: [], uncoded: 0, p };
     if (p.code) g.codes.push(p.code);
     else g.uncoded += r.quantity;
@@ -892,6 +897,8 @@ export function pieceChoice(p: MaterialPiece): PieceChoice {
     item_name: p.item_name,
     width_mm: p.width_mm,
     length_mm: p.length_mm,
+    shape: p.shape,
+    area_m2: p.area_m2,
     heat_number: p.heat_number,
     warehouse_code: p.warehouse_code,
     job_no: p.job_no,
@@ -962,7 +969,7 @@ export function PieceLotPickerModal({
     if (!tickedList.length) return notify.warning('Kesim için sac işaretleyin.');
     const cards = new Set(tickedList.map((p) => p.item_code));
     if (cards.size > 1) return notify.warning('Bir kesimin sacları aynı sac kartından olmalı.');
-    const sizes = new Set(tickedList.map((p) => `${Number(p.width_mm)}x${Number(p.length_mm)}`));
+    const sizes = new Set(tickedList.map((p) => sizeLabel(p)));
     if (sizes.size > 1)
       notify.warning('İşaretli saclar farklı ölçüde; kesimin ölçüsü ilk sacdan alınır.');
     onPick(tickedList);

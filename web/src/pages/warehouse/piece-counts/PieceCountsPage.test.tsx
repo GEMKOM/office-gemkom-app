@@ -1,6 +1,7 @@
 import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { pickShape } from '@/test/plateShape';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { MikroComparisonPage } from '../mikro-comparison/MikroComparisonPage';
@@ -268,6 +269,92 @@ it('counts lots, adds pieces the system did not know, and posts', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Sayımı İşle' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Evet, İşle' }));
   await waitFor(() => expect(notify.success).toHaveBeenCalledWith('SBS-2026-0003 işlendi'));
+});
+
+const PLATE_CARD = {
+  ...CARD,
+  id: 10,
+  code: '0100 0000 0010 000 000',
+  name: '10 mm ST 37-2 SAC',
+  unit: 'kg',
+  category_code: '0100',
+  category_name: 'Sac',
+  kind: 'plate',
+  plate_thickness_mm: '10.00',
+  missing: '',
+};
+
+it('a plate count line takes its shape: a circle by its diameter, an irregular one by area', async () => {
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    const u = new URL(String(url), 'https://api.test');
+    if (u.pathname === '/warehouse/pieces/cards/') return json({ count: 1, results: [PLATE_CARD] });
+    if (u.pathname === '/warehouse/piece-counts/3/lines/' && (init?.method ?? 'GET') === 'GET') {
+      const circle = {
+        ...LINES[0]!,
+        id: 13,
+        width_mm: '600.0',
+        length_mm: '600.0',
+        shape: 'circle',
+      };
+      return json({ count: 3, results: [...LINES, circle] });
+    }
+    return base(url, init);
+  });
+  renderCounts('/warehouse/piece-counts?sayim=3');
+  // A counted circle reads by its diameter.
+  expect(await screen.findByText('Ø 600 mm')).toBeInTheDocument();
+
+  const picker = screen.getByRole('combobox', { name: 'Stok kartı' });
+  picker.focus();
+  fireEvent.change(picker, { target: { value: 'sac' } });
+  fireEvent.click(await screen.findByRole('option', { name: /10 mm ST 37-2 SAC/, hidden: true }));
+  const panel = screen.getByText('Sistemde olmayan parça ekle').closest('div')!;
+
+  await pickShape(panel, 'Şekil', 'Daire');
+  expect(within(panel).queryByLabelText('Boy (mm)')).not.toBeInTheDocument();
+  fireEvent.change(within(panel).getByLabelText('Çap (mm)'), { target: { value: '600' } });
+  fireEvent.change(within(panel).getByLabelText('Adet'), { target: { value: '2' } });
+  fireEvent.click(within(panel).getByRole('button', { name: 'Ekle' }));
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith('0100 0000 0010 000 000 sayıma eklendi'),
+  );
+  const added = () =>
+    calls().filter((c) => c.method === 'POST' && c.url.pathname.endsWith('/lines/'));
+  expect(added().at(-1)!.body).toEqual([
+    {
+      item: 10,
+      width_mm: '600',
+      length_mm: '600',
+      shape: 'circle',
+      counted_quantity: 2,
+      heat_number: '',
+    },
+  ]);
+
+  // The shape stays for the next sheet; Şekilsiz wants its area.
+  await pickShape(panel, 'Şekil', 'Şekilsiz');
+  fireEvent.change(within(panel).getByLabelText('En (mm)'), { target: { value: '800' } });
+  fireEvent.change(within(panel).getByLabelText('Boy (mm)'), { target: { value: '900' } });
+  fireEvent.click(within(panel).getByRole('button', { name: 'Ekle' }));
+  await waitFor(() => expect(notify.warning).toHaveBeenCalledWith('Tahmini alan (m²) girin'));
+  expect(added()).toHaveLength(1);
+  fireEvent.change(within(panel).getByLabelText('Tahmini alan (m²)'), {
+    target: { value: '0,45' },
+  });
+  fireEvent.click(within(panel).getByRole('button', { name: 'Ekle' }));
+  await waitFor(() => expect(added()).toHaveLength(2));
+  expect(added().at(-1)!.body).toEqual([
+    {
+      item: 10,
+      width_mm: '800',
+      length_mm: '900',
+      shape: 'irregular',
+      area_m2: '0.45',
+      counted_quantity: null,
+      heat_number: '',
+    },
+  ]);
 });
 
 it('compares the piece stock with Mikro, each card in its own unit', async () => {

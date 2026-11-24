@@ -36,6 +36,14 @@ import {
   StatusBadge,
   type DataTableColumn,
 } from '@/ui';
+import {
+  emptyPlateSize,
+  isBlankPlateSize,
+  plateSizeError,
+  plateSizeInput,
+  PlateSizeFields,
+  type PlateSizeDraft,
+} from '@/pages/warehouse/pieces/PlateSizeFields';
 import { SheetCodesModal, type CodedSheet } from '@/pages/warehouse/pieces/SheetCodes';
 import { isOrderedLine, pieceText, sheetsText, SHEETS_WAITING_FINISH } from './PlateSource';
 
@@ -50,6 +58,8 @@ export function remnantSheets(booked: ProcessResult | undefined): CodedSheet[] {
         item_name: r.item_name,
         width_mm: r.width_mm,
         length_mm: r.length_mm,
+        shape: r.shape,
+        area_m2: r.area_m2,
         heat_number: s.heat_number,
       })),
   );
@@ -70,22 +80,26 @@ export const kg = (value: string | number | null | undefined) =>
     ? '-'
     : `${formatNumber(Number(value), 2)} kg`;
 
-export interface RemnantDraft {
+/** A remnant row: its shape and size (width × length its bounding box) and count. */
+export interface RemnantDraft extends PlateSizeDraft {
   rowId: number;
-  width: number | string;
-  length: number | string;
   quantity: number | string;
 }
 
 let nextRowId = 1;
 export const newRemnant = (): RemnantDraft => ({
   rowId: nextRowId++,
-  width: '',
-  length: '',
+  ...emptyPlateSize(),
   quantity: 1,
 });
 
 const positive = (value: number | string) => Number(value) > 0;
+
+/** Why a typed remnant row can't be sent, or null (a blank row is left out, no error). */
+export function remnantError(row: RemnantDraft): string | null {
+  if (isBlankPlateSize(row)) return null;
+  return plateSizeError(row) ?? (positive(row.quantity) ? null : 'Adet girin');
+}
 
 /** Complete remnant rows, with the chosen card (else the cut sheet's card). */
 export function remnantInputs(
@@ -93,13 +107,19 @@ export function remnantInputs(
   card: string | null,
 ): ProcessRemnantInput[] {
   return rows
-    .filter((r) => positive(r.width) && positive(r.length) && positive(r.quantity))
+    .filter((r) => !isBlankPlateSize(r) && remnantError(r) === null)
     .map((r) => ({
-      width_mm: String(r.width),
-      length_mm: String(r.length),
+      ...plateSizeInput(r),
       quantity: Number(r.quantity),
       ...(card ? { item: Number(card) } : {}),
     }));
+}
+
+/** Kept as stock only when its short side reaches MIN_REMNANT_SIDE_MM (the backend's rule). */
+function scrapsAsFire(row: RemnantDraft): boolean {
+  if (plateSizeError(row) !== null) return false;
+  const { width_mm, length_mm } = plateSizeInput(row);
+  return Math.min(Number(width_mm), Number(length_mm)) < MIN_REMNANT_SIDE_MM;
 }
 
 export function RemnantRows({
@@ -117,54 +137,49 @@ export function RemnantRows({
     onChange(rows.map((r) => (r.rowId === rowId ? { ...r, ...patch } : r)));
   return (
     <Stack gap="xs">
-      {rows.map((r, index) => (
-        <Group key={r.rowId} gap="xs" align="flex-end">
-          <NumberInput
-            size="xs"
-            w={110}
-            label={index === 0 ? 'En (mm)' : undefined}
-            aria-label={`Fire sac eni ${index + 1}`}
-            min={0}
-            hideControls
-            value={r.width}
-            onChange={(value) => update(r.rowId, { width: value })}
-          />
-          <NumberInput
-            size="xs"
-            w={110}
-            label={index === 0 ? 'Boy (mm)' : undefined}
-            aria-label={`Fire sac boyu ${index + 1}`}
-            min={0}
-            hideControls
-            value={r.length}
-            onChange={(value) => update(r.rowId, { length: value })}
-          />
-          <NumberInput
-            size="xs"
-            w={80}
-            label={index === 0 ? 'Adet' : undefined}
-            aria-label={`Fire sac adedi ${index + 1}`}
-            min={1}
-            allowDecimal={false}
-            value={r.quantity}
-            onChange={(value) => update(r.rowId, { quantity: value })}
-          />
-          {positive(r.width) &&
-          positive(r.length) &&
-          Math.min(Number(r.width), Number(r.length)) < MIN_REMNANT_SIDE_MM ? (
-            <StatusBadge color="orange">Fire (stoğa alınmaz)</StatusBadge>
-          ) : null}
-          <Button
-            size="xs"
-            variant="subtle"
-            color="red"
-            aria-label={`Fire sacı sil ${index + 1}`}
-            onClick={() => onChange(rows.filter((x) => x.rowId !== r.rowId))}
-          >
-            <FaIcon icon="fas fa-trash" />
-          </Button>
-        </Group>
-      ))}
+      {rows.map((r, index) => {
+        const error = remnantError(r);
+        return (
+          <Stack key={r.rowId} gap={2}>
+            <Group gap="xs" align="flex-end">
+              <PlateSizeFields
+                size="xs"
+                width={130}
+                value={r}
+                onChange={(size) => update(r.rowId, size)}
+                ariaLabel={(label) => `Fire sac ${index + 1} ${label}`}
+              />
+              <NumberInput
+                size="xs"
+                w={80}
+                label="Adet"
+                aria-label={`Fire sac adedi ${index + 1}`}
+                min={1}
+                allowDecimal={false}
+                value={r.quantity}
+                onChange={(value) => update(r.rowId, { quantity: value })}
+              />
+              {scrapsAsFire(r) ? (
+                <StatusBadge color="orange">Fire (stoğa alınmaz)</StatusBadge>
+              ) : null}
+              <Button
+                size="xs"
+                variant="subtle"
+                color="red"
+                aria-label={`Fire sacı sil ${index + 1}`}
+                onClick={() => onChange(rows.filter((x) => x.rowId !== r.rowId))}
+              >
+                <FaIcon icon="fas fa-trash" />
+              </Button>
+            </Group>
+            {error ? (
+              <Text size="xs" c="red">
+                Fire sac {index + 1}: {error}
+              </Text>
+            ) : null}
+          </Stack>
+        );
+      })}
       <Group gap="xs" align="flex-end">
         <Button
           size="xs"
@@ -378,6 +393,8 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
   const [rows, setRows] = useState<RemnantDraft[]>(() => [newRemnant()]);
   const [card, setCard] = useState<string | null>(null);
   const remnants = useMemo(() => remnantInputs(rows, card), [rows, card]);
+  // A typed row with a wrong size holds the finish (it would be left out).
+  const rowsWrong = rows.some((r) => remnantError(r) !== null);
   // A cut on a plate line without a lot: the line's sheets picked here.
   // (Not a Talep Edilen Sac line: its sheets are reserved, never named here.)
   const lineId =
@@ -472,9 +489,10 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
 
             <ModalSection title="Fire Saclar" icon="fas fa-undo">
               <Text size="xs" c="dimmed" mb="xs">
-                Kesimden artan dikdörtgen saclar. Kısa kenarı {MIN_REMNANT_SIDE_MM} mm ve üstü
-                olanlar aynı sac kartıyla Hammadde deposuna döner; daha kısası fireye sayılır.
-                Kullanılabilir fire kalmadıysa boş bırakın.
+                Kesimden artan saclar: şeklini seçin (dikdörtgen, üçgen, daire ya da şekilsiz). Kısa
+                kenarı {MIN_REMNANT_SIDE_MM} mm ve üstü olanlar aynı sac kartıyla Hammadde deposuna
+                döner; daha kısası fireye sayılır. Şekilsiz sacın ağırlığı girilen tahmini alandan
+                hesaplanır. Kullanılabilir fire kalmadıysa boş bırakın.
               </Text>
               <RemnantRows rows={rows} onChange={setRows} card={card} onCard={setCard} />
             </ModalSection>
@@ -514,7 +532,7 @@ export function FinishCutModal({ cutKey, onClose }: { cutKey: string; onClose: (
               </Button>
               <Button
                 leftSection={<FaIcon icon="fas fa-check" />}
-                disabled={Boolean(previewError) || preview.isFetching || waiting}
+                disabled={Boolean(previewError) || preview.isFetching || waiting || rowsWrong}
                 loading={finish.isPending}
                 onClick={() => void save()}
               >

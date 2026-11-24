@@ -2,7 +2,7 @@ import { queryOptions, useMutation, useQueryClient } from '@tanstack/react-query
 import { apiFetch } from '../client';
 import { toPaginated } from '../types';
 import type { WarehouseCode } from '../procurement/stock';
-import { pieceKeys, type PieceKind } from './pieces';
+import { pieceKeys, type PieceKind, type PieceShape } from './pieces';
 
 // Sac ve boy sayımı (backend /warehouse/piece-counts/): plate / boy pieces
 // counted in one warehouse. Lines are lots, prefilled from what the system
@@ -41,6 +41,10 @@ export interface PieceCountLine {
   piece: number | null;
   width_mm: string | null;
   length_mm: string;
+  /** Plates: the outline (width × length its bounding box); posting makes pieces of it. */
+  shape?: PieceShape;
+  /** Irregular plates only: the estimated area in m². */
+  area_m2?: string | null;
   job_no: string;
   counted_quantity: number | null;
   /** Draft: what the lot holds now. Posted: frozen at posting. */
@@ -59,6 +63,8 @@ export interface PieceCountLineInput {
   item?: number;
   width_mm?: string | null;
   length_mm?: string;
+  shape?: PieceShape;
+  area_m2?: string | null;
   job_no?: string;
   counted_quantity?: number | null;
   heat_number?: string;

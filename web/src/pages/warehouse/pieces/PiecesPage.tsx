@@ -40,6 +40,8 @@ import {
   pieceGroupsQueryOptions,
   searchPieceCards,
   searchSuppliers,
+  areaLabel,
+  shapeLabel,
   sizeLabel,
   ORIGIN_OPTIONS,
   type MaterialPiece,
@@ -75,6 +77,15 @@ import {
   type DataTableGrouping,
   type FilterConfig,
 } from '@/ui';
+import {
+  emptyPlateSize,
+  plateSizeError,
+  plateSizeInput,
+  plateSizeChanged,
+  plateSizeOf,
+  PlateSizeFields,
+  type PlateSizeDraft,
+} from './PlateSizeFields';
 import { codedSheets, SheetCodesModal, type CodedSheet } from './SheetCodes';
 
 const PAGE_SIZE = 50;
@@ -122,7 +133,7 @@ const FILTER_KEYS: FilterKeys[] = [
 
 /** One box for anything on a lot; the backend splits it into words that all must match. */
 export const SEARCH_PLACEHOLDER =
-  'Sac kodu (S26-00012), kart, ölçü (1500x3000), döküm no, iş no, CNC-…';
+  'Sac kodu (S26-00012), kart, ölçü (1500x3000), şekil (daire), döküm no, iş no, CNC-…';
 /** Boy Stoğu: a bar's length is searched in metres ("6 m"), like it reads. */
 export const BAR_SEARCH_PLACEHOLDER = 'Kod, ad, boy (6 m), döküm no, iş no, #no…';
 const searchFilter = (kind: PieceKind): FilterConfig<FilterKeys> => ({
@@ -353,8 +364,10 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
 ];
 
 // Sac Stoğu: the sheets of a card and size in one row, opened to each sheet
-// (its code, heat no and place). A size of one sheet is just that sheet.
-const sizeGroupKey = (row: MaterialPiece) => `${row.item}:${row.width_mm ?? ''}:${row.length_mm}`;
+// (its code, heat no and place). A size of one sheet is just that sheet. The
+// shape is in the key: a circle and a rectangle of the same box are two rows.
+const sizeGroupKey = (row: MaterialPiece) =>
+  `${row.item}:${row.width_mm ?? ''}:${row.length_mm}:${row.shape ?? 'rectangle'}`;
 
 /** One value if every row has it, '–' if none has one, else how many differ. */
 function sameOrCount(values: string[], counted: string): string {
@@ -560,25 +573,35 @@ function useInvalidatePieces() {
 
 // --- new pieces -------------------------------------------------------------------
 
+type SizeInput = Omit<Parameters<typeof previewWeight>[0], 'item' | 'quantity'>;
+
+/** The size a new piece is sent with (a plate's with its shape), or a warning to show. */
+function pieceSize(
+  card: PieceCard,
+  plate: PlateSizeDraft,
+  lengthMm: number | string,
+): SizeInput | string {
+  if (card.kind === 'plate') return plateSizeError(plate) ?? plateSizeInput(plate);
+  return Number(lengthMm) > 0 ? { width_mm: null, length_mm: String(lengthMm) } : 'Boy (m) girin';
+}
+
 function WeightPreviewLine({
   card,
-  width,
-  length,
+  size,
   quantity,
 }: {
   card: PieceCard;
-  width: string;
-  length: string;
+  /** The size to weigh; a string (what is missing) while it is incomplete. */
+  size: SizeInput | string;
   quantity: number;
 }) {
-  const ready = Number(length) > 0 && (card.kind === 'boy' || Number(width) > 0);
+  const ready = typeof size !== 'string';
   const preview = useQuery({
-    queryKey: ['pieces', 'weight-preview', card.id, width, length, quantity],
+    queryKey: ['pieces', 'weight-preview', card.id, size, quantity],
     queryFn: () =>
       previewWeight({
         item: card.id,
-        width_mm: card.kind === 'plate' ? width : null,
-        length_mm: length,
+        ...(size as SizeInput),
         quantity: Math.max(1, quantity || 1),
       }),
     enabled: ready,
@@ -609,8 +632,9 @@ function WeightPreviewLine({
 function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKind }) {
   const invalidate = useInvalidatePieces();
   const [cardId, setCardId] = useState<string | null>(null);
-  const [width, setWidth] = useState<string | number>('');
-  // A plate's length in mm; a bar's in metres (stored in mm).
+  // A plate's shape and size in mm.
+  const [plateSize, setPlateSize] = useState<PlateSizeDraft>(emptyPlateSize);
+  // A bar's length in metres (stored in mm).
   const [length, setLength] = useState<string | number>('');
   const [quantity, setQuantity] = useState<string | number>(1);
   const [place, setPlace] = useState<PlaceDraft>({ kind: 'HAMMADDE', job: null, supplier: null });
@@ -621,14 +645,11 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
   const [coded, setCoded] = useState<CodedSheet[] | null>(null);
   const card = cardId ? pieceCardFromSearch(cardId) : undefined;
   const create = useMutation({ mutationFn: createPieces, onSuccess: invalidate });
-  const lengthMm = card?.kind === 'plate' ? length : metresToMm(length);
+  const size = card ? pieceSize(card, plateSize, metresToMm(length)) : null;
 
   const save = async () => {
-    if (!card) return notify.warning('Stok kartı seçin');
-    if (!(Number(lengthMm) > 0))
-      return notify.warning(card.kind === 'plate' ? 'Boy (mm) girin' : 'Boy (m) girin');
-    if (card.kind === 'plate' && !(Number(width) > 0))
-      return notify.warning('Sac için en (mm) girin');
+    if (!card || size === null) return notify.warning('Stok kartı seçin');
+    if (typeof size === 'string') return notify.warning(size);
     if (!(Number(quantity) >= 1)) return notify.warning('Adet en az 1 olmalı');
     const where = placeToInput(place);
     if (typeof where === 'string') return notify.warning(where);
@@ -638,8 +659,7 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
         {
           item: card.id,
           quantity: Number(quantity),
-          width_mm: card.kind === 'plate' ? String(width) : null,
-          length_mm: String(lengthMm),
+          ...size,
           heat_number: heat,
           certificate_no: certificate,
           note,
@@ -694,24 +714,7 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
         {card ? (
           <Group grow align="flex-start">
             {card.kind === 'plate' ? (
-              <NumberInput
-                label="En (mm)"
-                min={0}
-                decimalScale={1}
-                hideControls
-                value={width}
-                onChange={setWidth}
-              />
-            ) : null}
-            {card.kind === 'plate' ? (
-              <NumberInput
-                label="Boy (mm)"
-                min={0}
-                decimalScale={1}
-                hideControls
-                value={length}
-                onChange={setLength}
-              />
+              <PlateSizeFields value={plateSize} onChange={setPlateSize} />
             ) : (
               <NumberInput
                 label="Boy (m)"
@@ -729,13 +732,8 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
             />
           </Group>
         ) : null}
-        {card ? (
-          <WeightPreviewLine
-            card={card}
-            width={String(width)}
-            length={String(lengthMm)}
-            quantity={Number(quantity)}
-          />
+        {card && size !== null ? (
+          <WeightPreviewLine card={card} size={size} quantity={Number(quantity)} />
         ) : null}
         <PlacePicker
           place={place}
@@ -865,15 +863,12 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
   const [checked, setChecked] = useState(false);
   const [changeNote, setChangeNote] = useState('');
   const plate = piece.kind === 'plate';
-  const [width, setWidth] = useState<string | number>(piece.width_mm ? Number(piece.width_mm) : '');
-  // A plate's length in mm; a bar's in metres (stored in mm).
-  const [length, setLength] = useState<string | number>(
-    plate ? Number(piece.length_mm) : mmToMetres(piece.length_mm),
-  );
-  const lengthMm = plate ? length : metresToMm(length);
-  const resized =
-    Number(lengthMm) !== Number(piece.length_mm) ||
-    (plate && Number(width) !== Number(piece.width_mm));
+  // A plate's shape and size in mm; a bar's length in metres (stored in mm).
+  const [plateSize, setPlateSize] = useState<PlateSizeDraft>(() => plateSizeOf(piece));
+  const [length, setLength] = useState<string | number>(() => mmToMetres(piece.length_mm));
+  const resized = plate
+    ? plateSizeChanged(plateSizeOf(piece), plateSize)
+    : Number(metresToMm(length)) !== Number(piece.length_mm);
   // What the page knows of the backend's size guard (it also refuses a lot that was cut).
   const sizeLock = piece.reserved_quantity
     ? 'kesime ayrılmış parçası var'
@@ -887,8 +882,12 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
   const save = async () => {
     if (checked && !changeNote.trim()) return notify.warning('Kontrol edildi için açıklama girin');
     if (resized) {
-      if (!(Number(lengthMm) > 0) || (plate && !(Number(width) > 0)))
-        return notify.warning(plate ? 'En ve boy (mm) girin' : 'Boy (m) girin');
+      const wrong = plate
+        ? plateSizeError(plateSize)
+        : Number(metresToMm(length)) > 0
+          ? null
+          : 'Boy (m) girin';
+      if (wrong) return notify.warning(wrong);
       if (!changeNote.trim()) return notify.warning('Ölçü düzeltmesi için açıklama girin');
     }
     try {
@@ -898,7 +897,9 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
         note,
         ...(checked ? { needs_review: false as const } : {}),
         ...(resized
-          ? { ...(plate ? { width_mm: String(width) } : {}), length_mm: String(lengthMm) }
+          ? plate
+            ? plateSizeInput(plateSize)
+            : { length_mm: String(metresToMm(length)) }
           : {}),
         change_note: changeNote,
       });
@@ -930,25 +931,10 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
         </Text>
         <Group grow align="flex-start">
           {plate ? (
-            <NumberInput
-              label="En (mm)"
-              min={0}
-              decimalScale={1}
-              hideControls
+            <PlateSizeFields
+              value={plateSize}
+              onChange={setPlateSize}
               disabled={Boolean(sizeLock)}
-              value={width}
-              onChange={setWidth}
-            />
-          ) : null}
-          {plate ? (
-            <NumberInput
-              label="Boy (mm)"
-              min={0}
-              decimalScale={1}
-              hideControls
-              disabled={Boolean(sizeLock)}
-              value={length}
-              onChange={setLength}
             />
           ) : (
             <NumberInput
@@ -963,8 +949,9 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
         <Text size="xs" c={sizeLock ? 'orange.8' : 'dimmed'}>
           {sizeLock
             ? `Ölçü değiştirilemez: ${sizeLock}. Adedi düzeltip doğru ölçüde yeni lot ekleyin.`
-            : 'Ölçü yalnız yanlış okunmuş bir lotta düzeltilir (ayrılmamış, kesime çıkmamış, ' +
-              'fasonda değil); ağırlık yeni ölçüden hesaplanır, açıklama zorunlu.'}
+            : `${plate ? 'Şekil ve ölçü' : 'Ölçü'} yalnız yanlış okunmuş bir lotta düzeltilir ` +
+              '(ayrılmamış, kesime çıkmamış, fasonda değil); ağırlık yeni ölçüden hesaplanır, ' +
+              'açıklama zorunlu.'}
         </Text>
         <Group grow>
           <TextInput
@@ -1018,11 +1005,17 @@ const CHANGE_LABELS: Record<string, string> = {
   note: 'Not',
   width_mm: 'En (mm)',
   length_mm: 'Boy (mm)',
+  shape: 'Şekil',
+  area_m2: 'Tahmini alan',
 };
+
+/** The fields of a size correction (width, length, and a plate's shape and area). */
+const SIZE_FIELDS = ['width_mm', 'length_mm', 'shape', 'area_m2'] as const;
 
 /**
  * "Döküm no: – → D-901" lines of an edit (needs_review is the row's own label). A bar's
- * length reads in metres ("Boy: 6 m → 5,5 m"); the change keeps mm.
+ * length reads in metres ("Boy: 6 m → 5,5 m"); the change keeps mm. A plate's shape and
+ * area read in Turkish ("Şekil: Dikdörtgen → Şekilsiz", "Tahmini alan: – → 3 m²").
  */
 export function changeLines(change: PieceChange, kind: PieceKind | null = 'plate'): string[] {
   return Object.entries(change.changes)
@@ -1032,6 +1025,14 @@ export function changeLines(change: PieceChange, kind: PieceKind | null = 'plate
       if (field === 'length_mm' && kind === 'boy') {
         const m = (v: unknown) => (v ? barMetres(String(v)) : '–');
         return `Boy: ${m(before)} → ${m(after)}`;
+      }
+      if (field === 'shape') {
+        const s = (v: unknown) => shapeLabel(v ? String(v) : null);
+        return `Şekil: ${s(before)} → ${s(after)}`;
+      }
+      if (field === 'area_m2') {
+        const a = (v: unknown) => (v ? areaLabel(String(v)) : '–');
+        return `Tahmini alan: ${a(before)} → ${a(after)}`;
       }
       return `${CHANGE_LABELS[field]}: ${String(before || '–')} → ${String(after || '–')}`;
     });
@@ -1157,7 +1158,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
                           <Table.Td>
                             {c.changes.needs_review
                               ? 'Kontrol edildi'
-                              : c.changes.width_mm || c.changes.length_mm
+                              : SIZE_FIELDS.some((f) => c.changes[f])
                                 ? 'Ölçü düzeltildi'
                                 : 'Bilgi düzenlendi'}
                             {[...changeLines(c, piece.kind), c.note].filter(Boolean).map((line) => (

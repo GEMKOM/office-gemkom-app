@@ -1,6 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { apiFetch, apiUpload, cleanParams, type QueryParams } from '../client';
 import type { PlanningItem } from '../planning/planningItems';
+import type { PieceShape } from '../warehouse/pieces';
 import { extractResults, toPaginated } from '../types';
 
 // Port of apis/cnc_cutting/crud.js, parts.js and files.js (the CNC Kesimler
@@ -61,6 +62,9 @@ export interface CncPieceDetails {
   item_name: string;
   width_mm: string | null;
   length_mm: string;
+  /** The sheet's outline, when the payload carries it (else a rectangle). */
+  shape?: PieceShape;
+  area_m2?: string | null;
   heat_number: string;
   warehouse_code: string | null;
   job_no: string;
@@ -293,8 +297,12 @@ export interface ProcessConsumedInput {
 }
 
 export interface ProcessRemnantInput {
+  /** The bounding box: a circle's diameter both ways, a triangle's base × height. */
   width_mm: string;
   length_mm: string;
+  shape: PieceShape;
+  /** Irregular only: the estimated area (m²), which its weight comes from. */
+  area_m2?: string;
   quantity: number;
   item?: number | null;
   heat_number?: string;
@@ -348,6 +356,8 @@ export interface ProcessResult {
     item_name?: string;
     width_mm: string;
     length_mm: string;
+    shape?: PieceShape;
+    area_m2?: string | null;
     quantity: number;
     heat_number: string;
     /** false: shorter than 500 mm on its short side; it is fire, not stock. */
