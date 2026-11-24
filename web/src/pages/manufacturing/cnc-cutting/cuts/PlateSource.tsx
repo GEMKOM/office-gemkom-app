@@ -9,7 +9,7 @@ import {
   Stack,
   Text,
 } from '@mantine/core';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useEffect, useState, type ReactNode } from 'react';
 import type {
   CncPieceDetails,
@@ -20,8 +20,6 @@ import type {
   RemnantChoice,
 } from '@/api/manufacturing/cncTasks';
 import {
-  markPlanningItemConsumed,
-  planningItemKeys,
   planningItemsQueryOptions,
   type PlanningItem,
   type PlanningItemsParams,
@@ -35,7 +33,6 @@ import {
 } from '@/api/warehouse/pieces';
 import { formatNumber } from '@/lib/format';
 import {
-  confirm,
   DataTable,
   FaIcon,
   FilterBar,
@@ -51,11 +48,12 @@ import {
 } from '@/ui';
 
 // The "Plaka Kaynağı" section of the create and edit modals. Every cut uses
-// exactly one plate source: sheets from piece stock (a plate lot on the Sac &
-// Boy Stoğu page) or a planning request item (plaka kalemi); picking one
-// clears the other. A plaka kalemi may also take one of the lots received
-// for it in Mal kabul: the cut then reserves the line's own sheets and keeps
-// the line. The sheets are reserved for the cut and leave stock when
+// exactly one plate source: coded sheets from Sac Stoğu, or a sized plate
+// line still on order (Talep Edilen Sac); picking one clears the other. An
+// unsized planning line (plaka kalemi) is no longer picked for a new cut:
+// once its sheets pass Mal Kabul they are in Sac Stoğu with their codes. Older
+// cuts keep and show theirs, and may take one of the lots received for it.
+// The sheets are reserved for the cut and leave stock when
 // the warehouse processes it (Ağırlık Düşüşü). Cuts made before piece stock
 // may still show their old remnant plate (fire plaka); it can be kept or
 // replaced, not picked anew.
@@ -287,7 +285,7 @@ export function PlateSourceSection({
   sheetsWaiting,
   mismatch,
 }: PlateSourceSectionProps) {
-  const [picking, setPicking] = useState<'piece' | 'item' | 'ordered' | null>(null);
+  const [picking, setPicking] = useState<'piece' | 'ordered' | null>(null);
   const [quantityError, setQuantityError] = useState('');
   const { piece, remnant, planningItem, locked } = value;
   const sheets = value.sheets ?? [];
@@ -374,13 +372,6 @@ export function PlateSourceSection({
         >
           Talep Edilen Sac Seç
         </Button>
-        <Button
-          variant="outline"
-          leftSection={<FaIcon icon="fas fa-box-open" />}
-          onClick={() => setPicking('item')}
-        >
-          {planningItem && !ordered ? 'Plaka Kalemi Değiştir' : 'Plaka Kalemi Seç'}
-        </Button>
         {piece ? (
           <Group gap={4} wrap="nowrap" maw="100%">
             <Badge
@@ -432,9 +423,9 @@ export function PlateSourceSection({
         ) : null}
       </Group>
       <Text size="xs" c="dimmed" mb="xs">
-        Her kesim için stoktan sac veya plaka kalemi seçilmelidir; malzeme, kalınlık ve ölçü seçilen
-        kaynaktan otomatik alınır. Stoktan seçilen saclar kesime ayrılır ve depo kesimi işleyince
-        stoktan düşer.
+        Her kesim için stoktan sac veya talep edilen sac seçilmelidir; malzeme, kalınlık ve ölçü
+        seçilen kaynaktan otomatik alınır. Stoktan seçilen saclar kesime ayrılır ve depo kesimi
+        işleyince stoktan düşer.
       </Text>
 
       {planningItem && ordered ? (
@@ -538,21 +529,6 @@ export function PlateSourceSection({
             onChange({ ...EMPTY_PLATE_SOURCE, planningItem: { ...item, ordered_line: true } });
             setPicking(null);
             notify.success('Talep edilen sac seçildi');
-          }}
-        />
-      ) : null}
-      {picking === 'item' ? (
-        <PlanningItemPickerModal
-          onClose={() => setPicking(null)}
-          onPick={(item) => {
-            setQuantityError('');
-            onChange({
-              ...EMPTY_PLATE_SOURCE,
-              planningItem: item,
-              markConsumed: item.is_consumed === true,
-            });
-            setPicking(null);
-            notify.success('Plaka kalemi seçildi');
           }}
         />
       ) : null}
@@ -1055,178 +1031,6 @@ export function PieceLotPickerModal({
               {tickedList.length ? `${tickedList.length} sacı kesime al` : 'İşaretli sacları al'}
             </Button>
           </Group>
-        </Group>
-      </ModalBody>
-    </Modal>
-  );
-}
-
-// ---- "Plaka Kalemi Seç" ----
-
-type ItemFilters = { job_no: string; search: string; is_delivered: string };
-const EMPTY_ITEM_FILTERS: ItemFilters = { job_no: '', search: '', is_delivered: '' };
-
-const ITEM_FILTERS: FilterConfig<keyof ItemFilters>[] = [
-  {
-    type: 'text',
-    key: 'job_no',
-    label: 'İş Emri No',
-    placeholder: 'örn. 270-01',
-    suggestions: 'jobOrders',
-  },
-  { type: 'text', key: 'search', label: 'Kalem Kodu / Adı', placeholder: 'örn. 10 mm' },
-  {
-    type: 'select',
-    key: 'is_delivered',
-    label: 'Teslim Durumu',
-    placeholder: 'Tümü',
-    searchable: false,
-    options: [
-      { value: 'true', label: 'Teslim Edildi' },
-      { value: 'false', label: 'Teslim Bekleniyor' },
-    ],
-  },
-];
-
-const ITEM_COLUMNS: DataTableColumn<PlanningItem>[] = [
-  { key: 'item_code', header: 'Kalem Kodu', width: '18%' },
-  { key: 'item_name', header: 'Kalem Adı', width: '24%' },
-  { key: 'job_no', header: 'İş Emri', width: '10%' },
-  {
-    key: 'quantity',
-    header: 'Miktar',
-    width: '10%',
-    render: (r) => (r.quantity ? `${r.quantity} ${r.item_unit || ''}`.trim() : '-'),
-  },
-  {
-    key: 'is_delivered',
-    header: 'Teslim',
-    width: '8%',
-    render: (r) =>
-      r.is_delivered ? (
-        <StatusBadge color="green">Teslim</StatusBadge>
-      ) : Number(r.delivered_quantity || 0) > 0 ? (
-        <span title={`${r.delivered_quantity} / ${r.quantity} alındı`}>
-          <StatusBadge color="purple">Kısmi</StatusBadge>
-        </span>
-      ) : (
-        <StatusBadge color="orange">Bekliyor</StatusBadge>
-      ),
-  },
-  {
-    key: 'cnc_cuts_count',
-    header: 'Kullanım',
-    width: '8%',
-    render: (r) => `${r.cnc_cuts_count ?? 0} kesim`,
-  },
-  { key: 'planning_request_number', header: 'Talep No', width: '12%' },
-];
-
-const EMPTY_ITEMS: PlanningItem[] = [];
-
-export function PlanningItemPickerModal({
-  onClose,
-  onPick,
-}: {
-  onClose: () => void;
-  onPick: (item: PlanningItem) => void;
-}) {
-  const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<ItemFilters>(EMPTY_ITEM_FILTERS);
-  const [page, setPage] = useState(1);
-
-  // Unconsumed plate lines of the user's own planning requests (superusers: all).
-  const params: PlanningItemsParams = {
-    is_plate: 'true',
-    // Sized lines are picked as Talep Edilen Sac.
-    sized: 'false',
-    is_consumed: 'false',
-    mine: 'true',
-    fields: 'simple',
-    ordering: '-id',
-    page,
-    page_size: 20,
-    job_no: filters.job_no.trim() || undefined,
-    search: filters.search.trim() || undefined,
-    is_delivered:
-      filters.is_delivered === 'true' || filters.is_delivered === 'false'
-        ? filters.is_delivered
-        : undefined,
-  };
-  const list = useQuery({
-    ...planningItemsQueryOptions(params),
-    placeholderData: keepPreviousData,
-  });
-  useEffect(() => {
-    if (list.isError) notify.error('Plaka kalemleri yüklenirken hata oluştu');
-  }, [list.isError, list.errorUpdatedAt]);
-
-  const consume = useMutation({
-    mutationFn: (item: PlanningItem) => markPlanningItemConsumed(item.id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: planningItemKeys.all }),
-  });
-
-  const markConsumed = async (row: PlanningItem) => {
-    const ok = await confirm({
-      title: 'Kullanıldı Olarak İşaretle',
-      icon: 'fas fa-box',
-      message: `${row.item_code || ''} kalemi kullanıldı olarak işaretlenecek.`,
-      description:
-        'Kullanıldı işaretlenen kalemler yeni kesimler için seçilemez. (Planlama Kalemleri sayfasından geri alınabilir.)',
-      confirmLabel: 'Evet, Kullanıldı',
-      cancelLabel: 'İptal',
-    });
-    if (!ok) return;
-    try {
-      await consume.mutateAsync(row);
-      notify.success('Kalem kullanıldı olarak işaretlendi');
-    } catch {
-      notify.error('Kalem işaretlenirken hata oluştu');
-    }
-  };
-
-  const rowActions = (): RowAction<PlanningItem>[] => [
-    { key: 'select', label: 'Seç', icon: 'fas fa-check', color: 'success', onClick: onPick },
-    {
-      key: 'mark-consumed',
-      label: 'Kullanıldı',
-      icon: 'fas fa-box',
-      color: 'danger',
-      onClick: (row) => void markConsumed(row),
-    },
-  ];
-
-  return (
-    <Modal opened onClose={onClose} size="xl" withCloseButton={false} classNames={modalClassNames}>
-      <ModalHeader title="Plaka Kalemi Seç" icon="fas fa-box-open" />
-      <ModalBody>
-        <ModalSection title="Plaka Kalemleri" icon="fas fa-table">
-          <DataTable
-            title="Plaka Kalemleri Listesi"
-            filters={
-              <FilterBar
-                inline
-                filters={ITEM_FILTERS}
-                values={filters}
-                onApply={(next) => {
-                  setPage(1);
-                  setFilters(next);
-                }}
-              />
-            }
-            data={list.data?.results ?? EMPTY_ITEMS}
-            columns={ITEM_COLUMNS}
-            getRowId={(row) => String(row.id)}
-            loading={list.isFetching}
-            pagination={{ page, pageSize: 20, total: list.data?.count ?? 0, onPageChange: setPage }}
-            rowActions={rowActions}
-            emptyMessage="Plaka kalemi bulunamadı"
-          />
-        </ModalSection>
-        <Group justify="flex-end" mt="md">
-          <Button variant="default" onClick={onClose} leftSection={<FaIcon icon="fas fa-times" />}>
-            İptal
-          </Button>
         </Group>
       </ModalBody>
     </Modal>

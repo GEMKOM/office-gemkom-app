@@ -37,6 +37,7 @@ import {
   placeLabel,
   previewWeight,
   scrapPieces,
+  pieceGroupsQueryOptions,
   searchPieceCards,
   searchSuppliers,
   sizeLabel,
@@ -71,6 +72,7 @@ import {
   StatusBadge,
   useUrlFilters,
   type DataTableColumn,
+  type DataTableGrouping,
   type FilterConfig,
 } from '@/ui';
 import { codedSheets, SheetCodesModal, type CodedSheet } from './SheetCodes';
@@ -349,6 +351,71 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
       ),
   },
 ];
+
+// Sac Stoğu: the sheets of a card and size in one row, opened to each sheet
+// (its code, heat no and place). A size of one sheet is just that sheet.
+const sizeGroupKey = (row: MaterialPiece) => `${row.item}:${row.width_mm ?? ''}:${row.length_mm}`;
+
+/** One value if every row has it, '–' if none has one, else how many differ. */
+function sameOrCount(values: string[], counted: string): string {
+  const set = new Set(values);
+  if (set.size === 1) return values[0] || '–';
+  const filled = [...set].filter(Boolean);
+  return filled.length === 0 ? '–' : `${filled.length} ${counted}`;
+}
+
+export function sizeGrouping(opened: boolean): DataTableGrouping<MaterialPiece> {
+  return {
+    by: sizeGroupKey,
+    sort: false,
+    singleAsRow: true,
+    defaultExpanded: opened,
+    header: ({ rows }) => {
+      const first = rows[0];
+      if (!first) return null;
+      const quantity = rows.reduce((n, r) => n + r.quantity, 0);
+      const reserved = rows.reduce((n, r) => n + (r.reserved_quantity ?? 0), 0);
+      const weighed = rows.every((r) => r.total_kg !== null);
+      const total = weighed ? String(rows.reduce((n, r) => n + Number(r.total_kg), 0)) : null;
+      const unit = first.kind === 'plate' ? 'sac' : 'lot';
+      return {
+        cells: {
+          code: (
+            <Text size="sm" fw={600}>
+              {rows.length} {unit}
+            </Text>
+          ),
+          card: (
+            <CardCell code={first.item_code} name={first.item_name} active={first.item_is_active} />
+          ),
+          kind: first.kind ? <KindBadge kind={first.kind} /> : null,
+          size: <span style={mono}>{sizeLabel(first)}</span>,
+          quantity: reserved ? (
+            <span>
+              {quantity}{' '}
+              <Text span size="xs" c="orange.8">
+                ({reserved} ayrılmış)
+              </Text>
+            </span>
+          ) : (
+            quantity
+          ),
+          unit_kg: first.unit_kg !== null ? kg(first.unit_kg) : '–',
+          total_kg: <Weight value={total} kind={first.kind} />,
+          place: sameOrCount(rows.map(placeLabel), 'yer'),
+          heat: sameOrCount(
+            rows.map((r) => r.heat_number),
+            'döküm no',
+          ),
+          origin: sameOrCount(
+            rows.map((r) => r.origin_label),
+            'kaynak',
+          ),
+        },
+      };
+    },
+  };
+}
 
 const cardColumns: DataTableColumn<PieceCard>[] = [
   {
@@ -1262,33 +1329,43 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
     const value = bar ? metresToMm(values[key]) : values[key];
     return value === '' ? {} : { [param]: String(value) };
   };
+  // Sac Stoğu pages by card + size (each opens to its sheets); Boy Stoğu by lot.
+  const grouped = kind === 'plate';
+  const listParams = {
+    page,
+    page_size: PAGE_SIZE,
+    ...(search ? { search } : {}),
+    kind,
+    ...(kind === 'plate' ? mm('thickness', 'thickness_mm') : {}),
+    ...(kind === 'plate' ? mm('min_width', 'min_width_mm') : {}),
+    ...(kind === 'plate' ? mm('max_width', 'max_width_mm') : {}),
+    ...mm('min_length', 'min_length_mm'),
+    ...mm('max_length', 'max_length_mm'),
+    ...(values.origin ? { origin: values.origin } : {}),
+    ...(values.review ? { needs_review: 'true' as const } : {}),
+    ...(values.place === 'FASON'
+      ? { at_supplier: 'true' as const }
+      : values.place
+        ? { warehouse: values.place }
+        : {}),
+    ...(values.job_no ? { job_no: values.job_no } : {}),
+    ...(values.item ? { item: Number(values.item) } : {}),
+  };
   const list = useQuery({
-    ...piecesQueryOptions({
-      page,
-      page_size: PAGE_SIZE,
-      ...(search ? { search } : {}),
-      kind,
-      ...(kind === 'plate' ? mm('thickness', 'thickness_mm') : {}),
-      ...(kind === 'plate' ? mm('min_width', 'min_width_mm') : {}),
-      ...(kind === 'plate' ? mm('max_width', 'max_width_mm') : {}),
-      ...mm('min_length', 'min_length_mm'),
-      ...mm('max_length', 'max_length_mm'),
-      ...(values.origin ? { origin: values.origin } : {}),
-      ...(values.review ? { needs_review: 'true' as const } : {}),
-      ...(values.place === 'FASON'
-        ? { at_supplier: 'true' as const }
-        : values.place
-          ? { warehouse: values.place }
-          : {}),
-      ...(values.job_no ? { job_no: values.job_no } : {}),
-      ...(values.item ? { item: Number(values.item) } : {}),
-    }),
+    ...piecesQueryOptions(listParams),
     placeholderData: keepPreviousData,
-    enabled: view === 'pieces',
+    enabled: view === 'pieces' && !grouped,
   });
+  const groups = useQuery({
+    ...pieceGroupsQueryOptions(listParams),
+    placeholderData: keepPreviousData,
+    enabled: view === 'pieces' && grouped,
+  });
+  const pieceQuery = grouped ? groups : list;
   useEffect(() => {
-    if (list.isError) notify.error(countErrorMessage(list.error, 'Parçalar yüklenemedi'));
-  }, [list.isError, list.error]);
+    if (pieceQuery.isError)
+      notify.error(countErrorMessage(pieceQuery.error, 'Parçalar yüklenemedi'));
+  }, [pieceQuery.isError, pieceQuery.error]);
 
   const allCards = cards.data?.results ?? EMPTY_CARDS;
   const figures = useMemo(() => {
@@ -1310,7 +1387,13 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
     [allCards, kind, search, searchedCards.data],
   );
 
-  const rows = list.data?.results ?? EMPTY_PIECES;
+  const rows = useMemo(
+    () =>
+      grouped
+        ? (groups.data?.results.flatMap((g) => g.pieces) ?? EMPTY_PIECES)
+        : (list.data?.results ?? EMPTY_PIECES),
+    [grouped, groups.data, list.data],
+  );
   const openId = Number.parseInt(values.piece, 10);
   const open = rows.find((r) => r.id === openId) ?? null;
   const itemCard = values.item ? allCards.find((c) => String(c.id) === values.item) : undefined;
@@ -1395,12 +1478,13 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
           data={rows}
           columns={pieceColumns}
           getRowId={(row) => String(row.id)}
-          loading={list.isFetching}
+          loading={pieceQuery.isFetching}
           onRowClick={(row) => apply({ piece: String(row.id) })}
+          grouping={grouped ? sizeGrouping(search !== '') : undefined}
           pagination={{
             page,
             pageSize: PAGE_SIZE,
-            total: list.data?.count ?? 0,
+            total: pieceQuery.data?.count ?? 0,
             onPageChange: (next) => apply({ page: String(next) }),
           }}
           emptyMessage="Bu filtrelerle parça yok"

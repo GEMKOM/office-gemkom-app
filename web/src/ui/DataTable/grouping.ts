@@ -98,6 +98,7 @@ export function flattenGroups<T>(
   nodes: readonly GroupNode<T>[],
   isExpanded: (node: GroupNode<T>) => boolean,
   withFooter: boolean,
+  singleAsRow = false,
 ): DisplayItem<T>[] {
   const out: DisplayItem<T>[] = [];
   const walk = (list: readonly GroupNode<T>[]) => {
@@ -110,6 +111,12 @@ export function flattenGroups<T>(
         else leaves.push(...n.rows);
       };
       collect(node);
+      // A group of one row is just that row (grouping.singleAsRow).
+      if (singleAsRow && leaves.length === 1 && leaves[0]) {
+        const row = leaves[0];
+        out.push({ kind: 'row', key: row.id, row, groupId: null, depth: node.depth });
+        continue;
+      }
       const group: RowGroup<T> = {
         id: node.id,
         value: node.value,

@@ -165,6 +165,21 @@ export interface PiecesParams {
   planning_item?: number;
 }
 
+/** Sac Stoğu: the pieces of one card and size (each plate sheet with its code). */
+export interface PieceGroup {
+  /** item:width:length */
+  key: string;
+  item: number;
+  item_code: string;
+  width_mm: string | null;
+  length_mm: string;
+  /** Rows (one per plate sheet). */
+  lots: number;
+  /** Pieces in them. */
+  quantity: number;
+  pieces: MaterialPiece[];
+}
+
 export interface PieceCardsParams {
   page?: number;
   page_size?: number;
@@ -204,6 +219,7 @@ const BASE = '/warehouse/pieces/';
 export const pieceKeys = {
   all: ['pieces'] as const,
   list: (params: PiecesParams) => ['pieces', 'list', params] as const,
+  groups: (params: PiecesParams) => ['pieces', 'groups', params] as const,
   cards: (params: PieceCardsParams) => ['pieces', 'cards', params] as const,
   movements: (id: number) => ['pieces', 'movements', id] as const,
   changes: (id: number) => ['pieces', 'changes', id] as const,
@@ -217,6 +233,17 @@ export function piecesQueryOptions(params: PiecesParams) {
     queryFn: ({ signal }) =>
       apiFetch<unknown>(BASE, { params: { ...params }, signal }).then((data) =>
         toPaginated<MaterialPiece>(data),
+      ),
+  });
+}
+
+/** The list grouped by card + size; pages count groups (GET pieces/groups/). */
+export function pieceGroupsQueryOptions(params: PiecesParams) {
+  return queryOptions({
+    queryKey: pieceKeys.groups(params),
+    queryFn: ({ signal }) =>
+      apiFetch<unknown>(`${BASE}groups/`, { params: { ...params }, signal }).then((data) =>
+        toPaginated<PieceGroup>(data),
       ),
   });
 }

@@ -154,6 +154,21 @@ const CHANGE = {
   created_at: '2026-11-12T09:00:00Z',
 };
 
+type Lot = { item: number; width_mm: string | null; length_mm: string; quantity: number };
+/** The backend's pieces/groups/: lots by card + size, in the order they come. */
+function sizeGroups(rows: unknown[]) {
+  const out = new Map<string, { key: string; lots: number; quantity: number; pieces: Lot[] }>();
+  for (const row of rows as Lot[]) {
+    const key = `${row.item}:${row.width_mm ?? ''}:${row.length_mm}`;
+    const group = out.get(key) ?? { key, lots: 0, quantity: 0, pieces: [] };
+    group.lots += 1;
+    group.quantity += row.quantity;
+    group.pieces.push(row);
+    out.set(key, group);
+  }
+  return [...out.values()].map((g) => ({ ...g, ...g.pieces[0] }));
+}
+
 function json(body: unknown, status = 200) {
   return Promise.resolve(new Response(JSON.stringify(body), { status }));
 }
@@ -182,6 +197,9 @@ beforeEach(() => {
     const u = new URL(String(url), 'https://api.test');
     if (method === 'GET' && u.pathname === '/warehouse/pieces/') {
       return json({ count: lots.length, results: lots });
+    }
+    if (method === 'GET' && u.pathname === '/warehouse/pieces/groups/') {
+      return json({ count: sizeGroups(lots).length, results: sizeGroups(lots) });
     }
     if (method === 'GET' && u.pathname === '/warehouse/pieces/cards/') {
       const search = (u.searchParams.get('search') ?? '').toUpperCase();
@@ -394,7 +412,7 @@ it('searches on the backend, in Parçalar and in Kartlar', async () => {
     expect(
       calls().some(
         (c) =>
-          c.url.pathname === '/warehouse/pieces/' &&
+          c.url.pathname === '/warehouse/pieces/groups/' &&
           c.url.searchParams.get('search') === 'hardox 1500x3000',
       ),
     ).toBe(true),
@@ -416,7 +434,8 @@ it('sends the size, origin and kontrol filters', async () => {
   );
   await waitFor(() => {
     const call = calls().find(
-      (c) => c.url.pathname === '/warehouse/pieces/' && c.url.searchParams.get('thickness_mm'),
+      (c) =>
+        c.url.pathname === '/warehouse/pieces/groups/' && c.url.searchParams.get('thickness_mm'),
     );
     expect(call).toBeDefined();
     const p = call!.url.searchParams;
@@ -477,9 +496,9 @@ it('Sac Stoğu asks only for plates: pieces, cards and the card picker', async (
   renderPage();
   expect(await screen.findByRole('heading', { name: 'Sac Stoğu' })).toBeInTheDocument();
   await waitFor(() =>
-    expect(calls().some((c) => c.url.pathname === '/warehouse/pieces/')).toBe(true),
+    expect(calls().some((c) => c.url.pathname === '/warehouse/pieces/groups/')).toBe(true),
   );
-  for (const path of ['/warehouse/pieces/', '/warehouse/pieces/cards/']) {
+  for (const path of ['/warehouse/pieces/groups/', '/warehouse/pieces/cards/']) {
     const call = calls().find((c) => c.url.pathname === path)!;
     expect(call.url.searchParams.get('kind')).toBe('plate');
   }
@@ -496,6 +515,38 @@ it('Sac Stoğu asks only for plates: pieces, cards and the card picker', async (
     (c) => c.url.pathname === '/warehouse/pieces/cards/' && c.url.searchParams.get('search'),
   )!;
   expect(search.url.searchParams.get('kind')).toBe('plate');
+});
+
+it('groups the sheets of a card and size in one row, opened to each sheet', async () => {
+  const sheet = { ...WEIGHED_LOT, quantity: 1, warehouse_code: 'HAMMADDE' };
+  lots = [
+    { ...sheet, id: 21, code: 'S26-00021', heat_number: 'H-1' },
+    { ...sheet, id: 22, code: 'S26-00022', heat_number: 'H-2' },
+    { ...NO_WEIGHT_LOT, id: 23, code: 'S26-00023', quantity: 1, heat_number: 'H-3' },
+  ];
+  renderPage();
+  const header = await screen.findByText('2 sac');
+  const row = header.closest('tr')!;
+  expect(within(row).getByText('2 döküm no')).toBeInTheDocument();
+  expect(within(row).getByText('251,20 kg')).toBeInTheDocument();
+  // Closed: the sheets show once the row is opened. A size of one sheet is just the sheet.
+  expect(screen.queryByText('S26-00021')).not.toBeInTheDocument();
+  expect(screen.getByText('S26-00023')).toBeInTheDocument();
+  fireEvent.click(row);
+  expect(await screen.findByText('S26-00021')).toBeInTheDocument();
+  expect(screen.getByText('S26-00022')).toBeInTheDocument();
+  expect(screen.getByText('H-2')).toBeInTheDocument();
+});
+
+it('opens the groups when searching, so the sheet searched for shows', async () => {
+  const sheet = { ...WEIGHED_LOT, quantity: 1 };
+  lots = [
+    { ...sheet, id: 21, code: 'S26-00021' },
+    { ...sheet, id: 22, code: 'S26-00022' },
+  ];
+  renderPage('/warehouse/plate-stock?search=8%20mm');
+  expect(await screen.findByText('S26-00021')).toBeInTheDocument();
+  expect(screen.getByText('2 sac')).toBeInTheDocument();
 });
 
 it('Boy Stoğu asks only for bars', async () => {

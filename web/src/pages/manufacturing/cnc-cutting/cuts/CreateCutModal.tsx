@@ -91,7 +91,7 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
   const save = async (values: typeof form.values) => {
     // Every cut needs exactly one plate source.
     if (!hasPlateSource(plate)) {
-      notify.error('Stoktan sac veya plaka kalemi seçmelisiniz');
+      notify.error('Stoktan sac veya talep edilen sac seçmelisiniz');
       return;
     }
     const parts = draftsToParts(rows);

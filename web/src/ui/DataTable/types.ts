@@ -165,6 +165,11 @@ export interface DataTableGrouping<T> {
    * the groups first appear in the data; a function compares group values.
    */
   sort?: 'asc' | 'desc' | false | ((a: unknown, b: unknown) => number);
+  /**
+   * A group holding one row shows just that row: no header, toggle or
+   * footer. Default false.
+   */
+  singleAsRow?: boolean;
   /** Text of the default header for empty values. Default '-'. */
   emptyLabel?: string;
 }
