@@ -288,6 +288,7 @@ export function StatementsPage() {
       />
 
       <DataTable
+        columnsKey="subcontracting-statements"
         title="Hakediş Listesi"
         filters={
           <FilterBar

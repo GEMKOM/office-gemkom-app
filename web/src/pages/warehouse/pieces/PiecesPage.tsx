@@ -106,6 +106,7 @@ const URL_DEFAULTS = {
   item: '',
   piece: '',
   page: '1',
+  page_size: '50',
 };
 type FilterKeys =
   | 'search'
@@ -1305,6 +1306,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
     if (values.view === 'mikro') navigate(MIKRO_COMPARISON, { replace: true });
   }, [values.view, navigate]);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const [creating, setCreating] = useState(false);
   const view = values.view === 'cards' ? 'cards' : 'pieces';
 
@@ -1334,7 +1336,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
   const grouped = kind === 'plate';
   const listParams = {
     page,
-    page_size: PAGE_SIZE,
+    page_size: pageSize,
     ...(search ? { search } : {}),
     kind,
     ...(kind === 'plate' ? mm('thickness', 'thickness_mm') : {}),
@@ -1463,6 +1465,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
       ) : null}
       {view === 'pieces' ? (
         <DataTable
+          columnsKey={`${kind === 'plate' ? 'plate' : 'boy'}-stock`}
           title={itemCard ? `Parçalar · ${itemCard.code}` : 'Parçalar'}
           icon="fas fa-layer-group"
           toolbar={
@@ -1484,14 +1487,16 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
           grouping={grouped ? sizeGrouping(search !== '') : undefined}
           pagination={{
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             total: pieceQuery.data?.count ?? 0,
             onPageChange: (next) => apply({ page: String(next) }),
+            onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
           }}
           emptyMessage="Bu filtrelerle parça yok"
         />
       ) : (
         <DataTable
+          columnsKey={`${kind === 'plate' ? 'plate' : 'boy'}-stock-cards`}
           title="Kartlar"
           icon="fas fa-boxes"
           toolbar={viewSwitch}

@@ -371,6 +371,7 @@ export function CreateTaskPage() {
       </Panel>
 
       <DataTable
+        columnsKey="machining-create-task-mine"
         title="Oluşturduğum Görevler"
         icon="fas fa-table"
         filters={

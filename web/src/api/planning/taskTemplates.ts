@@ -45,6 +45,7 @@ export type TaskTemplatesParams = {
   is_default?: boolean;
   ordering?: string;
   page?: number;
+  page_size?: number;
 };
 
 export interface TaskTemplateInput {

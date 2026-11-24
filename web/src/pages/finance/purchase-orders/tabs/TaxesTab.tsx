@@ -181,6 +181,7 @@ export function TaxesTab() {
         actions={<CreateButton label="Yeni Vergi Kaydı" onClick={() => setCreating(true)} />}
       />
       <DataTable
+        columnsKey="finance-taxes"
         title="Vergi Kayıtları"
         icon="fas fa-file-invoice-dollar"
         filters={

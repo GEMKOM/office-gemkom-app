@@ -346,6 +346,7 @@ export function CraneRequestsListPage() {
       />
 
       <DataTable
+        columnsKey="crane-requests"
         title="Vinç Talepleri"
         icon="fas fa-truck-pickup"
         toolbar={

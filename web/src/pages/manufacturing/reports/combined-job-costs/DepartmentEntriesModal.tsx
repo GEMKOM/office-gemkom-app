@@ -49,6 +49,7 @@ function EntriesModal<T extends { id: number }>({
         ? {
             content: (
               <DataTable
+                columnsKey="combined-job-costs-entries"
                 title="Kayıtlar (Tarihe Göre Sıralı)"
                 icon="fas fa-table"
                 data={entries}

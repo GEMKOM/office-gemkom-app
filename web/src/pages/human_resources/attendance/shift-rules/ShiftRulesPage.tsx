@@ -275,6 +275,7 @@ export function ShiftRulesPage() {
       />
 
       <DataTable
+        columnsKey="attendance-shift-rules"
         title="Vardiya Kuralları"
         icon="fas fa-clock"
         data={rows}

@@ -565,6 +565,7 @@ export function PlanningItemsModal({
         <ModalHeader title="Planlama Talebi Malzemeleri" icon="fas fa-clipboard-list" />
         <ModalBody>
           <DataTable
+            columnsKey="purchase-request-planning-items"
             title="Planlama Talebi Malzemeleri"
             filters={
               <FilterBar

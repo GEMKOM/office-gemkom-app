@@ -1,11 +1,31 @@
 import { Button, Modal, Text } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { addPaymentListItems, paymentPoolQueryOptions, type PoolRow } from '@/api/procurement/paymentLists';
-import { DataTable, FaIcon, FilterBar, ModalBody, ModalFooter, ModalHeader, modalClassNames, notify } from '@/ui';
+import {
+  addPaymentListItems,
+  paymentPoolQueryOptions,
+  type PoolRow,
+} from '@/api/procurement/paymentLists';
+import {
+  DataTable,
+  FaIcon,
+  FilterBar,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  modalClassNames,
+  notify,
+} from '@/ui';
 import { fmtEur, rowEur } from './format';
 import { useInvalidatePayments } from './modals';
-import { excelColumns, POOL_FILTER_DEFAULTS, poolParams, poolRowId, usePoolFilterConfig, type PoolFilterValues } from './poolShared';
+import {
+  excelColumns,
+  POOL_FILTER_DEFAULTS,
+  poolParams,
+  poolRowId,
+  usePoolFilterConfig,
+  type PoolFilterValues,
+} from './poolShared';
 import { nextSelection } from './PoolView';
 
 const columns = excelColumns<PoolRow>({ withListed: true });
@@ -30,7 +50,9 @@ export function PoolPicker({ listId, onClose }: PoolPickerProps) {
   const [selection, setSelection] = useState<Map<string, PoolRow>>(new Map());
   const [adding, setAdding] = useState(false);
 
-  const pool = useQuery(paymentPoolQueryOptions(poolParams(filters, { page, pageSize, forceHideListed: true })));
+  const pool = useQuery(
+    paymentPoolQueryOptions(poolParams(filters, { page, pageSize, forceHideListed: true })),
+  );
   useEffect(() => {
     if (pool.isError) notify.error(pool.error, { fallback: 'Havuz yüklenemedi' });
   }, [pool.isError, pool.error, pool.errorUpdatedAt]);
@@ -66,6 +88,7 @@ export function PoolPicker({ listId, onClose }: PoolPickerProps) {
       <ModalHeader title="Havuzdan Kalem Ekle" icon="fas fa-water" />
       <ModalBody>
         <DataTable
+          columnsKey="payment-pool-picker"
           filters={
             <FilterBar
               inline

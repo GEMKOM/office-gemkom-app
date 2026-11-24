@@ -269,6 +269,7 @@ export function CncDashboardPage() {
       <DashboardGrid
         timers={
           <DataTable
+            columnsKey="cnc-dashboard-timers"
             title="Aktif Zamanlayıcılar"
             icon="fas fa-clock"
             data={timers}
@@ -283,6 +284,7 @@ export function CncDashboardPage() {
         }
         machines={
           <DataTable
+            columnsKey="cnc-dashboard-machines"
             title="Makine Durumları"
             icon="fas fa-industry"
             data={machines}

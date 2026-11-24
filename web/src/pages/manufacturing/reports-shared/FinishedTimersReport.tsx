@@ -361,6 +361,7 @@ export function FinishedTimersReport({
       />
 
       <DataTable
+        columnsKey={`finished-timers-${module.replace(/_/g, '-')}`}
         title="Zamanlayıcı Listesi"
         filters={
           <FilterBar

@@ -625,6 +625,7 @@ export function MachiningPlanningPage() {
                 sürükleyin veya Sıra hücresine yeni sırayı yazın; taşınan satır kilitlenir.
               </Text>
               <DataTable
+                columnsKey="machining-planning-planned"
                 title="Planlanmış Operasyonlar"
                 icon="fas fa-tasks"
                 data={selectedId ? tableRows : EMPTY}

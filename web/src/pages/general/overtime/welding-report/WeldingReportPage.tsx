@@ -521,6 +521,7 @@ export function WeldingReportPage() {
         ) : null}
 
         <DataTable
+          columnsKey="overtime-welding-summary"
           title="Dönem Özeti"
           icon="fas fa-list-check"
           data={summary}
@@ -533,6 +534,7 @@ export function WeldingReportPage() {
         />
 
         <DataTable
+          columnsKey="overtime-welding-flags"
           title="Sapma Dağılımı"
           icon="fas fa-triangle-exclamation"
           data={flagCounts}
@@ -555,6 +557,7 @@ export function WeldingReportPage() {
         />
 
         <DataTable
+          columnsKey="overtime-welding-report"
           title="Mesai / Kaynak Zaman Karşılaştırması"
           icon="fas fa-fire"
           data={rows}

@@ -218,6 +218,7 @@ export function CostAnalysisPage({ switcher }: { switcher?: ReactNode }) {
       />
 
       <DataTable
+        columnsKey="machining-cost-analysis"
         title="Maliyet Analizi Raporu"
         filters={
           <FilterBar

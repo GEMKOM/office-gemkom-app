@@ -182,6 +182,7 @@ export function OvertimeUsersPage() {
       />
 
       <DataTable
+        columnsKey="overtime-users"
         title="Mesai Kullanıcıları"
         icon="fas fa-users"
         filters={

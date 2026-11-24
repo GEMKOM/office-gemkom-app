@@ -26,7 +26,7 @@ import { RejectDepartmentRequestModal } from './RejectDepartmentRequestModal';
 import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 // `request` is the legacy deep link (daily summary e-mails: ?request=<id>).
-const URL_DEFAULTS = { request: '', approved_page: '1' };
+const URL_DEFAULTS = { request: '', approved_page: '1', approved_page_size: '20' };
 const PAGE_SIZE = 20;
 const EMPTY_ROWS: DepartmentRequest[] = [];
 
@@ -43,8 +43,9 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
   const pendingRows = pending.data?.results ?? EMPTY_ROWS;
 
   const approvedPage = positiveInt(values.approved_page, 1);
+  const approvedPageSize = positiveInt(values.approved_page_size, PAGE_SIZE);
   const approved = useQuery({
-    ...approvedDepartmentRequestsQueryOptions({ page: approvedPage, page_size: PAGE_SIZE }),
+    ...approvedDepartmentRequestsQueryOptions({ page: approvedPage, page_size: approvedPageSize }),
     placeholderData: keepPreviousData,
   });
   const approvedRows = approved.data?.results ?? EMPTY_ROWS;
@@ -183,6 +184,7 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
       )}
 
       <DataTable
+        columnsKey="department-requests-pending"
         title="Onay Bekleyen Departman Talepleri"
         icon="fas fa-clock"
         data={pendingRows}
@@ -198,6 +200,7 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
       <div style={{ height: 'var(--mantine-spacing-lg)' }} />
 
       <DataTable
+        columnsKey="department-requests-approved"
         title="Onayladığım Departman Talepleri"
         icon="fas fa-check-circle"
         data={approvedRows}
@@ -206,9 +209,11 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
         loading={approved.isFetching}
         pagination={{
           page: approvedPage,
-          pageSize: PAGE_SIZE,
+          pageSize: approvedPageSize,
           total: approved.data?.count ?? 0,
           onPageChange: (next) => apply({ approved_page: String(next) }),
+          onPageSizeChange: (size) =>
+            apply({ approved_page_size: String(size), approved_page: '1' }),
         }}
         rowActions={approvedActions}
         emptyMessage="Onayladığınız departman talebi bulunamadı."

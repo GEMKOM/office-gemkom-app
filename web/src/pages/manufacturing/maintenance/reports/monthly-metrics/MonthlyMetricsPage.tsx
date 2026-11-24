@@ -239,6 +239,7 @@ export function MonthlyMetricsPage() {
       />
 
       <DataTable
+        columnsKey="maintenance-monthly-metrics"
         title="Aylık Arıza Detayları"
         data={rows}
         columns={columns}

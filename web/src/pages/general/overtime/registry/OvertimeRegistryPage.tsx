@@ -294,6 +294,7 @@ export function OvertimeRegistryPage() {
       />
 
       <DataTable
+        columnsKey="overtime-registry"
         title="Mesai Talepleri"
         filters={
           <FilterBar

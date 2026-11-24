@@ -505,22 +505,24 @@ function PlaceStock({
   /** Shown above the tables (e.g. a closed job still holding stock). */
   notice?: ReactNode;
   actions: MoveAction[];
-  values: { search: string; kind: string; card_page: string; lot_page: string };
-  apply: (
-    next: Partial<{ search: string; kind: string; card_page: string; lot_page: string }>,
-  ) => void;
+  values: typeof PLACE_DEFAULTS;
+  apply: (next: Partial<typeof PLACE_DEFAULTS>) => void;
 }) {
   const search = values.search.trim();
   const kind = (values.kind || '') as KindFilter;
   const cardPage = Math.max(1, Number.parseInt(values.card_page, 10) || 1);
+  const cardPageSize = Math.max(1, Number.parseInt(values.card_page_size, 10) || PAGE_SIZE);
   const lotPage = Math.max(1, Number.parseInt(values.lot_page, 10) || 1);
+  const lotPageSize = Math.max(1, Number.parseInt(values.lot_page_size, 10) || PAGE_SIZE);
+  // Hammadde and İş Emri keep separate column layouts.
+  const placeKey = place.warehouse === 'HAMMADDE' ? 'inventory-hammadde' : 'inventory-is-emri';
   const showCards = kind === '' || kind === 'card';
   const showLots = kind !== 'card';
 
   const balances = useQuery({
     ...placeBalancesQueryOptions(place, {
       page: cardPage,
-      page_size: PAGE_SIZE,
+      page_size: cardPageSize,
       ...(search ? { search } : {}),
     }),
     placeholderData: keepPreviousData,
@@ -530,7 +532,7 @@ function PlaceStock({
     ...piecesQueryOptions({
       ...placeParams(place),
       page: lotPage,
-      page_size: PAGE_SIZE,
+      page_size: lotPageSize,
       ...(search ? { search } : {}),
       ...(kind === 'plate' || kind === 'boy' ? { kind } : {}),
     }),
@@ -605,6 +607,7 @@ function PlaceStock({
         {notice}
         {showCards ? (
           <DataTable
+            columnsKey={`${placeKey}-cards`}
             title="Stok Kartları"
             icon="fas fa-boxes"
             filters={filters}
@@ -619,15 +622,17 @@ function PlaceStock({
             }}
             pagination={{
               page: cardPage,
-              pageSize: PAGE_SIZE,
+              pageSize: cardPageSize,
               total: balances.data?.count ?? 0,
               onPageChange: (next) => apply({ card_page: String(next) }),
+              onPageSizeChange: (size) => apply({ card_page_size: String(size), card_page: '1' }),
             }}
             emptyMessage={search ? 'Bu aramayla stok kartı yok' : 'Burada stok kartı yok'}
           />
         ) : null}
         {showLots ? (
           <DataTable
+            columnsKey={`${placeKey}-lots`}
             title="Sac ve Boy Lotları"
             icon="fas fa-layer-group"
             filters={showCards ? undefined : filters}
@@ -644,9 +649,10 @@ function PlaceStock({
             }}
             pagination={{
               page: lotPage,
-              pageSize: PAGE_SIZE,
+              pageSize: lotPageSize,
               total: lots.data?.count ?? 0,
               onPageChange: (next) => apply({ lot_page: String(next) }),
+              onPageSizeChange: (size) => apply({ lot_page_size: String(size), lot_page: '1' }),
             }}
             emptyMessage={search ? 'Bu aramayla lot yok' : 'Burada sac veya boy lotu yok'}
           />
@@ -675,7 +681,14 @@ function PlaceStock({
   );
 }
 
-const PLACE_DEFAULTS = { search: '', kind: '', card_page: '1', lot_page: '1' };
+const PLACE_DEFAULTS = {
+  search: '',
+  kind: '',
+  card_page: '1',
+  card_page_size: '50',
+  lot_page: '1',
+  lot_page_size: '50',
+};
 
 export function HammaddePage() {
   const { values, apply } = useUrlFilters(PLACE_DEFAULTS);
@@ -836,6 +849,7 @@ export function IsEmriPage() {
         ]}
       />
       <DataTable
+        columnsKey="inventory-jobs"
         title="İşler"
         icon="fas fa-clipboard-list"
         filters={

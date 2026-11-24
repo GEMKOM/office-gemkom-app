@@ -1,7 +1,11 @@
 import { Text } from '@mantine/core';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { positionKeys, positionsQueryOptions, type Position } from '@/api/human_resources/organization';
+import {
+  positionKeys,
+  positionsQueryOptions,
+  type Position,
+} from '@/api/human_resources/organization';
 import {
   permissionsListQueryOptions,
   permissionsMatrixQueryOptions,
@@ -73,12 +77,16 @@ function usePositionsByPermission(positions: Position[] | undefined): Map<string
   const queryClient = useQueryClient();
   // Read from the cache as the tab renders; the tab mounts fresh on each visit.
   const codesById = new Map<number, string[]>();
-  for (const [, detail] of queryClient.getQueriesData<PositionDetail>({ queryKey: [...positionKeys.all, 'detail'] })) {
+  for (const [, detail] of queryClient.getQueriesData<PositionDetail>({
+    queryKey: [...positionKeys.all, 'detail'],
+  })) {
     if (detail) codesById.set(Number(detail.id), positionCodenames(detail));
   }
   const byPerm = new Map<string, Position[]>();
   for (const p of positions ?? []) {
-    const codes = Array.isArray(p.permission_codenames) ? p.permission_codenames : codesById.get(Number(p.id));
+    const codes = Array.isArray(p.permission_codenames)
+      ? p.permission_codenames
+      : codesById.get(Number(p.id));
     for (const code of codes ?? []) {
       const list = byPerm.get(code) ?? [];
       list.push(p);
@@ -97,14 +105,18 @@ export function PermissionsListTab() {
   const positionsByPerm = usePositionsByPermission(positions.data);
 
   useEffect(() => {
-    if (list.isError) notify.error(list.error, { fallback: 'Yetki listesi yüklenirken hata oluştu' });
+    if (list.isError)
+      notify.error(list.error, { fallback: 'Yetki listesi yüklenirken hata oluştu' });
   }, [list.isError, list.error]);
 
   // Small (one row per permission); rebuilt each render with the cached details.
   const rows = ((): PermissionRow[] => {
     const display = (code: string) => {
       const held = positionsByPerm.get(code) ?? [];
-      return { position_count: held.length, positions_display: held.length ? held.map(positionLabel).join(', ') : '-' };
+      return {
+        position_count: held.length,
+        positions_display: held.length ? held.map(positionLabel).join(', ') : '-',
+      };
     };
     let out: PermissionRow[] = [];
     if (list.data?.length) {
@@ -137,11 +149,14 @@ export function PermissionsListTab() {
         };
       });
     }
-    return out.sort((a, b) => a.section.localeCompare(b.section, 'tr') || a.name.localeCompare(b.name, 'tr'));
+    return out.sort(
+      (a, b) => a.section.localeCompare(b.section, 'tr') || a.name.localeCompare(b.name, 'tr'),
+    );
   })();
 
   return (
     <DataTable
+      columnsKey="it-permissions"
       title="Yetkiler"
       icon="fas fa-key"
       data={list.data || matrix.data ? rows : EMPTY_ROWS}

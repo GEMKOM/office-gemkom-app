@@ -260,6 +260,7 @@ export function NotificationConfigsPage() {
       />
 
       <DataTable
+        columnsKey="it-notification-configs"
         title="Bildirim Yapılandırmaları"
         icon="fas fa-bell"
         data={rows}

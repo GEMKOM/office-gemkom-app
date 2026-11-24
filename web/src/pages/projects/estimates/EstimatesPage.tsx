@@ -2,7 +2,13 @@ import { Button, Modal, Text } from '@mantine/core';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router';
-import { ESTIMATE_STATUS, estimatesQueryOptions, estimatorKeys, REVIEW_LABELS, type EstimateRow } from '@/api/projects/estimator';
+import {
+  ESTIMATE_STATUS,
+  estimatesQueryOptions,
+  estimatorKeys,
+  REVIEW_LABELS,
+  type EstimateRow,
+} from '@/api/projects/estimator';
 import { customersQueryOptions, useCustomer } from '@/api/reference/customers';
 import { formatDateTime } from '@/lib/format';
 import {
@@ -88,8 +94,18 @@ const columns: DataTableColumn<Row>[] = [
     },
     exportValue: (row) => ESTIMATE_STATUS[row.status]?.label ?? row.status,
   },
-  { key: 'in_house', header: 'İç imalat €', align: 'right', render: (row) => money(row.in_house, 0) },
-  { key: 'subcontract', header: 'Taşeron €', align: 'right', render: (row) => money(row.subcontract, 0) },
+  {
+    key: 'in_house',
+    header: 'İç imalat €',
+    align: 'right',
+    render: (row) => money(row.in_house, 0),
+  },
+  {
+    key: 'subcontract',
+    header: 'Taşeron €',
+    align: 'right',
+    render: (row) => money(row.subcontract, 0),
+  },
   { key: 'eur_kg', header: '€/kg', align: 'right', render: (row) => money(row.eur_kg, 2) },
   {
     key: 'suggested_price_eur',
@@ -147,7 +163,13 @@ const columns: DataTableColumn<Row>[] = [
 export function EstimatesPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const filters = useUrlFilters({ q: '', customer: '', status: [] as string[], reviewed: '', kind: '' });
+  const filters = useUrlFilters({
+    q: '',
+    customer: '',
+    status: [] as string[],
+    reviewed: '',
+    kind: '',
+  });
   const { values } = filters;
   const list = useQuery({
     ...estimatesQueryOptions({
@@ -230,6 +252,7 @@ export function EstimatesPage() {
       />
 
       <DataTable
+        columnsKey="estimates"
         data={list.data ? rows : EMPTY_ROWS}
         columns={columns}
         getRowId={(row) => String(row.id)}
@@ -256,16 +279,28 @@ export function EstimatesPage() {
                   value={values.customer || null}
                   initialOptions={
                     customer.data
-                      ? [{ value: String(customer.data.id), label: customer.data.name || customer.data.code || '' }]
+                      ? [
+                          {
+                            value: String(customer.data.id),
+                            label: customer.data.name || customer.data.code || '',
+                          },
+                        ]
                       : []
                   }
                   clearable
                   onChange={(value) => filters.apply({ customer: value ?? '' })}
                   search={async (term) => {
                     const res = await queryClient.fetchQuery(
-                      customersQueryOptions({ search: term.trim(), is_active: true, page_size: 50 }),
+                      customersQueryOptions({
+                        search: term.trim(),
+                        is_active: true,
+                        page_size: 50,
+                      }),
                     );
-                    return res.results.map((c) => ({ value: String(c.id), label: c.name || c.code || `#${c.id}` }));
+                    return res.results.map((c) => ({
+                      value: String(c.id),
+                      label: c.name || c.code || `#${c.id}`,
+                    }));
                   }}
                 />
               </div>
@@ -284,7 +319,9 @@ export function EstimatesPage() {
           onClose={() => {
             setReport(null);
             // A review or a new version changes the row.
-            void queryClient.invalidateQueries({ queryKey: [...estimatorKeys.all, 'estimates', 'list'] });
+            void queryClient.invalidateQueries({
+              queryKey: [...estimatorKeys.all, 'estimates', 'list'],
+            });
           }}
         >
           <ModalHeader

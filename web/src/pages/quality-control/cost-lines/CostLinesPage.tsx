@@ -36,10 +36,12 @@ const URL_DEFAULTS = {
   search: '',
   status: '',
   page: '1',
+  page_size: '20',
   ordering: 'job_no',
   has_search: '',
   has_status: '',
   has_page: '1',
+  has_page_size: '20',
   has_ordering: 'job_no',
 };
 
@@ -85,12 +87,13 @@ export function CostLinesPage() {
     [values.search, values.status],
   );
   const pendingPage = positiveInt(values.page, 1);
+  const pendingPageSize = positiveInt(values.page_size, PAGE_SIZE);
   const pendingSort = fromOrdering(values.ordering || 'job_no');
   const pendingParams: CostJobOrdersParams = {
     ...pendingFilters,
     ordering: toOrdering(pendingSort.sortBy, pendingSort.sortDir) ?? 'job_no',
     page: pendingPage,
-    page_size: PAGE_SIZE,
+    page_size: pendingPageSize,
   };
   const pending = useQuery({
     ...qcPendingJobOrdersQueryOptions(pendingParams),
@@ -104,12 +107,13 @@ export function CostLinesPage() {
     [values.has_search, values.has_status],
   );
   const hasPage = positiveInt(values.has_page, 1);
+  const hasPageSize = positiveInt(values.has_page_size, PAGE_SIZE);
   const hasSort = fromOrdering(values.has_ordering || 'job_no');
   const hasParams: CostJobOrdersParams = {
     ...hasFilters,
     ordering: toOrdering(hasSort.sortBy, hasSort.sortDir) ?? 'job_no',
     page: hasPage,
-    page_size: PAGE_SIZE,
+    page_size: hasPageSize,
   };
   const hasEntries = useQuery({
     ...jobOrdersHasQcQueryOptions(hasParams),
@@ -171,6 +175,7 @@ export function CostLinesPage() {
 
       <Stack gap="md">
         <DataTable
+          columnsKey="qc-cost-pending"
           title="KK Maliyeti Girilmemiş İş Emirleri"
           icon="fas fa-clipboard-check"
           filters={
@@ -194,9 +199,10 @@ export function CostLinesPage() {
           }}
           pagination={{
             page: pendingPage,
-            pageSize: PAGE_SIZE,
+            pageSize: pendingPageSize,
             total: pending.data?.count ?? 0,
             onPageChange: (next) => apply({ page: String(next) }),
+            onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
           }}
           rowActions={rowActions}
           emptyMessage="Listeyi yüklemek veya güncellemek için Filtrele veya Yenile butonuna tıklayın."
@@ -204,6 +210,7 @@ export function CostLinesPage() {
         />
 
         <DataTable
+          columnsKey="qc-cost-entered"
           title="KK Maliyeti Girilmiş İş Emirleri"
           icon="fas fa-check-double"
           filters={
@@ -229,9 +236,10 @@ export function CostLinesPage() {
           }}
           pagination={{
             page: hasPage,
-            pageSize: PAGE_SIZE,
+            pageSize: hasPageSize,
             total: hasEntries.data?.count ?? 0,
             onPageChange: (next) => apply({ has_page: String(next) }),
+            onPageSizeChange: (size) => apply({ has_page_size: String(size), has_page: '1' }),
           }}
           rowActions={rowActions}
           emptyMessage="Listeyi yüklemek için Filtrele veya Yenile butonuna tıklayın."

@@ -381,6 +381,7 @@ export function MachiningDetailsModal({ jobNo, onClose }: DrillModalProps) {
         ? {
             content: (
               <DataTable
+                columnsKey="analytics-machining-entries"
                 title="Kayıtlar"
                 icon="fas fa-table"
                 data={table.rows}
@@ -540,6 +541,7 @@ export function WeldingDetailsModal({ jobNo, onClose }: DrillModalProps) {
           : {
               content: (
                 <DataTable
+                  columnsKey="analytics-welding-entries"
                   title="Kayıtlar"
                   icon="fas fa-table"
                   data={grouped.sorted}
@@ -674,6 +676,7 @@ export function SubcontractorDetailsModal({ jobNo, onClose }: DrillModalProps) {
           ? {
               content: (
                 <DataTable
+                  columnsKey="analytics-subcontracting-lines"
                   title="İş Satırları"
                   data={lines.map((l, i) => ({
                     ...l,
@@ -723,6 +726,7 @@ export function SubcontractorDetailsModal({ jobNo, onClose }: DrillModalProps) {
           hidden: !adjustments.length,
           content: (
             <DataTable
+              columnsKey="analytics-subcontracting-adjustments"
               title="Düzeltmeler"
               data={adjustments.map((a, i) => ({ ...a, id: `adj-${i}` }))}
               getRowId={(row) => row.id}

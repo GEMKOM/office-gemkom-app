@@ -663,6 +663,7 @@ export function OrderedLinePickerModal({
 }) {
   const [filters, setFilters] = useState<OrderedFilters>(EMPTY_ORDERED_FILTERS);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const params: PlanningItemsParams = {
     is_plate: 'true',
     sized: 'true',
@@ -670,7 +671,7 @@ export function OrderedLinePickerModal({
     fields: 'simple',
     ordering: '-id',
     page,
-    page_size: 20,
+    page_size: pageSize,
     job_no: filters.job_no.trim() || undefined,
     search: filters.search.trim() || undefined,
   };
@@ -704,6 +705,7 @@ export function OrderedLinePickerModal({
       <ModalBody>
         <ModalSection title="Ölçülü sac talepleri" icon="fas fa-table">
           <DataTable
+            columnsKey="cnc-plate-source-ordered"
             title="Siparişteki ve gelen saclar"
             filters={
               <FilterBar
@@ -724,7 +726,13 @@ export function OrderedLinePickerModal({
             columns={ORDERED_COLUMNS}
             getRowId={(row) => String(row.id)}
             loading={list.isFetching}
-            pagination={{ page, pageSize: 20, total: list.data?.count ?? 0, onPageChange: setPage }}
+            pagination={{
+              page,
+              pageSize,
+              total: list.data?.count ?? 0,
+              onPageChange: setPage,
+              onPageSizeChange: setPageSize,
+            }}
             rowActions={rowActions}
             emptyMessage="Ölçülü sac talebi bulunamadı"
           />
@@ -920,6 +928,7 @@ export function PieceLotPickerModal({
 }) {
   const [filters, setFilters] = useState<PieceFilters>(EMPTY_PIECE_FILTERS);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   // Ticked sheets by id; kept across pages and searches.
   const [ticked, setTicked] = useState<Map<number, PieceChoice>>(
     () => new Map(initial.filter((p) => p.code).map((p) => [p.id, p])),
@@ -929,7 +938,7 @@ export function PieceLotPickerModal({
     kind: 'plate',
     available: 'true',
     page,
-    page_size: 20,
+    page_size: pageSize,
     search: filters.search.trim() || undefined,
     thickness_mm: filters.thickness_mm.trim().replace(',', '.') || undefined,
   };
@@ -981,6 +990,7 @@ export function PieceLotPickerModal({
       <ModalBody>
         <ModalSection title="Sac Stoğu" icon="fas fa-table">
           <DataTable
+            columnsKey="cnc-plate-source-pieces"
             title="Boş saclar"
             selection={{
               selectedIds: rows.filter((r) => ticked.has(r.id)).map((r) => String(r.id)),
@@ -1006,7 +1016,13 @@ export function PieceLotPickerModal({
             columns={PIECE_COLUMNS}
             getRowId={(row) => String(row.id)}
             loading={list.isFetching}
-            pagination={{ page, pageSize: 20, total: list.data?.count ?? 0, onPageChange: setPage }}
+            pagination={{
+              page,
+              pageSize,
+              total: list.data?.count ?? 0,
+              onPageChange: setPage,
+              onPageSizeChange: setPageSize,
+            }}
             rowActions={rowActions}
             extraData={ticked}
             emptyMessage="Boş sac bulunamadı"

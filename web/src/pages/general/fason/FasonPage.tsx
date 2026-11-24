@@ -154,6 +154,7 @@ export function FasonPage() {
         }
       />
       <DataTable
+        columnsKey="fason-requests"
         title="Fason Talepleri"
         icon="fas fa-people-carry"
         toolbar={

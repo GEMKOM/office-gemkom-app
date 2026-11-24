@@ -563,20 +563,18 @@ export function MachiningCreateTasksPage() {
     ],
   );
   const users = useUsers();
-  const creatorOptions = useMemo(
-    () => {
-      const options = (users.data ?? []).map((u) => ({ value: String(u.id), label: userLabel(u) }));
-      // Keep the picked creator visible before / without the user list.
-      if (filters.created_by && !options.some((o) => o.value === filters.created_by)) {
-        options.unshift({
-          value: filters.created_by,
-          label: filters.created_by === String(user?.id) ? (user?.username ?? 'Ben') : filters.created_by,
-        });
-      }
-      return options;
-    },
-    [users.data, filters.created_by, user?.id, user?.username],
-  );
+  const creatorOptions = useMemo(() => {
+    const options = (users.data ?? []).map((u) => ({ value: String(u.id), label: userLabel(u) }));
+    // Keep the picked creator visible before / without the user list.
+    if (filters.created_by && !options.some((o) => o.value === filters.created_by)) {
+      options.unshift({
+        value: filters.created_by,
+        label:
+          filters.created_by === String(user?.id) ? (user?.username ?? 'Ben') : filters.created_by,
+      });
+    }
+    return options;
+  }, [users.data, filters.created_by, user?.id, user?.username]);
   const listFilterConfig = useMemo<FilterConfig<FilterKeys>[]>(
     () => [
       {
@@ -792,6 +790,7 @@ export function MachiningCreateTasksPage() {
       </Panel>
 
       <DataTable
+        columnsKey="machining-create-tasks-mine"
         title="Oluşturduğum Görevler"
         filters={
           <FilterBar

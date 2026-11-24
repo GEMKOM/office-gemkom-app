@@ -214,6 +214,7 @@ export function CraneRequestsPendingPage({ embedded = false }: EmbeddableProps =
       )}
 
       <DataTable
+        columnsKey="crane-requests-pending"
         title="Onay Bekleyen Vinç Talepleri"
         icon="fas fa-clock"
         data={pendingRows}
@@ -227,6 +228,7 @@ export function CraneRequestsPendingPage({ embedded = false }: EmbeddableProps =
       />
 
       <DataTable
+        columnsKey="crane-requests-approved"
         title="Onayladığım Vinç Talepleri"
         icon="fas fa-check-circle"
         data={approvedRows}

@@ -222,6 +222,7 @@ export function CranePricesPage() {
       />
 
       <DataTable
+        columnsKey="crane-prices"
         title="Fiyat Listesi"
         icon="fas fa-tags"
         data={rows}

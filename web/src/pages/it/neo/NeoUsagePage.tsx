@@ -61,7 +61,7 @@ const DEFAULT_DAYS = 30;
 
 // Legacy kept the filters in memory only; here they live in the URL.
 // days '' = the legacy default of 30.
-const URL_DEFAULTS = { days: '', q: '', page: '1' };
+const URL_DEFAULTS = { days: '', q: '', page: '1', page_size: '25' };
 
 type FilterState = { days: string; q: string };
 
@@ -96,7 +96,11 @@ const RUN_MESSAGES: Record<string, [string, NotifyType]> = {
 };
 
 /** One toast for both run and regenerate responses (task body or analytics row). */
-function notifyRunResult(result: DailySummaryRunResult | undefined, failureDetail?: string, okText?: string) {
+function notifyRunResult(
+  result: DailySummaryRunResult | undefined,
+  failureDetail?: string,
+  okText?: string,
+) {
   const status = result?.status;
   if (status === 'failed') {
     notify.error(failureDetail || 'Özet üretilemedi.');
@@ -116,7 +120,10 @@ function positiveInt(value: string, fallback: number): number {
 }
 
 /** [key, count] pairs → table rows that know the period's total. */
-function shareRows(pairs: readonly (readonly [string, number])[], label: (key: string) => string): ShareRow[] {
+function shareRows(
+  pairs: readonly (readonly [string, number])[],
+  label: (key: string) => string,
+): ShareRow[] {
   const total = pairs.reduce((acc, [, count]) => acc + count, 0);
   return pairs.map(([key, count]) => ({ key, label: label(key), count, total }));
 }
@@ -127,14 +134,18 @@ const isForbidden = (error: unknown) => isApiError(error) && error.status === 40
 export function NeoUsagePage() {
   const queryClient = useQueryClient();
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
-  const filters = useMemo<FilterState>(() => ({ days: values.days, q: values.q }), [values.days, values.q]);
+  const filters = useMemo<FilterState>(
+    () => ({ days: values.days, q: values.q }),
+    [values.days, values.q],
+  );
   const days = Number(values.days) || DEFAULT_DAYS;
   const q = values.q.trim();
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
 
   const summary = useNeoSummary(days);
   const summaryRows = useDailySummaryRows(days);
-  const questions = useNeoQuestions({ days, q, page, pageSize: PAGE_SIZE });
+  const questions = useNeoQuestions({ days, q, page, pageSize });
   const denied = isForbidden(summary.error);
 
   // 403 is the page-level "no permission" state, not a toast.
@@ -166,11 +177,25 @@ export function NeoUsagePage() {
     const declined = (outcomes.declined_budget || 0) + (outcomes.declined_permission || 0);
     const rowsReady = summaryRows.isSuccess || summaryRows.isError;
     return [
-      { id: 'neo-stat-questions', label: data ? `Soru (${data.days} gün)` : 'Soru', value: data ? formatNumber(data.questions) : blank },
-      { id: 'neo-stat-users', label: 'Aktif Kullanıcı', value: data ? formatNumber(data.active_users) : blank },
+      {
+        id: 'neo-stat-questions',
+        label: data ? `Soru (${data.days} gün)` : 'Soru',
+        value: data ? formatNumber(data.questions) : blank,
+      },
+      {
+        id: 'neo-stat-users',
+        label: 'Aktif Kullanıcı',
+        value: data ? formatNumber(data.active_users) : blank,
+      },
       { id: 'neo-stat-cost', label: 'Maliyet', value: data ? usd(data.total_cost_usd) : blank },
       ...(engagement
-        ? [{ id: 'neo-stat-per-user', label: 'Soru / Kişi', value: formatNumber(engagement.questions_per_user, 1) }]
+        ? [
+            {
+              id: 'neo-stat-per-user',
+              label: 'Soru / Kişi',
+              value: formatNumber(engagement.questions_per_user, 1),
+            },
+          ]
         : []),
       // Median and p90 once the backend sends them: one slow answer moved the
       // average more than the many quick ones.
@@ -199,7 +224,11 @@ export function NeoUsagePage() {
         label: declined ? `Geri Bildirim · ${declined} red` : 'Geri Bildirim',
         value: data ? `${data.feedback?.up ?? 0} 👍 · ${data.feedback?.down ?? 0} 👎` : blank,
       },
-      { id: 'neo-stat-summary-cost', label: 'Günlük Özet maliyeti', value: rowsReady ? usd(sumSummaryCost(rows)) : blank },
+      {
+        id: 'neo-stat-summary-cost',
+        label: 'Günlük Özet maliyeti',
+        value: rowsReady ? usd(sumSummaryCost(rows)) : blank,
+      },
       {
         id: 'neo-stat-summary-read',
         label: 'Ort. okuma süresi',
@@ -212,16 +241,19 @@ export function NeoUsagePage() {
   const weekRows = useMemo<WeekRow[]>(() => {
     const weeks = engagement?.weekly ?? [];
     const busiest = Math.max(0, ...weeks.map((w) => w.questions));
-    return weeks
-      .map((w) => ({ ...w, scale: busiest ? w.questions / busiest : 0 }))
-      .reverse();
+    return weeks.map((w) => ({ ...w, scale: busiest ? w.questions / busiest : 0 })).reverse();
   }, [engagement]);
   const sourceRows = useMemo(
-    () => shareRows(engagement?.sources.map((s) => [s.source, s.count] as const) ?? [], sourceLabel),
+    () =>
+      shareRows(engagement?.sources.map((s) => [s.source, s.count] as const) ?? [], sourceLabel),
     [engagement],
   );
   const reasonRows = useMemo(
-    () => shareRows(engagement?.feedback_reasons.map((r) => [r.reason, r.count] as const) ?? [], reasonLabel),
+    () =>
+      shareRows(
+        engagement?.feedback_reasons.map((r) => [r.reason, r.count] as const) ?? [],
+        reasonLabel,
+      ),
     [engagement],
   );
 
@@ -304,7 +336,13 @@ export function NeoUsagePage() {
   const summaryActions = (row: DailySummaryRow): RowAction<DailySummaryRow>[] => {
     const busy = regenerating.has(row.id);
     return [
-      { key: 'view', label: 'Görüntüle', icon: 'fas fa-eye', color: 'primary', onClick: (r) => void openSummary(r) },
+      {
+        key: 'view',
+        label: 'Görüntüle',
+        icon: 'fas fa-eye',
+        color: 'primary',
+        onClick: (r) => void openSummary(r),
+      },
       {
         key: 'regenerate',
         label: 'Yeniden üret',
@@ -343,8 +381,8 @@ export function NeoUsagePage() {
       <>
         {header}
         <Alert color="red" variant="light" role="alert" icon={<FaIcon icon="fas fa-lock" />}>
-          Neo kullanım analizlerini görüntüleme yetkiniz yok. Soru kayıtları kişisel veri içerdiğinden bu sayfa ayrı
-          bir yetkiye bağlıdır.
+          Neo kullanım analizlerini görüntüleme yetkiniz yok. Soru kayıtları kişisel veri
+          içerdiğinden bu sayfa ayrı bir yetkiye bağlıdır.
         </Alert>
       </>
     );
@@ -368,6 +406,7 @@ export function NeoUsagePage() {
           <div className={`${classes.breakdown} ${classes.engagement}`}>
             <div className={classes.cell}>
               <DataTable
+                columnsKey="neo-weekly"
                 title="Haftalık Kullanım"
                 icon="fas fa-chart-column"
                 data={weekRows}
@@ -379,6 +418,7 @@ export function NeoUsagePage() {
             </div>
             <div className={classes.cell}>
               <DataTable
+                columnsKey="neo-sources"
                 title="Sorular Nereden Geliyor"
                 icon="fas fa-signs-post"
                 data={sourceRows}
@@ -395,6 +435,7 @@ export function NeoUsagePage() {
             </div>
             <div className={classes.cell}>
               <DataTable
+                columnsKey="neo-downvote-reasons"
                 title="Olumsuz Oy Nedenleri"
                 icon="fas fa-thumbs-down"
                 data={reasonRows}
@@ -408,6 +449,7 @@ export function NeoUsagePage() {
         ) : null}
 
         <DataTable
+          columnsKey="neo-daily-summaries"
           title="Günlük Özetler"
           icon="fas fa-newspaper"
           data={rows}
@@ -423,7 +465,13 @@ export function NeoUsagePage() {
               size="xs"
               disabled={run.isPending}
               onClick={() => void runToday()}
-              leftSection={run.isPending ? <Loader size={12} color="currentColor" /> : <FaIcon icon="fas fa-play" />}
+              leftSection={
+                run.isPending ? (
+                  <Loader size={12} color="currentColor" />
+                ) : (
+                  <FaIcon icon="fas fa-play" />
+                )
+              }
             >
               {run.isPending ? 'Üretiliyor…' : 'Bugünkü özeti üret'}
             </Button>
@@ -433,6 +481,7 @@ export function NeoUsagePage() {
         <div className={classes.breakdown}>
           <div className={classes.cell}>
             <DataTable
+              columnsKey="neo-users"
               title="Kullanıcı Bazında"
               icon="fas fa-users"
               data={data?.per_user ?? NO_ROWS}
@@ -444,6 +493,7 @@ export function NeoUsagePage() {
           </div>
           <div className={classes.cell}>
             <DataTable
+              columnsKey="neo-tools"
               title="Konu Dağılımı"
               icon="fas fa-wrench"
               data={data?.per_tool ?? NO_ROWS}
@@ -455,6 +505,7 @@ export function NeoUsagePage() {
           </div>
           <div className={classes.cell}>
             <DataTable
+              columnsKey="neo-jobs"
               title="En Çok Sorulan İşler"
               icon="fas fa-fire"
               data={data?.top_job_orders ?? NO_ROWS}
@@ -467,6 +518,7 @@ export function NeoUsagePage() {
         </div>
 
         <DataTable
+          columnsKey="neo-questions"
           title="Soru Kayıtları"
           icon="fas fa-comments"
           data={questions.data?.results ?? NO_ROWS}
@@ -476,9 +528,10 @@ export function NeoUsagePage() {
           onRowClick={(row) => void openConversation(row)}
           pagination={{
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             total: questions.data?.count ?? 0,
             onPageChange: (next) => apply({ page: String(next) }),
+            onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
           }}
           emptyMessage="Soru kaydı yok"
         />

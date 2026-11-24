@@ -51,7 +51,8 @@ export interface StockMovement {
 export const stockKeys = {
   all: ['stockLedger'] as const,
   balances: (itemId: number) => ['stockLedger', 'balances', itemId] as const,
-  movements: (itemId: number, page: number) => ['stockLedger', 'movements', itemId, page] as const,
+  movements: (itemId: number, page: number, pageSize: number) =>
+    ['stockLedger', 'movements', itemId, page, pageSize] as const,
 };
 
 export function getItemBalances(itemId: number, signal?: AbortSignal): Promise<StockBalance[]> {
@@ -82,7 +83,7 @@ export function getItemMovements(
 
 export function itemMovementsQueryOptions(itemId: number, page: number, pageSize = 20) {
   return queryOptions({
-    queryKey: stockKeys.movements(itemId, page),
+    queryKey: stockKeys.movements(itemId, page, pageSize),
     queryFn: ({ signal }) => getItemMovements(itemId, page, pageSize, signal),
   });
 }

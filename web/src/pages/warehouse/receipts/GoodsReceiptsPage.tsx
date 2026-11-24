@@ -64,12 +64,14 @@ const URL_DEFAULTS = {
   search: '',
   mk: '',
   page: '1',
+  page_size: '20',
   // Bekleyen Siparişler
   supplier: '',
   psearch: '',
   overdue: '',
   since: '90',
   ppage: '1',
+  ppage_size: '20',
 };
 type FilterKeys = 'search' | 'status';
 
@@ -702,11 +704,12 @@ function PendingOrders({
   onReceive: (target: ReceiveTarget) => void;
 }) {
   const page = Math.max(1, Number.parseInt(values.ppage, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.ppage_size, 10) || PAGE_SIZE);
   const since = sinceDate(values.since);
   const list = useQuery({
     ...pendingLinesQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(values.supplier ? { supplier: Number(values.supplier) } : {}),
       ...(values.psearch ? { search: values.psearch } : {}),
       ...(values.overdue === 'true' || values.overdue === 'false'
@@ -759,6 +762,7 @@ function PendingOrders({
     `#${row.purchase_order} · ${row.supplier_name} · ${row.pr_number}`;
   return (
     <DataTable
+      columnsKey="goods-receipts-pending-orders"
       title="Bekleyen Siparişler"
       icon="fas fa-hourglass-half"
       toolbar={
@@ -804,9 +808,10 @@ function PendingOrders({
       }
       pagination={{
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
         total: list.data?.count ?? 0,
         onPageChange: (next) => apply({ ppage: String(next) }),
+        onPageSizeChange: (size) => apply({ ppage_size: String(size), ppage: '1' }),
       }}
       emptyMessage="Bu filtrelerle bekleyen sipariş satırı yok"
     />
@@ -820,6 +825,7 @@ function PendingOrders({
 export function GoodsReceiptsPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const [creating, setCreating] = useState<ReceiveTarget | 'new' | null>(null);
   const view = values.view === 'kabuller' ? 'kabuller' : 'bekleyen';
   const viewSwitch = (
@@ -836,7 +842,7 @@ export function GoodsReceiptsPage() {
   const list = useQuery({
     ...goodsReceiptsQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(values.status ? { status: values.status } : {}),
       ...(values.search ? { search: values.search } : {}),
     }),
@@ -878,6 +884,7 @@ export function GoodsReceiptsPage() {
       ) : null}
       {view === 'kabuller' ? (
         <DataTable
+          columnsKey="goods-receipts"
           title="Mal Kabuller"
           icon="fas fa-truck-loading"
           toolbar={viewSwitch}
@@ -897,9 +904,10 @@ export function GoodsReceiptsPage() {
           onRowClick={(row) => apply({ mk: String(row.id) })}
           pagination={{
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             total: list.data?.count ?? 0,
             onPageChange: (next) => apply({ page: String(next) }),
+            onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
           }}
           emptyMessage="Henüz mal kabul yok"
         />

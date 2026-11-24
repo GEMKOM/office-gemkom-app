@@ -41,7 +41,11 @@ import {
 } from '@/ui';
 import { HoldJobOrderModal, TargetDateRevisionModal } from './ActionModals';
 import { buildColumns, ToggleActionsButton, TrackingContext, type TrackingState } from './columns';
-import { JobOrderDetailModal, releaseReviewUrl, TopicDetailModal } from './detail/JobOrderDetailModal';
+import {
+  JobOrderDetailModal,
+  releaseReviewUrl,
+  TopicDetailModal,
+} from './detail/JobOrderDetailModal';
 import {
   nodeProjections,
   type Forecast,
@@ -49,7 +53,11 @@ import {
   type ProductionPlan,
   type TaskSchedule,
 } from './forecast';
-import { JobOrderActionsProvider, useJobOrderPermissions, type JobOrderActions } from './jobOrderActions';
+import {
+  JobOrderActionsProvider,
+  useJobOrderPermissions,
+  type JobOrderActions,
+} from './jobOrderActions';
 import { JobOrderFormModal, joinedErrorMessage, type JobOrderFormMode } from './JobOrderFormModal';
 import { MeetingView } from './meeting/MeetingView';
 import classes from './ProjectTracking.module.css';
@@ -177,7 +185,12 @@ export function ProjectTrackingPage() {
   const statusChoices = useQuery(jobOrderStatusChoicesQueryOptions());
   const filterConfig = useMemo<FilterConfig<FilterKeys>[]>(
     () => [
-      { type: 'text', key: 'search', label: 'Arama', placeholder: 'İş emri no, başlık, açıklama, müşteri' },
+      {
+        type: 'text',
+        key: 'search',
+        label: 'Arama',
+        placeholder: 'İş emri no, başlık, açıklama, müşteri',
+      },
       {
         type: 'multiselect',
         key: 'status',
@@ -233,7 +246,9 @@ export function ProjectTrackingPage() {
   });
   const current = useMemo<Expansion>(
     () =>
-      expansion.key === listKey ? expansion : { key: listKey, children: NO_JOBS, tasks: NO_JOBS, subtasks: NO_IDS },
+      expansion.key === listKey
+        ? expansion
+        : { key: listKey, children: NO_JOBS, tasks: NO_JOBS, subtasks: NO_IDS },
     [expansion, listKey],
   );
   const [loading, setLoading] = useState<ReadonlySet<string>>(new Set());
@@ -245,16 +260,27 @@ export function ProjectTrackingPage() {
   const childQueries = useQueries({ queries: childJobNos.map((no) => jobOrderQueryOptions(no)) });
   const taskQueries = useQueries({
     queries: taskJobNos.map((no) =>
-      jobOrderDepartmentTasksQueryOptions<DepartmentTask>(no, { main_only: true, ordering: 'sequence' }),
+      jobOrderDepartmentTasksQueryOptions<DepartmentTask>(no, {
+        main_only: true,
+        ordering: 'sequence',
+      }),
     ),
   });
   const subtaskQueries = useQueries({
-    queries: subtaskIds.map((id) => departmentTasksQueryOptions({ parent: id, ordering: 'sequence' })),
+    queries: subtaskIds.map((id) =>
+      departmentTasksQueryOptions({ parent: id, ordering: 'sequence' }),
+    ),
   });
   // Sub-job and task rows read their projection from the expanded job's plan.
-  const planJobNos = useMemo(() => [...new Set([...childJobNos, ...taskJobNos])], [childJobNos, taskJobNos]);
+  const planJobNos = useMemo(
+    () => [...new Set([...childJobNos, ...taskJobNos])],
+    [childJobNos, taskJobNos],
+  );
   const planQueries = useQueries({
-    queries: planJobNos.map((no) => ({ ...productionPlanQueryOptions<ProductionPlan>(no), retry: false })),
+    queries: planJobNos.map((no) => ({
+      ...productionPlanQueryOptions<ProductionPlan>(no),
+      retry: false,
+    })),
   });
 
   const dataStamp = (qs: { dataUpdatedAt: number }[]) => qs.map((q) => q.dataUpdatedAt).join(',');
@@ -267,7 +293,8 @@ export function ProjectTrackingPage() {
     const children = new Map<string, JobOrder[]>();
     childJobNos.forEach((no, i) => {
       const detail = childQueries[i]?.data;
-      if (detail) children.set(no, Array.isArray(detail.children) ? (detail.children as JobOrder[]) : []);
+      if (detail)
+        children.set(no, Array.isArray(detail.children) ? (detail.children as JobOrder[]) : []);
     });
     const tasks = new Map<string, DepartmentTask[]>();
     taskJobNos.forEach((no, i) => {
@@ -296,12 +323,15 @@ export function ProjectTrackingPage() {
   // ---- forecasts (Öngörülen Bitiş) ----
   // "all", not the table's status filter: the column needs a value whatever is filtered.
   const overview = useQuery({
-    ...productionPlanOverviewQueryOptions<{ items?: { job_no: string; forecast?: Forecast }[] }>('all'),
+    ...productionPlanOverviewQueryOptions<{ items?: { job_no: string; forecast?: Forecast }[] }>(
+      'all',
+    ),
     retry: false,
   });
   const rootForecasts = useMemo(() => {
     const map = new Map<string, Forecast>();
-    for (const item of overview.data?.items ?? []) if (item.forecast) map.set(item.job_no, item.forecast);
+    for (const item of overview.data?.items ?? [])
+      if (item.forecast) map.set(item.job_no, item.forecast);
     return map;
   }, [overview.data]);
   useEffect(() => {
@@ -345,7 +375,10 @@ export function ProjectTrackingPage() {
   // ---- modals ----
   const [form, setForm] = useState<JobOrderFormMode | null>(null);
   const [holding, setHolding] = useState<string | null>(null);
-  const [revising, setRevising] = useState<{ jobNo: string; date: string | null | undefined } | null>(null);
+  const [revising, setRevising] = useState<{
+    jobNo: string;
+    date: string | null | undefined;
+  } | null>(null);
   const [taskPlannerJob, setTaskPlannerJob] = useState<string | null>(null);
   const [weightPlannerJob, setWeightPlannerJob] = useState<string | null>(null);
 
@@ -360,7 +393,8 @@ export function ProjectTrackingPage() {
   const topicId = Number.isNaN(topicParam) ? null : topicParam;
   const inMeeting = Boolean(values.meeting);
   // In Sunum Modu job_no names the current slide, not a modal to open.
-  const detailJobNo = jobNoParam && !isTaskPseudoJobNo(jobNoParam) && !inMeeting ? jobNoParam : null;
+  const detailJobNo =
+    jobNoParam && !isTaskPseudoJobNo(jobNoParam) && !inMeeting ? jobNoParam : null;
 
   const topic = useQuery({ ...topicQueryOptions(topicId ?? 0), enabled: topicId !== null });
   const topicRedirect = topic.data ? releaseReviewUrl(topic.data) : null;
@@ -369,13 +403,18 @@ export function ProjectTrackingPage() {
   }, [topicRedirect]);
   // A topic link without job_no opens its job order, or the topic alone when it has none.
   const inferredJobNo = topic.data
-    ? (topic.data.job_order as string | undefined) || (topic.data.job_order_no as string | undefined) || null
+    ? (topic.data.job_order as string | undefined) ||
+      (topic.data.job_order_no as string | undefined) ||
+      null
     : null;
   useEffect(() => {
-    if (topicId !== null && !detailJobNo && !topicRedirect && inferredJobNo) apply({ job_no: inferredJobNo });
+    if (topicId !== null && !detailJobNo && !topicRedirect && inferredJobNo)
+      apply({ job_no: inferredJobNo });
   }, [topicId, detailJobNo, topicRedirect, inferredJobNo, apply]);
   const standaloneTopic =
-    topicId !== null && !detailJobNo && topic.data && !topicRedirect && !inferredJobNo ? topicId : null;
+    topicId !== null && !detailJobNo && topic.data && !topicRedirect && !inferredJobNo
+      ? topicId
+      : null;
   useEffect(() => {
     if (topic.isError) notify.error('Tartışma detayı açılırken hata oluştu');
   }, [topic.isError]);
@@ -395,7 +434,10 @@ export function ProjectTrackingPage() {
         return;
       }
       try {
-        const jobOrder = await queryClient.fetchQuery({ ...jobOrderQueryOptions(jobNo), staleTime: 0 });
+        const jobOrder = await queryClient.fetchQuery({
+          ...jobOrderQueryOptions(jobNo),
+          staleTime: 0,
+        });
         // One modal at a time: the detail view closes and the form takes its place.
         apply({ job_no: '', topic_id: '' });
         setForm({ kind: 'edit', jobOrder });
@@ -409,7 +451,8 @@ export function ProjectTrackingPage() {
   const createChild = useCallback(
     async (parentJobNo: string) => {
       let parent: JobOrder | undefined = rows.find(
-        (r): r is Extract<TrackingRow, { _kind: 'job' }> => !isTaskRow(r) && r.job_no === parentJobNo,
+        (r): r is Extract<TrackingRow, { _kind: 'job' }> =>
+          !isTaskRow(r) && r.job_no === parentJobNo,
       );
       if (!parent) {
         try {
@@ -426,7 +469,13 @@ export function ProjectTrackingPage() {
 
   const start = useCallback(
     async (jobNo: string) => {
-      if (!(await confirm({ title: 'İş Emri Başlatma', message: `İş emri ${jobNo} başlatılsın mı?`, confirmLabel: 'Başlat' })))
+      if (
+        !(await confirm({
+          title: 'İş Emri Başlatma',
+          message: `İş emri ${jobNo} başlatılsın mı?`,
+          confirmLabel: 'Başlat',
+        }))
+      )
         return;
       try {
         const response = await startJobOrder(jobNo);
@@ -529,7 +578,9 @@ export function ProjectTrackingPage() {
         notify.success('Görev silindi');
         // Only the task lists: the rest of the table stays as it is.
         await Promise.all([
-          queryClient.invalidateQueries({ queryKey: jobOrderKeys.departmentTasks(task._parentJobNo) }),
+          queryClient.invalidateQueries({
+            queryKey: jobOrderKeys.departmentTasks(task._parentJobNo),
+          }),
           queryClient.invalidateQueries({ queryKey: ['departmentTasks', 'list'] }),
         ]);
       } catch (error) {
@@ -592,7 +643,11 @@ export function ProjectTrackingPage() {
       void toggle(
         'children',
         jobNo,
-        () => Promise.all([queryClient.fetchQuery({ ...jobOrderQueryOptions(jobNo), staleTime: 0 }), loadPlan(jobNo)]),
+        () =>
+          Promise.all([
+            queryClient.fetchQuery({ ...jobOrderQueryOptions(jobNo), staleTime: 0 }),
+            loadPlan(jobNo),
+          ]),
         'Alt işler yüklenirken hata oluştu',
       ),
     [toggle, queryClient, loadPlan],
@@ -605,7 +660,10 @@ export function ProjectTrackingPage() {
         () =>
           Promise.all([
             queryClient.fetchQuery({
-              ...jobOrderDepartmentTasksQueryOptions(jobNo, { main_only: true, ordering: 'sequence' }),
+              ...jobOrderDepartmentTasksQueryOptions(jobNo, {
+                main_only: true,
+                ordering: 'sequence',
+              }),
               staleTime: 0,
             }),
             loadPlan(jobNo),
@@ -758,7 +816,11 @@ export function ProjectTrackingPage() {
           { id: 'total-job-orders-count', label: 'Toplam İş Emri', value: figure(total) },
           { id: 'active-job-orders-count', label: 'Aktif', value: figure(counts.active) },
           { id: 'on-hold-job-orders-count', label: 'Beklemede', value: figure(counts.onHold) },
-          { id: 'completed-job-orders-count', label: 'Tamamlanan', value: figure(counts.completed) },
+          {
+            id: 'completed-job-orders-count',
+            label: 'Tamamlanan',
+            value: figure(counts.completed),
+          },
         ]}
         actions={
           <>
@@ -769,7 +831,10 @@ export function ProjectTrackingPage() {
             >
               Sunum Modu
             </Button>
-            <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setForm({ kind: 'create' })}>
+            <Button
+              leftSection={<FaIcon icon="fas fa-plus" />}
+              onClick={() => setForm({ kind: 'create' })}
+            >
               Yeni İş Emri
             </Button>
           </>
@@ -779,6 +844,7 @@ export function ProjectTrackingPage() {
       <div ref={tableRef} className={classes.root} data-fit={fitAttr}>
         <TrackingContext.Provider value={tracking}>
           <DataTable
+            columnsKey="project-tracking"
             title="İş Emri Listesi"
             filters={
               <FilterBar
@@ -794,7 +860,11 @@ export function ProjectTrackingPage() {
                     minSearchLength={3}
                     queryKey={['projectTracking', 'customerFilter']}
                     search={searchCustomers}
-                    initialOptions={values.customer ? [{ value: values.customer, label: `#${values.customer}` }] : []}
+                    initialOptions={
+                      values.customer
+                        ? [{ value: values.customer, label: `#${values.customer}` }]
+                        : []
+                    }
                     value={values.customer || null}
                     onChange={(value) => apply({ customer: value ?? '', page: '1' })}
                   />
@@ -809,7 +879,8 @@ export function ProjectTrackingPage() {
             sort={{
               sortBy: sort.sortBy,
               sortDir: sort.sortDir,
-              onSortChange: (sortBy, sortDir) => apply({ ordering: toOrdering(sortBy, sortDir) ?? 'job_no', page: '1' }),
+              onSortChange: (sortBy, sortDir) =>
+                apply({ ordering: toOrdering(sortBy, sortDir) ?? 'job_no', page: '1' }),
             }}
             pagination={{
               page,
@@ -820,7 +891,11 @@ export function ProjectTrackingPage() {
             }}
             rowStyle={(row) => {
               if (isTaskRow(row)) {
-                return { backgroundColor: row.parent ? 'rgba(13, 110, 253, 0.03)' : 'rgba(25, 135, 84, 0.04)' };
+                return {
+                  backgroundColor: row.parent
+                    ? 'rgba(13, 110, 253, 0.03)'
+                    : 'rgba(25, 135, 84, 0.04)',
+                };
               }
               const tone = dueTone(row);
               if (tone === 'past-due') return { backgroundColor: '#fee2e2' };
@@ -875,7 +950,11 @@ export function ProjectTrackingPage() {
       ) : null}
 
       {holding ? (
-        <HoldJobOrderModal jobNo={holding} onClose={() => setHolding(null)} onDone={() => void reload()} />
+        <HoldJobOrderModal
+          jobNo={holding}
+          onClose={() => setHolding(null)}
+          onDone={() => void reload()}
+        />
       ) : null}
 
       {revising ? (
@@ -887,7 +966,11 @@ export function ProjectTrackingPage() {
         />
       ) : null}
 
-      <TaskPlannerModal jobNo={taskPlannerJob} onClose={() => setTaskPlannerJob(null)} onSaved={() => void reload()} />
+      <TaskPlannerModal
+        jobNo={taskPlannerJob}
+        onClose={() => setTaskPlannerJob(null)}
+        onSaved={() => void reload()}
+      />
       <WeightPlannerModal
         jobNo={weightPlannerJob}
         onClose={() => setWeightPlannerJob(null)}

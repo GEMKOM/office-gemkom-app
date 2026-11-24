@@ -169,6 +169,7 @@ export function SubcontractingStatementsPage() {
       />
 
       <DataTable
+        columnsKey="accounting-subcontracting-statements"
         title="Sonuç"
         icon="fas fa-table"
         filters={

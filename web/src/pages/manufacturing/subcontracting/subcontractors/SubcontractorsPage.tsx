@@ -185,6 +185,7 @@ export function SubcontractorsPage() {
       />
 
       <DataTable
+        columnsKey="subcontractors"
         title="Taşeron Listesi"
         filters={
           <FilterBar

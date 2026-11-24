@@ -360,6 +360,7 @@ export function CashFlowReportPage() {
 
           <DashCell>
             <DataTable
+              columnsKey="cash-flow-monthly"
               title="Aylık Nakit Akış Özeti"
               icon="fas fa-table"
               data={merged.rows}
@@ -401,6 +402,7 @@ export function CashFlowReportPage() {
 
           <DashCell>
             <DataTable
+              columnsKey="cash-flow-dbs"
               title="DBS Limit Kullanımı"
               icon="fas fa-university"
               data={dbsRows}

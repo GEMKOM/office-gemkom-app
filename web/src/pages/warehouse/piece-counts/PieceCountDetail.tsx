@@ -293,13 +293,14 @@ export interface PieceCountDetailProps {
 export function PieceCountDetail({ countId }: PieceCountDetailProps) {
   const count = useQuery(pieceCountQueryOptions(countId));
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [uncounted, setUncounted] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
   const lines = useQuery({
     ...pieceCountLinesQueryOptions(countId, {
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(search.trim() ? { search: search.trim() } : {}),
       ...(uncounted ? { uncounted: 'true' as const } : {}),
     }),
@@ -567,6 +568,7 @@ export function PieceCountDetail({ countId }: PieceCountDetailProps) {
         ) : null}
 
         <DataTable
+          columnsKey="piece-count-lines"
           title="Sayım Satırları"
           icon="fas fa-list"
           filters={
@@ -597,9 +599,10 @@ export function PieceCountDetail({ countId }: PieceCountDetailProps) {
           loading={lines.isFetching}
           pagination={{
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             total: lines.data?.count ?? 0,
             onPageChange: setPage,
+            onPageSizeChange: setPageSize,
           }}
           emptyMessage={
             editable

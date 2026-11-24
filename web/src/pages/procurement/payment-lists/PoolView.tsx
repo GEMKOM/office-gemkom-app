@@ -2,11 +2,26 @@ import { Button } from '@mantine/core';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
 import { paymentPoolQueryOptions, type PoolRow } from '@/api/procurement/paymentLists';
-import { DataTable, FaIcon, FilterBar, notify, PageHeader, useUrlFilters, type RowAction } from '@/ui';
+import {
+  DataTable,
+  FaIcon,
+  FilterBar,
+  notify,
+  PageHeader,
+  useUrlFilters,
+  type RowAction,
+} from '@/ui';
 import { currencyBreakdown, fmtEur, sumEur, todayIso } from './format';
 import type { OpenModal } from './modals';
 import classes from './PaymentLists.module.css';
-import { excelColumns, POOL_FILTER_DEFAULTS, poolParams, poolRowId, usePoolFilterConfig, type PoolFilterValues } from './poolShared';
+import {
+  excelColumns,
+  POOL_FILTER_DEFAULTS,
+  poolParams,
+  poolRowId,
+  usePoolFilterConfig,
+  type PoolFilterValues,
+} from './poolShared';
 import { ViewSwitcher } from './ViewSwitcher';
 
 const URL_DEFAULTS = { ...POOL_FILTER_DEFAULTS, page: '1', page_size: '50' };
@@ -31,7 +46,11 @@ function positiveInt(value: string, fallback: number): number {
 export type PoolSelection = ReadonlyMap<string, PoolRow>;
 
 /** Keep the selected rows across pages: ids from the table, rows from what was on screen. */
-export function nextSelection(prev: PoolSelection, ids: string[], pageRows: readonly PoolRow[]): Map<string, PoolRow> {
+export function nextSelection(
+  prev: PoolSelection,
+  ids: string[],
+  pageRows: readonly PoolRow[],
+): Map<string, PoolRow> {
   const onPage = new Map(pageRows.map((r) => [poolRowId(r), r]));
   const next = new Map<string, PoolRow>();
   for (const id of ids) {
@@ -61,7 +80,16 @@ export function PoolView({ openModal, selection, onSelectionChange }: PoolViewPr
       gs: values.gs,
       supplier: values.supplier,
     }),
-    [values.basis, values.currency, values.q, values.po_date, values.hide_listed, values.job_no, values.gs, values.supplier],
+    [
+      values.basis,
+      values.currency,
+      values.q,
+      values.po_date,
+      values.hide_listed,
+      values.job_no,
+      values.gs,
+      values.supplier,
+    ],
   );
   const page = positiveInt(values.page, 1);
   const pageSize = positiveInt(values.page_size, 50);
@@ -86,13 +114,24 @@ export function PoolView({ openModal, selection, onSelectionChange }: PoolViewPr
       hidden: Boolean(row.is_paid),
       onClick: (r) => openModal({ kind: 'markPaid', row: r, mode: 'pool' }),
     },
-    { key: 'proforma', label: 'Proforma', icon: 'fas fa-paperclip', onClick: (r) => openModal({ kind: 'proforma', row: r }) },
-    { key: 'split', label: 'Böl (taksitlendir)', icon: 'fas fa-scissors', onClick: (r) => openModal({ kind: 'split', row: r }) },
+    {
+      key: 'proforma',
+      label: 'Proforma',
+      icon: 'fas fa-paperclip',
+      onClick: (r) => openModal({ kind: 'proforma', row: r }),
+    },
+    {
+      key: 'split',
+      label: 'Böl (taksitlendir)',
+      icon: 'fas fa-scissors',
+      onClick: (r) => openModal({ kind: 'split', row: r }),
+    },
     {
       key: 'po',
       label: 'Sipariş detayı',
       icon: 'fas fa-external-link-alt',
-      onClick: (r) => window.open(`/finance/purchase-orders/?order=${r.po.id}`, '_blank', 'noopener'),
+      onClick: (r) =>
+        window.open(`/finance/purchase-orders/?order=${r.po.id}`, '_blank', 'noopener'),
     },
   ];
 
@@ -106,6 +145,7 @@ export function PoolView({ openModal, selection, onSelectionChange }: PoolViewPr
       />
       <ViewSwitcher active="pool" />
       <DataTable
+        columnsKey="payment-pool"
         title="Ödeme Havuzu"
         icon="fas fa-water"
         filters={
@@ -142,13 +182,16 @@ export function PoolView({ openModal, selection, onSelectionChange }: PoolViewPr
       {selectedRows.length ? (
         <div className={`${classes.bulkBar} ${classes.noPrint}`} data-testid="pool-bulk-bar">
           <span style={{ marginRight: 'auto' }}>
-            <strong>{selectedRows.length}</strong> kalem seçildi · toplam <strong>{fmtEur(sumEur(selectedRows))}</strong>{' '}
+            <strong>{selectedRows.length}</strong> kalem seçildi · toplam{' '}
+            <strong>{fmtEur(sumEur(selectedRows))}</strong>{' '}
             <span className={classes.sub}>({currencyBreakdown(selectedRows)})</span>
           </span>
           <Button
             size="xs"
             leftSection={<FaIcon icon="fas fa-list-check" />}
-            onClick={() => openModal({ kind: 'addToList', rows: selectedRows, onDone: clearSelection })}
+            onClick={() =>
+              openModal({ kind: 'addToList', rows: selectedRows, onDone: clearSelection })
+            }
           >
             Listeye Ekle
           </Button>
@@ -156,11 +199,18 @@ export function PoolView({ openModal, selection, onSelectionChange }: PoolViewPr
             size="xs"
             color="green"
             leftSection={<FaIcon icon="fas fa-check-double" />}
-            onClick={() => openModal({ kind: 'bulkPaid', rows: selectedRows, onDone: clearSelection })}
+            onClick={() =>
+              openModal({ kind: 'bulkPaid', rows: selectedRows, onDone: clearSelection })
+            }
           >
             Ödendi İşaretle (toplu)
           </Button>
-          <Button size="xs" variant="default" leftSection={<FaIcon icon="fas fa-times" />} onClick={clearSelection}>
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<FaIcon icon="fas fa-times" />}
+            onClick={clearSelection}
+          >
             Seçimi Temizle
           </Button>
         </div>

@@ -59,6 +59,7 @@ export function UserDetailsModal({ jobNo, dateAfter, dateBefore, onClose }: User
         ? {
             content: (
               <DataTable
+                columnsKey="welding-cost-analysis-users"
                 title="Kullanıcı Detayları"
                 icon="fas fa-users"
                 data={users}

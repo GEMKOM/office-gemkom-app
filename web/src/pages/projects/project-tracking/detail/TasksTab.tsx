@@ -4,7 +4,14 @@ import { patchDepartmentTask, type DepartmentTask } from '@/api/projects/departm
 import { jobOrderDepartmentTasksQueryOptions } from '@/api/projects/jobOrders';
 import { formatDate } from '@/lib/format';
 import { AppLink } from '@/shell/AppLink';
-import { DataTable, notify, StatusBadge, type CellEdit, type DataTableColumn, type StatusFamily } from '@/ui';
+import {
+  DataTable,
+  notify,
+  StatusBadge,
+  type CellEdit,
+  type DataTableColumn,
+  type StatusFamily,
+} from '@/ui';
 import css from './JobOrderDetail.module.css';
 import { ErrorState, fieldErrors, LoadingState } from './parts';
 
@@ -96,10 +103,7 @@ function DepartmentCell({ row }: { row: DepartmentTask }) {
   return (
     <>
       {base && row.id ? (
-        <AppLink
-          className={css.departmentLink}
-          to={`${base}?task=${encodeURIComponent(row.id)}`}
-        >
+        <AppLink className={css.departmentLink} to={`${base}?task=${encodeURIComponent(row.id)}`}>
           {value}
         </AppLink>
       ) : (
@@ -187,7 +191,8 @@ export function TasksTab({ jobNo }: { jobNo: string }) {
         key: 'target_completion_date',
         header: 'Hedef Tarih',
         sortable: true,
-        render: (row) => (row.target_completion_date ? formatDate(row.target_completion_date) : '-'),
+        render: (row) =>
+          row.target_completion_date ? formatDate(row.target_completion_date) : '-',
       },
       {
         key: 'completed_at',
@@ -221,6 +226,7 @@ export function TasksTab({ jobNo }: { jobNo: string }) {
 
   return (
     <DataTable
+      columnsKey="project-tracking-tasks"
       title="Departman Görevleri"
       icon="fas fa-tasks"
       data={query.data}

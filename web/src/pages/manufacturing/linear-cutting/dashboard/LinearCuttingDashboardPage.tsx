@@ -133,6 +133,7 @@ export function LinearCuttingDashboardPage() {
       <DashboardGrid
         timers={
           <DataTable
+            columnsKey="linear-dashboard-timers"
             title="Aktif Zamanlayıcılar"
             icon="fas fa-clock"
             data={timers}
@@ -147,6 +148,7 @@ export function LinearCuttingDashboardPage() {
         }
         machines={
           <DataTable
+            columnsKey="linear-dashboard-machines"
             title="Makine Durumları"
             icon="fas fa-industry"
             data={machines}

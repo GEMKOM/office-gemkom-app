@@ -509,6 +509,7 @@ export function LaborPricingPage() {
         <CostBreakdown report={report} />
 
         <DataTable
+          columnsKey="subcontracting-labor-pricing"
           title="Alt Kalemler"
           icon="fas fa-table-list"
           toolbar={

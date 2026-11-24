@@ -341,6 +341,7 @@ export function AttendanceRecordsPage() {
       />
 
       <DataTable
+        columnsKey="attendance-records"
         // New filters start with every record collapsed again (legacy cleared expandedRecordIds).
         key={JSON.stringify(values)}
         title="PDKS Kayıtları"

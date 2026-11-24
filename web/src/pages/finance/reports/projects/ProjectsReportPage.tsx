@@ -116,6 +116,7 @@ export function ProjectsReportPage() {
       />
 
       <DataTable
+        columnsKey="finance-projects-report"
         title="Proje Raporu"
         filters={
           <FilterBar

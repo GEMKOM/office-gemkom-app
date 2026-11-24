@@ -452,6 +452,7 @@ export function HrVacationPage() {
       />
 
       <DataTable
+        columnsKey="hr-vacation-balances"
         filters={
           <TitledFilters icon="fas fa-wallet" title="İzin Bakiyeleri">
             <FilterBar
@@ -493,6 +494,7 @@ export function HrVacationPage() {
       />
 
       <DataTable
+        columnsKey="hr-vacation-inbox"
         title="Onay Kutusu"
         icon="fas fa-user-check"
         data={inboxRows}
@@ -506,6 +508,7 @@ export function HrVacationPage() {
       />
 
       <DataTable
+        columnsKey="hr-vacation-approved"
         filters={
           <TitledFilters icon="fas fa-calendar-check" title="Onaylanmış İzinler">
             <FilterBar

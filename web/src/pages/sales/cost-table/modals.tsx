@@ -271,6 +271,7 @@ export function MachiningDetailsModal({ jobNo, onClose }: DrillModalProps) {
         ? {
             content: (
               <DataTable
+                columnsKey="sales-cost-machining-entries"
                 title="Kayıtlar (Tarihe Göre Sıralı)"
                 icon="fas fa-table"
                 data={rows}
@@ -374,6 +375,7 @@ export function WeldingDetailsModal({ jobNo, onClose }: DrillModalProps) {
         ? {
             content: (
               <DataTable
+                columnsKey="sales-cost-welding-entries"
                 title="Kayıtlar (Tarihe Göre Sıralı)"
                 icon="fas fa-table"
                 data={rows}
@@ -473,6 +475,7 @@ export function MaterialDetailsModal({ jobNo, onClose }: DrillModalProps) {
         ? {
             content: (
               <DataTable
+                columnsKey="sales-cost-material-lines"
                 title="Malzeme Satırları"
                 icon="fas fa-table"
                 data={rows}
@@ -605,6 +608,7 @@ export function SubcontractorDetailsModal({ jobNo, onClose }: DrillModalProps) {
         ? {
             content: (
               <DataTable
+                columnsKey="sales-cost-subcontracting"
                 title="Taşeron Atamaları"
                 icon="fas fa-table"
                 data={rows}

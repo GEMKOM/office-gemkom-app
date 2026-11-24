@@ -51,11 +51,13 @@ const URL_DEFAULTS = {
   dr_priority: '',
   dr_requestor: '',
   dr_page: '1',
+  dr_page_size: '20',
   dr_ordering: '-id',
   erp_priority: '',
   erp_created_by: '',
   erp_department_request: '',
   erp_page: '1',
+  erp_page_size: '20',
   erp_ordering: '-id',
   pr_request_number: '',
   pr_status: '',
@@ -63,6 +65,7 @@ const URL_DEFAULTS = {
   pr_created_by: '',
   pr_department_request: '',
   pr_page: '1',
+  pr_page_size: '20',
   pr_ordering: '-id',
   request: '',
   talep: '',
@@ -232,11 +235,12 @@ export function DepartmentRequestsPage() {
 
   // ---- lists ----
   const drPage = positiveInt(values.dr_page, 1);
+  const drPageSize = positiveInt(values.dr_page_size, PAGE_SIZE);
   const drSort = fromOrdering(values.dr_ordering || '-id');
   const approved = useQuery({
     ...approvedDepartmentRequestsQueryOptions({
       page: drPage,
-      page_size: PAGE_SIZE,
+      page_size: drPageSize,
       ordering: toOrdering(drSort.sortBy, drSort.sortDir) ?? '-id',
       department: values.dr_department || undefined,
       priority: values.dr_priority || undefined,
@@ -246,11 +250,12 @@ export function DepartmentRequestsPage() {
   });
 
   const erpPage = positiveInt(values.erp_page, 1);
+  const erpPageSize = positiveInt(values.erp_page_size, PAGE_SIZE);
   const erpSort = fromOrdering(values.erp_ordering || '-id');
   const pendingErp = useQuery({
     ...planningRequestsQueryOptions({
       page: erpPage,
-      page_size: PAGE_SIZE,
+      page_size: erpPageSize,
       ordering: toOrdering(erpSort.sortBy, erpSort.sortDir) ?? '-id',
       status: 'pending_erp_entry',
       priority: values.erp_priority || undefined,
@@ -261,11 +266,12 @@ export function DepartmentRequestsPage() {
   });
 
   const prPage = positiveInt(values.pr_page, 1);
+  const prPageSize = positiveInt(values.pr_page_size, PAGE_SIZE);
   const prSort = fromOrdering(values.pr_ordering || '-id');
   const planning = useQuery({
     ...planningRequestsQueryOptions({
       page: prPage,
-      page_size: PAGE_SIZE,
+      page_size: prPageSize,
       ordering: toOrdering(prSort.sortBy, prSort.sortDir) ?? '-id',
       status: values.pr_status || undefined,
       priority: values.pr_priority || undefined,
@@ -532,6 +538,7 @@ export function DepartmentRequestsPage() {
             }}
           />
           <DataTable
+            columnsKey="planning-department-requests"
             title="Aktarılacak Departman Talepleri"
             icon="fas fa-check-circle"
             data={approved.data?.results ?? EMPTY_DEPARTMENT}
@@ -546,9 +553,10 @@ export function DepartmentRequestsPage() {
             }}
             pagination={{
               page: drPage,
-              pageSize: PAGE_SIZE,
+              pageSize: drPageSize,
               total: approved.data?.count ?? 0,
               onPageChange: (next) => apply({ dr_page: String(next) }),
+              onPageSizeChange: (size) => apply({ dr_page_size: String(size), dr_page: '1' }),
             }}
             rowActions={approvedActions}
             emptyMessage="Aktarılacak departman talebi bulunamadı."
@@ -572,6 +580,7 @@ export function DepartmentRequestsPage() {
             }}
           />
           <DataTable
+            columnsKey="planning-requests-pending-erp"
             title="ERP Girişi Bekleyen Planlama Talepleri"
             icon="fas fa-clock"
             data={pendingErp.data?.results ?? EMPTY_PLANNING}
@@ -586,9 +595,10 @@ export function DepartmentRequestsPage() {
             }}
             pagination={{
               page: erpPage,
-              pageSize: PAGE_SIZE,
+              pageSize: erpPageSize,
               total: pendingErp.data?.count ?? 0,
               onPageChange: (next) => apply({ erp_page: String(next) }),
+              onPageSizeChange: (size) => apply({ erp_page_size: String(size), erp_page: '1' }),
             }}
             rowActions={pendingErpActions}
             emptyMessage="ERP girişi bekleyen planlama talebi bulunamadı."
@@ -614,6 +624,7 @@ export function DepartmentRequestsPage() {
           }}
         />
         <DataTable
+          columnsKey="planning-requests"
           title="Planlama Talepleri"
           icon="fas fa-clipboard-list"
           data={planning.data?.results ?? EMPTY_PLANNING}
@@ -628,9 +639,10 @@ export function DepartmentRequestsPage() {
           }}
           pagination={{
             page: prPage,
-            pageSize: PAGE_SIZE,
+            pageSize: prPageSize,
             total: planning.data?.count ?? 0,
             onPageChange: (next) => apply({ pr_page: String(next) }),
+            onPageSizeChange: (size) => apply({ pr_page_size: String(size), pr_page: '1' }),
           }}
           rowActions={planningActions}
           emptyMessage="Planlama talebi bulunamadı."

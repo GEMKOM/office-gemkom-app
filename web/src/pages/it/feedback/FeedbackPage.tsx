@@ -73,7 +73,12 @@ function GithubCell({ row }: { row: FeedbackReport }) {
 
 const columns: DataTableColumn<FeedbackReport>[] = [
   { key: 'id', header: '#', width: 55 },
-  { key: 'created_at', header: 'Tarih', width: 135, render: (row) => shortDateTime(row.created_at) },
+  {
+    key: 'created_at',
+    header: 'Tarih',
+    width: 135,
+    render: (row) => shortDateTime(row.created_at),
+  },
   {
     key: 'reporter_name',
     header: 'Bildiren',
@@ -114,7 +119,12 @@ const columns: DataTableColumn<FeedbackReport>[] = [
     width: 85,
     render: (row) => (row.priority ? PRIORITY_LABELS[row.priority] || row.priority : '—'),
   },
-  { key: 'status', header: 'Durum', width: 135, render: (row) => <FeedbackStatusBadge status={row.status} /> },
+  {
+    key: 'status',
+    header: 'Durum',
+    width: 135,
+    render: (row) => <FeedbackStatusBadge status={row.status} />,
+  },
   { key: 'github_issues', header: 'GitHub', width: 75, render: (row) => <GithubCell row={row} /> },
 ];
 
@@ -125,7 +135,11 @@ export function FeedbackPage() {
     () => ({ status: values.status, kind: values.kind, q: values.q }),
     [values.status, values.kind, values.q],
   );
-  const params: FeedbackFilters = { status: filters.status, kind: filters.kind, q: filters.q.trim() };
+  const params: FeedbackFilters = {
+    status: filters.status,
+    kind: filters.kind,
+    q: filters.q.trim(),
+  };
 
   const stats = useQuery(feedbackStatsQueryOptions());
   const denied = isForbidden(stats.error);
@@ -134,10 +148,12 @@ export function FeedbackPage() {
   const closeReport = useCallback(() => setOpenId(null), []);
 
   useEffect(() => {
-    if (stats.isError && !isForbidden(stats.error)) notify.error(stats.error, { fallback: 'İstatistikler yüklenemedi.' });
+    if (stats.isError && !isForbidden(stats.error))
+      notify.error(stats.error, { fallback: 'İstatistikler yüklenemedi.' });
   }, [stats.isError, stats.error]);
   useEffect(() => {
-    if (list.isError && !isForbidden(list.error)) notify.error(list.error, { fallback: 'Bildirimler yüklenemedi.' });
+    if (list.isError && !isForbidden(list.error))
+      notify.error(list.error, { fallback: 'Bildirimler yüklenemedi.' });
   }, [list.isError, list.error]);
 
   const refresh = () => {
@@ -145,8 +161,7 @@ export function FeedbackPage() {
     void list.refetch();
   };
 
-  const figure = (value: string | number | undefined) =>
-    stats.data ? String(value ?? '') : '–';
+  const figure = (value: string | number | undefined) => (stats.data ? String(value ?? '') : '–');
 
   return (
     <>
@@ -160,9 +175,21 @@ export function FeedbackPage() {
             ? undefined
             : [
                 { id: 'fb-open', label: 'Açık Bildirim', value: figure(stats.data?.open_total) },
-                { id: 'fb-awaiting', label: 'Kararın Bekleniyor', value: figure(stats.data?.awaiting_decision) },
-                { id: 'fb-pipeline', label: 'AI Hattında (Issue/PR)', value: figure(stats.data?.in_pipeline) },
-                { id: 'fb-done', label: 'Tamamlanan (30 gün)', value: figure(stats.data?.done_30d) },
+                {
+                  id: 'fb-awaiting',
+                  label: 'Kararın Bekleniyor',
+                  value: figure(stats.data?.awaiting_decision),
+                },
+                {
+                  id: 'fb-pipeline',
+                  label: 'AI Hattında (Issue/PR)',
+                  value: figure(stats.data?.in_pipeline),
+                },
+                {
+                  id: 'fb-done',
+                  label: 'Tamamlanan (30 gün)',
+                  value: figure(stats.data?.done_30d),
+                },
                 {
                   id: 'fb-cost',
                   label: 'AI Maliyeti (30 gün)',
@@ -174,11 +201,12 @@ export function FeedbackPage() {
 
       {denied ? (
         <Alert color="gray" icon={<FaIcon icon="fas fa-lock" />}>
-          Geri bildirim yönetimi yetkiniz yok. Bu sayfa AI triyaj kararlarını ve geliştirme kuyruğunu yönettiği için
-          ayrı bir yetkiye bağlıdır.
+          Geri bildirim yönetimi yetkiniz yok. Bu sayfa AI triyaj kararlarını ve geliştirme
+          kuyruğunu yönettiği için ayrı bir yetkiye bağlıdır.
         </Alert>
       ) : (
         <DataTable
+          columnsKey="it-feedback"
           title="Bildirimler"
           icon="fas fa-bug"
           filters={
@@ -201,7 +229,9 @@ export function FeedbackPage() {
         />
       )}
 
-      {openId !== null ? <FeedbackReportModal key={openId} reportId={openId} onClose={closeReport} /> : null}
+      {openId !== null ? (
+        <FeedbackReportModal key={openId} reportId={openId} onClose={closeReport} />
+      ) : null}
     </>
   );
 }

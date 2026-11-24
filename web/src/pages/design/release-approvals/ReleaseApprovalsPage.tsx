@@ -464,6 +464,7 @@ export function ReleaseApprovalsPage({ embedded = false }: EmbeddableProps = {})
 
           <Tabs.Panel value="pending">
             <DataTable
+              columnsKey="release-approvals-pending"
               title="İnceleme Bekleyen Yayınlar"
               data={pending.data ?? EMPTY}
               columns={pendingColumns}
@@ -477,6 +478,7 @@ export function ReleaseApprovalsPage({ embedded = false }: EmbeddableProps = {})
 
           <Tabs.Panel value="completed">
             <DataTable
+              columnsKey="release-approvals-completed"
               title="Tamamlanan İncelemeler"
               filters={
                 <FilterBar

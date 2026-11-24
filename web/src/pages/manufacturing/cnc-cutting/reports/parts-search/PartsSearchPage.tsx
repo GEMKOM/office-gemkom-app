@@ -255,6 +255,7 @@ export function PartsSearchPage() {
       />
 
       <DataTable
+        columnsKey="cnc-parts-search"
         title="CNC Parça Arama Sonuçları"
         filters={
           <FilterBar

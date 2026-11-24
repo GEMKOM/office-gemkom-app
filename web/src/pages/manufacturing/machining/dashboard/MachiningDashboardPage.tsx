@@ -375,6 +375,7 @@ export function MachiningDashboardPage() {
       <DashboardGrid
         timers={
           <DataTable
+            columnsKey="machining-dashboard-timers"
             title="Aktif Zamanlayıcılar"
             icon="fas fa-clock"
             data={timers}
@@ -397,6 +398,7 @@ export function MachiningDashboardPage() {
         }
         machines={
           <DataTable
+            columnsKey="machining-dashboard-machines"
             title="Makine Durumları"
             icon="fas fa-industry"
             data={machines}

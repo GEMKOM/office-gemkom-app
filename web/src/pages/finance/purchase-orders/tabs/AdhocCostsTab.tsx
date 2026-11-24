@@ -179,6 +179,7 @@ export function AdhocCostsTab() {
         actions={<CreateButton label="Yeni Ek Gider" onClick={() => setEditing('new')} />}
       />
       <DataTable
+        columnsKey="finance-adhoc-costs"
         title="Ek Giderler"
         icon="fas fa-briefcase"
         filters={

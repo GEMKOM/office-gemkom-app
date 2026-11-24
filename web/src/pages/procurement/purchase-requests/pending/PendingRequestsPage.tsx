@@ -235,6 +235,7 @@ export function PendingRequestsPage({ embedded = false }: EmbeddableProps = {}) 
       )}
       <Stack gap="lg">
         <RequestTable
+          columnsKey="purchase-requests-pending"
           title="Onay Bekleyen Talepler"
           icon="fas fa-clock"
           query={pending}
@@ -247,6 +248,7 @@ export function PendingRequestsPage({ embedded = false }: EmbeddableProps = {}) 
           rowStyle={(row) => (row.item_type === 'subcontracting' ? SUBCONTRACTING_ROW : undefined)}
         />
         <RequestTable
+          columnsKey="purchase-requests-approved"
           title="Onayladığınız Talepler"
           icon="fas fa-check-circle"
           query={approved}
@@ -290,6 +292,7 @@ export function PendingRequestsPage({ embedded = false }: EmbeddableProps = {}) 
 }
 
 function RequestTable({
+  columnsKey,
   title,
   icon,
   query,
@@ -301,6 +304,7 @@ function RequestTable({
   errorPrefix,
   rowStyle,
 }: {
+  columnsKey: string;
   title: string;
   icon: string;
   query: ReturnType<typeof useList>;
@@ -315,6 +319,7 @@ function RequestTable({
   const rows = query.data?.results ?? EMPTY;
   return (
     <DataTable
+      columnsKey={columnsKey}
       title={title}
       icon={icon}
       data={query.isError ? EMPTY : rows}

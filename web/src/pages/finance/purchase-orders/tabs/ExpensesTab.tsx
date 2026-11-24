@@ -175,6 +175,7 @@ export function ExpensesTab() {
         actions={<CreateButton label="Yeni Gider" onClick={() => setCreating(true)} />}
       />
       <DataTable
+        columnsKey="finance-expenses"
         title="Aylık Giderler"
         icon="fas fa-calendar-alt"
         filters={

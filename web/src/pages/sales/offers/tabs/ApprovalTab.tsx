@@ -302,6 +302,7 @@ function ApprovalPage({ data, offerId }: { data: ApprovalStatus; offerId: number
           <Text c="dimmed">Onay süreci bulunamadı.</Text>
         ) : (
           <DataTable
+            columnsKey="sales-offer-approvals"
             title="Onay Geçmişi"
             icon="fas fa-route"
             data={workflows}

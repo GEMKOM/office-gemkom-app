@@ -26,7 +26,9 @@ import { PolicyFormModal } from './PolicyFormModal';
 
 const EMPTY_POLICIES: ApprovalPolicy[] = [];
 
-const count = (value: number | null | undefined) => <span className={css.count}>{Number(value || 0)}</span>;
+const count = (value: number | null | undefined) => (
+  <span className={css.count}>{Number(value || 0)}</span>
+);
 
 // Legacy columns; all sort the loaded rows.
 const policyColumns: DataTableColumn<ApprovalPolicy>[] = [
@@ -38,7 +40,8 @@ const policyColumns: DataTableColumn<ApprovalPolicy>[] = [
         <Text fw={600} size="sm">
           {row.name}
         </Text>
-        {row.subject_type === PURCHASE_REQUEST && (row.min_amount_eur != null || row.max_amount_eur != null) ? (
+        {row.subject_type === PURCHASE_REQUEST &&
+        (row.min_amount_eur != null || row.max_amount_eur != null) ? (
           <Text size="xs" c="dimmed">
             {row.min_amount_eur != null ? `≥ €${row.min_amount_eur}` : ''}
             {row.max_amount_eur != null ? ` – ≤ €${row.max_amount_eur}` : ''}
@@ -57,9 +60,18 @@ const policyColumns: DataTableColumn<ApprovalPolicy>[] = [
     header: 'Durum',
     width: 90,
     render: (row) =>
-      row.is_active ? <StatusBadge color="green">Aktif</StatusBadge> : <StatusBadge color="grey">Pasif</StatusBadge>,
+      row.is_active ? (
+        <StatusBadge color="green">Aktif</StatusBadge>
+      ) : (
+        <StatusBadge color="grey">Pasif</StatusBadge>
+      ),
   },
-  { key: 'selection_priority', header: 'Öncelik', width: 80, render: (row) => row.selection_priority ?? '-' },
+  {
+    key: 'selection_priority',
+    header: 'Öncelik',
+    width: 80,
+    render: (row) => row.selection_priority ?? '-',
+  },
   {
     key: 'stage_count',
     header: 'Aşama',
@@ -103,7 +115,11 @@ interface SubjectTypeRow {
 
 const subjectTypeColumns: DataTableColumn<SubjectTypeRow>[] = [
   { key: 'label', header: 'Ad', render: (row) => <strong>{row.label || '-'}</strong> },
-  { key: 'value', header: 'Kod', render: (row) => <span className={uiClasses.code}>{row.value || '-'}</span> },
+  {
+    key: 'value',
+    header: 'Kod',
+    render: (row) => <span className={uiClasses.code}>{row.value || '-'}</span>,
+  },
 ];
 
 function SubjectTypesTab() {
@@ -117,6 +133,7 @@ function SubjectTypesTab() {
   }));
   return (
     <DataTable
+      columnsKey="it-approval-subject-types"
       title="Konu Türleri"
       icon="fas fa-tags"
       data={rows}
@@ -166,7 +183,13 @@ export function ApprovalsPage() {
       color: 'primary',
       onClick: (row) => setPolicyModal({ policy: row }),
     },
-    { key: 'delete', label: 'Sil', icon: 'fas fa-trash', color: 'danger', onClick: (row) => void deletePolicy(row) },
+    {
+      key: 'delete',
+      label: 'Sil',
+      icon: 'fas fa-trash',
+      color: 'danger',
+      onClick: (row) => void deletePolicy(row),
+    },
   ];
 
   const userGroups = groups.data ?? [];
@@ -187,7 +210,10 @@ export function ApprovalsPage() {
           },
         ]}
         actions={
-          <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => setPolicyModal({ policy: null })}>
+          <Button
+            leftSection={<FaIcon icon="fas fa-plus" />}
+            onClick={() => setPolicyModal({ policy: null })}
+          >
             Yeni Politika
           </Button>
         }
@@ -207,6 +233,7 @@ export function ApprovalsPage() {
           <Tabs.Panel value="policies">
             <div className={css.layout}>
               <DataTable
+                columnsKey="it-approval-policies"
                 title="Onay Politikaları"
                 icon="fas fa-layer-group"
                 data={policies}

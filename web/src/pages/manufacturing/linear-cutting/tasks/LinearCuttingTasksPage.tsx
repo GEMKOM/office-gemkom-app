@@ -191,6 +191,7 @@ export function LinearCuttingTasksPage() {
       />
 
       <DataTable
+        columnsKey="linear-cutting-tasks"
         title="Görev Listesi"
         filters={
           <FilterBar

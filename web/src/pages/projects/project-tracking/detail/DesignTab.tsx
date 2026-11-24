@@ -48,13 +48,7 @@ const revision = (r: DrawingRelease) => `(Rev. ${r.revision_number || '-'})`;
 const hardcopies = (r: DrawingRelease) => Number(r.hardcopy_count) || 0;
 
 /** Legacy requestRevisionModal: a reason, then POST request_revision. */
-function RequestRevisionModal({
-  releaseId,
-  onClose,
-}: {
-  releaseId: number;
-  onClose: () => void;
-}) {
+function RequestRevisionModal({ releaseId, onClose }: { releaseId: number; onClose: () => void }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const form = useForm({
@@ -213,6 +207,7 @@ export function DesignTab({ jobNo }: { jobNo: string }) {
             </p>
           ) : (
             <DataTable
+              columnsKey="project-tracking-design-releases"
               data={list}
               columns={columns}
               getRowId={(r) => String(r.id)}

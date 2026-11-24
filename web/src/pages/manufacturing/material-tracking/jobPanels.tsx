@@ -91,6 +91,7 @@ export function JobStockPanel({
   const picked = rows.filter((row) => selectedKeys.includes(row.key) && canRequest(row));
   return (
     <DataTable
+      columnsKey="material-tracking-job-stock"
       title="İş Emri Stoğu"
       icon="fas fa-clipboard-list"
       data={rows}
@@ -167,6 +168,7 @@ export function JobPullsPanel({
 }) {
   return (
     <DataTable
+      columnsKey="material-tracking-job-pulls"
       title="Bu İşin Çıkış Talepleri"
       icon="fas fa-dolly"
       data={rows}
@@ -255,6 +257,7 @@ export function JobPlanningPanel({
   ];
   return (
     <DataTable
+      columnsKey="material-tracking-job-undelivered"
       title="Henüz Gelmeyen Planlama Kalemleri"
       icon="fas fa-clock"
       data={rows}

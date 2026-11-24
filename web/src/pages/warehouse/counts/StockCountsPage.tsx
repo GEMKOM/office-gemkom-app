@@ -26,7 +26,7 @@ import {
 import { StockCountDetail } from './StockCountDetail';
 
 const PAGE_SIZE = 20;
-const URL_DEFAULTS = { status: '', warehouse__code: '', sayim: '', page: '1' };
+const URL_DEFAULTS = { status: '', warehouse__code: '', sayim: '', page: '1', page_size: '20' };
 type FilterKeys = 'status' | 'warehouse__code';
 
 const WAREHOUSE_OPTIONS = (Object.keys(WAREHOUSE_LABELS) as WarehouseCode[]).map((code) => ({
@@ -162,11 +162,12 @@ function NewCountModal({
 export function StockCountsPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const [creating, setCreating] = useState(false);
   const list = useQuery({
     ...stockCountsQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(values.status ? { status: values.status } : {}),
       ...(values.warehouse__code ? { warehouse__code: values.warehouse__code } : {}),
     }),
@@ -196,6 +197,7 @@ export function StockCountsPage() {
         }
       />
       <DataTable
+        columnsKey="stock-counts"
         title="Sayımlar"
         icon="fas fa-clipboard-check"
         filters={
@@ -214,9 +216,10 @@ export function StockCountsPage() {
         onRowClick={(row) => apply({ sayim: String(row.id) })}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total: list.data?.count ?? 0,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         emptyMessage="Henüz sayım yok"
       />

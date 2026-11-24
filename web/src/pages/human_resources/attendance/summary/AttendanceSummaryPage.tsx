@@ -184,6 +184,7 @@ export function AttendanceSummaryPage() {
       />
 
       <DataTable
+        columnsKey="attendance-summary"
         title="Kullanıcı Bazlı Özet"
         filters={
           <FilterBar

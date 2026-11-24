@@ -125,6 +125,7 @@ export function ItemsReportPage() {
       />
 
       <DataTable
+        columnsKey="procurement-items-report"
         title="Ürün Raporu"
         filters={
           <FilterBar

@@ -67,7 +67,8 @@ export function UsersTab() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (matrix.isError) notify.error(matrix.error, { fallback: 'Kullanıcı listesi yüklenirken hata oluştu' });
+    if (matrix.isError)
+      notify.error(matrix.error, { fallback: 'Kullanıcı listesi yüklenirken hata oluştu' });
   }, [matrix.isError, matrix.error]);
 
   const rows = useMemo<UserRow[]>(() => {
@@ -86,6 +87,7 @@ export function UsersTab() {
   return (
     <div className={css.layout}>
       <DataTable
+        columnsKey="it-permission-users"
         title="Kullanıcılar"
         icon="fas fa-users"
         data={rows}
@@ -94,7 +96,9 @@ export function UsersTab() {
         loading={matrix.isFetching}
         sortable
         onRowClick={(row) => setSelectedId(row.id)}
-        rowStyle={(row) => (row.id === selectedId ? { background: 'var(--gk-red-050)' } : undefined)}
+        rowStyle={(row) =>
+          row.id === selectedId ? { background: 'var(--gk-red-050)' } : undefined
+        }
         emptyMessage="Kullanıcı bulunamadı."
         onRefresh={() => void matrix.refetch()}
       />

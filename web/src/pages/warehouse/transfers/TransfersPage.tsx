@@ -52,7 +52,15 @@ import {
 } from '@/ui';
 
 const PAGE_SIZE = 20;
-const URL_DEFAULTS = { status: '', warehouse: '', job_no: '', search: '', transfer: '', page: '1' };
+const URL_DEFAULTS = {
+  status: '',
+  warehouse: '',
+  job_no: '',
+  search: '',
+  transfer: '',
+  page: '1',
+  page_size: '20',
+};
 type FilterKeys = 'search' | 'warehouse' | 'status' | 'job_no';
 
 const WAREHOUSES = (Object.keys(WAREHOUSE_LABELS) as WarehouseCode[]).map((code) => ({
@@ -507,11 +515,12 @@ const EMPTY: TransferSlip[] = [];
 export function TransfersPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const [creating, setCreating] = useState(false);
   const list = useQuery({
     ...transfersQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(values.status ? { status: values.status } : {}),
       ...(values.warehouse ? { warehouse: values.warehouse } : {}),
       ...(values.job_no ? { job_no: values.job_no } : {}),
@@ -549,6 +558,7 @@ export function TransfersPage() {
         }
       />
       <DataTable
+        columnsKey="transfers"
         title="Transferler"
         icon="fas fa-exchange-alt"
         filters={
@@ -572,9 +582,10 @@ export function TransfersPage() {
         onRowClick={(row) => apply({ transfer: String(row.id) })}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total: list.data?.count ?? 0,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         emptyMessage="Henüz transfer yok"
       />

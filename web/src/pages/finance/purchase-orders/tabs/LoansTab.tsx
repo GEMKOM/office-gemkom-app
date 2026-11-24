@@ -186,6 +186,7 @@ export function LoansTab() {
         actions={<CreateButton label="Yeni Kredi" onClick={() => setCreating(true)} />}
       />
       <DataTable
+        columnsKey="finance-loans"
         title="Krediler"
         icon="fas fa-hand-holding-usd"
         filters={

@@ -168,6 +168,7 @@ export function ConsultationsTab({ offer }: TabProps) {
         <ErrorText>Departman görüşleri yüklenemedi.</ErrorText>
       ) : (
         <DataTable
+          columnsKey="sales-offer-consultations"
           title="Departman Görüşleri"
           icon="fas fa-comments"
           data={rows}

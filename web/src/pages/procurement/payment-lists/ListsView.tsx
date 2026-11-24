@@ -25,7 +25,14 @@ const EMPTY_FILTERS: FilterState = { status: '', q: '', gs: '' };
 
 const filterConfig: FilterConfig<keyof FilterState>[] = [
   { type: 'text', key: 'q', label: 'Ara', placeholder: 'Liste başlığı veya GS no…' },
-  { type: 'select', key: 'status', label: 'Durum', options: LIST_STATUS_OPTIONS, placeholder: 'Tümü', searchable: false },
+  {
+    type: 'select',
+    key: 'status',
+    label: 'Durum',
+    options: LIST_STATUS_OPTIONS,
+    placeholder: 'Tümü',
+    searchable: false,
+  },
   { type: 'text', key: 'gs', label: 'GS No', placeholder: 'GS-10162, GS-9794' },
 ];
 
@@ -34,7 +41,9 @@ function positiveInt(value: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
-const Muted = ({ children }: { children: string }) => <span style={{ color: 'var(--gk-muted)' }}>{children}</span>;
+const Muted = ({ children }: { children: string }) => (
+  <span style={{ color: 'var(--gk-muted)' }}>{children}</span>
+);
 
 const columns: DataTableColumn<PaymentList>[] = [
   {
@@ -51,13 +60,22 @@ const columns: DataTableColumn<PaymentList>[] = [
     ),
   },
   { key: 'list_date', header: 'Tarih', width: 100, render: (row) => fmtDate(row.list_date) },
-  { key: 'status', header: 'Durum', width: 110, render: (row) => <ListStatusBadge status={row.status} label={row.status_label} /> },
+  {
+    key: 'status',
+    header: 'Durum',
+    width: 110,
+    render: (row) => <ListStatusBadge status={row.status} label={row.status_label} />,
+  },
   {
     key: 'budget_eur',
     header: 'Bütçe',
     width: 120,
     align: 'right',
-    render: (row) => <span className={classes.money}>{num(row.budget_eur) === null ? '-' : fmtEur(row.budget_eur)}</span>,
+    render: (row) => (
+      <span className={classes.money}>
+        {num(row.budget_eur) === null ? '-' : fmtEur(row.budget_eur)}
+      </span>
+    ),
   },
   {
     key: 'total_eur',
@@ -65,7 +83,9 @@ const columns: DataTableColumn<PaymentList>[] = [
     width: 130,
     align: 'right',
     render: (row) => (
-      <span className={`${classes.money} ${row.totals?.over_budget ? classes.over : ''}`}>{fmtEur(row.totals?.total_eur)}</span>
+      <span className={`${classes.money} ${row.totals?.over_budget ? classes.over : ''}`}>
+        {fmtEur(row.totals?.total_eur)}
+      </span>
     ),
   },
   {
@@ -84,7 +104,9 @@ const columns: DataTableColumn<PaymentList>[] = [
       return (
         <>
           {t.paid_count ?? 0}/{t.included_count ?? 0}
-          {t.excluded_count ? <div className={classes.sub}>{t.excluded_count} çıkarıldı</div> : null}
+          {t.excluded_count ? (
+            <div className={classes.sub}>{t.excluded_count} çıkarıldı</div>
+          ) : null}
         </>
       );
     },
@@ -98,7 +120,12 @@ const columns: DataTableColumn<PaymentList>[] = [
       return v > 0 ? (
         <Pill color="orange">{v} eksik</Pill>
       ) : (
-        <i className="fas fa-check" title="Tamam" style={{ color: 'var(--mantine-color-green-7)' }} aria-label="Tamam" />
+        <i
+          className="fas fa-check"
+          title="Tamam"
+          style={{ color: 'var(--mantine-color-green-7)' }}
+          aria-label="Tamam"
+        />
       );
     },
   },
@@ -116,7 +143,12 @@ const columns: DataTableColumn<PaymentList>[] = [
         );
       }
       if (row.status === 'sent_to_finance') {
-        if (row.finance_email_error) return <Pill color="red" title={row.finance_email_error}>E-posta hatası</Pill>;
+        if (row.finance_email_error)
+          return (
+            <Pill color="red" title={row.finance_email_error}>
+              E-posta hatası
+            </Pill>
+          );
         return row.finance_email_sent_at ? (
           <Pill color="green">E-posta gönderildi</Pill>
         ) : (
@@ -136,7 +168,10 @@ interface ListsViewProps {
 /** Port of listsView.js: stat figures + filterable table of lists. */
 export function ListsView({ openModal, openList }: ListsViewProps) {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
-  const filters = useMemo<FilterState>(() => ({ status: values.status, q: values.q, gs: values.gs }), [values.status, values.q, values.gs]);
+  const filters = useMemo<FilterState>(
+    () => ({ status: values.status, q: values.q, gs: values.gs }),
+    [values.status, values.q, values.gs],
+  );
   const page = positiveInt(values.page, 1);
   const pageSize = positiveInt(values.page_size, 20);
 
@@ -164,7 +199,10 @@ export function ListsView({ openModal, openList }: ListsViewProps) {
     if (!rows) return null;
     const inFinance = rows
       .filter((r) => r.status === 'sent_to_finance')
-      .reduce((acc, r) => acc + ((num(r.totals?.total_eur) || 0) - (num(r.totals?.paid_eur) || 0)), 0);
+      .reduce(
+        (acc, r) => acc + ((num(r.totals?.total_eur) || 0) - (num(r.totals?.paid_eur) || 0)),
+        0,
+      );
     return {
       open: rows.length,
       submitted: rows.filter((r) => r.status === 'submitted').length,
@@ -172,7 +210,8 @@ export function ListsView({ openModal, openList }: ListsViewProps) {
       missing: rows.reduce((acc, r) => acc + (num(r.totals?.proforma_missing) || 0), 0),
     };
   }, [statsQuery.data]);
-  const figure = (value: string | number | undefined) => (value === undefined ? '–' : String(value));
+  const figure = (value: string | number | undefined) =>
+    value === undefined ? '–' : String(value);
 
   const refresh = () => {
     void list.refetch();
@@ -183,13 +222,25 @@ export function ListsView({ openModal, openList }: ListsViewProps) {
   const total = list.isError ? 0 : (list.data?.count ?? 0);
 
   const rowActions = (row: PaymentList): RowAction<PaymentList>[] => [
-    { key: 'open', label: 'Aç', icon: 'fas fa-folder-open', color: 'primary', onClick: (r) => openList(r.id) },
+    {
+      key: 'open',
+      label: 'Aç',
+      icon: 'fas fa-folder-open',
+      color: 'primary',
+      onClick: (r) => openList(r.id),
+    },
     {
       key: 'carry',
       label: 'Yeni listeye aktar',
       icon: 'fas fa-forward',
       hidden: !['completed', 'cancelled'].includes(row.status),
-      onClick: (r) => openModal({ kind: 'listForm', mode: 'create', carryOverFrom: r, onSaved: (saved) => openList(saved.id) }),
+      onClick: (r) =>
+        openModal({
+          kind: 'listForm',
+          mode: 'create',
+          carryOverFrom: r,
+          onSaved: (saved) => openList(saved.id),
+        }),
     },
     {
       key: 'cancel',
@@ -211,13 +262,23 @@ export function ListsView({ openModal, openList }: ListsViewProps) {
         stats={[
           { id: 'pl-open', label: 'Açık Liste', value: figure(stats?.open) },
           { id: 'pl-submitted', label: 'Onay Bekleyen', value: figure(stats?.submitted) },
-          { id: 'pl-finance', label: 'Finansta Bekleyen (EUR)', value: stats ? fmtEur(stats.inFinance) : '–' },
+          {
+            id: 'pl-finance',
+            label: 'Finansta Bekleyen (EUR)',
+            value: stats ? fmtEur(stats.inFinance) : '–',
+          },
           { id: 'pl-missing', label: 'Proforma Eksik Kalem', value: figure(stats?.missing) },
         ]}
         actions={
           <Button
             leftSection={<FaIcon icon="fas fa-plus" />}
-            onClick={() => openModal({ kind: 'listForm', mode: 'create', onSaved: (saved) => openList(saved.id) })}
+            onClick={() =>
+              openModal({
+                kind: 'listForm',
+                mode: 'create',
+                onSaved: (saved) => openList(saved.id),
+              })
+            }
           >
             Yeni Liste
           </Button>
@@ -225,6 +286,7 @@ export function ListsView({ openModal, openList }: ListsViewProps) {
       />
       <ViewSwitcher active="lists" />
       <DataTable
+        columnsKey="payment-lists"
         title="Ödeme Listeleri"
         icon="fas fa-list-check"
         filters={
@@ -248,7 +310,11 @@ export function ListsView({ openModal, openList }: ListsViewProps) {
           onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         onRowClick={(row) => openList(row.id)}
-        rowStyle={(row) => (row.status === 'submitted' ? { backgroundColor: 'var(--mantine-color-orange-0)' } : undefined)}
+        rowStyle={(row) =>
+          row.status === 'submitted'
+            ? { backgroundColor: 'var(--mantine-color-orange-0)' }
+            : undefined
+        }
         rowActions={rowActions}
         onRefresh={refresh}
         emptyMessage='Ödeme listesi yok. "Yeni Liste" ile başlayın.'
