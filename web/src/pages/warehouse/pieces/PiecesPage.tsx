@@ -7,6 +7,7 @@ import {
   NumberInput,
   SegmentedControl,
   Select,
+  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -84,7 +85,8 @@ import {
   plateSizeInput,
   plateSizeChanged,
   plateSizeOf,
-  PlateSizeFields,
+  PlateShapeSelect,
+  PlateSizeInputs,
   type PlateSizeDraft,
 } from './PlateSizeFields';
 import { codedSheets, SheetCodesModal, type CodedSheet } from './SheetCodes';
@@ -716,25 +718,34 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
           onChange={setCardId}
         />
         {card ? (
-          <Group grow align="flex-start">
-            {card.kind === 'plate' ? (
-              <PlateSizeFields value={plateSize} onChange={setPlateSize} />
-            ) : (
+          // Plates: Şekil and Adet on one row, the shape's sizes on the next (three for
+          // Şekilsiz), so every row is level. Bars: Boy and Adet.
+          <>
+            <SimpleGrid cols={2}>
+              {card.kind === 'plate' ? (
+                <PlateShapeSelect value={plateSize} onChange={setPlateSize} />
+              ) : (
+                <NumberInput
+                  label="Boy (m)"
+                  {...BAR_METRES_INPUT}
+                  value={length}
+                  onChange={setLength}
+                />
+              )}
               <NumberInput
-                label="Boy (m)"
-                {...BAR_METRES_INPUT}
-                value={length}
-                onChange={setLength}
+                label="Adet"
+                min={1}
+                allowDecimal={false}
+                value={quantity}
+                onChange={setQuantity}
               />
-            )}
-            <NumberInput
-              label="Adet"
-              min={1}
-              allowDecimal={false}
-              value={quantity}
-              onChange={setQuantity}
-            />
-          </Group>
+            </SimpleGrid>
+            {card.kind === 'plate' ? (
+              <SimpleGrid cols={plateSize.shape === 'irregular' ? 3 : 2}>
+                <PlateSizeInputs value={plateSize} onChange={setPlateSize} />
+              </SimpleGrid>
+            ) : null}
+          </>
         ) : null}
         {card && size !== null ? (
           <WeightPreviewLine card={card} size={size} quantity={Number(quantity)} />
@@ -933,23 +944,33 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
           Adet ve yer kendi işlemleriyle değişir (Adedi Düzelt, Taşı). Değişiklik lotun geçmişinde
           kim ve ne zaman ile görünür.
         </Text>
-        <Group grow align="flex-start">
-          {plate ? (
-            <PlateSizeFields
-              value={plateSize}
-              onChange={setPlateSize}
-              disabled={Boolean(sizeLock)}
-            />
-          ) : (
-            <NumberInput
-              label="Boy (m)"
-              {...BAR_METRES_INPUT}
-              disabled={Boolean(sizeLock)}
-              value={length}
-              onChange={setLength}
-            />
-          )}
-        </Group>
+        {plate ? (
+          // Şekil on its own row, the shape's sizes level on the next.
+          <>
+            <SimpleGrid cols={2}>
+              <PlateShapeSelect
+                value={plateSize}
+                onChange={setPlateSize}
+                disabled={Boolean(sizeLock)}
+              />
+            </SimpleGrid>
+            <SimpleGrid cols={plateSize.shape === 'irregular' ? 3 : 2}>
+              <PlateSizeInputs
+                value={plateSize}
+                onChange={setPlateSize}
+                disabled={Boolean(sizeLock)}
+              />
+            </SimpleGrid>
+          </>
+        ) : (
+          <NumberInput
+            label="Boy (m)"
+            {...BAR_METRES_INPUT}
+            disabled={Boolean(sizeLock)}
+            value={length}
+            onChange={setLength}
+          />
+        )}
         <Text size="xs" c={sizeLock ? 'orange.8' : 'dimmed'}>
           {sizeLock
             ? `Ölçü değiştirilemez: ${sizeLock}. Adedi düzeltip doğru ölçüde yeni lot ekleyin.`
