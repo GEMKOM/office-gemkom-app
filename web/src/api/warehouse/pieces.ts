@@ -1,7 +1,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { barMetres, formatNumber } from '@/lib/format';
 import { apiFetch } from '../client';
-import { extractResults, toPaginated } from '../types';
+import { extractResults, toPaginated, type Paginated } from '../types';
 
 // Sac & boy stoğu (backend /warehouse/pieces/): plate and boy (profile, pipe,
 // bar) material held as pieces of a stock card. Each lot is pieces of one
@@ -247,6 +247,8 @@ export const pieceKeys = {
   list: (params: PiecesParams) => ['pieces', 'list', params] as const,
   groups: (params: PiecesParams) => ['pieces', 'groups', params] as const,
   cards: (params: PieceCardsParams) => ['pieces', 'cards', params] as const,
+  detail: (id: number) => ['pieces', 'detail', id] as const,
+  used: (params: UsedPlatesParams) => ['pieces', 'used', params] as const,
   movements: (id: number) => ['pieces', 'movements', id] as const,
   changes: (id: number) => ['pieces', 'changes', id] as const,
   cardSearch: ['pieces', 'card-search'] as const,
@@ -280,6 +282,98 @@ export function pieceCardsQueryOptions(params: PieceCardsParams) {
     queryFn: ({ signal }) =>
       apiFetch<unknown>(`${BASE}cards/`, { params: { ...params }, signal }).then((data) =>
         toPaginated<PieceCard>(data),
+      ),
+  });
+}
+
+/** One lot by id, used up or not (a used sheet opened from Kullanılan Saclar). */
+export function pieceQueryOptions(id: number) {
+  return queryOptions({
+    queryKey: pieceKeys.detail(id),
+    queryFn: ({ signal }) => apiFetch<MaterialPiece>(`${BASE}${id}/`, { signal }),
+  });
+}
+
+/** Why a plate sheet left stock: a CNC cut took it, or it was scrapped (Hurdaya Ayır). */
+export type UsedReason = 'cut' | 'scrap';
+
+export const USED_REASON_LABELS: Record<UsedReason, string> = { cut: 'Kesim', scrap: 'Hurda' };
+
+/**
+ * A plate sheet that left stock (GET /warehouse/pieces/used/): one ledger line. A cut a
+ * reopened cut gave back is not listed; nor are sheets zeroed by the old-records update.
+ */
+export interface UsedPlate {
+  /** The ledger line. */
+  id: number;
+  /** The lot (open it for its Hareketler). */
+  piece: number;
+  /** The sheet's code; null for a sheet taken from an old uncoded lot. */
+  piece_code: string | null;
+  /** What the lot still holds: above 0 only for an old lot of several sheets. */
+  lot_remaining: number;
+  reason: UsedReason;
+  movement_type: string;
+  /** Sheets that left (1 for a coded sheet). */
+  quantity: number;
+  unit_kg: string | null;
+  total_kg: string | null;
+  item: number;
+  item_code: string;
+  item_name: string;
+  item_is_active: boolean;
+  plate_thickness_mm: string | null;
+  shape: PieceShape;
+  width_mm: string | null;
+  length_mm: string;
+  area_m2: string | null;
+  heat_number: string;
+  origin_label: string;
+  from_warehouse_code: string | null;
+  from_job_no: string;
+  /** The cut (CNC-2310); null for Hurda. */
+  cnc_task: string | null;
+  cnc_task_name: string | null;
+  /** The cut's parts' jobs, else the job the sheet sat on. */
+  job_nos: string[];
+  note: string;
+  created_by_username: string | null;
+  created_by_name: string | null;
+  created_at: string;
+}
+
+export interface UsedPlatesParams {
+  page?: number;
+  page_size?: number;
+  reason?: UsedReason;
+  /** YYYY-MM-DD, both days included. */
+  date_from?: string;
+  date_to?: string;
+  item?: number;
+  /** As the pieces list's search (sheet code, card, size, heat no…), or the cut's key. */
+  search?: string;
+  /** A part's job on the cut (prefix), or the job the sheet sat on. */
+  job_no?: string;
+  cnc_task?: string;
+}
+
+export interface UsedPlatesPage extends Paginated<UsedPlate> {
+  /** The filtered rows: sheets and kg (null if none weighs anything). */
+  summary: { sheets: number; kg: string | null };
+}
+
+export function usedPlatesQueryOptions(params: UsedPlatesParams) {
+  return queryOptions({
+    queryKey: pieceKeys.used(params),
+    queryFn: ({ signal }) =>
+      apiFetch<unknown>(`${BASE}used/`, { params: { ...params }, signal }).then(
+        (data): UsedPlatesPage => {
+          const summary = (data as { summary?: UsedPlatesPage['summary'] } | null)?.summary;
+          return {
+            ...toPaginated<UsedPlate>(data),
+            summary: summary ?? { sheets: 0, kg: null },
+          };
+        },
       ),
   });
 }

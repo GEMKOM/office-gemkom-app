@@ -34,6 +34,7 @@ import {
   pieceChangesQueryOptions,
   pieceKeys,
   pieceMovementsQueryOptions,
+  pieceQueryOptions,
   piecesQueryOptions,
   placeLabel,
   previewWeight,
@@ -90,6 +91,7 @@ import {
   type PlateSizeDraft,
 } from './PlateSizeFields';
 import { codedSheets, SheetCodesModal, type CodedSheet } from './SheetCodes';
+import { UsedPlatesView } from './UsedPlatesView';
 
 const PAGE_SIZE = 50;
 /** The Mikro comparison, on its own page (it was this page's "Mikro ile" view). */
@@ -106,6 +108,7 @@ const URL_DEFAULTS = {
   max_length: '',
   origin: '',
   review: false,
+  used: false,
   item: '',
   piece: '',
   page: '1',
@@ -120,7 +123,8 @@ type FilterKeys =
   | 'min_length'
   | 'max_length'
   | 'origin'
-  | 'review';
+  | 'review'
+  | 'used';
 const FILTER_KEYS: FilterKeys[] = [
   'search',
   'place',
@@ -132,6 +136,7 @@ const FILTER_KEYS: FilterKeys[] = [
   'max_length',
   'origin',
   'review',
+  'used',
 ];
 
 /** One box for anything on a lot; the backend splits it into words that all must match. */
@@ -192,8 +197,20 @@ function filterConfig(kind: PieceKind): FilterConfig<FilterKeys>[] {
       options: ORIGIN_OPTIONS,
     },
     { type: 'checkbox', key: 'review', label: 'Kontrol edilmeli' },
+    // Sac Stoğu: sheets a cut used (or scrapped) stay listed, dimmed, to open their history.
+    ...(kind === 'plate'
+      ? [{ type: 'checkbox' as const, key: 'used' as const, label: USED_FILTER_LABEL }]
+      : []),
   ];
 }
+
+export const USED_FILTER_LABEL = 'Kullanılmış sacları da göster';
+
+/** A sheet a cut used or that was scrapped: no pieces left, kept to open its history. */
+export const isUsedUp = (row: MaterialPiece) => row.quantity === 0;
+
+/** Used-up rows read dimmed. */
+export const usedRowStyle = (row: MaterialPiece) => (isUsedUp(row) ? { opacity: 0.55 } : undefined);
 
 /** A column header with an (i) that says what the column holds. */
 export function HeaderHelp({ label, help }: { label: string; help: string }) {
@@ -283,16 +300,20 @@ const allPieceColumns: DataTableColumn<MaterialPiece>[] = [
     key: 'code',
     header: <HeaderHelp label="Sac Kodu" help={SHEET_CODE_HELP} />,
     exportValue: (row) => row.code ?? '',
-    render: (row) =>
-      row.code ? (
-        <Text size="sm" fw={600} style={mono}>
-          {row.code}
-        </Text>
-      ) : (
-        <Text size="sm" c="dimmed">
-          –
-        </Text>
-      ),
+    render: (row) => (
+      <Group gap={6} wrap="nowrap">
+        {row.code ? (
+          <Text size="sm" fw={600} style={mono}>
+            {row.code}
+          </Text>
+        ) : (
+          <Text size="sm" c="dimmed">
+            –
+          </Text>
+        )}
+        {isUsedUp(row) ? <StatusBadge color="grey">Kullanıldı</StatusBadge> : null}
+      </Group>
+    ),
   },
   {
     key: 'card',
@@ -341,7 +362,8 @@ const allPieceColumns: DataTableColumn<MaterialPiece>[] = [
     key: 'weight',
     header: 'Ağırlık',
     align: 'right',
-    render: (row) => <Weight value={row.total_kg} kind={row.kind} />,
+    // A used sheet weighs nothing in stock: '–', never 0 kg.
+    render: (row) => (isUsedUp(row) ? '–' : <Weight value={row.total_kg} kind={row.kind} />),
   },
   { key: 'place', header: 'Yer', render: (row) => placeLabel(row) },
   { key: 'heat', header: 'Döküm No', render: (row) => row.heat_number || '–' },
@@ -397,6 +419,9 @@ export function sizeGrouping(opened: boolean): DataTableGrouping<MaterialPiece> 
       const first = rows[0];
       if (!first) return null;
       const quantity = rows.reduce((n, r) => n + r.quantity, 0);
+      // Used-up sheets (shown with Kullanılmış sacları da göster) are not stock: not counted.
+      const inStock = rows.filter((r) => !isUsedUp(r)).length;
+      const used = rows.length - inStock;
       const reserved = rows.reduce((n, r) => n + (r.reserved_quantity ?? 0), 0);
       const weighed = rows.every((r) => r.total_kg !== null);
       const total = weighed ? String(rows.reduce((n, r) => n + Number(r.total_kg), 0)) : null;
@@ -405,7 +430,13 @@ export function sizeGrouping(opened: boolean): DataTableGrouping<MaterialPiece> 
         cells: {
           code: (
             <Text size="sm" fw={600}>
-              {rows.length} {unit}
+              {inStock} {unit}
+              {used ? (
+                <Text span size="xs" c="dimmed" fw={400}>
+                  {' '}
+                  (+{used} kullanıldı)
+                </Text>
+              ) : null}
             </Text>
           ),
           card: (
@@ -1115,9 +1146,21 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
       : []),
     ...(piece.parent_code ? [{ label: 'Kesildiği sac', value: piece.parent_code }] : []),
     { label: 'Ölçü', value: sizeLabel(piece) },
-    { label: 'Adet', value: piece.quantity },
+    {
+      label: 'Adet',
+      value: isUsedUp(piece) ? (
+        <Group gap={6}>
+          0 <StatusBadge color="grey">Kullanıldı</StatusBadge>
+        </Group>
+      ) : (
+        piece.quantity
+      ),
+    },
     { label: 'Birim ağırlık', value: piece.unit_kg !== null ? kg(piece.unit_kg) : '–' },
-    { label: 'Toplam ağırlık', value: <Weight value={piece.total_kg} kind={piece.kind} /> },
+    {
+      label: 'Toplam ağırlık',
+      value: isUsedUp(piece) ? '–' : <Weight value={piece.total_kg} kind={piece.kind} />,
+    },
     { label: 'Yer', value: placeLabel(piece) },
     { label: 'Döküm no', value: piece.heat_number || '–' },
     { label: 'Sertifika no', value: piece.certificate_no || '–' },
@@ -1331,7 +1374,12 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
   }, [values.view, navigate]);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
   const [creating, setCreating] = useState(false);
-  const view = values.view === 'cards' ? 'cards' : 'pieces';
+  const view =
+    values.view === 'cards'
+      ? 'cards'
+      : values.view === 'used' && kind === 'plate'
+        ? 'used'
+        : 'pieces';
 
   // Every card of this kind that holds pieces, for the band's figures and the Kartlar view.
   const cards = useQuery({
@@ -1369,6 +1417,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
     ...mm('max_length', 'max_length_mm'),
     ...(values.origin ? { origin: values.origin } : {}),
     ...(values.review ? { needs_review: 'true' as const } : {}),
+    ...(kind === 'plate' && values.used ? { include_empty: 'true' as const } : {}),
     ...(values.place === 'FASON'
       ? { at_supplier: 'true' as const }
       : values.place
@@ -1421,7 +1470,13 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
     [grouped, groups.data, list.data],
   );
   const openId = Number.parseInt(values.piece, 10);
-  const open = rows.find((r) => r.id === openId) ?? null;
+  const listed = rows.find((r) => r.id === openId);
+  // A lot not on this page (a used sheet opened from Kullanılan Saclar): fetched by id.
+  const fetched = useQuery({
+    ...pieceQueryOptions(openId),
+    enabled: Number.isFinite(openId) && !listed && (view === 'used' || !pieceQuery.isFetching),
+  });
+  const open = listed ?? (fetched.data?.id === openId ? fetched.data : null);
   const itemCard = values.item ? allCards.find((c) => String(c.id) === values.item) : undefined;
 
   const viewSwitch = (
@@ -1432,6 +1487,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
       data={[
         { value: 'pieces', label: 'Parçalar' },
         { value: 'cards', label: 'Kartlar' },
+        ...(kind === 'plate' ? [{ value: 'used', label: 'Kullanılan Saclar' }] : []),
       ]}
     />
   );
@@ -1506,6 +1562,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
           getRowId={(row) => String(row.id)}
           loading={pieceQuery.isFetching}
           onRowClick={(row) => apply({ piece: String(row.id) })}
+          rowStyle={usedRowStyle}
           grouping={grouped ? sizeGrouping(search !== '') : undefined}
           pagination={{
             page,
@@ -1515,6 +1572,8 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
           }}
           emptyMessage="Bu filtrelerle parça yok"
         />
+      ) : view === 'used' ? (
+        <UsedPlatesView toolbar={viewSwitch} onOpen={(id) => apply({ piece: String(id) })} />
       ) : (
         <DataTable
           title="Kartlar"
