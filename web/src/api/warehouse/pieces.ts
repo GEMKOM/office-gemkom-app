@@ -249,9 +249,17 @@ export const pieceKeys = {
   cards: (params: PieceCardsParams) => ['pieces', 'cards', params] as const,
   movements: (id: number) => ['pieces', 'movements', id] as const,
   changes: (id: number) => ['pieces', 'changes', id] as const,
+  lineSheets: (planningItemId: number) => ['pieces', 'line-sheets', planningItemId] as const,
   cardSearch: ['pieces', 'card-search'] as const,
   supplierSearch: ['pieces', 'supplier-search'] as const,
 };
+
+/**
+ * A plate line's received sheets (and splits), every page. After sheet codes each
+ * sheet is its own row; a 50-row page hid the rest, and those sheets are not free
+ * stock either (held for the line's cuts). Backend max_page_size is 1000.
+ */
+export const LINE_SHEETS_PAGE_SIZE = 1000;
 
 export function piecesQueryOptions(params: PiecesParams) {
   return queryOptions({
@@ -260,6 +268,34 @@ export function piecesQueryOptions(params: PiecesParams) {
       apiFetch<unknown>(BASE, { params: { ...params }, signal }).then((data) =>
         toPaginated<MaterialPiece>(data),
       ),
+  });
+}
+
+/** Every sheet Mal kabul posted for this planning line (coded rows, all pages). */
+export async function fetchLineSheets(planningItemId: number, signal?: AbortSignal) {
+  const all: MaterialPiece[] = [];
+  for (let page = 1; page <= 20; page++) {
+    const chunk = toPaginated<MaterialPiece>(
+      await apiFetch<unknown>(BASE, {
+        params: {
+          planning_item: planningItemId,
+          kind: 'plate',
+          page,
+          page_size: LINE_SHEETS_PAGE_SIZE,
+        },
+        signal,
+      }),
+    );
+    all.push(...chunk.results);
+    if (!chunk.next || chunk.results.length === 0 || all.length >= chunk.count) break;
+  }
+  return all;
+}
+
+export function lineSheetsQueryOptions(planningItemId: number) {
+  return queryOptions({
+    queryKey: pieceKeys.lineSheets(planningItemId),
+    queryFn: ({ signal }) => fetchLineSheets(planningItemId, signal),
   });
 }
 

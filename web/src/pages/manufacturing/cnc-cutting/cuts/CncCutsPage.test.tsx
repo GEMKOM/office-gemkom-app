@@ -611,6 +611,51 @@ it('a cut takes sheets from a stock lot: the picker lists free sheets, the pick 
   await waitFor(() => expect(used).toHaveValue('2'));
 });
 
+it("Kesimi Bitir lists every sheet of the cut's plate line, not only the first 50", async () => {
+  const sheet = (id: number) => ({
+    id,
+    code: `S26-${String(id).padStart(5, '0')}`,
+    item: 12,
+    item_code: '0100-20',
+    item_name: '20 mm P265GH',
+    kind: 'plate',
+    width_mm: '1500.0',
+    length_mm: '3000.0',
+    quantity: 1,
+    available_quantity: 1,
+    warehouse_code: 'HAMMADDE',
+    job_no: '',
+    heat_number: '',
+  });
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) => {
+    const parsed = new URL(String(url));
+    if (
+      (!init?.method || init.method === 'GET') &&
+      parsed.pathname === '/warehouse/pieces/' &&
+      parsed.searchParams.get('planning_item') === '12'
+    ) {
+      const page = parsed.searchParams.get('page') || '1';
+      return json({
+        count: 51,
+        next: page === '1' ? 'https://api.test/warehouse/pieces/?page=2' : null,
+        previous: null,
+        results: page === '1' ? Array.from({ length: 50 }, (_, i) => sheet(i + 1)) : [sheet(51)],
+      });
+    }
+    return base(url, init);
+  });
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'CNC-7 durumunu değiştir' }));
+  const dialog = await screen.findByRole('dialog', { name: /Kesimi Bitir/ });
+  expect(await within(dialog).findByText(/S26-00051/)).toBeInTheDocument();
+  const pages = calls().filter(
+    (c) =>
+      c.url.pathname === '/warehouse/pieces/' && c.url.searchParams.get('planning_item') === '12',
+  );
+  expect(pages.map((c) => c.url.searchParams.get('page'))).toEqual(['1', '2']);
+});
+
 it('a cut may finish with no remnant rows: it left none', async () => {
   renderPage();
   fireEvent.click(await screen.findByRole('button', { name: 'CNC-7 durumunu değiştir' }));
