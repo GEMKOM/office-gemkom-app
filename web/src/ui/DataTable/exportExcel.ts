@@ -12,7 +12,8 @@ type Cell = string | number | null;
 
 function headerText<T>(column: DataTableColumn<T>): string {
   if (column.exportHeader) return column.exportHeader;
-  if (typeof column.header === 'string' || typeof column.header === 'number') return String(column.header);
+  if (typeof column.header === 'string' || typeof column.header === 'number')
+    return String(column.header);
   return column.key;
 }
 
@@ -73,7 +74,8 @@ export async function exportToExcel<T>(
   aoa.forEach((cells, r) => {
     cells.forEach((value, c) => {
       const format = r > 0 ? formats[r - 1]?.[c] : undefined;
-      const cell = sheet[XLSX.utils.encode_cell({ r, c })] as { t?: string; z?: string } | undefined;
+      const cell = sheet[XLSX.utils.encode_cell({ r, c })] as
+        { t?: string; z?: string } | undefined;
       if (cell && cell.t === 'n' && format) cell.z = format;
       const len =
         typeof value === 'number'
@@ -87,7 +89,10 @@ export async function exportToExcel<T>(
   sheet['!cols'] = widths.map((w) => ({ wch: Math.min(Math.max(w + 2, 8), 60) }));
   if (header.length > 0) {
     sheet['!autofilter'] = {
-      ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: header.length - 1 } }),
+      ref: XLSX.utils.encode_range({
+        s: { r: 0, c: 0 },
+        e: { r: aoa.length - 1, c: header.length - 1 },
+      }),
     };
   }
 

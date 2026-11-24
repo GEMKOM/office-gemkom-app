@@ -1062,10 +1062,18 @@ export function DataTable<T extends RowData>(props: DataTableProps<T>) {
       if (!canCollapse({ ...info, expanded: initial })) return initial;
       return groupOpen[node.id] ?? initial;
     };
-    return flattenGroups(groupTree, isExpanded, hasGroupFooter);
+    return flattenGroups(groupTree, isExpanded, hasGroupFooter, grouping?.singleAsRow ?? false);
     // The items depend on these options, not on the header/footer functions' identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [groupTree, rows, groupOpen, collapsibleOption, grouping?.defaultExpanded, hasGroupFooter]);
+  }, [
+    groupTree,
+    rows,
+    groupOpen,
+    collapsibleOption,
+    grouping?.defaultExpanded,
+    hasGroupFooter,
+    grouping?.singleAsRow,
+  ]);
   const bodyRows = useMemo(
     () =>
       items.filter((item): item is Extract<DisplayItem<T>, { kind: 'row' }> => item.kind === 'row'),

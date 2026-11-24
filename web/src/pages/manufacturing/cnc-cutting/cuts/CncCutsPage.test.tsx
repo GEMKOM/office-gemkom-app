@@ -363,31 +363,14 @@ it('create needs a plate source and a part, then posts the multipart body', asyn
   fireEvent.change(within(dialog).getByLabelText(/^Nesting ID/), { target: { value: 'N-9' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kesim Oluştur' }));
   await waitFor(() =>
-    expect(notify.error).toHaveBeenCalledWith('Stoktan sac veya plaka kalemi seçmelisiniz'),
+    expect(notify.error).toHaveBeenCalledWith('Stoktan sac veya talep edilen sac seçmelisiniz'),
   );
-
-  // Pick a planning item.
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Plaka Kalemi Seç' }));
-  const picker = await screen.findByRole('dialog', { name: 'Plaka Kalemi Seç' });
+  // A new cut takes sheets from Sac Stoğu or a Talep Edilen Sac, no plaka kalemi.
+  expect(within(dialog).queryByRole('button', { name: /Plaka Kalemi/ })).not.toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Stoktan Sac Seç' }));
+  const picker = await screen.findByRole('dialog', { name: 'Stoktan Sac Seç' });
   fireEvent.click(await within(picker).findByRole('button', { name: 'Seç' }));
-  await waitFor(() =>
-    expect(screen.queryByRole('dialog', { name: 'Plaka Kalemi Seç' })).not.toBeInTheDocument(),
-  );
-  expect(within(dialog).getByText('Seçili: 0101-10 — 10 mm S235')).toBeInTheDocument();
-  expect(
-    within(dialog).getByText('Malzeme henüz teslim edilmedi — satın alma bekleniyor.'),
-  ).toBeInTheDocument();
-  const itemCall = calls().find((c) => c.url.pathname === '/planning/items/')!;
-  expect(Object.fromEntries(itemCall.url.searchParams)).toEqual({
-    is_plate: 'true',
-    sized: 'false',
-    is_consumed: 'false',
-    mine: 'true',
-    fields: 'simple',
-    ordering: '-id',
-    page: '1',
-    page_size: '20',
-  });
+  expect(await within(dialog).findByText('Seçili: 0100-10 · 1500 × 3000 mm')).toBeInTheDocument();
 
   fireEvent.click(within(dialog).getByRole('button', { name: 'Kesim Oluştur' }));
   await waitFor(() => expect(notify.error).toHaveBeenCalledWith('En az bir parça eklemelisiniz'));
@@ -407,8 +390,8 @@ it('create needs a plate source and a part, then posts the multipart body', asyn
   const body = post.body as FormData;
   expect(body.get('name')).toBe('Yeni');
   expect(body.get('nesting_id')).toBe('N-9');
-  expect(body.get('planning_request_item_id')).toBe('44');
-  expect(body.get('mark_item_consumed')).toBe('false');
+  expect(body.get('selected_piece_id')).toBe('9');
+  expect(body.has('planning_request_item_id')).toBe(false);
   expect(body.has('selected_plate_id')).toBe(false);
   expect(JSON.parse(String(body.get('parts_data')))).toEqual([
     { job_no: '114-09', image_no: '0124', position_no: 'P1', weight_kg: 10, quantity: 2 },

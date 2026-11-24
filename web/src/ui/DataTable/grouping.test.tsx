@@ -60,6 +60,23 @@ describe('grouping helpers', () => {
     ]);
   });
 
+  it('shows a one-row group as just its row with singleAsRow', () => {
+    const rows = entries.map((original, index) => ({ id: String(original.id), index, original }));
+    const tree = buildGroupTree(rows, ['job'], 'asc');
+    expect(flattenGroups(tree, () => false, true, true).map((i) => i.key)).toEqual([
+      '1',
+      '2',
+      '5',
+      '3',
+      '4',
+    ]);
+    const byUser = buildGroupTree(rows, ['month'], 'asc');
+    expect(flattenGroups(byUser, () => false, false, true).map((i) => i.key)).toEqual([
+      'group:2026-10',
+      'group:2026-11',
+    ]);
+  });
+
   it('puts empty values in one group and can keep data order or sort descending', () => {
     const rows = [{ v: null }, { v: '' }, { v: 'b' }, { v: 'a' }].map((original, index) => ({
       id: String(index),
