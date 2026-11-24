@@ -49,6 +49,13 @@ import {
   type DataTableColumn,
 } from '@/ui';
 import { STATUS_COLOR } from '../counts/StockCountsPage';
+import {
+  emptyPlateSize,
+  plateSizeError,
+  plateSizeInput,
+  PlateSizeFields,
+  type PlateSizeDraft,
+} from '../pieces/PlateSizeFields';
 
 const PAGE_SIZE = 50;
 const EMPTY: PieceCountLine[] = [];
@@ -170,7 +177,7 @@ function PrefillModal({
   );
 }
 
-/** Pieces the system did not know: card, size, count (and job in İş Emri). */
+/** Pieces the system did not know: card, size (a plate's with its shape), count (and job in İş Emri). */
 function AddLinePanel({
   perJob,
   submitting,
@@ -181,15 +188,15 @@ function AddLinePanel({
   onAdd: (line: PieceCountLineInput, code: string) => Promise<boolean>;
 }) {
   const [cardId, setCardId] = useState<string | null>(null);
-  const [width, setWidth] = useState<string | number>('');
-  // A plate's length in mm; a bar's in metres (bars read in metres, never mm; sent in mm).
+  // A plate's shape and size in mm.
+  const [plateSize, setPlateSize] = useState<PlateSizeDraft>(emptyPlateSize);
+  // A bar's length in metres (bars read in metres, never mm; sent in mm).
   const [length, setLength] = useState<string | number>('');
   const [quantity, setQuantity] = useState<string | number>('');
   const [jobNo, setJobNo] = useState('');
   const [heat, setHeat] = useState('');
   const card = cardId ? pieceCardFromSearch(cardId) : undefined;
   const bar = card?.kind === 'boy';
-  const lengthMm = bar ? metresToMm(length) : length;
   const pickCard = (value: string | null) => {
     // The length's unit follows the card: a typed length does not carry over.
     if ((value ? pieceCardFromSearch(value)?.kind : undefined) !== card?.kind) setLength('');
@@ -198,14 +205,14 @@ function AddLinePanel({
 
   const add = async () => {
     if (!card) return notify.warning('Stok kartı seçin');
-    if (!(Number(lengthMm) > 0)) return notify.warning(bar ? 'Boy (m) girin' : 'Boy (mm) girin');
-    if (card.kind === 'plate' && !(Number(width) > 0))
-      return notify.warning('Sac için en (mm) girin');
+    const lengthMm = metresToMm(length);
+    if (bar && !(Number(lengthMm) > 0)) return notify.warning('Boy (m) girin');
+    const wrong = bar ? null : plateSizeError(plateSize);
+    if (wrong) return notify.warning(wrong);
     const ok = await onAdd(
       {
         item: card.id,
-        width_mm: card.kind === 'plate' ? String(width) : null,
-        length_mm: String(lengthMm),
+        ...(bar ? { width_mm: null, length_mm: String(lengthMm) } : plateSizeInput(plateSize)),
         ...(perJob ? { job_no: jobNo.trim() } : {}),
         counted_quantity: quantity === '' ? null : Number(quantity),
         heat_number: heat,
@@ -213,7 +220,8 @@ function AddLinePanel({
       card.code,
     );
     if (ok) {
-      setWidth('');
+      // The next sheet counted is often of the same shape.
+      setPlateSize((was) => ({ ...emptyPlateSize(), shape: was.shape }));
       setLength('');
       setQuantity('');
       setHeat('');
@@ -225,7 +233,7 @@ function AddLinePanel({
       <Text size="sm" fw={600} mb={6}>
         Sistemde olmayan parça ekle
       </Text>
-      <SimpleGrid cols={{ base: 1, md: perJob ? 7 : 6 }} spacing="sm">
+      <SimpleGrid cols={{ base: 1, sm: 3, md: 5 }} spacing="sm">
         <SelectRemote
           label="Stok kartı"
           placeholder="Sac / boy kartı ara…"
@@ -235,26 +243,10 @@ function AddLinePanel({
           value={cardId}
           onChange={pickCard}
         />
-        <NumberInput
-          label="En (mm)"
-          min={0}
-          decimalScale={1}
-          hideControls
-          disabled={card?.kind === 'boy'}
-          value={width}
-          onChange={setWidth}
-        />
         {bar ? (
           <NumberInput label="Boy (m)" {...BAR_METRES_INPUT} value={length} onChange={setLength} />
         ) : (
-          <NumberInput
-            label="Boy (mm)"
-            min={0}
-            decimalScale={1}
-            hideControls
-            value={length}
-            onChange={setLength}
-          />
+          <PlateSizeFields value={plateSize} onChange={setPlateSize} />
         )}
         <NumberInput
           label="Adet"

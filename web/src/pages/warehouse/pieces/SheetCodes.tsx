@@ -1,6 +1,7 @@
 import { Alert, Button, Table, Text } from '@mantine/core';
 import { flushSync } from 'react-dom';
 import { createRoot } from 'react-dom/client';
+import { sizeLabel, type PieceShape } from '@/api/warehouse/pieces';
 import { DetailModal, FaIcon, notify } from '@/ui';
 
 // The codes new plate sheets got (Mal Kabul, Parça Ekle, a cut's remnants),
@@ -13,13 +14,15 @@ export interface CodedSheet {
   item_name?: string;
   width_mm: string | null;
   length_mm: string;
+  /** The sheet's outline (a rectangle when left out). */
+  shape?: PieceShape;
+  area_m2?: string | null;
   heat_number?: string;
 }
 
-const mm = (v: string | null) => (v === null ? '' : String(Number(v)));
-
-export function sheetSize(s: { width_mm: string | null; length_mm: string }): string {
-  return s.width_mm ? `${mm(s.width_mm)} × ${mm(s.length_mm)} mm` : `${mm(s.length_mm)} mm`;
+/** The sheet's size by its shape ("Ø 600 mm", "Şekilsiz 800 × 900 mm · ~0,45 m²"). */
+export function sheetSize(s: CodedSheet): string {
+  return sizeLabel(s);
 }
 
 /** The coded sheets among rows the backend sent back (bars have no code). */

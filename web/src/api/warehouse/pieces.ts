@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { barMetres } from '@/lib/format';
+import { barMetres, formatNumber } from '@/lib/format';
 import { apiFetch } from '../client';
 import { extractResults, toPaginated } from '../types';
 
@@ -12,6 +12,13 @@ import { extractResults, toPaginated } from '../types';
 // (S26-00001), written on the sheet; bars stay lots of identical pieces.
 
 export type PieceKind = 'plate' | 'boy';
+
+/**
+ * A plate piece's outline. width_mm × length_mm is always its bounding box: a rectangle's
+ * en × boy, a triangle's taban × yükseklik, a circle's çap (both), an irregular piece's
+ * box with its estimated area (area_m2), which its weight comes from. Bars are rectangles.
+ */
+export type PieceShape = 'rectangle' | 'triangle' | 'circle' | 'irregular';
 
 export interface MaterialPiece {
   id: number;
@@ -29,6 +36,10 @@ export interface MaterialPiece {
   plate_thickness_mm?: string | null;
   width_mm: string | null;
   length_mm: string;
+  /** Plates: the outline (width × length is its bounding box); bars are always rectangle. */
+  shape?: PieceShape;
+  /** Irregular plates only: the estimated area in m² ("0.4500"); else null. */
+  area_m2?: string | null;
   quantity: number;
   /** Sheets CNC cuts have reserved of the lot (they leave stock when the cut is processed). */
   reserved_quantity?: number;
@@ -85,7 +96,14 @@ export interface PieceChange {
   /** field → [old, new] */
   changes: Partial<
     Record<
-      'heat_number' | 'certificate_no' | 'note' | 'needs_review' | 'width_mm' | 'length_mm',
+      | 'heat_number'
+      | 'certificate_no'
+      | 'note'
+      | 'needs_review'
+      | 'width_mm'
+      | 'length_mm'
+      | 'shape'
+      | 'area_m2',
       [unknown, unknown]
     >
   >;
@@ -107,6 +125,9 @@ export interface PieceEdit {
    */
   width_mm?: string | null;
   length_mm?: string;
+  /** A plate's outline, corrected with its size (change_note required). */
+  shape?: PieceShape;
+  area_m2?: string | null;
   change_note?: string;
 }
 
@@ -167,12 +188,14 @@ export interface PiecesParams {
 
 /** Sac Stoğu: the pieces of one card and size (each plate sheet with its code). */
 export interface PieceGroup {
-  /** item:width:length */
+  /** item:width:length:shape */
   key: string;
   item: number;
   item_code: string;
   width_mm: string | null;
   length_mm: string;
+  /** A circle and a rectangle of the same box are two groups. */
+  shape?: PieceShape;
   /** Rows (one per plate sheet). */
   lots: number;
   /** Pieces in them. */
@@ -200,6 +223,9 @@ export interface PieceInput extends PiecePlace {
   quantity: number;
   width_mm?: string | null;
   length_mm: string;
+  /** Plates (default rectangle); area_m2 for an irregular one. */
+  shape?: PieceShape;
+  area_m2?: string | null;
   heat_number?: string;
   certificate_no?: string;
   note?: string;
@@ -296,6 +322,9 @@ export function previewWeight(data: {
   item: number;
   width_mm?: string | null;
   length_mm: string;
+  /** Plates: the weight follows the shape's area (an irregular one's area_m2). */
+  shape?: PieceShape;
+  area_m2?: string | null;
   quantity?: number;
 }) {
   return apiFetch<WeightPreview>(`${BASE}weight-preview/`, { method: 'POST', body: data });
@@ -390,8 +419,54 @@ export function missingWeightText(kind: PieceKind | null): string {
   return kind === 'boy' ? 'Kartta metre ağırlığı (kg/m) yok' : 'Kartta sac kalınlığı yok';
 }
 
-/** "1500 × 3000 mm" for a plate, "6 m" / "2,5 m" for a bar (bars read in metres, never mm). */
-export function sizeLabel(p: { width_mm: string | null; length_mm: string }): string {
+export const SHAPE_LABELS: Record<PieceShape, string> = {
+  rectangle: 'Dikdörtgen',
+  triangle: 'Üçgen',
+  circle: 'Daire',
+  irregular: 'Şekilsiz',
+};
+
+/** The Şekil picker's choices, Dikdörtgen first (the default). */
+export const SHAPE_OPTIONS: { value: PieceShape; label: string }[] = (
+  Object.keys(SHAPE_LABELS) as PieceShape[]
+).map((value) => ({ value, label: SHAPE_LABELS[value] }));
+
+/** "Daire"; an unknown value as it came, none as "Dikdörtgen". */
+export function shapeLabel(shape: string | null | undefined): string {
+  if (!shape) return SHAPE_LABELS.rectangle;
+  return SHAPE_LABELS[shape as PieceShape] ?? shape;
+}
+
+/** An area in m²: "0,45 m²", "3 m²" (up to 4 decimals, as stored). */
+export function areaLabel(area: string | number): string {
+  return `${formatNumber(area, { maximumFractionDigits: 4 })} m²`;
+}
+
+/** A plate's or bar's size, with the plate's shape when it has one. */
+export interface PieceSize {
+  width_mm: string | null;
+  length_mm: string;
+  shape?: PieceShape | string | null;
+  area_m2?: string | null;
+}
+
+/**
+ * A plate by its shape: "1500 × 3000 mm", "Üçgen 600 × 800 mm" (taban × yükseklik),
+ * "Ø 600 mm" (çap), "Şekilsiz 800 × 900 mm · ~0,45 m²" (box and estimated area). A bar reads
+ * "6 m" / "2,5 m" (bars read in metres, never mm).
+ */
+export function sizeLabel(p: PieceSize): string {
   const n = (v: string) => String(Number(v));
-  return p.width_mm ? `${n(p.width_mm)} × ${n(p.length_mm)} mm` : barMetres(p.length_mm);
+  if (!p.width_mm) return barMetres(p.length_mm);
+  const box = `${n(p.width_mm)} × ${n(p.length_mm)} mm`;
+  switch (p.shape) {
+    case 'triangle':
+      return `Üçgen ${box}`;
+    case 'circle':
+      return `Ø ${n(p.width_mm)} mm`;
+    case 'irregular':
+      return `Şekilsiz ${box}${p.area_m2 ? ` · ~${areaLabel(p.area_m2)}` : ''}`;
+    default:
+      return box;
+  }
 }

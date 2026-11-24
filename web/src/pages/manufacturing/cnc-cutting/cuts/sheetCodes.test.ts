@@ -115,4 +115,36 @@ describe('a cut on coded sheets', () => {
     ]);
     expect(remnantSheets(undefined)).toEqual([]);
   });
+
+  it('reads sheets and remnants by their shape', () => {
+    const circle = { ...sheet(7, 'S26-00007'), width_mm: '600', length_mm: '600', shape: 'circle' };
+    const box = { ...sheet(8, 'S26-00008'), width_mm: '600', length_mm: '600' };
+    expect(
+      sheetsText([
+        { quantity: 1, piece_details: circle as PieceChoice },
+        { quantity: 1, piece_details: box },
+      ]),
+    ).toBe('S26-00007 · 0100-10 · Ø 600 mm · S26-00008 · 0100-10 · 600 × 600 mm');
+    const booked = {
+      remnants: [
+        {
+          item: 5,
+          item_code: '0100-10',
+          width_mm: '800',
+          length_mm: '900',
+          shape: 'irregular',
+          area_m2: '0.4500',
+          quantity: 1,
+          heat_number: '',
+          kept: true,
+          unit_kg: null,
+          total_kg: null,
+          sheets: [{ id: 42, code: 'S26-00042', heat_number: '' }],
+        },
+      ],
+    } as unknown as ProcessResult;
+    expect(remnantSheets(booked)).toEqual([
+      expect.objectContaining({ code: 'S26-00042', shape: 'irregular', area_m2: '0.4500' }),
+    ]);
+  });
 });

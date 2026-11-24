@@ -2,6 +2,7 @@ import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
+import { pickShape } from '@/test/plateShape';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { CncCutsPage } from './CncCutsPage';
@@ -297,14 +298,19 @@ it('finishing a cut asks for its remnants, then books it', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'CNC-7 durumunu değiştir' }));
   const dialog = await screen.findByRole('dialog', { name: /Kesimi Bitir/ });
   const finish = await within(dialog).findByRole('button', { name: 'Kesimi Bitir' });
-  fireEvent.change(within(dialog).getByLabelText('Fire sac eni 1'), { target: { value: '600' } });
-  fireEvent.change(within(dialog).getByLabelText('Fire sac boyu 1'), { target: { value: '1500' } });
+  fireEvent.change(within(dialog).getByLabelText('Fire sac 1 En (mm)'), {
+    target: { value: '600' },
+  });
+  fireEvent.change(within(dialog).getByLabelText('Fire sac 1 Boy (mm)'), {
+    target: { value: '1500' },
+  });
+  const remnant = { width_mm: '600', length_mm: '1500', shape: 'rectangle', quantity: 1 };
   await waitFor(() =>
     expect(
       calls()
         .filter((c) => c.url.pathname === '/cnc_cutting/tasks/CNC-7/finish-preview/')
         .at(-1)?.body,
-    ).toEqual({ remnants: [{ width_mm: '600', length_mm: '1500', quantity: 1 }] }),
+    ).toEqual({ remnants: [remnant] }),
   );
   await waitFor(() => expect(finish).toBeEnabled());
   fireEvent.click(finish);
@@ -312,11 +318,61 @@ it('finishing a cut asks for its remnants, then books it', async () => {
     expect(notify.success).toHaveBeenCalledWith('Kesim tamamlandı olarak işaretlendi'),
   );
   const post = calls().find((c) => c.url.pathname === '/cnc_cutting/tasks/mark-completed/')!;
-  expect(post.body).toEqual({
-    key: 'CNC-7',
-    remnants: [{ width_mm: '600', length_mm: '1500', quantity: 1 }],
-    no_remnant: false,
+  expect(post.body).toEqual({ key: 'CNC-7', remnants: [remnant], no_remnant: false });
+});
+
+it('finishing a cut takes remnants by shape: a circle by its diameter, an irregular one by area', async () => {
+  renderPage();
+  fireEvent.click(await screen.findByRole('button', { name: 'CNC-7 durumunu değiştir' }));
+  const dialog = await screen.findByRole('dialog', { name: /Kesimi Bitir/ });
+  const finish = await within(dialog).findByRole('button', { name: 'Kesimi Bitir' });
+
+  // Daire: one Çap input, sent as width and length.
+  await pickShape(dialog, 'Fire sac 1 Şekil', 'Daire');
+  expect(within(dialog).queryByLabelText('Fire sac 1 Boy (mm)')).not.toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('Fire sac 1 Çap (mm)'), {
+    target: { value: '700' },
   });
+
+  // Şekilsiz: its box and the estimated area, at most the box.
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Fire Sac Ekle' }));
+  await pickShape(dialog, 'Fire sac 2 Şekil', 'Şekilsiz');
+  fireEvent.change(within(dialog).getByLabelText('Fire sac 2 En (mm)'), {
+    target: { value: '800' },
+  });
+  fireEvent.change(within(dialog).getByLabelText('Fire sac 2 Boy (mm)'), {
+    target: { value: '900' },
+  });
+  expect(within(dialog).getByText('Fire sac 2: Tahmini alan (m²) girin')).toBeInTheDocument();
+  fireEvent.change(within(dialog).getByLabelText('Fire sac 2 Tahmini alan (m²)'), {
+    target: { value: '0,8' },
+  });
+  expect(
+    within(dialog).getAllByText('Tahmini alan en × boydan (0,72 m²) büyük olamaz').length,
+  ).toBeGreaterThan(0);
+  expect(finish).toBeDisabled();
+  fireEvent.change(within(dialog).getByLabelText('Fire sac 2 Tahmini alan (m²)'), {
+    target: { value: '0,45' },
+  });
+
+  const remnants = [
+    { width_mm: '700', length_mm: '700', shape: 'circle', quantity: 1 },
+    { width_mm: '800', length_mm: '900', shape: 'irregular', area_m2: '0.45', quantity: 1 },
+  ];
+  await waitFor(() =>
+    expect(
+      calls()
+        .filter((c) => c.url.pathname === '/cnc_cutting/tasks/CNC-7/finish-preview/')
+        .at(-1)?.body,
+    ).toEqual({ remnants }),
+  );
+  await waitFor(() => expect(finish).toBeEnabled());
+  fireEvent.click(finish);
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith('Kesim tamamlandı olarak işaretlendi'),
+  );
+  const post = calls().find((c) => c.url.pathname === '/cnc_cutting/tasks/mark-completed/')!;
+  expect(post.body).toEqual({ key: 'CNC-7', remnants, no_remnant: false });
 });
 
 it('reopening a finished cut asks first', async () => {
