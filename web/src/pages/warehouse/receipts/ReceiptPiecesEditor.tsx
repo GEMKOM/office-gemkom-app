@@ -135,6 +135,12 @@ export function ReceiptPiecesEditor({
       <Text size="xs" fw={600}>
         Gelen parçalar ({kind === 'plate' ? 'en × boy' : 'boy'}, adet)
       </Text>
+      {kind === 'plate' ? (
+        <Text size="xs" c="dimmed">
+          Döküm no’su farklı saclar için ayrı satır girin. Kaydedince her sac kendi kodunu alır
+          (S26-…); kodları sacların üzerine yazmanız için gösterilir.
+        </Text>
+      ) : null}
       {rows.map((row, index) => (
         <Group key={row.key} gap={6} wrap="nowrap" align="flex-end">
           {kind === 'plate' ? (
@@ -222,9 +228,17 @@ export function ReceiptPiecesEditor({
           size="compact-xs"
           variant="subtle"
           leftSection={<FaIcon icon="fas fa-plus" />}
-          onClick={() => onChange([...rows, emptyPiece()])}
+          onClick={() => {
+            // A plate row of another heat no is mostly the same size: start from the last row's.
+            const last = rows[rows.length - 1];
+            const next = emptyPiece();
+            onChange([
+              ...rows,
+              kind === 'plate' && last ? { ...next, width: last.width, length: last.length } : next,
+            ]);
+          }}
         >
-          Ölçü ekle
+          {kind === 'plate' ? 'Satır ekle (ölçü / döküm no)' : 'Ölçü ekle'}
         </Button>
         <Text size="xs" c={line.weight_missing ? 'orange.8' : 'dimmed'}>
           {totalPieces} parça

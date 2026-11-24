@@ -25,6 +25,7 @@ import {
   editPiece,
   KIND_LABELS,
   LOT_HELP,
+  SHEET_CODE_HELP,
   missingWeightText,
   movePieces,
   pieceCardFromSearch,
@@ -72,6 +73,7 @@ import {
   type DataTableColumn,
   type FilterConfig,
 } from '@/ui';
+import { codedSheets, SheetCodesModal, type CodedSheet } from './SheetCodes';
 
 const PAGE_SIZE = 50;
 /** The Mikro comparison, on its own page (it was this page's "Mikro ile" view). */
@@ -117,7 +119,8 @@ const FILTER_KEYS: FilterKeys[] = [
 ];
 
 /** One box for anything on a lot; the backend splits it into words that all must match. */
-export const SEARCH_PLACEHOLDER = 'Kod, ad, ölçü (1500x3000), döküm no, iş no, CNC-…, #fire no…';
+export const SEARCH_PLACEHOLDER =
+  'Sac kodu (S26-00012), kart, ölçü (1500x3000), döküm no, iş no, CNC-…';
 /** Boy Stoğu: a bar's length is searched in metres ("6 m"), like it reads. */
 export const BAR_SEARCH_PLACEHOLDER = 'Kod, ad, boy (6 m), döküm no, iş no, #no…';
 const searchFilter = (kind: PieceKind): FilterConfig<FilterKeys> => ({
@@ -263,6 +266,21 @@ function CardCell({ code, name, active }: { code: string; name: string; active: 
 }
 
 const pieceColumns: DataTableColumn<MaterialPiece>[] = [
+  {
+    key: 'code',
+    header: <HeaderHelp label="Sac Kodu" help={SHEET_CODE_HELP} />,
+    exportValue: (row) => row.code ?? '',
+    render: (row) =>
+      row.code ? (
+        <Text size="sm" fw={600} style={mono}>
+          {row.code}
+        </Text>
+      ) : (
+        <Text size="sm" c="dimmed">
+          –
+        </Text>
+      ),
+  },
   {
     key: 'card',
     header: 'Stok Kartı',
@@ -532,6 +550,8 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
   const [heat, setHeat] = useState('');
   const [certificate, setCertificate] = useState('');
   const [note, setNote] = useState('');
+  // The new sheets' codes, shown once saved (plates only).
+  const [coded, setCoded] = useState<CodedSheet[] | null>(null);
   const card = cardId ? pieceCardFromSearch(cardId) : undefined;
   const create = useMutation({ mutationFn: createPieces, onSuccess: invalidate });
   const lengthMm = card?.kind === 'plate' ? length : metresToMm(length);
@@ -546,22 +566,38 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
     const where = placeToInput(place);
     if (typeof where === 'string') return notify.warning(where);
     try {
-      await create.mutateAsync({
-        item: card.id,
-        quantity: Number(quantity),
-        width_mm: card.kind === 'plate' ? String(width) : null,
-        length_mm: String(lengthMm),
-        heat_number: heat,
-        certificate_no: certificate,
-        note,
-        ...where,
-      });
+      // Sent as a list: a plate row of N sheets comes back as N coded sheets.
+      const made = await create.mutateAsync([
+        {
+          item: card.id,
+          quantity: Number(quantity),
+          width_mm: card.kind === 'plate' ? String(width) : null,
+          length_mm: String(lengthMm),
+          heat_number: heat,
+          certificate_no: certificate,
+          note,
+          ...where,
+        },
+      ]);
       notify.success(`${card.code}: ${quantity} adet eklendi`);
-      onClose();
+      const sheets = codedSheets(Array.isArray(made) ? made : [made]);
+      if (sheets.length) setCoded(sheets);
+      else onClose();
     } catch (error) {
       notify.error(countErrorMessage(error, 'Parça eklenemedi'));
     }
   };
+
+  if (coded) {
+    return (
+      <SheetCodesModal
+        opened
+        onClose={onClose}
+        title={`Parça Ekle · ${coded[0]?.item_code ?? ''}`}
+        sheets={coded}
+      />
+    );
+  }
 
   return (
     <FormModal
@@ -972,6 +1008,19 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
     { key: 'scrap', label: 'Hurdaya Ayır', icon: 'fas fa-trash', color: 'red' },
   ];
   const info: { label: string; value: ReactNode }[] = [
+    ...(piece.code
+      ? [
+          {
+            label: 'Sac kodu',
+            value: (
+              <Text fw={700} style={mono}>
+                {piece.code}
+              </Text>
+            ),
+          },
+        ]
+      : []),
+    ...(piece.parent_code ? [{ label: 'Kesildiği sac', value: piece.parent_code }] : []),
     { label: 'Ölçü', value: sizeLabel(piece) },
     { label: 'Adet', value: piece.quantity },
     { label: 'Birim ağırlık', value: piece.unit_kg !== null ? kg(piece.unit_kg) : '–' },
@@ -989,7 +1038,7 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
       <DetailModal
         opened={action === null}
         onClose={onClose}
-        title={`${piece.item_code} · ${sizeLabel(piece)}`}
+        title={`${piece.code ? `${piece.code} · ` : ''}${piece.item_code} · ${sizeLabel(piece)}`}
         subtitle={piece.item_name}
         icon="fas fa-layer-group"
         size="lg"

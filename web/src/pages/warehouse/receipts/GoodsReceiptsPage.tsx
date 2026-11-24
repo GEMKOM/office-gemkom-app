@@ -26,6 +26,7 @@ import {
   type GoodsReceipt,
   type OrderLineState,
   type PendingLine,
+  type ReceiptPiece,
   type ReceiptPieceInput,
 } from '@/api/warehouse/goodsReceipts';
 import { pieceKeys, sizeLabel } from '@/api/warehouse/pieces';
@@ -54,6 +55,7 @@ import {
   startPieces,
   type PieceDraft,
 } from './ReceiptPiecesEditor';
+import { codedSheets, SheetCodesModal, type CodedSheet } from '../pieces/SheetCodes';
 
 const PAGE_SIZE = 20;
 const URL_DEFAULTS = {
@@ -251,6 +253,8 @@ function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: Re
   const [irsaliyeNo, setIrsaliyeNo] = useState('');
   const [irsaliyeDate, setIrsaliyeDate] = useState(today);
   const [note, setNote] = useState('');
+  // The receipt's new plate sheets and their codes, shown once it is saved.
+  const [coded, setCoded] = useState<{ number: string; sheets: CodedSheet[] } | null>(null);
   const orderId = order ? Number(order) : 0;
   const lines = useQuery({ ...orderLinesQueryOptions(orderId), enabled: orderId > 0 });
   const create = useMutation({
@@ -319,11 +323,24 @@ function NewReceiptModal({ onClose, target }: { onClose: () => void; target?: Re
         })),
       });
       notify.success(`${receipt.number} işlendi`);
-      onClose();
+      const sheets = receiptSheets(receipt);
+      if (sheets.length) setCoded({ number: receipt.number, sheets });
+      else onClose();
     } catch (error) {
       notify.error(countErrorMessage(error, 'Mal kabul kaydedilemedi'));
     }
   };
+
+  if (coded) {
+    return (
+      <SheetCodesModal
+        opened
+        onClose={onClose}
+        title={`Mal Kabul ${coded.number}`}
+        sheets={coded.sheets}
+      />
+    );
+  }
 
   const receivable = (lines.data ?? []).filter((l) => num(l.receivable) > 0).length;
   return (
@@ -406,6 +423,38 @@ function pieceText(p: {
 }) {
   const heat = p.heat_number ? ` (döküm ${p.heat_number})` : '';
   return `${sizeLabel(p)} × ${p.quantity}${heat}`;
+}
+
+/** A line's pieces: each size and heat no once, with its sheets' codes. */
+export function receiptPiecesText(pieces: ReceiptPiece[]): string {
+  const groups = new Map<string, { piece: ReceiptPiece; quantity: number; codes: string[] }>();
+  for (const p of pieces) {
+    const key = `${p.width_mm}|${p.length_mm}|${p.heat_number}`;
+    const group = groups.get(key) ?? { piece: p, quantity: 0, codes: [] };
+    group.quantity += p.quantity;
+    if (p.code) group.codes.push(p.code);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .map(({ piece, quantity, codes }) => {
+      const text = pieceText({ ...piece, quantity });
+      return codes.length ? `${text}: ${codes.join(', ')}` : text;
+    })
+    .join(' · ');
+}
+
+/** The plate sheets a saved receipt brought, with their codes. */
+function receiptSheets(receipt: GoodsReceipt): CodedSheet[] {
+  return (receipt.lines ?? []).flatMap((line) =>
+    codedSheets(line.pieces ?? []).map((p) => ({
+      code: p.code,
+      item_code: line.item_code,
+      item_name: line.item_name,
+      width_mm: p.width_mm,
+      length_mm: p.length_mm,
+      heat_number: p.heat_number,
+    })),
+  );
 }
 
 function ReceiptDetail({ receipt, onClose }: { receipt: GoodsReceipt; onClose: () => void }) {
@@ -500,7 +549,7 @@ function ReceiptDetail({ receipt, onClose }: { receipt: GoodsReceipt; onClose: (
                         <Table.Td colSpan={4}>
                           <Text size="xs" c="dimmed">
                             {'Parçalar: '}
-                            {l.pieces.map((p) => pieceText(p)).join(' · ')}
+                            {receiptPiecesText(l.pieces)}
                             {l.pieces_kg !== null
                               ? ` — ${formatNumber(l.pieces_kg, 2)} kg`
                               : ' — ağırlık yok'}

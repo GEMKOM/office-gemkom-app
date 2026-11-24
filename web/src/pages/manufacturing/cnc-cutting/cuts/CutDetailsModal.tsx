@@ -4,7 +4,7 @@ import { formatNumber } from '@/lib/format';
 import { DataTable, DetailModal, FileAttachments, type DetailField } from '@/ui';
 import { toAttachment } from './cutForm';
 import { PART_COLUMNS } from './PartsManager';
-import { pieceText } from './PlateSource';
+import { sheetsText } from './PlateSource';
 
 const kg = (value: string | null | undefined) =>
   value === null || value === undefined ? '-' : `${formatNumber(Number(value), 2)} kg`;
@@ -14,13 +14,13 @@ const or = (value: unknown, fallback = '-') =>
 
 /** "Stoktan Sac" / "Plaka Kalemi" / "Fire Plaka" line of the details. */
 export function plateSourceField(task: CncTask): DetailField | null {
-  const reservation = task.piece_reservations?.[0];
-  if (reservation) {
-    const p = reservation.piece_details;
-    const heat = p.heat_number ? ` · Şarj ${p.heat_number}` : '';
+  const reserved = task.piece_reservations ?? [];
+  if (reserved.length) {
+    const heats = [...new Set(reserved.map((r) => r.piece_details.heat_number).filter(Boolean))];
+    const sheets = reserved.reduce((n, r) => n + r.quantity, 0);
     return {
       label: 'Stoktan Sac',
-      value: `${pieceText(p)} · ${reservation.quantity} adet ayrıldı${heat}`,
+      value: `${sheetsText(reserved)} · ${sheets} sac ayrıldı${heats.length ? ` · Döküm ${heats.join(', ')}` : ''}`,
       span: 6,
     };
   }
@@ -28,7 +28,7 @@ export function plateSourceField(task: CncTask): DetailField | null {
   if (issued.length) {
     return {
       label: 'Stoktan Sac',
-      value: `${issued.map((i) => `${pieceText(i.piece_details)} × ${i.quantity}`).join(', ')} · stoktan düşüldü`,
+      value: `${sheetsText(issued)} · stoktan düşüldü`,
       span: 6,
     };
   }
@@ -80,7 +80,9 @@ export function processingFields(task: CncTask): DetailField[] {
       ? [
           {
             label: 'Stoğa Dönen Fire Saclar',
-            value: remnants.map((r) => `${pieceText(r)} × ${r.quantity ?? 1}`).join(', '),
+            value: sheetsText(
+              remnants.map((r) => ({ quantity: r.quantity ?? 1, piece_details: r })),
+            ),
             span: 12,
           },
         ]
