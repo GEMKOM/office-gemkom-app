@@ -288,7 +288,8 @@ it('shows weights from the backend and a clear "ağırlık yok", never 0 kg', as
   expect(within(noWeightRow!).getByText('Kartta sac kalınlığı yok')).toBeInTheDocument();
   expect(within(noWeightRow!).queryByText(/0,00 kg/)).not.toBeInTheDocument();
   expect(within(noWeightRow!).getByText('1500 × 3000 mm')).toBeInTheDocument();
-  expect(within(weighedRow!).getAllByText('125,60 kg')).toHaveLength(2);
+  // A sheet is one piece: its weight once, in Ağırlık (no Birim and Toplam).
+  expect(within(weighedRow!).getAllByText('125,60 kg')).toHaveLength(1);
 
   // The band counts only weighed pieces in the total and says what has none.
   expect(
@@ -616,7 +617,7 @@ it('groups the sheets of a card and size in one row, opened to each sheet', asyn
     { ...NO_WEIGHT_LOT, id: 23, code: 'S26-00023', quantity: 1, heat_number: 'H-3' },
   ];
   renderPage();
-  const header = await screen.findByText('2 sac');
+  const header = await screen.findByText('2 plaka');
   const row = header.closest('tr')!;
   expect(within(row).getByText('2 döküm no')).toBeInTheDocument();
   expect(within(row).getByText('251,20 kg')).toBeInTheDocument();
@@ -629,6 +630,35 @@ it('groups the sheets of a card and size in one row, opened to each sheet', asyn
   expect(screen.getByText('H-2')).toBeInTheDocument();
 });
 
+it('Sac Stoğu shows each sheet with its shape and one weight column, no Tür', async () => {
+  const sheet = { ...WEIGHED_LOT, quantity: 1, warehouse_code: 'HAMMADDE' };
+  lots = [
+    { ...sheet, id: 31, code: 'S26-00031', shape: 'circle', width_mm: '600', length_mm: '600' },
+    { ...sheet, id: 32, code: 'S26-00032', shape: 'circle', width_mm: '600', length_mm: '600' },
+  ];
+  renderPage();
+  const header = await screen.findByText('2 plaka');
+  const row = header.closest('tr')!;
+  expect(within(row).getByText('Daire')).toBeInTheDocument();
+  // The shape has its own column, so Ölçü leaves its name out.
+  expect(within(row).getByText('Ø 600 mm')).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Şekil' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Ağırlık' })).toBeInTheDocument();
+  for (const gone of ['Tür', 'Birim', 'Toplam']) {
+    expect(screen.queryByRole('columnheader', { name: gone })).not.toBeInTheDocument();
+  }
+});
+
+it('Boy Stoğu keeps Birim and Toplam, with no Şekil or Tür', async () => {
+  lots = [BAR_LOT];
+  renderPage('/warehouse/bar-stock', <WarehouseBarStockPage />);
+  expect(await screen.findByRole('columnheader', { name: 'Birim' })).toBeInTheDocument();
+  expect(screen.getByRole('columnheader', { name: 'Toplam' })).toBeInTheDocument();
+  for (const gone of ['Tür', 'Şekil', 'Ağırlık']) {
+    expect(screen.queryByRole('columnheader', { name: gone })).not.toBeInTheDocument();
+  }
+});
+
 it('opens the groups when searching, so the sheet searched for shows', async () => {
   const sheet = { ...WEIGHED_LOT, quantity: 1 };
   lots = [
@@ -637,7 +667,7 @@ it('opens the groups when searching, so the sheet searched for shows', async () 
   ];
   renderPage('/warehouse/plate-stock?search=8%20mm');
   expect(await screen.findByText('S26-00021')).toBeInTheDocument();
-  expect(screen.getByText('2 sac')).toBeInTheDocument();
+  expect(screen.getByText('2 plaka')).toBeInTheDocument();
 });
 
 it('Boy Stoğu asks only for bars', async () => {
@@ -858,13 +888,16 @@ it('keeps a circle and a rectangle of the same box apart, each read by its shape
     },
   ];
   renderPage();
-  // Each is a size of its own: no "2 sac" group.
+  // Each is a size of its own: no "2 plaka" group.
   expect(await screen.findByText('S26-00021')).toBeInTheDocument();
   expect(screen.getByText('S26-00022')).toBeInTheDocument();
-  expect(screen.queryByText('2 sac')).not.toBeInTheDocument();
+  expect(screen.queryByText('2 plaka')).not.toBeInTheDocument();
   expect(screen.getByText('Ø 600 mm')).toBeInTheDocument();
   expect(screen.getByText('600 × 600 mm')).toBeInTheDocument();
-  expect(screen.getByText('Şekilsiz 800 × 900 mm · ~0,45 m²')).toBeInTheDocument();
+  // The shape in its own column, the size without its name.
+  expect(screen.getByText('800 × 900 mm · ~0,45 m²')).toBeInTheDocument();
+  expect(screen.getByText('Şekilsiz')).toBeInTheDocument();
+  expect(screen.getByText('Daire')).toBeInTheDocument();
 });
 
 it('locks the size of a lot a cut has reserved', async () => {

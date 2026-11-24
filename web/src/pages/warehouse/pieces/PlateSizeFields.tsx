@@ -118,18 +118,7 @@ export function plateSizeInput(d: PlateSizeDraft): {
 
 export const AREA_HINT = 'Ağırlık bu alandan hesaplanır';
 
-/**
- * The Şekil select and the size inputs of that shape, as siblings (the caller lays them out
- * in its Group or grid). A shape change keeps what was typed.
- */
-export function PlateSizeFields({
-  value,
-  onChange,
-  disabled,
-  size,
-  width,
-  ariaLabel,
-}: {
+interface FieldProps {
   value: PlateSizeDraft;
   onChange: (value: PlateSizeDraft) => void;
   disabled?: boolean;
@@ -138,22 +127,42 @@ export function PlateSizeFields({
   width?: number;
   /** The inputs' accessible names ("En (mm) 2" on row 2); the label by default. */
   ariaLabel?: (label: string) => string;
-}) {
+}
+
+/** The Şekil select. A shape change keeps what was typed. */
+export function PlateShapeSelect({
+  value,
+  onChange,
+  disabled,
+  size,
+  width,
+  ariaLabel,
+}: FieldProps) {
+  const name = ariaLabel ?? ((label: string) => label);
+  return (
+    <Select
+      size={size}
+      w={width}
+      label="Şekil"
+      aria-label={name('Şekil')}
+      data={SHAPE_OPTIONS}
+      value={value.shape}
+      allowDeselect={false}
+      disabled={disabled}
+      onChange={(shape) => onChange({ ...value, shape: (shape as PieceShape) ?? 'rectangle' })}
+    />
+  );
+}
+
+/**
+ * The size inputs of the shape, as siblings. The area's hint sits under its input, so the
+ * inputs of a row stay level.
+ */
+export function PlateSizeInputs({ value, onChange, disabled, size, width, ariaLabel }: FieldProps) {
   const name = ariaLabel ?? ((label: string) => label);
   const tooBig = areaTooBig(value);
   return (
     <>
-      <Select
-        size={size}
-        w={width}
-        label="Şekil"
-        aria-label={name('Şekil')}
-        data={SHAPE_OPTIONS}
-        value={value.shape}
-        allowDeselect={false}
-        disabled={disabled}
-        onChange={(shape) => onChange({ ...value, shape: (shape as PieceShape) ?? 'rectangle' })}
-      />
       {plateSizeFields(value.shape).map(({ field, label }) =>
         field === 'area' ? (
           <NumberInput
@@ -163,6 +172,7 @@ export function PlateSizeFields({
             label={label}
             aria-label={name(label)}
             description={AREA_HINT}
+            inputWrapperOrder={['label', 'input', 'description', 'error']}
             min={0}
             decimalScale={4}
             decimalSeparator=","
@@ -188,6 +198,19 @@ export function PlateSizeFields({
           />
         ),
       )}
+    </>
+  );
+}
+
+/**
+ * The Şekil select and the size inputs of that shape, as siblings (the caller lays them out
+ * in its Group or grid).
+ */
+export function PlateSizeFields(props: FieldProps) {
+  return (
+    <>
+      <PlateShapeSelect {...props} />
+      <PlateSizeInputs {...props} />
     </>
   );
 }
