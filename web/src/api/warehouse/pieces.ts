@@ -456,17 +456,27 @@ export interface PieceSize {
  * "6 m" / "2,5 m" (bars read in metres, never mm).
  */
 export function sizeLabel(p: PieceSize): string {
+  if (!p.width_mm) return barMetres(p.length_mm);
+  const dims = dimsLabel(p);
+  switch (p.shape) {
+    case 'triangle':
+      return `Üçgen ${dims}`;
+    case 'irregular':
+      return `Şekilsiz ${dims}`;
+    default:
+      return dims;
+  }
+}
+
+/**
+ * The size without the shape's name, for a table that shows the shape in its own column:
+ * "600 × 800 mm", "Ø 600 mm", "800 × 900 mm · ~0,45 m²"; a bar "6 m".
+ */
+export function dimsLabel(p: PieceSize): string {
   const n = (v: string) => String(Number(v));
   if (!p.width_mm) return barMetres(p.length_mm);
   const box = `${n(p.width_mm)} × ${n(p.length_mm)} mm`;
-  switch (p.shape) {
-    case 'triangle':
-      return `Üçgen ${box}`;
-    case 'circle':
-      return `Ø ${n(p.width_mm)} mm`;
-    case 'irregular':
-      return `Şekilsiz ${box}${p.area_m2 ? ` · ~${areaLabel(p.area_m2)}` : ''}`;
-    default:
-      return box;
-  }
+  if (p.shape === 'circle') return `Ø ${n(p.width_mm)} mm`;
+  if (p.shape === 'irregular' && p.area_m2) return `${box} · ~${areaLabel(p.area_m2)}`;
+  return box;
 }
