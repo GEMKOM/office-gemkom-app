@@ -119,3 +119,22 @@ test('Planlama › Stok moved to Depo: the old Stok Kartları URL opens Tüm Sto
   await expect(page).toHaveURL(/\/warehouse\/bar-stock\/$/);
   consoleErrors.expectNone();
 });
+
+test("Depo's URLs are English: the old Hammadde and İş Emri URLs forward with the query", async ({
+  page,
+  consoleErrors,
+}) => {
+  const session = await seedSession(page, { admin: false, grants: ['/warehouse/'] });
+  await mockBackend(page, {}, { session });
+  const main = page.getByRole('main');
+
+  await page.goto('/warehouse/hammadde/?search=civata');
+  await expect(page).toHaveURL(/\/warehouse\/raw-materials\/\?search=civata$/);
+  await expect(main.getByRole('heading', { name: 'Hammadde', level: 1 })).toBeVisible();
+
+  await page.goto('/warehouse/is-emri/?job_search=254');
+  await expect(page).toHaveURL(/\/warehouse\/job-stock\/\?job_search=254$/);
+  await expect(main.getByRole('heading', { name: 'İş Emri', level: 1 })).toBeVisible();
+  await expect(main.getByRole('checkbox', { name: 'Bitmiş işleri de göster' })).toBeVisible();
+  consoleErrors.expectNone();
+});

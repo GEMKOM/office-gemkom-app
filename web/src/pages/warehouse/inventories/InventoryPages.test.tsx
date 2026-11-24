@@ -1,6 +1,7 @@
 import { authedFetch } from '@/auth/authService';
 import { ModalsProvider } from '@mantine/modals';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { HammaddePage, IsEmriPage } from './InventoryPages';
@@ -143,7 +144,11 @@ beforeEach(() => {
       });
     }
     if (u.pathname === '/warehouse/pieces/') return json({ count: 2, results: [SHEETS, BARS] });
-    if (u.pathname === '/warehouse/inventories/jobs/') return json(JOBS);
+    if (u.pathname === '/warehouse/inventories/jobs/') {
+      // closed=false leaves out the finished jobs (never the unassigned bucket).
+      const closed = u.searchParams.get('closed');
+      return json(closed === 'false' ? JOBS.filter((j) => !j.job_no || !j.job_closed) : JOBS);
+    }
     if (u.pathname === '/projects/job-orders/dropdown/') {
       return json([
         { job_no: '254-01', title: 'Pres Hattı' },
@@ -193,7 +198,7 @@ it('Hammadde: ticks a card and a bar lot, sets both aside for a job; plates stay
     <ModalsProvider>
       <HammaddePage />
     </ModalsProvider>,
-    { route: '/warehouse/hammadde' },
+    { route: '/warehouse/raw-materials' },
   );
   expect(await screen.findByText('CİVATA M12x40')).toBeInTheDocument();
   expect(await screen.findByText('10 mm SAC')).toBeInTheDocument();
@@ -251,7 +256,7 @@ it('Hammadde: ticks a card and a bar lot, sets both aside for a job; plates stay
 });
 
 it('İş Emri: lists jobs with Atanmamış first and opens one', async () => {
-  renderWithProviders(<IsEmriPage />, { route: '/warehouse/is-emri' });
+  renderWithProviders(<IsEmriPage />, { route: '/warehouse/job-stock' });
   expect(await screen.findByText('Atanmamış')).toBeInTheDocument();
   expect(screen.getByText('Pres Hattı')).toBeInTheDocument();
   expect(screen.getByText('1 eksi')).toBeInTheDocument();
@@ -269,8 +274,47 @@ it('İş Emri: lists jobs with Atanmamış first and opens one', async () => {
   expect(screen.getByRole('button', { name: 'Hammaddeye İade' })).toBeInTheDocument();
 });
 
+function LocationProbe() {
+  return <div data-testid="location">{useLocation().search}</div>;
+}
+
+function jobListCalls() {
+  return calls().filter((c) => c.url.pathname === '/warehouse/inventories/jobs/');
+}
+
+it('İş Emri: hides finished jobs until "Bitmiş işleri de göster" is ticked', async () => {
+  renderWithProviders(
+    <>
+      <IsEmriPage />
+      <LocationProbe />
+    </>,
+    { route: '/warehouse/job-stock' },
+  );
+  expect(await screen.findByText('Pres Hattı')).toBeInTheDocument();
+  expect(jobListCalls().at(-1)!.url.searchParams.get('closed')).toBe('false');
+  expect(screen.queryByText('Eski Vinç')).toBeNull();
+  expect(screen.queryByText('Kapanmış işte stok')).toBeNull();
+
+  const box = screen.getByRole('checkbox', { name: 'Bitmiş işleri de göster' });
+  expect(box).toHaveAttribute('aria-checked', 'false');
+  fireEvent.click(box);
+  expect(await screen.findByText('Eski Vinç')).toBeInTheDocument();
+  expect(jobListCalls().at(-1)!.url.searchParams.has('closed')).toBe(false);
+  // Kept in the URL with the page's other filters.
+  expect(screen.getByTestId('location')).toHaveTextContent('show_closed=true');
+  expect(screen.getByText('Kapanmış işte stok').parentElement).toHaveTextContent('1');
+});
+
+it('İş Emri: a link straight to a finished job still opens it with its warning', async () => {
+  renderWithProviders(<IsEmriPage />, { route: '/warehouse/job-stock?job=200-01' });
+  expect(await screen.findByText('İş Emri · 200-01')).toBeInTheDocument();
+  expect(await screen.findByText(/Bu iş emri tamamlandı/)).toBeInTheDocument();
+  expect(screen.getByText('Eski Vinç')).toBeInTheDocument();
+  expect(jobListCalls().at(-1)!.url.searchParams.has('closed')).toBe(false);
+});
+
 it('İş Emri: a completed job that still holds stock is marked, and warns when opened', async () => {
-  renderWithProviders(<IsEmriPage />, { route: '/warehouse/is-emri' });
+  renderWithProviders(<IsEmriPage />, { route: '/warehouse/job-stock?show_closed=true' });
   expect(await screen.findByText('İş tamamlandı')).toBeInTheDocument();
   expect(screen.getAllByText('İş tamamlandı')).toHaveLength(1); // open jobs carry no badge
   fireEvent.click(screen.getByText('Eski Vinç'));
@@ -283,7 +327,7 @@ it('İş Emri · Atanmamış: assigns the unassigned stock to a job, or returns 
     <ModalsProvider>
       <IsEmriPage />
     </ModalsProvider>,
-    { route: '/warehouse/is-emri?job=__unassigned__' },
+    { route: '/warehouse/job-stock?job=__unassigned__' },
   );
   expect(await screen.findByText('İş Emri · Atanmamış')).toBeInTheDocument();
   expect(await screen.findByText('CİVATA M12x40')).toBeInTheDocument();
@@ -312,7 +356,7 @@ it('İş Emri job: a plate already on the job only goes back to Hammadde, never 
     <ModalsProvider>
       <IsEmriPage />
     </ModalsProvider>,
-    { route: '/warehouse/is-emri?job=254-01' },
+    { route: '/warehouse/job-stock?job=254-01' },
   );
   expect(await screen.findByText('10 mm SAC')).toBeInTheDocument();
   const boxes = screen.getAllByLabelText('Satırı seç');

@@ -504,12 +504,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
         icon: 'fas fa-boxes',
         children: {
           // The two daily inventories: free stock, and stock set aside per job.
-          '/warehouse/hammadde': {
+          '/warehouse/raw-materials': {
             label: 'Hammadde',
             icon: 'fas fa-cubes',
             children: {},
           },
-          '/warehouse/is-emri': {
+          '/warehouse/job-stock': {
             label: 'İş Emri',
             icon: 'fas fa-clipboard-list',
             children: {},

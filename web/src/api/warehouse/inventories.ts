@@ -79,7 +79,7 @@ export interface MoveResult {
 
 export const inventoryKeys = {
   all: ['inventories'] as const,
-  jobs: (search: string) => ['inventories', 'jobs', search] as const,
+  jobs: (search: string, closed?: boolean) => ['inventories', 'jobs', search, closed] as const,
   balances: (place: InventoryPlace, params: PlaceBalancesParams) =>
     ['inventories', 'balances', place, params] as const,
 };
@@ -92,12 +92,20 @@ export function placeParams(place: InventoryPlace) {
     : { warehouse: 'IS_EMRI', unassigned: 'true' as const };
 }
 
-export function jobHoldingsQueryOptions(search = '') {
+/**
+ * İş Emri's jobs. `closed`: leave it out for every job; false leaves out the
+ * completed / cancelled jobs (job_closed), true keeps only those. The
+ * unassigned bucket is always listed.
+ */
+export function jobHoldingsQueryOptions(search = '', closed?: boolean) {
   return queryOptions({
-    queryKey: inventoryKeys.jobs(search),
+    queryKey: inventoryKeys.jobs(search, closed),
     queryFn: ({ signal }) =>
       apiFetch<unknown>('/warehouse/inventories/jobs/', {
-        params: search ? { search } : {},
+        params: {
+          ...(search ? { search } : {}),
+          ...(closed === undefined ? {} : { closed: String(closed) }),
+        },
         signal,
       }).then((data) => extractResults<JobHolding>(data)),
   });

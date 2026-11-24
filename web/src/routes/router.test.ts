@@ -8,7 +8,9 @@ import { RouteLoading } from './RouteLoading';
 // route would publish an SPA page that only shows "Sayfa bulunamadı".
 describe('migrated routes', () => {
   it('lists every app route in migrated-routes.json and nothing else', () => {
-    const routerPaths = [...publicRoutes, ...appRoutes].map((r) => normalizeRoute(r.path ?? '')).sort();
+    const routerPaths = [...publicRoutes, ...appRoutes]
+      .map((r) => normalizeRoute(r.path ?? ''))
+      .sort();
     const listed = migratedRoutes.map(normalizeRoute).sort();
     expect(routerPaths).toEqual(listed);
   });
@@ -66,9 +68,9 @@ describe('merged reports', () => {
     expect(await landing('/manufacturing/machining/reports/cost-analysis')).toBe(
       '/manufacturing/reports/job-costs/?breakdown=machining',
     );
-    expect(await landing('/manufacturing/welding/reports/cost-analysis?date_after=2026-10-01')).toBe(
-      '/manufacturing/reports/job-costs/?date_after=2026-10-01&breakdown=welding',
-    );
+    expect(
+      await landing('/manufacturing/welding/reports/cost-analysis?date_after=2026-10-01'),
+    ).toBe('/manufacturing/reports/job-costs/?date_after=2026-10-01&breakdown=welding');
   });
 });
 
@@ -88,6 +90,16 @@ describe('moved pages', () => {
     expect(await landing('/manufacturing/linear-cutting')).toBe('/planning/linear-cutting/');
     expect(await landing('/manufacturing/linear-cutting/capacity/planning?machine=5')).toBe(
       '/planning/linear-cutting/capacity/?machine=5',
+    );
+  });
+
+  it("forward Depo's old Turkish URLs to the English ones with the query", async () => {
+    expect(await landing('/warehouse/hammadde?search=civata&kind=card')).toBe(
+      '/warehouse/raw-materials/?search=civata&kind=card',
+    );
+    expect(await landing('/warehouse/is-emri')).toBe('/warehouse/job-stock/');
+    expect(await landing('/warehouse/is-emri?job=254-01&card_page=2')).toBe(
+      '/warehouse/job-stock/?job=254-01&card_page=2',
     );
   });
 

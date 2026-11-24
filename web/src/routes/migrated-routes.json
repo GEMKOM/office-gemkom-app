@@ -195,6 +195,8 @@
   "/warehouse/production-slips",
   "/warehouse/hammadde",
   "/warehouse/is-emri",
+  "/warehouse/raw-materials",
+  "/warehouse/job-stock",
   "/warehouse/transfers",
   "/warehouse/goods-receipts",
   "/warehouse/pieces",
