@@ -278,6 +278,27 @@ function CardCell({ code, name, active }: { code: string; name: string; active: 
 // One kind per page, so no Tür column. A plate row is one sheet: its weight in one
 // Ağırlık column, its shape in its own (Ölçü then leaves the shape's name out).
 // A bar lot holds several, so Boy Stoğu keeps Birim and Toplam.
+/** Kaynak: the source, and for a row split off a lot (a part moved, a sheet given its
+ * own code) a small "bölünmüş" note naming the lot it came from. */
+function OriginText({ piece }: { piece: MaterialPiece }) {
+  if (piece.origin !== 'split') return <>{piece.origin_label}</>;
+  return (
+    <Tooltip label={splitText(piece)} multiline w={260}>
+      <span>
+        {piece.origin_label}{' '}
+        <Text span size="xs" c="dimmed">
+          · bölünmüş
+        </Text>
+      </span>
+    </Tooltip>
+  );
+}
+
+const splitText = (piece: MaterialPiece) =>
+  piece.parent_code
+    ? `${piece.parent_code} kaydından ayrıldı`
+    : 'Bir lottan ayrıldı (parça taşındı veya sac kendi kodunu aldı)';
+
 const allPieceColumns: DataTableColumn<MaterialPiece>[] = [
   {
     key: 'code',
@@ -352,7 +373,7 @@ const allPieceColumns: DataTableColumn<MaterialPiece>[] = [
     render: (row) =>
       row.needs_review ? (
         <Group gap={4} wrap="nowrap">
-          {row.origin_label}
+          <OriginText piece={row} />
           <Tooltip label={row.review_note || 'Planlama kontrol etmeli'} multiline w={280}>
             <span>
               <StatusBadge color="orange">Kontrol</StatusBadge>
@@ -360,7 +381,7 @@ const allPieceColumns: DataTableColumn<MaterialPiece>[] = [
           </Tooltip>
         </Group>
       ) : (
-        row.origin_label
+        <OriginText piece={row} />
       ),
   },
 ];
@@ -1121,7 +1142,13 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
     { label: 'Yer', value: placeLabel(piece) },
     { label: 'Döküm no', value: piece.heat_number || '–' },
     { label: 'Sertifika no', value: piece.certificate_no || '–' },
-    { label: 'Kaynak', value: piece.origin_label },
+    {
+      label: 'Kaynak',
+      value:
+        piece.origin === 'split'
+          ? `${piece.origin_label} · ${splitText(piece)}`
+          : piece.origin_label,
+    },
     ...(piece.needs_review
       ? [{ label: 'Kontrol', value: <StatusBadge color="orange">Kontrol edilmeli</StatusBadge> }]
       : []),

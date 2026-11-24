@@ -58,7 +58,9 @@ export interface MaterialPiece {
   supplier: number | null;
   supplier_name: string | null;
   origin: string;
+  /** Where it first came from; a split row (origin 'split') shows its parent's source here. */
   origin_label: string;
+  source_origin?: string;
   parent: number | null;
   needs_review: boolean;
   review_note: string;
