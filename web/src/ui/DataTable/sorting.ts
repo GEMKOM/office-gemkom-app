@@ -1,10 +1,7 @@
 import type { DataTableColumn, SortDir } from './types';
 
 /** DRF `ordering`: ('created_at', 'desc') -> '-created_at'; no field -> undefined. */
-export function toOrdering(
-  sortBy: string | null | undefined,
-  sortDir: SortDir,
-): string | undefined {
+export function toOrdering(sortBy: string | null | undefined, sortDir: SortDir): string | undefined {
   if (!sortBy) return undefined;
   return sortDir === 'desc' ? `-${sortBy}` : sortBy;
 }
