@@ -5,7 +5,7 @@ import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { MaterialTrackingPage } from './MaterialTrackingPage';
-import { arrivalState, jobStockRows } from './jobStock';
+import { arrivalState, jobStockRows, lotGroups, lotsText, spreadPick } from './jobStock';
 import { pickedText } from './CreatePullRequestModal';
 
 vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn(), hasPerm: () => false }));
@@ -317,6 +317,27 @@ describe('job stock rows', () => {
     ]);
     // Longest bars first.
     expect(rows[0]!.lots.map((l) => l.id)).toEqual([300, 301]);
+  });
+
+  it('show lots of the same length as one, and spread a count over them', () => {
+    const same = (id: number, free: number, heat = '') =>
+      lot({
+        id,
+        item: 21,
+        item_code: '0010 0120',
+        item_name: 'NPU 120',
+        kind: 'boy',
+        length_mm: '6000.0',
+        quantity: free,
+        available_quantity: free,
+        heat_number: heat,
+      });
+    const rows = jobStockRows([], [same(10, 72), same(11, 6), same(12, 2, 'D-1')] as never);
+    expect(lotsText(rows[0]!)).toBe('6 m × 78 · 6 m × 2');
+    const [group] = lotGroups(rows[0]!.lots);
+    expect(group!.free).toBe(78);
+    expect(spreadPick(group!, 75)).toEqual({ 10: 72, 11: 3 });
+    expect(spreadPick(group!, 5)).toEqual({ 10: 5, 11: 0 });
   });
 
   it('say how many bars and metres are picked', () => {
