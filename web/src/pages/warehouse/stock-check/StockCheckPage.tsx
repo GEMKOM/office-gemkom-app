@@ -441,15 +441,31 @@ function BarPicker({
   onChange: (picks: Picks) => void;
 }) {
   const unit = item.item_unit || '';
+  // The API sends the card as `item`; `item_id` is only what a form sends.
+  const cardId = item.item ?? item.item_id ?? null;
   const lots = useQuery({
     ...piecesQueryOptions({
-      item: item.item_id ?? undefined,
+      item: cardId ?? undefined,
       warehouse: 'HAMMADDE',
       page_size: 100,
     }),
-    enabled: !!item.item_id,
+    enabled: cardId !== null,
   });
   const free = (lots.data?.results ?? []).filter((lot) => freeBars(lot) > 0);
+  if (cardId === null) {
+    return (
+      <Text size="xs" c="dimmed" data-testid={`bars-${index + 1}`}>
+        Bu kalemin stok kartı yok: boy seçilemez.
+      </Text>
+    );
+  }
+  if (lots.isError) {
+    return (
+      <Text size="xs" c="red" data-testid={`bars-${index + 1}`}>
+        Hammadde boyları yüklenemedi.
+      </Text>
+    );
+  }
   if (lots.isPending) {
     return (
       <Text size="xs" c="dimmed">

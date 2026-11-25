@@ -61,7 +61,8 @@ const REQUEST = {
     },
     {
       id: 4,
-      item_id: 9,
+      // As the API sends it: the card is `item` (item_id is write-only).
+      item: 9,
       item_code: 'PIPE',
       item_name: '114,3*15 BORU',
       item_unit: 'metre',
