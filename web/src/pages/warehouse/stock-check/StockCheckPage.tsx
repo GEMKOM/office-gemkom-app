@@ -10,14 +10,20 @@ import {
   type PlanningRequestItem,
 } from '@/api/planning/planningRequests';
 import { lookupCardsByCode } from '@/api/procurement/items';
-import { piecesQueryOptions, type MaterialPiece } from '@/api/warehouse/pieces';
-import { barMetres, formatDate, formatNumber } from '@/lib/format';
+import {
+  createPieces,
+  pieceKeys,
+  piecesQueryOptions,
+  type MaterialPiece,
+} from '@/api/warehouse/pieces';
+import { BAR_METRES_INPUT, barMetres, formatDate, formatNumber, metresToMm } from '@/lib/format';
 import {
   confirm,
   DataTable,
   DetailModal,
   FaIcon,
   FilterBar,
+  FormModal,
   notify,
   PageHeader,
   StatusBadge,
@@ -402,6 +408,8 @@ export function StockCheckModal({
                                     <BarPicker
                                       item={item}
                                       index={index}
+                                      canAdd={pending}
+                                      requestNumber={data.request_number ?? ''}
                                       picks={bars[item.id!] ?? {}}
                                       onChange={(picks) =>
                                         setBars((prev) => ({ ...prev, [item.id!]: picks }))
@@ -432,14 +440,20 @@ export function StockCheckModal({
 function BarPicker({
   item,
   index,
+  canAdd,
+  requestNumber,
   picks,
   onChange,
 }: {
   item: PlanningRequestItem;
   index: number;
+  /** The check is still open: bars found on the rack can be added. */
+  canAdd: boolean;
+  requestNumber: string;
   picks: Picks;
   onChange: (picks: Picks) => void;
 }) {
+  const [adding, setAdding] = useState(false);
   const unit = item.item_unit || '';
   // The API sends the card as `item`; `item_id` is only what a form sends.
   const cardId = item.item ?? item.item_id ?? null;
@@ -473,11 +487,47 @@ function BarPicker({
       </Text>
     );
   }
+  const requested = num(item.quantity);
+  const pickedQuantity = (current: Picks, among: MaterialPiece[]) =>
+    among.reduce((sum, lot) => {
+      const count = Math.trunc(num(current[lot.id]));
+      return count < 1 ? sum : sum + (barsQuantity(lot, count, unit) ?? 0);
+    }, 0);
+  const foundButton = canAdd ? (
+    <Button
+      size="compact-xs"
+      variant="light"
+      leftSection={<FaIcon icon="fas fa-plus" />}
+      onClick={() => setAdding(true)}
+    >
+      Depoda buldum
+    </Button>
+  ) : null;
+  const foundModal = adding ? (
+    <FoundBarsModal
+      item={item}
+      cardId={cardId}
+      requestNumber={requestNumber}
+      onClose={() => setAdding(false)}
+      onAdded={(lot) => {
+        // Pick what the line still needs from the new lot; the rest stays in Hammadde.
+        const left = requested - pickedQuantity(picks, free);
+        const each = barsQuantity(lot, 1, unit);
+        const count = each && left > 0 ? Math.min(lot.quantity, Math.ceil(left / each - 1e-9)) : 0;
+        if (count > 0) onChange({ ...picks, [lot.id]: count });
+        setAdding(false);
+      }}
+    />
+  ) : null;
   if (!free.length) {
     return (
-      <Text size="xs" c="dimmed" data-testid={`bars-${index + 1}`}>
-        Hammadde’de bu karttan boy yok: satınalmaya gidecek.
-      </Text>
+      <Group gap="sm" data-testid={`bars-${index + 1}`}>
+        <Text size="xs" c="dimmed">
+          Hammadde’de bu karttan boy yok: satınalmaya gidecek.
+        </Text>
+        {foundButton}
+        {foundModal}
+      </Group>
     );
   }
   let total = 0;
@@ -489,7 +539,6 @@ function BarPicker({
     if (q === null) unknown = true;
     else total += q;
   }
-  const requested = num(item.quantity);
   return (
     <Group gap="md" align="center" data-testid={`bars-${index + 1}`}>
       <Text size="xs" c="dimmed">
@@ -527,6 +576,99 @@ function BarPicker({
               (total > requested ? ' (talebin tamamı)' : '')}
         </Text>
       ) : null}
+      {foundButton}
+      {foundModal}
     </Group>
+  );
+}
+
+/**
+ * "Depoda buldum": bars on the rack that Hammadde doesn't know of yet (its stock
+ * is not counted). They are booked into Hammadde at once, flagged Kontrol so a
+ * lead checks them; the line picks what it needs and the rest stays in stock.
+ */
+function FoundBarsModal({
+  item,
+  cardId,
+  requestNumber,
+  onClose,
+  onAdded,
+}: {
+  item: PlanningRequestItem;
+  cardId: number;
+  requestNumber: string;
+  onClose: () => void;
+  onAdded: (lot: MaterialPiece) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [length, setLength] = useState<number | string>('');
+  const [count, setCount] = useState<number | string>('');
+  const save = useMutation({
+    mutationFn: () =>
+      createPieces({
+        item: cardId,
+        quantity: Math.trunc(num(count)),
+        length_mm: String(metresToMm(length)),
+        warehouse_code: 'HAMMADDE',
+        needs_review: true,
+        review_note: `Stok kontrolünde depoda bulundu (${requestNumber})`.slice(0, 255),
+      }),
+    onSuccess: async (made) => {
+      const lot = Array.isArray(made) ? made[0] : made;
+      await queryClient.invalidateQueries({ queryKey: pieceKeys.all });
+      notify.success(`${item.item_code}: ${num(count)} boy Hammadde’ye eklendi (Kontrol)`);
+      if (lot) onAdded(lot);
+      else onClose();
+    },
+    onError: (error) => notify.error(error instanceof Error ? error.message : 'Boylar eklenemedi'),
+  });
+  const submit = () => {
+    if (!(num(metresToMm(length)) > 0)) {
+      notify.warning('Boyu metre olarak girin');
+      return;
+    }
+    if (!(Math.trunc(num(count)) >= 1)) {
+      notify.warning('Kaç boy bulunduğunu girin');
+      return;
+    }
+    save.mutate();
+  };
+  return (
+    <FormModal
+      opened
+      onClose={onClose}
+      title="Depoda buldum"
+      subtitle={`${item.item_code ?? ''} · ${item.item_name ?? ''}`}
+      icon="fas fa-ruler-horizontal"
+      size="sm"
+      submitLabel="Hammadde’ye ekle"
+      submitting={save.isPending}
+      onSubmit={(event) => {
+        event.preventDefault();
+        submit();
+      }}
+    >
+      <Text size="xs" c="dimmed" mb="sm">
+        Rafta olup sistemde görünmeyen boyları girin. Hammadde’ye “Kontrol” işaretiyle eklenir; bu
+        kaleme gereken kadarı seçilir, kalanı Hammadde’de kalır.
+      </Text>
+      <Group grow align="flex-start">
+        <NumberInput
+          label="Boy (m)"
+          {...BAR_METRES_INPUT}
+          data-autofocus
+          value={length}
+          onChange={setLength}
+        />
+        <NumberInput
+          label="Adet (boy)"
+          min={1}
+          allowDecimal={false}
+          allowNegative={false}
+          value={count}
+          onChange={setCount}
+        />
+      </Group>
+    </FormModal>
   );
 }
