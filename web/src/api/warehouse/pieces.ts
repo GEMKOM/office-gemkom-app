@@ -231,6 +231,9 @@ export interface PieceInput extends PiecePlace {
   heat_number?: string;
   certificate_no?: string;
   note?: string;
+  /** Found on the rack while giving stock: booked, but flagged Kontrol with why. */
+  needs_review?: boolean;
+  review_note?: string;
 }
 
 export interface WeightPreview {
