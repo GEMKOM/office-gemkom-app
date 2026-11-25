@@ -78,13 +78,65 @@ export function canRequest(row: JobStockRow): boolean {
   return row.kind !== 'plate' && row.available > 0;
 }
 
+/**
+ * A row's lots of one size (and heat no): one card on one job, so lots of the
+ * same length are the same bars to the workshop, however many lots they came in.
+ */
+export interface LotGroup {
+  key: string;
+  width_mm: string | null;
+  length_mm: string;
+  heat_number: string;
+  /** The row's order: longest first, then oldest lot. */
+  lots: MaterialPiece[];
+  quantity: number;
+  free: number;
+}
+
+export function lotGroups(lots: MaterialPiece[]): LotGroup[] {
+  const groups = new Map<string, LotGroup>();
+  for (const lot of lots) {
+    const heat = (lot.heat_number ?? '').trim();
+    const key = `${Number(lot.width_mm ?? 0)}x${Number(lot.length_mm)}|${heat}`;
+    let group = groups.get(key);
+    if (!group) {
+      group = {
+        key,
+        width_mm: lot.width_mm ?? null,
+        length_mm: lot.length_mm,
+        heat_number: heat,
+        lots: [],
+        quantity: 0,
+        free: 0,
+      };
+      groups.set(key, group);
+    }
+    group.lots.push(lot);
+    group.quantity += lot.quantity;
+    group.free += free(lot);
+  }
+  return [...groups.values()];
+}
+
+/** `count` bars of a group as picks per lot, filling its lots in order. */
+export function spreadPick(group: LotGroup, count: number): Record<string, number> {
+  let left = Math.max(0, Math.trunc(count));
+  const out: Record<string, number> = {};
+  for (const lot of group.lots) {
+    const take = Math.min(left, free(lot));
+    out[String(lot.id)] = take;
+    left -= take;
+  }
+  return out;
+}
+
 /** "12 m × 4 · 6,4 m × 2" (free bars per length); a plate lot by its size. */
 export function lotsText(row: JobStockRow): string {
-  return row.lots
-    .map((lot) =>
+  return lotGroups(row.lots)
+    .map((group) =>
       row.kind === 'plate'
-        ? `${fmtQty(lot.width_mm)}×${fmtQty(lot.length_mm)} × ${lot.quantity}`
-        : `${barMetres(lot.length_mm)} × ${free(lot)}`,
+        ? `${fmtQty(group.width_mm)}×${fmtQty(group.length_mm)} × ${group.quantity}`
+        : `${barMetres(group.length_mm)} × ${group.free}`,
     )
     .join(' · ');
 }

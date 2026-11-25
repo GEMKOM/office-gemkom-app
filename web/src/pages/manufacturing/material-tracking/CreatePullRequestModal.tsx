@@ -15,7 +15,7 @@ import { barMetres } from '@/lib/format';
 import { FormModal, ModalSection, notify } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
 import { fmtQty } from './deliveryState';
-import { amountText, type JobStockRow } from './jobStock';
+import { amountText, lotGroups, spreadPick, type JobStockRow, type LotGroup } from './jobStock';
 
 const REQUIRED = 'Bu alan gereklidir';
 
@@ -54,8 +54,14 @@ export function pickedText(
   return `${bars} boy · ${fmtQty(Math.round(mm / 10) / 100)} m`;
 }
 
-const freeBars = (lot: MaterialPiece) => lot.available_quantity ?? lot.quantity;
+/** What is typed for a group: the bars picked over its lots ('' for none). */
+function groupValue(group: LotGroup, picked: Record<string, number | string>): number | string {
+  const typed = group.lots.map((lot) => picked[String(lot.id)]);
+  if (typed.every((v) => v === undefined || v === '')) return '';
+  return typed.reduce<number>((sum, v) => sum + (Math.trunc(Number(v)) || 0), 0);
+}
 
+/** One input per length (and heat no): the count is spread over that length's lots. */
 function BarPicker({
   row,
   jobNo,
@@ -65,34 +71,42 @@ function BarPicker({
   row: JobStockRow;
   jobNo: string;
   picked: Record<string, number | string>;
-  onPick: (lotId: number, count: number | string) => void;
+  onPick: (lots: Record<string, number | string>) => void;
 }) {
-  const lots = row.lots.filter((lot) => freeBars(lot) > 0);
+  const groups = lotGroups(row.lots).filter((group) => group.free > 0);
   return (
     <Stack gap={4} mt={6}>
       <Text size="xs" fw={600}>
         {jobNo} iş emri stoğundaki boylar
       </Text>
-      {lots.map((lot) => (
-        <Group key={lot.id} gap="xs" wrap="nowrap">
+      {groups.map((group) => (
+        <Group key={group.key} gap="xs" wrap="nowrap">
           <Text size="sm" w={120} style={{ fontFamily: 'var(--gk-font-mono)' }}>
-            {barMetres(lot.length_mm)}
+            {barMetres(group.length_mm)}
           </Text>
           <NumberInput
             size="xs"
             w={90}
             min={0}
-            max={freeBars(lot)}
+            max={group.free}
             allowDecimal={false}
             hideControls
             placeholder="0"
-            aria-label={`${row.item_code} ${barMetres(lot.length_mm)} boy adedi`}
-            value={picked[String(lot.id)] ?? ''}
-            onChange={(value) => onPick(lot.id, value)}
+            aria-label={`${row.item_code} ${barMetres(group.length_mm)}${
+              group.heat_number ? ` döküm ${group.heat_number}` : ''
+            } boy adedi`}
+            value={groupValue(group, picked)}
+            onChange={(value) =>
+              onPick(
+                value === ''
+                  ? Object.fromEntries(group.lots.map((lot) => [String(lot.id), '']))
+                  : spreadPick(group, Number(value)),
+              )
+            }
           />
           <Text size="xs" c="dimmed">
-            / {freeBars(lot)} boş boy
-            {lot.heat_number ? ` · döküm ${lot.heat_number}` : ''}
+            / {group.free} boş boy
+            {group.heat_number ? ` · döküm ${group.heat_number}` : ''}
           </Text>
         </Group>
       ))}
@@ -307,11 +321,11 @@ export function CreatePullRequestModal({
                   row={row}
                   jobNo={jobNo}
                   picked={form.values.bars[row.key] ?? {}}
-                  onPick={(lotId, count) =>
+                  onPick={(lots) =>
                     // The whole row's picks: a nested path fails while the row has none.
                     form.setFieldValue(`bars.${row.key}`, {
                       ...(form.values.bars[row.key] ?? {}),
-                      [lotId]: count,
+                      ...lots,
                     })
                   }
                 />
