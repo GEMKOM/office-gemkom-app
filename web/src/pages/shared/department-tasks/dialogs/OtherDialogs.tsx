@@ -70,7 +70,7 @@ import {
   type QcReviewDraft,
 } from '../logic';
 import { teamAssignmentStatus, tierLabel } from '../tabs/AssignmentTabs';
-import { siblingStatusColor, toAttachment } from '../tabs/ConsultationTab';
+import { Comment, siblingStatusColor, toAttachment } from '../tabs/ConsultationTab';
 
 interface Props {
   onClose: () => void;
@@ -820,6 +820,8 @@ export function SiblingDialog({ taskId, onClose }: Props & { taskId: number }) {
     sibling?.status ||
     '-';
   const files = sibling?.completion_files ?? [];
+  const topic = sibling?.discussion_topic ?? null;
+  const comments = Array.isArray(topic?.comments) ? topic.comments : [];
 
   return (
     <Modal opened onClose={onClose} size={800} withCloseButton={false} classNames={modalClassNames}>
@@ -901,6 +903,21 @@ export function SiblingDialog({ taskId, onClose }: Props & { taskId: number }) {
                 ) : null
               }
             />
+            {topic?.id ? (
+              <Paper withBorder p="md" mt="md">
+                <Text fw={600} size="sm" mb="xs">
+                  <FaIcon icon="fas fa-comments" style={{ marginRight: 8 }} />
+                  Tartışma Yorumları ({comments.length})
+                </Text>
+                {comments.length === 0 ? (
+                  <Text c="dimmed" size="sm">
+                    Henüz yorum yok.
+                  </Text>
+                ) : (
+                  comments.map((c) => <Comment key={c.id} comment={c} />)
+                )}
+              </Paper>
+            ) : null}
           </>
         )}
       </ModalBody>
