@@ -386,7 +386,8 @@ const allPieceColumns: DataTableColumn<MaterialPiece>[] = [
   },
 ];
 
-const PLATE_ONLY = new Set(['shape', 'weight']);
+// Sheet codes, shapes and per-sheet weights belong to plates; bars are lots by length.
+const PLATE_ONLY = new Set(['code', 'shape', 'weight']);
 const BAR_ONLY = new Set(['unit_kg', 'total_kg']);
 
 export const pieceColumns: Record<PieceKind, DataTableColumn<MaterialPiece>[]> = {
