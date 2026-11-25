@@ -674,7 +674,7 @@ it('Sac Stoğu shows each sheet with its shape and one weight column, no Tür', 
   }
 });
 
-it('Boy Stoğu keeps Birim and Toplam, with no Şekil or Tür', async () => {
+it('Boy Stoğu keeps Birim and Toplam, with no Sac Kodu, Şekil or Tür', async () => {
   lots = [BAR_LOT];
   renderPage('/warehouse/bar-stock', <WarehouseBarStockPage />);
   expect(await screen.findByRole('columnheader', { name: 'Birim' })).toBeInTheDocument();
@@ -682,6 +682,7 @@ it('Boy Stoğu keeps Birim and Toplam, with no Şekil or Tür', async () => {
   for (const gone of ['Tür', 'Şekil', 'Ağırlık']) {
     expect(screen.queryByRole('columnheader', { name: gone })).not.toBeInTheDocument();
   }
+  expect(screen.queryByRole('columnheader', { name: /Sac Kodu/ })).not.toBeInTheDocument();
 });
 
 it('opens the groups when searching, so the sheet searched for shows', async () => {
