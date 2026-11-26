@@ -1,11 +1,19 @@
-import { Button, Checkbox, Text } from '@mantine/core';
+import { Button, Checkbox, SegmentedControl, Text } from '@mantine/core';
 import type { MaterialPullRequest } from '@/api/materialTracking/pullRequests';
 import type { PlanningItem } from '@/api/planning/planningItems';
 import { formatDate, formatDateTime, toNumber } from '@/lib/format';
 import { DataTable, FaIcon, SizeNote, StatusBadge, type DataTableColumn } from '@/ui';
 import uiClasses from '@/ui/ui.module.css';
 import { fmtQty } from './deliveryState';
-import { amountText, arrivalState, canRequest, lotsText, type JobStockRow } from './jobStock';
+import {
+  amountText,
+  canRequest,
+  lineState,
+  lotsText,
+  PLANNING_STATUS_OPTIONS,
+  type JobStockRow,
+  type PlanningStatus,
+} from './jobStock';
 import { DestinationCell, PullRequestStatusBadge } from './pullRequestShared';
 
 const Code = ({ value }: { value: string | null | undefined }) =>
@@ -180,18 +188,32 @@ export function JobPullsPanel({
   );
 }
 
-// ---- Henüz gelmeyen planlama kalemleri -------------------------------------
+// ---- Bu işin planlama kalemleri --------------------------------------------
+
+// Every planning line of the job, with a Durum filter: Tümü (default),
+// Bekleyen (not delivered — what the panel used to show on its own), Teslim
+// Edilen and Tüketilen.
+const EMPTY_MESSAGE: Record<PlanningStatus, (jobNo: string) => string> = {
+  all: (jobNo) => `${jobNo} için planlama kalemi yok.`,
+  pending: (jobNo) => `${jobNo} için beklenen planlama kalemi yok: hepsi teslim alındı.`,
+  delivered: (jobNo) => `${jobNo} için teslim edilen planlama kalemi yok.`,
+  consumed: (jobNo) => `${jobNo} için tüketilen planlama kalemi yok.`,
+};
 
 export function JobPlanningPanel({
   jobNo,
   rows,
   loading,
+  status,
+  onStatus,
   pendingCritical,
   onToggleCritical,
 }: {
   jobNo: string;
   rows: PlanningItem[];
   loading: boolean;
+  status: PlanningStatus;
+  onStatus: (status: PlanningStatus) => void;
   pendingCritical: ReadonlySet<number>;
   onToggleCritical: (row: PlanningItem, critical: boolean) => void;
 }) {
@@ -229,10 +251,10 @@ export function JobPlanningPanel({
       key: 'arrival',
       header: 'Durum',
       render: (row) => {
-        const state = arrivalState(row);
+        const state = lineState(row);
         return <StatusBadge color={state.tone}>{state.text}</StatusBadge>;
       },
-      exportValue: (row) => arrivalState(row).text,
+      exportValue: (row) => lineState(row).text,
     },
     {
       key: 'is_critical',
@@ -255,14 +277,22 @@ export function JobPlanningPanel({
   ];
   return (
     <DataTable
-      title="Henüz Gelmeyen Planlama Kalemleri"
-      icon="fas fa-clock"
+      title="Planlama Kalemleri"
+      icon="fas fa-list-ul"
+      toolbar={
+        <SegmentedControl
+          size="xs"
+          value={status}
+          onChange={(next) => onStatus(next as PlanningStatus)}
+          data={PLANNING_STATUS_OPTIONS}
+        />
+      }
       data={rows}
       columns={columns}
       getRowId={(row) => String(row.id)}
       loading={loading}
       pagination
-      emptyMessage={`${jobNo} için beklenen planlama kalemi yok: hepsi teslim alındı.`}
+      emptyMessage={EMPTY_MESSAGE[status](jobNo)}
     />
   );
 }
