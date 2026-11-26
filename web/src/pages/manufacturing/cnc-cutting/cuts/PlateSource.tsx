@@ -25,6 +25,7 @@ import {
   type PlanningItemsParams,
 } from '@/api/planning/planningItems';
 import {
+  lineSheetsQueryOptions,
   piecesQueryOptions,
   placeLabel,
   sizeLabel,
@@ -763,10 +764,8 @@ export function LineLots({
   hideEmpty?: boolean;
   pickLabel?: string;
 }) {
-  const lots = useQuery(
-    piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }),
-  );
-  const rows = lots.data?.results ?? EMPTY_LINE_LOTS;
+  const lots = useQuery(lineSheetsQueryOptions(planningItemId));
+  const rows = lots.data ?? EMPTY_LINE_LOTS;
   if (lots.isLoading) return null;
   if (rows.length === 0) {
     if (hideEmpty) return null;

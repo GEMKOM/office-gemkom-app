@@ -15,8 +15,8 @@ import {
   type ProcessResult,
 } from '@/api/manufacturing/cncTasks';
 import {
+  lineSheetsQueryOptions,
   pieceKeys,
-  piecesQueryOptions,
   placeLabel,
   searchPlateCards,
   type MaterialPiece,
@@ -338,10 +338,8 @@ function LineSheets({
   picks: Record<number, number>;
   onChange: (picks: Record<number, number>) => void;
 }) {
-  const lots = useQuery(
-    piecesQueryOptions({ planning_item: planningItemId, kind: 'plate', page_size: 50 }),
-  );
-  const rows = lots.data?.results ?? EMPTY_LOTS;
+  const lots = useQuery(lineSheetsQueryOptions(planningItemId));
+  const rows = lots.data ?? EMPTY_LOTS;
   if (lots.isLoading || rows.length === 0) return null;
   const chosen = Object.values(picks).reduce((sum, n) => sum + n, 0);
   return (
