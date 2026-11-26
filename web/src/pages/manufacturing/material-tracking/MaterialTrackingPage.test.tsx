@@ -5,7 +5,7 @@ import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { MaterialTrackingPage } from './MaterialTrackingPage';
-import { arrivalState, jobStockRows, lotGroups, lotsText, spreadPick } from './jobStock';
+import { arrivalState, jobStockRows, lineState, lotGroups, lotsText, spreadPick } from './jobStock';
 import { pickedText } from './CreatePullRequestModal';
 
 vi.mock('@/auth/authService', () => ({ authedFetch: vi.fn(), hasPerm: () => false }));
@@ -126,7 +126,40 @@ const PLANNING = [
   },
   // Another job that only contains the text: left out.
   { id: 2, item_code: 'X', item_name: 'Başka', job_no: `${JOB}-B`, is_delivered: false },
+  {
+    id: 3,
+    item_code: 'IPE 160',
+    item_name: 'IPE 160 profil',
+    job_no: JOB,
+    quantity: '2',
+    item_unit: 'boy',
+    is_delivered: true,
+    delivered_quantity: '2',
+    is_critical: false,
+  },
+  {
+    id: 4,
+    item_code: 'LAMA 40',
+    item_name: 'LAMA 40x5',
+    job_no: JOB,
+    quantity: '5',
+    item_unit: 'adet',
+    is_delivered: true,
+    delivered_quantity: '5',
+    is_consumed: true,
+    is_critical: false,
+  },
 ];
+
+/** The list endpoint as the page filters it: is_delivered / is_consumed. */
+function planningPage(params: URLSearchParams) {
+  let rows = PLANNING;
+  const delivered = params.get('is_delivered');
+  if (delivered === 'false') rows = rows.filter((row) => row.is_delivered !== true);
+  if (delivered === 'true') rows = rows.filter((row) => row.is_delivered === true);
+  if (params.get('is_consumed') === 'true') rows = rows.filter((row) => row.is_consumed === true);
+  return rows;
+}
 
 function json(body: unknown, status = 200) {
   return Promise.resolve(
@@ -172,7 +205,8 @@ beforeEach(() => {
     if (method === 'GET' && path === '/warehouse/pull-requests/job-stock/') return json(CARDS);
     if (method === 'GET' && path === '/warehouse/pieces/') return json(page(LOTS));
     if (method === 'GET' && path === '/warehouse/pull-requests/') return json(page(PULLS));
-    if (method === 'GET' && path === '/planning/items/') return json(page(PLANNING));
+    if (method === 'GET' && path === '/planning/items/')
+      return json(page(planningPage(new URL(String(url)).searchParams)));
     if (method === 'GET' && path === '/subcontracting/subcontractors/')
       return json([{ id: 5, name: 'Usta Kaynak', is_active: true }]);
     if (method === 'GET' && path === '/teams/') return json([{ id: 9, name: 'Kaynak 2' }]);
@@ -208,6 +242,11 @@ it("shows the job's İş Emri stock, its requests and the lines that have not ar
   expect(await screen.findByText('MPR-2026-0055')).toBeInTheDocument();
   expect(await screen.findByText(/Sipariş verildi · Demir AŞ/)).toBeInTheDocument();
   expect(screen.queryByText('Başka')).toBeNull();
+  // Tümü by default: delivered and consumed lines are listed too, and say so.
+  expect(screen.getByText('IPE 160 profil')).toBeInTheDocument();
+  expect(screen.getByText('Teslim edildi')).toBeInTheDocument();
+  expect(screen.getByText('LAMA 40x5')).toBeInTheDocument();
+  expect(screen.getByText('Tüketildi')).toBeInTheDocument();
 
   const get = (path: string) => calls().find((c) => c.url.pathname === path)!.url.searchParams;
   expect(get('/warehouse/pull-requests/job-stock/').get('job_no')).toBe(JOB);
@@ -218,9 +257,57 @@ it("shows the job's İş Emri stock, its requests and the lines that have not ar
   expect(get('/warehouse/pull-requests/').get('job')).toBe(JOB);
   expect(Object.fromEntries(get('/planning/items/'))).toMatchObject({
     job_no: JOB,
-    is_delivered: 'false',
     include_procurement: 'true',
   });
+  expect(get('/planning/items/').has('is_delivered')).toBe(false);
+  expect(get('/planning/items/').has('is_consumed')).toBe(false);
+});
+
+it('the Durum filter asks the list endpoint for one state of the planning lines', async () => {
+  renderPage();
+  await screen.findByText('HEA 200 profil');
+  const planningParams = () =>
+    calls()
+      .filter((c) => c.url.pathname === '/planning/items/')
+      .map((c) => Object.fromEntries(c.url.searchParams));
+
+  // Bekleyen: what the panel used to show on its own.
+  fireEvent.click(screen.getByRole('radio', { name: 'Bekleyen' }));
+  await waitFor(() => {
+    expect(screen.getByText('HEA 200 profil')).toBeInTheDocument();
+    expect(screen.queryByText('IPE 160 profil')).toBeNull();
+  });
+  expect(planningParams().at(-1)).toMatchObject({ job_no: JOB, is_delivered: 'false' });
+  expect(screen.getByTestId('location').textContent).toContain('durum=pending');
+
+  fireEvent.click(screen.getByRole('radio', { name: 'Teslim Edilen' }));
+  await waitFor(() => {
+    expect(screen.getByText('IPE 160 profil')).toBeInTheDocument();
+    expect(screen.queryByText('HEA 200 profil')).toBeNull();
+  });
+  expect(planningParams().at(-1)).toMatchObject({ job_no: JOB, is_delivered: 'true' });
+
+  fireEvent.click(screen.getByRole('radio', { name: 'Tüketilen' }));
+  await waitFor(() => {
+    expect(screen.getByText('LAMA 40x5')).toBeInTheDocument();
+    expect(screen.queryByText('IPE 160 profil')).toBeNull();
+  });
+  expect(planningParams().at(-1)).toMatchObject({ job_no: JOB, is_consumed: 'true' });
+
+  // Back to the whole list.
+  fireEvent.click(screen.getByRole('radio', { name: 'Tümü' }));
+  await waitFor(() => {
+    expect(screen.getByText('HEA 200 profil')).toBeInTheDocument();
+    expect(screen.getByText('IPE 160 profil')).toBeInTheDocument();
+  });
+  expect(screen.getByTestId('location').textContent).not.toContain('durum=');
+});
+
+it('?durum= opens the panel on that state', async () => {
+  renderPage(`/manufacturing/material-tracking?job=${encodeURIComponent(JOB)}&durum=consumed`);
+  expect(await screen.findByText('LAMA 40x5')).toBeInTheDocument();
+  expect(screen.queryByText('HEA 200 profil')).toBeNull();
+  expect(screen.getByRole('radio', { name: 'Tüketilen' })).toBeChecked();
 });
 
 it('only what can still go out is selectable; a card and bars make one request to a team', async () => {
@@ -371,5 +458,17 @@ describe('arrival state of a waiting planning line', () => {
       tone: 'orange',
     });
     expect(arrivalState(base).text).toBe('Sipariş verilmedi');
+  });
+
+  it('a delivered or consumed line names its state instead', () => {
+    expect(lineState({ ...base, is_delivered: true })).toEqual({
+      text: 'Teslim edildi',
+      tone: 'green',
+    });
+    expect(lineState({ ...base, is_delivered: true, is_consumed: true })).toEqual({
+      text: 'Tüketildi',
+      tone: 'grey',
+    });
+    expect(lineState(base).text).toBe('Sipariş verilmedi');
   });
 });

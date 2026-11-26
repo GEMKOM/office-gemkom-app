@@ -150,7 +150,7 @@ export function amountText(row: JobStockRow, value: number): string {
 
 // ---- planning lines of the job that have not arrived -----------------------
 
-export type ArrivalTone = 'blue' | 'orange' | 'red' | 'grey' | 'purple';
+export type ArrivalTone = 'green' | 'blue' | 'orange' | 'red' | 'grey' | 'purple';
 
 /**
  * Where a not (fully) delivered planning line stands: received in part,
@@ -190,4 +190,44 @@ export function arrivalState(
     if (tone === 'grey' || tone === 'purple') tone = 'orange';
   }
   return { text: parts.join(' · '), tone };
+}
+
+/**
+ * Delivered and consumed lines name their state; the rest show how far they
+ * are from arriving.
+ */
+export function lineState(row: PlanningItem, today?: string): { text: string; tone: ArrivalTone } {
+  if (row.is_consumed) return { text: 'Tüketildi', tone: 'grey' };
+  if (row.is_delivered === true) return { text: 'Teslim edildi', tone: 'green' };
+  return arrivalState(row, today);
+}
+
+/** Which of the job's planning lines the panel lists; 'all' is the default. */
+export type PlanningStatus = 'all' | 'pending' | 'delivered' | 'consumed';
+
+export const PLANNING_STATUS_OPTIONS: { value: PlanningStatus; label: string }[] = [
+  { value: 'all', label: 'Tümü' },
+  { value: 'pending', label: 'Bekleyen' },
+  { value: 'delivered', label: 'Teslim Edilen' },
+  { value: 'consumed', label: 'Tüketilen' },
+];
+
+export function toPlanningStatus(value: string): PlanningStatus {
+  return PLANNING_STATUS_OPTIONS.some((option) => option.value === value)
+    ? (value as PlanningStatus)
+    : 'all';
+}
+
+/**
+ * GET /planning/items/ params for a status: 'all' leaves the list unfiltered
+ * (every line of the job, delivered and consumed ones included).
+ */
+export function planningStatusParams(status: PlanningStatus): {
+  is_delivered?: string;
+  is_consumed?: string;
+} {
+  if (status === 'pending') return { is_delivered: 'false' };
+  if (status === 'delivered') return { is_delivered: 'true' };
+  if (status === 'consumed') return { is_consumed: 'true' };
+  return {};
 }

@@ -20,19 +20,36 @@ import { FaIcon, notify, PageHeader, Panel, useUrlFilters, type PageFigure } fro
 import { SuggestField } from '@/ui/FilterBar/SuggestField';
 import { CreatePullRequestModal } from './CreatePullRequestModal';
 import { JobPlanningPanel, JobPullsPanel, JobStockPanel } from './jobPanels';
-import { canRequest, jobStockRows, type JobStockRow } from './jobStock';
+import {
+  canRequest,
+  jobStockRows,
+  planningStatusParams,
+  toPlanningStatus,
+  type JobStockRow,
+  type PlanningStatus,
+} from './jobStock';
 import { PullRequestDetailModal } from './pullRequestShared';
 import { PullRequestsList } from './pull-requests/PullRequestsPage';
 
 // Malzeme Takibi (2026-11-23): the workshop picks a job, sees what is in its
 // İş Emri stock (stock cards and bar / plate lots, less what pending requests
 // hold), asks the warehouse for it on an İmalata Çıkış Talebi, and follows the
-// job's earlier requests and the planning lines that have not arrived yet.
+// job's earlier requests and its planning lines — every line by default, or
+// one state of them (?durum=pending / delivered / consumed).
 // With no job picked the page lists every request (the old İmalata Çıkış
 // Talepleri page, which forwards here).
 
 export const MATERIAL_TRACKING_ROUTE = '/manufacturing/material-tracking';
-const URL_DEFAULTS = { job: '' };
+// `durum` and not `status`: the request list below keeps ?status= for itself.
+const URL_DEFAULTS = { job: '', durum: 'all' };
+
+/** The "Gelmeyen kalem" figure names whichever planning lines are listed. */
+const PLANNING_FIGURE_LABEL: Record<PlanningStatus, string> = {
+  all: 'Planlama kalemi',
+  pending: 'Gelmeyen kalem',
+  delivered: 'Teslim edilen kalem',
+  consumed: 'Tüketilen kalem',
+};
 
 const EMPTY_ROWS: JobStockRow[] = [];
 const LOT_PARAMS = { warehouse: 'IS_EMRI', page_size: 1000, ordering: 'item__code' } as const;
@@ -70,12 +87,21 @@ export function MaterialTrackingPage() {
   const jobNo = values.job.trim();
   const pick = (next: string) => apply({ job: next });
 
-  if (jobNo) return <JobMaterial key={jobNo} jobNo={jobNo} onPick={pick} />;
+  if (jobNo)
+    return (
+      <JobMaterial
+        key={jobNo}
+        jobNo={jobNo}
+        onPick={pick}
+        status={toPlanningStatus(values.durum)}
+        onStatus={(next) => apply({ durum: next })}
+      />
+    );
   return (
     <>
       <PageHeader
         title="Malzeme Takibi"
-        subtitle="Bir iş seçin: o işin İş Emri stoğu, imalata çıkış talepleri ve gelmeyen planlama kalemleri"
+        subtitle="Bir iş seçin: o işin İş Emri stoğu, imalata çıkış talepleri ve planlama kalemleri"
         icon="fas fa-box"
       />
       <Stack gap="md">
@@ -92,7 +118,17 @@ export function MaterialTrackingPage() {
   );
 }
 
-function JobMaterial({ jobNo, onPick }: { jobNo: string; onPick: (jobNo: string) => void }) {
+function JobMaterial({
+  jobNo,
+  onPick,
+  status,
+  onStatus,
+}: {
+  jobNo: string;
+  onPick: (jobNo: string) => void;
+  status: PlanningStatus;
+  onStatus: (status: PlanningStatus) => void;
+}) {
   const queryClient = useQueryClient();
   const { user, isAdmin } = useAuth();
 
@@ -108,7 +144,7 @@ function JobMaterial({ jobNo, onPick }: { jobNo: string; onPick: (jobNo: string)
   const planning = useQuery({
     ...planningItemsQueryOptions({
       job_no: jobNo,
-      is_delivered: 'false',
+      ...planningStatusParams(status),
       include_procurement: true,
       include_price: false,
       ordering: 'id',
@@ -131,7 +167,7 @@ function JobMaterial({ jobNo, onPick }: { jobNo: string; onPick: (jobNo: string)
     [cards.data, lots.data],
   );
   // job_no on planning lines matches any job containing the text.
-  const waiting = useMemo(
+  const planningRows = useMemo(
     () => (planning.data?.results ?? []).filter((row) => row.job_no === jobNo),
     [planning.data, jobNo],
   );
@@ -205,14 +241,18 @@ function JobMaterial({ jobNo, onPick }: { jobNo: string; onPick: (jobNo: string)
       value: done ? stockRows.filter(canRequest).length : '–',
     },
     { id: 'pending', label: 'Bekleyen talep', value: pulls.isSuccess ? pending : '–' },
-    { id: 'waiting', label: 'Gelmeyen kalem', value: planning.isSuccess ? waiting.length : '–' },
+    {
+      id: 'waiting',
+      label: PLANNING_FIGURE_LABEL[status],
+      value: planning.isSuccess ? planningRows.length : '–',
+    },
   ];
 
   return (
     <>
       <PageHeader
         title={`Malzeme Takibi · ${jobNo}`}
-        subtitle="Bu işin İş Emri stoğundan imalata çıkış talebi oluşturun; önceki talepler ve gelmeyen kalemler aşağıda"
+        subtitle="Bu işin İş Emri stoğundan imalata çıkış talebi oluşturun; önceki talepler ve planlama kalemleri aşağıda"
         icon="fas fa-box"
         stats={stats}
         backTo={`${MATERIAL_TRACKING_ROUTE}/`}
@@ -245,8 +285,10 @@ function JobMaterial({ jobNo, onPick }: { jobNo: string; onPick: (jobNo: string)
         />
         <JobPlanningPanel
           jobNo={jobNo}
-          rows={waiting}
+          rows={planningRows}
           loading={planning.isFetching}
+          status={status}
+          onStatus={onStatus}
           pendingCritical={pendingCritical}
           onToggleCritical={(row, critical) => void toggleCritical(row, critical)}
         />
