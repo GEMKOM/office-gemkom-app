@@ -15,9 +15,16 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { zod4Resolver } from 'mantine-form-zod-resolver';
 import { useRef, useState, type FormEvent } from 'react';
 import { cncTaskKeys, createCncTask, type CncPartInput } from '@/api/manufacturing/cncTasks';
-import { FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
-import { CutBasicFields, cutInput, cutSchema, EMPTY_CUT_FORM, useJobOrderChoices } from './cutForm';
-import { parsePartsFromText } from './partsPaste';
+import { errorMessage, FaIcon, FileDropInput, FormModal, ModalSection, notify } from '@/ui';
+import {
+  CutBasicFields,
+  cutInput,
+  cutSchema,
+  EMPTY_CUT_FORM,
+  useJobOrderChoices,
+  useKnownJobNos,
+} from './cutForm';
+import { parsePartsFromText, pastedJobNoProblem } from './partsPaste';
 import {
   adetFollowsLot,
   EMPTY_PLATE_SOURCE,
@@ -71,6 +78,7 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
   // Row ids only grow, so removing a middle row never hands its id to a new one.
   const nextId = useRef(0);
   const jobChoices = useJobOrderChoices(rows.map((r) => r.job_no));
+  const knownJobNos = useKnownJobNos();
 
   const newRow = (part?: Partial<CncPartInput>): PartDraft => ({
     rowId: nextId.current++,
@@ -103,8 +111,14 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
       await create.mutateAsync({ ...cutInput(values, plate), files, parts_data: parts });
       notify.success('Kesim başarıyla oluşturuldu');
       onClose();
-    } catch {
-      notify.error('Kesim oluşturulurken hata oluştu');
+    } catch (error) {
+      // The backend's own reason (e.g. a job number with no job order), when it sent one.
+      const detail = errorMessage(error, '').trim();
+      notify.error(
+        detail && !/^HTTP \d+$/.test(detail)
+          ? `Kesim oluşturulamadı: ${detail.replace(/^parts_data: /, '')}`
+          : 'Kesim oluşturulurken hata oluştu',
+      );
     }
   };
 
@@ -112,6 +126,15 @@ export function CreateCutModal({ onClose }: { onClose: () => void }) {
     const parsed = parsePartsFromText(paste);
     if (!parsed.length) {
       notify.warning('Yapıştırılan veriler ayrıştırılamadı');
+      return;
+    }
+    if (!knownJobNos) {
+      notify.warning('İş emirleri yükleniyor, lütfen birkaç saniye sonra tekrar deneyin');
+      return;
+    }
+    const problem = pastedJobNoProblem(parsed, knownJobNos);
+    if (problem) {
+      notify.error(problem);
       return;
     }
     setRows((list) => [...list, ...parsed.map(newRow)]);

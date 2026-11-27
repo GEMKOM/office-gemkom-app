@@ -36,8 +36,8 @@ import {
   type RowAction,
 } from '@/ui';
 import { PASTE_HELP } from './CreateCutModal';
-import { useJobOrderChoices } from './cutForm';
-import { parsePartsFromText, planPastedParts } from './partsPaste';
+import { useJobOrderChoices, useKnownJobNos } from './cutForm';
+import { parsePartsFromText, pastedJobNoProblem, planPastedParts } from './partsPaste';
 
 const dash = (value: unknown) =>
   value === null || value === undefined || value === '' ? '-' : String(value);
@@ -72,6 +72,7 @@ export function PartsManager({ taskKey, parts }: { taskKey: string; parts: reado
   const [preview, setPreview] = useState<CncPartInput[] | null>(null);
   const [processing, setProcessing] = useState(false);
   const [editing, setEditing] = useState<CncPart | 'new' | null>(null);
+  const knownJobNos = useKnownJobNos();
 
   const showPreview = () => {
     if (!paste.trim()) {
@@ -81,6 +82,17 @@ export function PartsManager({ taskKey, parts }: { taskKey: string; parts: reado
     const parsed = parsePartsFromText(paste);
     if (!parsed.length) {
       notify.warning('Yapıştırılan veriler ayrıştırılamadı');
+      setPreview(null);
+      return;
+    }
+    if (!knownJobNos) {
+      notify.warning('İş emirleri yükleniyor, lütfen birkaç saniye sonra tekrar deneyin');
+      setPreview(null);
+      return;
+    }
+    const problem = pastedJobNoProblem(parsed, knownJobNos);
+    if (problem) {
+      notify.error(problem);
       setPreview(null);
       return;
     }

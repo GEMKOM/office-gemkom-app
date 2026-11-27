@@ -105,6 +105,32 @@ export function parsePartsFromText(rawText: string): CncPartInput[] {
   return parts;
 }
 
+/**
+ * Why a pasted part list can't be used: a part with no job number, or job
+ * numbers that are not job orders (a typo such as "293-15-" for "293-15"
+ * would put the parts on a job that does not exist). Null when every part
+ * is fine. The backend refuses the same (cnc_cutting validate_cnc_part_job_nos).
+ */
+export function pastedJobNoProblem(
+  parts: readonly CncPartInput[],
+  known: ReadonlySet<string>,
+): string | null {
+  if (parts.some((p) => !(p.job_no || '').trim())) {
+    return 'İş numarası olmayan parça var: her parçanın bir iş numarası olmalıdır.';
+  }
+  const unknown = [...new Set(parts.map((p) => (p.job_no || '').trim()))]
+    .filter((j) => !known.has(j))
+    .sort();
+  if (!unknown.length) return null;
+  const hints = unknown.flatMap((j) => {
+    const trimmed = j.replace(/[-_./,\s]+$/, '');
+    return trimmed !== j && known.has(trimmed) ? [`'${j}' yerine '${trimmed}'`] : [];
+  });
+  let message = `Şu iş numaralarına ait iş emri bulunamadı: ${unknown.map((j) => `'${j}'`).join(', ')}.`;
+  if (hints.length) message += ` Bunu mu demek istediniz: ${hints.join(', ')}?`;
+  return `${message} Liste eklenmedi; iş numaralarını düzeltip tekrar yapıştırın.`;
+}
+
 const partKey = (p: {
   job_no?: string | null;
   image_no?: string | null;

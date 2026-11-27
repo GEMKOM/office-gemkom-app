@@ -79,6 +79,19 @@ export function useCuttingMachineOptions() {
   );
 }
 
+/**
+ * Every job order's number, completed and cancelled ones included (a cut for
+ * a closed job is allowed); null until loaded. Pasted parts are checked
+ * against it.
+ */
+export function useKnownJobNos(): ReadonlySet<string> | null {
+  const jobOrders = useJobOrderOptions({ includeAll: true });
+  return useMemo(
+    () => (jobOrders.data ? new Set(jobOrders.data.map((j) => j.job_no)) : null),
+    [jobOrders.data],
+  );
+}
+
 /** `${job_no} - ${title}` choices; a value that is not in the list (pasted) stays selectable. */
 export function useJobOrderChoices(extra: readonly string[] = []) {
   const jobOrders = useJobOrderOptions();
