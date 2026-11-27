@@ -94,6 +94,41 @@ it('greets the user and lists what waits on their approval, each linking to its 
   expect(calledPaths()).not.toContain('/projects/drawing-releases/pending_approvals/');
 });
 
+it('opens fason approvals on the Onaylar tab, not the material pending page', async () => {
+  responses = {
+    '/planning/department-requests/pending_approval/?kind=fason': page(
+      [
+        {
+          id: 42,
+          request_number: 'DR-2026-0042',
+          title: 'Büküm · 304-02',
+          requestor_full_name: 'Ali Usta',
+          submitted_at: '2026-11-19T08:00:00Z',
+        },
+      ],
+      1,
+    ),
+  };
+  renderWithProviders(<HomePage />);
+
+  const list = within(panel('Onayınızı Bekleyenler'));
+  await waitFor(() => expect(list.getByRole('link', { name: /DR-2026-0042/ })).toBeInTheDocument());
+  expect(list.getByRole('link', { name: /DR-2026-0042/ })).toHaveAttribute(
+    'href',
+    '/approvals?queue=fason&request=42',
+  );
+  // The queue row and the band figure (this is the only waiting queue) must
+  // not dump the user on Departman Talepleri, which lists material only.
+  expect(within(queueBar()).getByRole('link', { name: /Fason talepleri/ })).toHaveAttribute(
+    'href',
+    '/approvals?queue=fason',
+  );
+  expect(tile('Onayınızı Bekleyen').querySelector('a')).toHaveAttribute(
+    'href',
+    '/approvals?queue=fason',
+  );
+});
+
 it('shows the tasks assigned to the user, overdue ones flagged, each opening on its department page', async () => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-11-03T10:00:00'));
