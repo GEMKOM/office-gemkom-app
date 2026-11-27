@@ -45,6 +45,7 @@ test('admin: the procurement hub shows its cards, live queues and band buttons',
   await expect(cardTitles(page)).toHaveText([
     'Satın Alma Talepleri',
     'Ödeme Listeleri',
+    'Fason Takibi',
     'Tedarikçiler',
     'Projeler',
   ]);

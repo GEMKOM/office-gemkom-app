@@ -30,8 +30,11 @@ export interface MenuCard {
    * An undefined value shows a placeholder bar while it loads.
    */
   stat?: { value: ReactNode | undefined; label: ReactNode };
-  /** A status pill beside the stat, e.g. { label: '4 Onay Bekliyor', color: 'yellow' }. */
-  badge?: { label: ReactNode; color: StatusFamily };
+  /**
+   * A status pill beside the stat, e.g. { label: '4 Onay Bekliyor', color: 'yellow' }.
+   * With `link` the pill opens that page instead of the card's (e.g. the Onaylar tab).
+   */
+  badge?: { label: ReactNode; color: StatusFamily; link?: string };
 }
 
 export interface MenuCardsProps {
@@ -137,7 +140,18 @@ function Card({ card, compact }: { card: MenuCard; compact: boolean }) {
               <span className={classes.hubFigureLabel}>{stat.label}</span>
             </>
           ) : null}
-          {badge ? <StatusBadge color={badge.color}>{badge.label}</StatusBadge> : null}
+          {badge ? (
+            badge.link ? (
+              <AppLink
+                to={badge.link}
+                aria-label={typeof badge.label === 'string' ? badge.label : undefined}
+              >
+                <StatusBadge color={badge.color}>{badge.label}</StatusBadge>
+              </AppLink>
+            ) : (
+              <StatusBadge color={badge.color}>{badge.label}</StatusBadge>
+            )
+          ) : null}
         </div>
       ) : null}
       {card.features && card.features.length > 0 ? (
@@ -146,15 +160,25 @@ function Card({ card, compact }: { card: MenuCard; compact: boolean }) {
             const content = (
               <>
                 {feature.icon ? (
-                  <FaIcon icon={feature.icon} color={feature.iconColor ?? 'var(--fam-fg)'} style={{ width: 16 }} />
+                  <FaIcon
+                    icon={feature.icon}
+                    color={feature.iconColor ?? 'var(--fam-fg)'}
+                    style={{ width: 16 }}
+                  />
                 ) : null}
                 {feature.label}
-                {feature.link ? <i className={`fas fa-chevron-right ${classes.hubLinkChevron}`} aria-hidden /> : null}
+                {feature.link ? (
+                  <i className={`fas fa-chevron-right ${classes.hubLinkChevron}`} aria-hidden />
+                ) : null}
               </>
             );
             return (
               <li key={index}>
-                {feature.link ? <AppLink to={feature.link}>{content}</AppLink> : <span>{content}</span>}
+                {feature.link ? (
+                  <AppLink to={feature.link}>{content}</AppLink>
+                ) : (
+                  <span>{content}</span>
+                )}
               </li>
             );
           })}
@@ -168,7 +192,15 @@ function Card({ card, compact }: { card: MenuCard; compact: boolean }) {
  * Replaces components/menu/menu.js on the section hub pages: the band (with
  * the module's figures and quick actions), the cards, then any panels.
  */
-export function MenuCards({ title, subtitle, stats, actions, compact = false, cards, children }: MenuCardsProps) {
+export function MenuCards({
+  title,
+  subtitle,
+  stats,
+  actions,
+  compact = false,
+  cards,
+  children,
+}: MenuCardsProps) {
   const permissionsVersion = usePermissionsVersion();
   const visible = useMemo(
     () => visibleMenuCards(cards),
@@ -181,7 +213,13 @@ export function MenuCards({ title, subtitle, stats, actions, compact = false, ca
   return (
     <>
       {title || subtitle || stats?.length || actions ? (
-        <PageHeader title={title ?? ''} subtitle={subtitle} stats={stats} figureStyle="tiles" actions={actions} />
+        <PageHeader
+          title={title ?? ''}
+          subtitle={subtitle}
+          stats={stats}
+          figureStyle="tiles"
+          actions={actions}
+        />
       ) : null}
       <div
         className={classes.hubGrid}

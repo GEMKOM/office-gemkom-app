@@ -18,6 +18,7 @@ const TRANSFERS = '/warehouse/transfers';
 const COUNTS = '/warehouse/counts';
 const PIECE_COUNTS = '/warehouse/piece-counts';
 const WEIGHT_REDUCTION = '/warehouse/weight-reduction';
+const FASON = '/warehouse/fason';
 
 /**
  * Depo in the menu's four groups: Stoklar, Giriş / Çıkış, Sayım and Raporlar.
@@ -72,6 +73,7 @@ export function WarehouseHubPage() {
         { label: 'Mal Kabul', icon: 'fas fa-truck-loading', link: RECEIPTS },
         { label: 'İmalata Çıkış Talepleri', icon: 'fas fa-dolly', link: PULLS },
         { label: 'İmalattan İade', icon: 'fas fa-undo', link: SLIPS },
+        { label: 'Fason Sevkiyatı', icon: 'fas fa-people-carry', link: FASON },
         { label: 'Depo Transferi', icon: 'fas fa-exchange-alt', link: TRANSFERS },
       ],
     },

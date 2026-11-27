@@ -165,11 +165,19 @@ export const DEPARTMENT_REQUEST_PRIORITY_OPTIONS = [
   { value: 'critical', label: 'Kritik' },
 ] as const;
 
+/**
+ * A department request is a material request (Departman Talepleri) or a
+ * workshop fason request (Fason Talepleri); the backend's `kind` filter
+ * splits every list. Without it a list has both (planning's, for one).
+ */
+export type DepartmentRequestKind = 'material' | 'fason';
+
 const keys = {
   all: ['departmentRequests'] as const,
   list: (params: DepartmentRequestsParams) => ['departmentRequests', 'list', params] as const,
   detail: (id: number | string) => ['departmentRequests', 'detail', String(id)] as const,
-  pending: () => ['departmentRequests', 'pendingApproval'] as const,
+  pending: (kind?: DepartmentRequestKind) =>
+    ['departmentRequests', 'pendingApproval', kind ?? 'all'] as const,
   approved: (params: QueryParams) => ['departmentRequests', 'approved', params] as const,
 };
 
@@ -192,13 +200,16 @@ export function departmentRequestQueryOptions(id: number | string) {
   });
 }
 
-/** Port of getPendingApprovalDepartmentRequests (legacy sends no params). */
-export function pendingDepartmentRequestsQueryOptions() {
+/** Port of getPendingApprovalDepartmentRequests; `kind` keeps material and fason apart. */
+export function pendingDepartmentRequestsQueryOptions(kind?: DepartmentRequestKind) {
   return queryOptions({
-    queryKey: keys.pending(),
+    queryKey: keys.pending(kind),
     queryFn: async ({ signal }) =>
       toPaginated<DepartmentRequest>(
-        await apiFetch<unknown>(`${BASE}pending_approval/`, { signal }),
+        await apiFetch<unknown>(`${BASE}pending_approval/`, {
+          params: kind ? { kind } : undefined,
+          signal,
+        }),
       ),
   });
 }

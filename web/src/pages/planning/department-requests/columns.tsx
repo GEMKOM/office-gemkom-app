@@ -1,4 +1,4 @@
-import { Text } from '@mantine/core';
+import { Group, Text } from '@mantine/core';
 import type { DepartmentRequest } from '@/api/general/departmentRequests';
 import type { PlanningRequest } from '@/api/planning/planningRequests';
 import { formatDate } from '@/lib/format';
@@ -43,6 +43,19 @@ const dateCell = (value: string | null | undefined) => (value ? formatDate(value
 // requestor, department and status, which the backend ignores.
 export const approvedRequestColumns: DataTableColumn<DepartmentRequest>[] = [
   { key: 'id', header: 'Talep No', sortable: true, render: (row) => <RequestNo id={row.id} /> },
+  {
+    // A workshop fason request (büküm, galvaniz…) is marked: it goes on to
+    // procurement like any other, its material follows on the Fason pages.
+    key: 'title',
+    header: 'Başlık',
+    sortable: false,
+    render: (row) => (
+      <Group gap={6} wrap="nowrap">
+        {row.fason_job_id ? <StatusBadge color="orange">Fason</StatusBadge> : null}
+        <Text size="sm">{row.title || '-'}</Text>
+      </Group>
+    ),
+  },
   {
     key: 'requestor_username',
     header: 'Talep Eden',
