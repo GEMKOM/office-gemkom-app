@@ -3,6 +3,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
 import { FasonPage, ProcurementFasonPage, WarehouseFasonPage } from './FasonPage';
+import { fasonUpload } from './FasonRequestFormModal';
 
 vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
@@ -60,6 +61,24 @@ const DETAIL = {
       unit: 'adet',
       job_no: '304-02',
       description: 'P-26',
+      files: [
+        {
+          id: 31,
+          asset_id: 41,
+          file_url: 'https://files.test/p26.dxf',
+          file_name: 'p26.dxf',
+          uploaded_at: '2026-11-19T08:00:00Z',
+        },
+      ],
+    },
+  ],
+  files: [
+    {
+      id: 30,
+      asset_id: 40,
+      file_url: 'https://files.test/genel.pdf',
+      file_name: 'genel.pdf',
+      uploaded_at: '2026-11-19T08:00:00Z',
     },
   ],
   lines: [
@@ -152,6 +171,29 @@ it('lists the jobs with purchasing and material side by side, by tab', async () 
   await waitFor(() =>
     expect(calls().some((c) => c.url.searchParams.get('tab') === 'at_supplier')).toBe(true),
   );
+});
+
+it('shows each part’s files under it and the general files apart', async () => {
+  renderWithProviders(<FasonPage />, { route: '/general/fason?job=5' });
+  const dialog = await screen.findByRole('dialog', { name: /Fason · DR-2026-0042/ });
+  const part = await within(dialog).findByRole('link', { name: /p26\.dxf/ });
+  expect(part).toHaveAttribute('href', 'https://files.test/p26.dxf');
+  expect(part.closest('tr')).toHaveTextContent('P-26');
+  expect(within(dialog).getByText('Genel Dosyalar')).toBeInTheDocument();
+  expect(within(dialog).getByText('genel.pdf')).toBeInTheDocument();
+});
+
+it('uploads the general files first, then each part’s, tied to its row', () => {
+  const file = (name: string) => new File(['x'], name);
+  const general = [file('genel.pdf')];
+  const upload = fasonUpload(general, [
+    { files: [file('a.dxf'), file('b.dxf')] },
+    { files: [] },
+    { files: [file('c.dxf')] },
+  ]);
+  expect(upload.files.map((f) => f.name)).toEqual(['genel.pdf', 'a.dxf', 'b.dxf', 'c.dxf']);
+  expect(upload.file_item_mapping).toEqual({ '1': [0], '2': [0], '3': [2] });
+  expect(fasonUpload([], [{ files: [] }]).file_item_mapping).toEqual({});
 });
 
 it('opens a job and sends its material to the order’s supplier', async () => {
@@ -294,8 +336,18 @@ it('is Fason Talepleri and opens a fason request: one operation, its parts, subm
   fireEvent.click(within(dialog).getByRole('button', { name: 'Parça Ekle' }));
   fireEvent.click(within(dialog).getByRole('button', { name: 'Parça Ekle' }));
   expect(within(dialog).getAllByTestId('fason-part-row')).toHaveLength(3);
-  fireEvent.click(within(dialog).getByRole('button', { name: 'Parçayı kaldır 3' }));
+  // The third part gets its own drawing straight on its row (no mapping step).
+  expect(within(dialog).getByRole('button', { name: 'Dosya ekle 3' })).toBeInTheDocument();
+  const picker = within(dialog)
+    .getAllByTestId('fason-part-row')[2]!
+    .querySelector('input[type="file"]') as HTMLInputElement;
+  fireEvent.change(picker, { target: { files: [new File(['x'], 'p40.dxf')] } });
+  expect(within(dialog).getByLabelText('Dosya sayısı 3')).toHaveTextContent('1');
+  expect(within(dialog).getByTestId('fason-part-files-3')).toHaveTextContent('p40.dxf');
+  // Removing the second part: the drawing moves up with its part.
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Parçayı kaldır 2' }));
   expect(within(dialog).getAllByTestId('fason-part-row')).toHaveLength(2);
+  expect(within(dialog).getByTestId('fason-part-files-2')).toHaveTextContent('p40.dxf');
   fireEvent.change(within(dialog).getByLabelText('Parça 2'), { target: { value: 'P-40 kapak' } });
   fireEvent.change(within(dialog).getByLabelText('İhtiyaç Tarihi'), {
     target: { value: '2026-12-01' },
@@ -316,6 +368,9 @@ it('is Fason Talepleri and opens a fason request: one operation, its parts, subm
   expect(body.get('description')).toBe('Kenarlar 90°');
   expect(body.get('needed_date')).toBe('2026-12-01');
   expect(body.get('priority')).toBe('normal');
+  // The part's file goes with the request, tied to its row (the second part now).
+  expect((body.getAll('files') as File[]).map((f) => f.name)).toEqual(['p40.dxf']);
+  expect(JSON.parse(String(body.get('file_item_mapping')))).toEqual({ '0': [1] });
   const card = { item_id: 3, item_code: BUKUM.code, item_name: 'BÜKÜM İŞLEMİ', item_unit: 'adet' };
   expect(JSON.parse(String(body.get('items')))).toEqual([
     { ...card, job_no: '304-02', quantity: 4, item_description: 'P-26', item_specifications: null },

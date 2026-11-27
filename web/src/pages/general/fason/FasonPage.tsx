@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Button,
   Group,
   SegmentedControl,
@@ -16,6 +17,7 @@ import {
   fasonJobQueryOptions,
   fasonJobsQueryOptions,
   useFasonAction,
+  type FasonFile,
   type FasonJob,
   type FasonJobDetail,
   type FasonMaterialStep,
@@ -27,6 +29,7 @@ import {
   DataTable,
   DetailModal,
   FaIcon,
+  FileAttachments,
   FilterBar,
   FormModal,
   notify,
@@ -490,6 +493,7 @@ function Rows({ job }: { job: FasonJobDetail }) {
             <Table.Th>Parça / Açıklama</Table.Th>
             <Table.Th>İş No</Table.Th>
             <Table.Th ta="right">Miktar</Table.Th>
+            <Table.Th>Dosyalar</Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -501,10 +505,26 @@ function Rows({ job }: { job: FasonJobDetail }) {
               <Table.Td ta="right">
                 {row.quantity ?? '-'} {row.unit}
               </Table.Td>
+              <Table.Td>
+                <PartFiles files={row.files ?? []} />
+              </Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
       </Table>
+      {job.files?.length ? (
+        <FileAttachments
+          readOnly
+          title="Genel Dosyalar"
+          files={job.files.map((f) => ({
+            id: f.id,
+            url: f.file_url,
+            name: f.file_name,
+            uploadedAt: f.uploaded_at,
+            uploadedBy: f.uploaded_by_username ?? null,
+          }))}
+        />
+      ) : null}
       {job.lines.length ? (
         <Table withTableBorder fz="sm" aria-label="Satınalma kalemleri">
           <Table.Thead>
@@ -540,6 +560,20 @@ function Rows({ job }: { job: FasonJobDetail }) {
           </Table.Tbody>
         </Table>
       ) : null}
+    </Stack>
+  );
+}
+
+/** A part's own files: each a link that opens it. */
+function PartFiles({ files }: { files: FasonFile[] }) {
+  if (!files.length) return <Text c="dimmed">-</Text>;
+  return (
+    <Stack gap={2}>
+      {files.map((f) => (
+        <Anchor key={f.id} href={f.file_url} target="_blank" rel="noopener noreferrer" size="sm">
+          <FaIcon icon="fas fa-paperclip" /> {f.file_name}
+        </Anchor>
+      ))}
     </Stack>
   );
 }

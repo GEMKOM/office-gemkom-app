@@ -59,6 +59,16 @@ export interface FasonJob {
   created_at: string | null;
 }
 
+/** A file of the request (planning FileAttachmentSerializer). */
+export interface FasonFile {
+  id: number;
+  asset_id: number;
+  file_url: string;
+  file_name: string;
+  uploaded_at: string | null;
+  uploaded_by_username?: string | null;
+}
+
 export interface FasonStepMark {
   at: string | null;
   by: string | null;
@@ -72,7 +82,11 @@ export interface FasonJobDetail extends FasonJob {
     unit: string;
     job_no: string;
     description: string;
+    /** The part's own files. */
+    files?: FasonFile[];
   }[];
+  /** The request's general files (not tied to a part). */
+  files?: FasonFile[];
   lines: {
     id: number;
     planning_request: string;
