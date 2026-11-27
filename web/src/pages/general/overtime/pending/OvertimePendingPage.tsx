@@ -14,7 +14,13 @@ import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 // `request` is the legacy deep link (notification e-mails) that opens the
 // details modal; the two table pages are kept in the URL too.
-const URL_DEFAULTS = { request: '', page: '1', decided_page: '1' };
+const URL_DEFAULTS = {
+  request: '',
+  page: '1',
+  page_size: '20',
+  decided_page: '1',
+  decided_page_size: '20',
+};
 const PAGE_SIZE = 20;
 const EMPTY_ROWS: OvertimeRequest[] = [];
 
@@ -34,14 +40,16 @@ export function OvertimePendingPage({ embedded = false }: EmbeddableProps = {}) 
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const invalidate = useInvalidateOvertime();
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
   const decidedPage = positiveInt(values.decided_page, 1);
+  const decidedPageSize = positiveInt(values.decided_page_size, PAGE_SIZE);
 
   const pending = useQuery({
-    ...pendingOvertimeQueryOptions({ page, page_size: PAGE_SIZE }),
+    ...pendingOvertimeQueryOptions({ page, page_size: pageSize }),
     placeholderData: keepPreviousData,
   });
   const decided = useQuery({
-    ...decidedByMeOvertimeQueryOptions({ page: decidedPage, page_size: PAGE_SIZE }),
+    ...decidedByMeOvertimeQueryOptions({ page: decidedPage, page_size: decidedPageSize }),
     placeholderData: keepPreviousData,
   });
 
@@ -106,6 +114,7 @@ export function OvertimePendingPage({ embedded = false }: EmbeddableProps = {}) 
 
       <Stack gap="lg">
         <DataTable
+          columnsKey="overtime-pending"
           title="Onay Bekleyen Mesai Talepleri"
           icon="fas fa-clock"
           data={pending.data?.results ?? EMPTY_ROWS}
@@ -114,9 +123,10 @@ export function OvertimePendingPage({ embedded = false }: EmbeddableProps = {}) 
           loading={pending.isFetching}
           pagination={{
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             total: pendingTotal,
             onPageChange: (next) => apply({ page: String(next) }),
+            onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
           }}
           rowActions={pendingActions}
           emptyMessage="Onay bekleyen mesai talebi bulunamadı."
@@ -124,6 +134,7 @@ export function OvertimePendingPage({ embedded = false }: EmbeddableProps = {}) 
         />
 
         <DataTable
+          columnsKey="overtime-decided"
           title="Onayladığım Mesai Talepleri"
           icon="fas fa-check-circle"
           data={decided.data?.results ?? EMPTY_ROWS}
@@ -132,9 +143,11 @@ export function OvertimePendingPage({ embedded = false }: EmbeddableProps = {}) 
           loading={decided.isFetching}
           pagination={{
             page: decidedPage,
-            pageSize: PAGE_SIZE,
+            pageSize: decidedPageSize,
             total: decided.data?.count ?? 0,
             onPageChange: (next) => apply({ decided_page: String(next) }),
+            onPageSizeChange: (size) =>
+              apply({ decided_page_size: String(size), decided_page: '1' }),
           }}
           rowActions={decidedActions}
           emptyMessage="Onayladığınız mesai talebi bulunamadı."

@@ -378,6 +378,7 @@ function JobTreeTable({
 
   return (
     <DataTable
+      columnsKey="overtime-cost-by-job"
       // Like legacy, every load starts from the default expansion.
       key={resetKey}
       title="İş Emri Numarasına Göre Dağılım"
@@ -552,6 +553,7 @@ export function CostReportPage() {
         ) : null}
 
         <DataTable
+          columnsKey="overtime-cost-by-rate"
           title="Ücret Katsayısına Göre Dağılım"
           icon="fas fa-layer-group"
           data={buckets}
@@ -571,6 +573,7 @@ export function CostReportPage() {
         />
 
         <DataTable
+          columnsKey="overtime-cost-breakdown"
           key={mode}
           title={GROUP_TITLES[mode]}
           icon="fas fa-chart-pie"
@@ -587,6 +590,7 @@ export function CostReportPage() {
         />
 
         <DataTable
+          columnsKey="overtime-cost-requests"
           title="Mesai Talepleri"
           icon="fas fa-clock"
           data={requests}

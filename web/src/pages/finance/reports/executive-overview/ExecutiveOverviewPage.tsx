@@ -322,6 +322,7 @@ export function ExecutiveOverviewPage() {
           </DashCell>
           <DashCell>
             <DataTable
+              columnsKey="executive-overview-monthly"
               title="Aylık Detaylar"
               icon="fas fa-chart-bar"
               data={series}

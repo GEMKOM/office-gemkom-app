@@ -69,6 +69,7 @@ export function ItemRequestsModal({ item, kind, onClose }: ItemRequestsModalProp
           icon: config.icon,
           content: (
             <DataTable
+              columnsKey={`inventory-card-${kind}-requests`}
               data={requests.data ?? EMPTY}
               columns={config.columns}
               getRowId={(row, index) => String(row.id ?? index)}

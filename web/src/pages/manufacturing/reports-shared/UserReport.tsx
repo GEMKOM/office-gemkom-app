@@ -147,6 +147,7 @@ export function UserReport({
       />
 
       <DataTable
+        columnsKey={`user-report-${module.replace(/_/g, '-')}`}
         title={header.title}
         filters={
           <FilterBar

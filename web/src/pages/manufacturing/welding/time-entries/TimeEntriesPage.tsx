@@ -307,6 +307,7 @@ export function TimeEntriesPage() {
       />
 
       <DataTable
+        columnsKey="welding-time-entries"
         title="Zaman Kayıtları"
         icon="fas fa-clock"
         filters={

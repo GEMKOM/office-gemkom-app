@@ -24,7 +24,14 @@ import { useSearchParams } from 'react-router';
 import { referencesQueryOptions, type ReferenceProfile } from '@/api/projects/references';
 import { fmt } from '../estimate-report/reportModel';
 import { CostHistoryDetail } from './CostHistoryDetail';
-import { CrossLink, ExclusionNotesBadge, monthLabel, PlanSourceBadge, ReliabilityBadge, ReviewBadge } from './costHistoryParts';
+import {
+  CrossLink,
+  ExclusionNotesBadge,
+  monthLabel,
+  PlanSourceBadge,
+  ReliabilityBadge,
+  ReviewBadge,
+} from './costHistoryParts';
 import css from './RefTabs.module.css';
 
 // Filter keys carry an "a" prefix: the calibration tab shares the URL.
@@ -160,10 +167,30 @@ const buildColumns = (
     exportValue: (r) => r.review,
   },
   { key: 'customer', header: 'Müşteri', exportOnly: true },
-  { key: 'labour_now', header: 'İşçilik bugün €', exportOnly: true, accessor: (r) => r.now?.labour ?? null },
-  { key: 'material_now', header: 'Malzeme bugün €', exportOnly: true, accessor: (r) => r.now?.material ?? null },
-  { key: 'total_now', header: 'Toplam bugün €', exportOnly: true, accessor: (r) => r.now?.total ?? null },
-  { key: 'total_then', header: 'Toplam o gün €', exportOnly: true, accessor: (r) => r.then?.total ?? null },
+  {
+    key: 'labour_now',
+    header: 'İşçilik bugün €',
+    exportOnly: true,
+    accessor: (r) => r.now?.labour ?? null,
+  },
+  {
+    key: 'material_now',
+    header: 'Malzeme bugün €',
+    exportOnly: true,
+    accessor: (r) => r.now?.material ?? null,
+  },
+  {
+    key: 'total_now',
+    header: 'Toplam bugün €',
+    exportOnly: true,
+    accessor: (r) => r.now?.total ?? null,
+  },
+  {
+    key: 'total_then',
+    header: 'Toplam o gün €',
+    exportOnly: true,
+    accessor: (r) => r.then?.total ?? null,
+  },
   { key: 'source_file', header: 'Kaynak dosya', exportOnly: true },
 ];
 
@@ -180,7 +207,10 @@ export function CostHistoryTab() {
     () => new Map((references.data?.results ?? []).map((r) => [r.job_no, r] as const)),
     [references.data],
   );
-  const columns = useMemo(() => buildColumns(refs, (jobNo) => setParams({ search: jobNo })), [refs, setParams]);
+  const columns = useMemo(
+    () => buildColumns(refs, (jobNo) => setParams({ search: jobNo })),
+    [refs, setParams],
+  );
   const [detail, setDetail] = useState<CostHistoryRow | null>(null);
   const [familiesOpen, setFamiliesOpen] = useState(false);
 
@@ -197,7 +227,10 @@ export function CostHistoryTab() {
     const minKg = Number(String(values.aminkg).replace(',', '.')) || 0;
     return all.filter(
       (r) =>
-        (!q || [r.job_no, r.product, r.customer].some((v) => (v || '').toLocaleLowerCase('tr').includes(q))) &&
+        (!q ||
+          [r.job_no, r.product, r.customer].some((v) =>
+            (v || '').toLocaleLowerCase('tr').includes(q),
+          )) &&
         (!fam.size || fam.has(r.family)) &&
         (!rev.size || rev.has(r.review || 'unreviewed')) &&
         (!plan.size || plan.has(r.plan ? 'yes' : 'no')) &&
@@ -237,7 +270,13 @@ export function CostHistoryTab() {
           { value: 'no', label: 'Okunmadı' },
         ],
       },
-      { key: 'aminkg', type: 'text', inputType: 'number', label: 'En az kg / adet', placeholder: 'ör. 1000' },
+      {
+        key: 'aminkg',
+        type: 'text',
+        inputType: 'number',
+        label: 'En az kg / adet',
+        placeholder: 'ör. 1000',
+      },
     ],
     [all],
   );
@@ -249,38 +288,70 @@ export function CostHistoryTab() {
 
   const onReviewed = (id: number, status: string, note: string) => {
     queryClient.setQueryData<CostHistoryList>(costHistoryKeys.all, (prev) =>
-      prev ? { ...prev, results: prev.results.map((r) => (r.id === id ? { ...r, review: status, review_note: note } : r)) } : prev,
+      prev
+        ? {
+            ...prev,
+            results: prev.results.map((r) =>
+              r.id === id ? { ...r, review: status, review_note: note } : r,
+            ),
+          }
+        : prev,
     );
     void queryClient.invalidateQueries({ queryKey: costHistoryKeys.all });
     const row = all.find((r) => r.id === id);
-    notify.success(`${row?.job_no || 'Kalem'}: ${status === 'verified' ? 'Doğrulandı' : status === 'excluded' ? 'Hariç tutuldu' : 'İnceleme geri alındı'}`);
+    notify.success(
+      `${row?.job_no || 'Kalem'}: ${status === 'verified' ? 'Doğrulandı' : status === 'excluded' ? 'Hariç tutuldu' : 'İnceleme geri alındı'}`,
+    );
     setDetail(null);
   };
 
   return (
     <>
       <p className={css.intro}>
-        MALİYET arşivindeki <strong>iş sonu maliyet tabloları</strong> (gerçekleşen maliyet). Her kalemin o günkü
-        maliyeti bugüne taşınır. Tahmin raporu aynı ailenin en yakın kalemlerini, önce aynı müşterinin ve çizimden
-        okunmuş tasarımı en çok benzeyenlerini, <strong>çapraz kontrol</strong> olarak gösterir. Hariç tutulan ve
-        aykırı €/kg'lı kalemler kullanılmaz.
+        MALİYET arşivindeki <strong>iş sonu maliyet tabloları</strong> (gerçekleşen maliyet). Her
+        kalemin o günkü maliyeti bugüne taşınır. Tahmin raporu aynı ailenin en yakın kalemlerini,
+        önce aynı müşterinin ve çizimden okunmuş tasarımı en çok benzeyenlerini,{' '}
+        <strong>çapraz kontrol</strong> olarak gösterir. Hariç tutulan ve aykırı €/kg'lı kalemler
+        kullanılmaz.
       </p>
 
       <div className={css.stats}>
         <StatCards
           loading={list.isLoading}
           cards={[
-            { id: 'rows', title: 'Arşiv kalemi', value: <>{all.length}<span className={css.statSub}>{jobs} iş</span></>, icon: 'fas fa-box-archive', color: 'blue' },
+            {
+              id: 'rows',
+              title: 'Arşiv kalemi',
+              value: (
+                <>
+                  {all.length}
+                  <span className={css.statSub}>{jobs} iş</span>
+                </>
+              ),
+              icon: 'fas fa-box-archive',
+              color: 'blue',
+            },
             {
               id: 'plan',
               title: 'Çizimi okunan',
-              value: <>{withPlan}<span className={css.statSub}>tasarımla eşleşir</span></>,
+              value: (
+                <>
+                  {withPlan}
+                  <span className={css.statSub}>tasarımla eşleşir</span>
+                </>
+              ),
               icon: 'fas fa-drafting-compass',
               color: 'green',
               onClick: () => filters.apply({ aplan: ['yes'] }),
               tooltip: 'Bu kalemlerde eşleşme ağırlık yerine çizimden okunan tasarıma bakar',
             },
-            { id: 'used', title: 'Eşleşmede kullanılan', value: used, icon: 'fas fa-check', color: 'gemkom' },
+            {
+              id: 'used',
+              title: 'Eşleşmede kullanılan',
+              value: used,
+              icon: 'fas fa-check',
+              color: 'gemkom',
+            },
             {
               id: 'excluded',
               title: 'Hariç tutulan',
@@ -298,14 +369,16 @@ export function CostHistoryTab() {
           <div>
             <div className={css.breakdownTitle}>Aileler</div>
             <div className={css.breakdownHint}>
-              Bugünkü €/kg medyanı ve ailenin arşivden ne kadar iyi tahmin edildiği. Zayıf ailelerde rapor geniş bir
-              aralık verir.
+              Bugünkü €/kg medyanı ve ailenin arşivden ne kadar iyi tahmin edildiği. Zayıf ailelerde
+              rapor geniş bir aralık verir.
             </div>
           </div>
           <Button
             size="xs"
             variant="subtle"
-            rightSection={<FaIcon icon={familiesOpen ? 'fas fa-chevron-up' : 'fas fa-chevron-down'} />}
+            rightSection={
+              <FaIcon icon={familiesOpen ? 'fas fa-chevron-up' : 'fas fa-chevron-down'} />
+            }
             onClick={() => setFamiliesOpen((v) => !v)}
           >
             {familiesOpen ? 'Gizle' : `Göster (${families.length})`}
@@ -334,7 +407,11 @@ export function CostHistoryTab() {
                     <ReliabilityBadge value={f.reliability} />
                   </td>
                   <td>
-                    <Button size="compact-xs" variant="subtle" onClick={() => filters.apply({ afamily: [f.family] })}>
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      onClick={() => filters.apply({ afamily: [f.family] })}
+                    >
                       Listele
                     </Button>
                   </td>
@@ -346,6 +423,7 @@ export function CostHistoryTab() {
       </Panel>
 
       <DataTable
+        columnsKey="references-cost-history"
         data={rows}
         columns={columns}
         getRowId={(r) => String(r.id)}
@@ -358,7 +436,13 @@ export function CostHistoryTab() {
         emptyMessage="Filtreye uyan kalem yok"
         verticalSpacing="xs"
         filters={
-          <FilterBar inline filters={filterConfig} values={values} onApply={filters.apply} onClear={filters.reset} />
+          <FilterBar
+            inline
+            filters={filterConfig}
+            values={values}
+            onApply={filters.apply}
+            onClear={filters.reset}
+          />
         }
       />
 

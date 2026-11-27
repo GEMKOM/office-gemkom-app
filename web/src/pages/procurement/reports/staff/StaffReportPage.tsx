@@ -153,6 +153,7 @@ export function StaffReportPage() {
       />
 
       <DataTable
+        columnsKey="procurement-staff-report"
         title="Personel Raporu"
         filters={
           <FilterBar

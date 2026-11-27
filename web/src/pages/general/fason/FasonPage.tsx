@@ -217,6 +217,7 @@ export function FasonPage({ view = 'requester' }: { view?: FasonView } = {}) {
         }
       />
       <DataTable
+        columnsKey={`fason-requests-${view}`}
         title={config.title}
         icon={`fas fa-${config.icon}`}
         toolbar={

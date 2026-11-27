@@ -154,6 +154,7 @@ export function MaintenanceDashboardPage() {
       <Grid gap="md">
         <Grid.Col span={{ base: 12, lg: 8 }}>
           <DataTable
+            columnsKey="maintenance-dashboard-timers"
             title="Aktif Arıza Zamanlayıcıları"
             icon="fas fa-stopwatch"
             data={timerRows}
@@ -167,6 +168,7 @@ export function MaintenanceDashboardPage() {
         </Grid.Col>
         <Grid.Col span={{ base: 12, lg: 4 }}>
           <DataTable
+            columnsKey="maintenance-dashboard-resolved"
             title="Bugün Çözülen Arızalar"
             icon="fas fa-check-circle"
             data={resolvedRows}

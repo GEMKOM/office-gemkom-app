@@ -21,7 +21,16 @@ import {
   type PaymentList,
   type PaymentListItem,
 } from '@/api/procurement/paymentLists';
-import { confirm, DataTable, FaIcon, notify, PageHeader, Panel, type DataTableColumn, type RowAction } from '@/ui';
+import {
+  confirm,
+  DataTable,
+  FaIcon,
+  notify,
+  PageHeader,
+  Panel,
+  type DataTableColumn,
+  type RowAction,
+} from '@/ui';
 import { exportPaymentList } from './exportList';
 import {
   currencyBreakdown,
@@ -43,20 +52,27 @@ import { excelColumns } from './poolShared';
 import { PoolPicker } from './PoolPicker';
 import { usePaymentNavigate, ViewSwitcher } from './ViewSwitcher';
 
-const sumRowsEur = (rows: readonly PaymentListItem[]) => rows.reduce((s, it) => s + (rowEur(it) || 0), 0);
+const sumRowsEur = (rows: readonly PaymentListItem[]) =>
+  rows.reduce((s, it) => s + (rowEur(it) || 0), 0);
 
 function ItemState({ row }: { row: PaymentListItem }) {
   if (row.po_cancelled) return <Pill color="red">Sipariş iptal</Pill>;
   if (row.is_paid) {
     return (
-      <Pill color="green" title={`${fmtDateTime(row.paid_at)}${row.paid_by_name ? ' · ' + row.paid_by_name : ''}`}>
+      <Pill
+        color="green"
+        title={`${fmtDateTime(row.paid_at)}${row.paid_by_name ? ' · ' + row.paid_by_name : ''}`}
+      >
         Ödendi
       </Pill>
     );
   }
   if (row.is_excluded) {
     return (
-      <Pill color="grey" title={`${row.exclusion_reason || ''}${row.excluded_by_name ? ' — ' + row.excluded_by_name : ''}`}>
+      <Pill
+        color="grey"
+        title={`${row.exclusion_reason || ''}${row.excluded_by_name ? ' — ' + row.excluded_by_name : ''}`}
+      >
         Çıkarıldı
       </Pill>
     );
@@ -94,21 +110,34 @@ function itemColumns(canEditNote: boolean): DataTableColumn<PaymentListItem>[] {
         <>
           {row.note ? row.note : <span style={{ color: 'var(--gk-muted)' }}>—</span>}
           {row.amount_changed ? (
-            <div className={`${classes.sub} ${classes.danger}`} title="Taksit tutarı listeye eklendiğinden beri değişti">
+            <div
+              className={`${classes.sub} ${classes.danger}`}
+              title="Taksit tutarı listeye eklendiğinden beri değişti"
+            >
               Güncel: {fmtMoney(row.live?.gross, row.currency)}
             </div>
           ) : null}
         </>
       ),
     },
-    { key: 'state', header: 'Durum', width: 110, render: (row) => <ItemState row={row} />, exportValue: itemStateText },
+    {
+      key: 'state',
+      header: 'Durum',
+      width: 110,
+      render: (row) => <ItemState row={row} />,
+      exportValue: itemStateText,
+    },
   ];
 }
 
 /** Legacy rowAttributes: excluded rows struck through, paid green, cancelled orders red. */
 function itemRowStyle(row: PaymentListItem): CSSProperties | undefined {
   if (row.is_excluded) {
-    return { textDecoration: 'line-through', color: 'var(--gk-muted)', backgroundColor: 'var(--mantine-color-gray-1)' };
+    return {
+      textDecoration: 'line-through',
+      color: 'var(--gk-muted)',
+      backgroundColor: 'var(--mantine-color-gray-1)',
+    };
   }
   if (row.is_paid) return { backgroundColor: 'var(--mantine-color-green-0)' };
   if (row.po_cancelled) return { backgroundColor: 'var(--mantine-color-red-0)' };
@@ -128,7 +157,10 @@ function BudgetBlock({ data }: { data: PaymentList }) {
     <div data-testid="pl-budget">
       <h3 className={classes.blockTitle}>Bütçe</h3>
       <div className={classes.big}>
-        {fmtEur(total)} <span style={{ color: 'var(--gk-muted)' }}>/ {budget === null ? 'bütçe yok' : fmtEur(budget)}</span>
+        {fmtEur(total)}{' '}
+        <span style={{ color: 'var(--gk-muted)' }}>
+          / {budget === null ? 'bütçe yok' : fmtEur(budget)}
+        </span>
       </div>
       {budget !== null ? (
         <div className={classes.budgetBar} data-over={over || undefined}>
@@ -138,14 +170,20 @@ function BudgetBlock({ data }: { data: PaymentList }) {
       <div className={classes.sub}>
         {over ? (
           <>
-            <span className={classes.over}>Bütçe aşımı: +{fmtEur(total - (budget ?? 0))}</span> ·{' '}
+            <span className={classes.over}>Bütçe aşımı: +{fmtEur(total - (budget ?? 0))}</span>{' '}
+            ·{' '}
           </>
         ) : budget !== null ? (
           `Kalan bütçe: ${fmtEur(budget - total)} · `
         ) : null}
-        Dahil {t.included_count ?? 0} kalem · Çıkarılan {t.excluded_count ?? 0} · Ödenen {fmtEur(paid)}
-        {t.missing_rate_count ? <span className={classes.danger}> · {t.missing_rate_count} kalemde kur yok</span> : null}
-        {t.cancelled_po_count ? <span className={classes.danger}> · {t.cancelled_po_count} iptal sipariş</span> : null}
+        Dahil {t.included_count ?? 0} kalem · Çıkarılan {t.excluded_count ?? 0} · Ödenen{' '}
+        {fmtEur(paid)}
+        {t.missing_rate_count ? (
+          <span className={classes.danger}> · {t.missing_rate_count} kalemde kur yok</span>
+        ) : null}
+        {t.cancelled_po_count ? (
+          <span className={classes.danger}> · {t.cancelled_po_count} iptal sipariş</span>
+        ) : null}
       </div>
       <div className={classes.sub}>{currencyBreakdown(includedItems(data.items))}</div>
     </div>
@@ -157,10 +195,16 @@ function FxBlock({ data }: { data: PaymentList }) {
   return (
     <div>
       <h3 className={classes.blockTitle}>
-        Kur {fx.source === 'manual' ? <Pill color="purple">Manuel</Pill> : <Pill color="grey">Kur tablosu</Pill>}
+        Kur{' '}
+        {fx.source === 'manual' ? (
+          <Pill color="purple">Manuel</Pill>
+        ) : (
+          <Pill color="grey">Kur tablosu</Pill>
+        )}
       </h3>
       <div className={classes.tabular}>
-        1 € = <strong>{fmtRate(fx.eur_try)}</strong> TL · 1 $ = <strong>{fmtRate(fx.usd_try)}</strong> TL
+        1 € = <strong>{fmtRate(fx.eur_try)}</strong> TL · 1 $ ={' '}
+        <strong>{fmtRate(fx.usd_try)}</strong> TL
       </div>
       <div className={classes.sub}>{fx.date ? fmtDate(fx.date) : 'Kur alınmadı'}</div>
     </div>
@@ -170,7 +214,10 @@ function FxBlock({ data }: { data: PaymentList }) {
 function ApprovalBlock({ data }: { data: PaymentList }) {
   const wf = data.approval;
   const meta: ReactNode[] = [];
-  if (data.submitted_at) meta.push(`Gönderildi: ${fmtDateTime(data.submitted_at)}${data.submitted_by_name ? ' · ' + data.submitted_by_name : ''}`);
+  if (data.submitted_at)
+    meta.push(
+      `Gönderildi: ${fmtDateTime(data.submitted_at)}${data.submitted_by_name ? ' · ' + data.submitted_by_name : ''}`,
+    );
   if (data.approved_at) meta.push(`Onaylandı: ${fmtDateTime(data.approved_at)}`);
   if (data.sent_to_finance_at) {
     meta.push(
@@ -178,10 +225,15 @@ function ApprovalBlock({ data }: { data: PaymentList }) {
     );
   }
   if (data.completed_at) meta.push(`Tamamlandı: ${fmtDateTime(data.completed_at)}`);
-  if (data.cancelled_at) meta.push(`İptal: ${fmtDateTime(data.cancelled_at)}${data.cancellation_reason ? ' · ' + data.cancellation_reason : ''}`);
+  if (data.cancelled_at)
+    meta.push(
+      `İptal: ${fmtDateTime(data.cancelled_at)}${data.cancellation_reason ? ' · ' + data.cancellation_reason : ''}`,
+    );
   if (data.status === 'sent_to_finance' || data.status === 'completed') {
-    if (data.finance_email_error) meta.push(<span className={classes.danger}>E-posta hatası: {data.finance_email_error}</span>);
-    else if (data.finance_email_sent_at) meta.push(`E-posta gönderildi: ${fmtDateTime(data.finance_email_sent_at)}`);
+    if (data.finance_email_error)
+      meta.push(<span className={classes.danger}>E-posta hatası: {data.finance_email_error}</span>);
+    else if (data.finance_email_sent_at)
+      meta.push(`E-posta gönderildi: ${fmtDateTime(data.finance_email_sent_at)}`);
   }
   const metaNode = meta.length ? (
     <div className={classes.sub}>
@@ -193,7 +245,11 @@ function ApprovalBlock({ data }: { data: PaymentList }) {
 
   let stages: ReactNode;
   if (!wf || !wf.stage_instances?.length) {
-    stages = <div className={classes.sub}>{data.status === 'draft' ? 'Henüz onaya gönderilmedi.' : '—'}</div>;
+    stages = (
+      <div className={classes.sub}>
+        {data.status === 'draft' ? 'Henüz onaya gönderilmedi.' : '—'}
+      </div>
+    );
   } else {
     stages = wf.stage_instances.map((s) => {
       let color: 'grey' | 'red' | 'green' | 'orange' = 'grey';
@@ -221,7 +277,13 @@ function ApprovalBlock({ data }: { data: PaymentList }) {
               <div key={i} className={classes.decision}>
                 <i
                   className={`fas ${d.decision === 'approve' ? 'fa-check' : 'fa-times'}`}
-                  style={{ marginRight: 4, color: d.decision === 'approve' ? 'var(--mantine-color-green-7)' : 'var(--gk-danger)' }}
+                  style={{
+                    marginRight: 4,
+                    color:
+                      d.decision === 'approve'
+                        ? 'var(--mantine-color-green-7)'
+                        : 'var(--gk-danger)',
+                  }}
                   aria-hidden
                 />
                 {userLabel(d.approver_detail)} · {fmtDateTime(d.decided_at)}
@@ -247,7 +309,11 @@ function ApprovalBlock({ data }: { data: PaymentList }) {
 function Notes({ data }: { data: PaymentList }) {
   const t = data.totals ?? {};
   const notes: { color: string; text: string }[] = [];
-  if (data.status === 'rejected') notes.push({ color: 'red', text: 'Liste reddedildi. Düzenleyip yeniden onaya gönderebilirsiniz.' });
+  if (data.status === 'rejected')
+    notes.push({
+      color: 'red',
+      text: 'Liste reddedildi. Düzenleyip yeniden onaya gönderebilirsiniz.',
+    });
   if (data.status === 'submitted' && data.can_decide) {
     notes.push({
       color: 'blue',
@@ -315,7 +381,11 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
   if (!data) {
     return (
       <>
-        <PageHeader title="Ödeme Listesi" icon="money-check-dollar" backTo="/procurement/payment-lists" />
+        <PageHeader
+          title="Ödeme Listesi"
+          icon="money-check-dollar"
+          backTo="/procurement/payment-lists"
+        />
         <ViewSwitcher active="lists" />
         <Panel>{detail.isError ? 'Ödeme listesi yüklenemedi' : 'Yükleniyor…'}</Panel>
       </>
@@ -353,13 +423,15 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
       openModal({
         kind: 'decide',
         approve: true,
-        onSave: (comment) => run(() => decidePaymentList(listId, { approve: true, comment }), 'Liste onaylandı'),
+        onSave: (comment) =>
+          run(() => decidePaymentList(listId, { approve: true, comment }), 'Liste onaylandı'),
       }),
     reject: () =>
       openModal({
         kind: 'decide',
         approve: false,
-        onSave: (comment) => run(() => decidePaymentList(listId, { approve: false, comment }), 'Liste reddedildi'),
+        onSave: (comment) =>
+          run(() => decidePaymentList(listId, { approve: false, comment }), 'Liste reddedildi'),
       }),
     send_to_finance: async () => {
       const missing = t.proforma_missing || 0;
@@ -386,7 +458,12 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
       if (ok) await run(() => completePaymentList(listId), 'Liste tamamlandı');
     },
     carry_over: () =>
-      openModal({ kind: 'listForm', mode: 'create', carryOverFrom: data, onSaved: (list) => go({ view: 'detail', listId: list.id }) }),
+      openModal({
+        kind: 'listForm',
+        mode: 'create',
+        carryOverFrom: data,
+        onSaved: (list) => go({ view: 'detail', listId: list.id }),
+      }),
     cancel: () => openModal({ kind: 'cancel', list: data }),
     delete: async () => {
       const ok = await confirm({
@@ -417,7 +494,13 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
     print: () => window.print(),
   };
 
-  const button = (id: string, label: string, icon: string, variant: 'filled' | 'outline' | 'default' = 'default', color?: string) => (
+  const button = (
+    id: string,
+    label: string,
+    icon: string,
+    variant: 'filled' | 'outline' | 'default' = 'default',
+    color?: string,
+  ) => (
     <Button
       key={id}
       size="xs"
@@ -432,23 +515,31 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
   );
 
   const parts: ReactNode[] = [];
-  if (allowed.has('add_items')) parts.push(button('add_items', 'Havuzdan Ekle', 'fa-plus', 'filled'));
+  if (allowed.has('add_items'))
+    parts.push(button('add_items', 'Havuzdan Ekle', 'fa-plus', 'filled'));
   if (allowed.has('update_header')) parts.push(button('edit', 'Düzenle', 'fa-pen'));
-  if (allowed.has('update_budget')) parts.push(button('budget', 'Bütçeyi Düzenle', 'fa-sack-dollar'));
+  if (allowed.has('update_budget'))
+    parts.push(button('budget', 'Bütçeyi Düzenle', 'fa-sack-dollar'));
   if (allowed.has('refresh_fx')) {
     parts.push(button('refresh_fx', 'Kurları Güncelle', 'fa-rotate'));
     parts.push(button('manual_fx', 'Kur Gir', 'fa-pen-to-square'));
   }
-  if (allowed.has('refresh_amounts')) parts.push(button('refresh_amounts', 'Tutarları Yenile', 'fa-calculator'));
-  if (allowed.has('submit')) parts.push(button('submit', 'Onaya Gönder', 'fa-paper-plane', 'filled', 'green'));
+  if (allowed.has('refresh_amounts'))
+    parts.push(button('refresh_amounts', 'Tutarları Yenile', 'fa-calculator'));
+  if (allowed.has('submit'))
+    parts.push(button('submit', 'Onaya Gönder', 'fa-paper-plane', 'filled', 'green'));
   if (allowed.has('decide')) {
     parts.push(button('approve', 'Onayla', 'fa-check', 'filled', 'green'));
     parts.push(button('reject', 'Reddet', 'fa-times', 'outline', 'red'));
   }
-  if (allowed.has('send_to_finance')) parts.push(button('send_to_finance', 'Finansa Gönder', 'fa-envelope', 'filled', 'green'));
-  if (allowed.has('resend_finance_email')) parts.push(button('resend', 'E-postayı Yeniden Gönder', 'fa-envelope-open-text'));
-  if (allowed.has('complete')) parts.push(button('complete', 'Tamamla', 'fa-flag-checkered', 'outline', 'green'));
-  if (allowed.has('carry_over')) parts.push(button('carry_over', 'Yeni Listeye Aktar', 'fa-forward'));
+  if (allowed.has('send_to_finance'))
+    parts.push(button('send_to_finance', 'Finansa Gönder', 'fa-envelope', 'filled', 'green'));
+  if (allowed.has('resend_finance_email'))
+    parts.push(button('resend', 'E-postayı Yeniden Gönder', 'fa-envelope-open-text'));
+  if (allowed.has('complete'))
+    parts.push(button('complete', 'Tamamla', 'fa-flag-checkered', 'outline', 'green'));
+  if (allowed.has('carry_over'))
+    parts.push(button('carry_over', 'Yeni Listeye Aktar', 'fa-forward'));
   parts.push(<span key="spacer" className={classes.spacer} />);
   parts.push(button('export', "Excel'e Aktar", 'fa-file-excel'));
   parts.push(button('print', 'Yazdır', 'fa-print'));
@@ -485,22 +576,34 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
       icon: 'fas fa-ban',
       hidden: !(allowed.has('exclude_item') && live(row)),
       onClick: (r) =>
-        openModal({ kind: 'exclude', row: r, onSave: (reason) => run(() => excludePaymentListItem(listId, r.id, reason), 'Kalem çıkarıldı') }),
+        openModal({
+          kind: 'exclude',
+          row: r,
+          onSave: (reason) =>
+            run(() => excludePaymentListItem(listId, r.id, reason), 'Kalem çıkarıldı'),
+        }),
     },
     {
       key: 'include',
       label: 'Geri Al',
       icon: 'fas fa-undo',
       hidden: !(allowed.has('include_item') && row.is_excluded),
-      onClick: (r) => void run(() => includePaymentListItem(listId, r.id), 'Kalem listeye geri alındı'),
+      onClick: (r) =>
+        void run(() => includePaymentListItem(listId, r.id), 'Kalem listeye geri alındı'),
     },
-    { key: 'proforma', label: 'Proforma', icon: 'fas fa-paperclip', onClick: (r) => openModal({ kind: 'proforma', row: r }) },
+    {
+      key: 'proforma',
+      label: 'Proforma',
+      icon: 'fas fa-paperclip',
+      onClick: (r) => openModal({ kind: 'proforma', row: r }),
+    },
     {
       key: 'urgent',
       label: 'Acil işaretle / kaldır',
       icon: 'fas fa-bolt',
       hidden: !(allowed.has('update_item') && live(row)),
-      onClick: (r) => void run(() => updatePaymentListItem(listId, r.id, { is_urgent: !r.is_urgent })),
+      onClick: (r) =>
+        void run(() => updatePaymentListItem(listId, r.id, { is_urgent: !r.is_urgent })),
     },
     {
       key: 'split',
@@ -529,7 +632,8 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
       key: 'po',
       label: 'Sipariş detayı',
       icon: 'fas fa-external-link-alt',
-      onClick: (r) => window.open(`/finance/purchase-orders/?order=${r.po.id}`, '_blank', 'noopener'),
+      onClick: (r) =>
+        window.open(`/finance/purchase-orders/?order=${r.po.id}`, '_blank', 'noopener'),
     },
   ];
 
@@ -572,6 +676,7 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
       </div>
       <Notes data={data} />
       <DataTable
+        columnsKey="payment-list-lines"
         data={items}
         columns={columns}
         getRowId={(row) => String(row.id)}
@@ -585,7 +690,12 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
           const note = `${value ?? ''}`.trim();
           await updatePaymentListItem(listId, row.id, { note });
           queryClient.setQueryData<PaymentList>(paymentListKeys.detail(listId), (prev) =>
-            prev ? { ...prev, items: (prev.items ?? []).map((it) => (it.id === row.id ? { ...it, note } : it)) } : prev,
+            prev
+              ? {
+                  ...prev,
+                  items: (prev.items ?? []).map((it) => (it.id === row.id ? { ...it, note } : it)),
+                }
+              : prev,
           );
         }}
         rowStyle={itemRowStyle}
@@ -593,8 +703,9 @@ export function DetailView({ listId, openModal }: DetailViewProps) {
         footer={() => (
           <Table.Tr className={classes.footerRow}>
             <Table.Td colSpan={columns.length + 1}>
-              Dahil: {fmtEur(sumRowsEur(included))} ({included.length} kalem) · Çıkarılan: {fmtEur(sumRowsEur(excluded))} (
-              {excluded.length}) · Ödenen: {fmtEur(sumRowsEur(paid))} ({paid.length}) · Kalan:{' '}
+              Dahil: {fmtEur(sumRowsEur(included))} ({included.length} kalem) · Çıkarılan:{' '}
+              {fmtEur(sumRowsEur(excluded))} ({excluded.length}) · Ödenen:{' '}
+              {fmtEur(sumRowsEur(paid))} ({paid.length}) · Kalan:{' '}
               {fmtEur(sumRowsEur(included.filter((it) => !it.is_paid)))}
             </Table.Td>
           </Table.Tr>

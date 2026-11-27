@@ -114,7 +114,11 @@ it('lists the templates newest first with the item count', async () => {
   expect(within(first).getByText('Varsayılan')).toBeInTheDocument();
   expect(within(first).getByText('Aktif')).toBeInTheDocument();
   expect(within(first).getByText('2')).toBeInTheDocument();
-  expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({ page: '1', ordering: '-created_at' });
+  expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({
+    page: '1',
+    page_size: '20',
+    ordering: '-created_at',
+  });
 });
 
 it('filters go to the URL and reach the request as booleans', async () => {
@@ -122,6 +126,7 @@ it('filters go to the URL and reach the request as booleans', async () => {
   await screen.findByText('Boya Akışı');
   expect(Object.fromEntries(listCalls()[0]!.url.searchParams)).toEqual({
     page: '1',
+    page_size: '20',
     ordering: '-created_at',
     search: 'boya',
     is_active: 'false',

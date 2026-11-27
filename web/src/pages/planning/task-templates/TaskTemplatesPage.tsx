@@ -26,7 +26,7 @@ import {
 import { ManageItemsModal } from './ManageItemsModal';
 import { TemplateFormModal } from './TemplateFormModal';
 
-const URL_DEFAULTS = { search: '', is_active: '', is_default: '', page: '1' };
+const URL_DEFAULTS = { search: '', is_active: '', is_default: '', page: '1', page_size: '20' };
 
 type FilterKeys = 'search' | 'is_active' | 'is_default';
 type FilterState = Record<FilterKeys, string>;
@@ -58,9 +58,9 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
   },
 ];
 
-/** Legacy loadTemplates: newest first, unset filters left out (no page_size: the backend's page). */
-function listParams(filters: FilterState, page: number): TaskTemplatesParams {
-  const params: TaskTemplatesParams = { page, ordering: '-created_at' };
+/** Legacy loadTemplates: newest first, unset filters left out. */
+function listParams(filters: FilterState, page: number, pageSize: number): TaskTemplatesParams {
+  const params: TaskTemplatesParams = { page, page_size: pageSize, ordering: '-created_at' };
   if (filters.search) params.search = filters.search;
   if (filters.is_active) params.is_active = filters.is_active === 'true';
   if (filters.is_default) params.is_default = filters.is_default === 'true';
@@ -104,10 +104,19 @@ const columns: DataTableColumn<TaskTemplate>[] = [
     header: 'Durum',
     sortable: true,
     render: (row) =>
-      row.is_active ? <StatusBadge color="green">Aktif</StatusBadge> : <StatusBadge color="yellow">Pasif</StatusBadge>,
+      row.is_active ? (
+        <StatusBadge color="green">Aktif</StatusBadge>
+      ) : (
+        <StatusBadge color="yellow">Pasif</StatusBadge>
+      ),
     exportValue: (row) => (row.is_active ? 'Aktif' : 'Pasif'),
   },
-  { key: 'created_at', header: 'Oluşturulma', sortable: true, render: (row) => formatDateTime(row.created_at) },
+  {
+    key: 'created_at',
+    header: 'Oluşturulma',
+    sortable: true,
+    render: (row) => formatDateTime(row.created_at),
+  },
   { key: 'created_by_name', header: 'Oluşturan', render: (row) => row.created_by_name || '-' },
 ];
 
@@ -120,8 +129,9 @@ export function TaskTemplatesPage() {
     [values.search, values.is_active, values.is_default],
   );
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
 
-  const list = useQuery(taskTemplatesQueryOptions(listParams(filters, page)));
+  const list = useQuery(taskTemplatesQueryOptions(listParams(filters, page, pageSize)));
   useEffect(() => {
     if (list.isError) notify.error('Şablonlar yüklenirken bir hata oluştu');
   }, [list.isError, list.errorUpdatedAt]);
@@ -173,9 +183,27 @@ export function TaskTemplatesPage() {
   };
 
   const rowActions = (): RowAction<TaskTemplate>[] => [
-    { key: 'items', label: 'Görevleri Yönet', icon: 'fas fa-tasks', color: 'primary', onClick: (r) => setManagingId(r.id) },
-    { key: 'edit', label: 'Düzenle', icon: 'fas fa-edit', color: 'warning', onClick: (r) => void openEdit(r) },
-    { key: 'delete', label: 'Sil', icon: 'fas fa-trash', color: 'danger', onClick: (r) => void remove(r) },
+    {
+      key: 'items',
+      label: 'Görevleri Yönet',
+      icon: 'fas fa-tasks',
+      color: 'primary',
+      onClick: (r) => setManagingId(r.id),
+    },
+    {
+      key: 'edit',
+      label: 'Düzenle',
+      icon: 'fas fa-edit',
+      color: 'warning',
+      onClick: (r) => void openEdit(r),
+    },
+    {
+      key: 'delete',
+      label: 'Sil',
+      icon: 'fas fa-trash',
+      color: 'danger',
+      onClick: (r) => void remove(r),
+    },
   ];
 
   return (
@@ -192,6 +220,7 @@ export function TaskTemplatesPage() {
         }
       />
       <DataTable
+        columnsKey="task-templates"
         title="Görev Şablonları"
         filters={
           <FilterBar
@@ -206,13 +235,23 @@ export function TaskTemplatesPage() {
         columns={columns}
         getRowId={(row) => String(row.id)}
         loading={list.isFetching}
-        pagination={{ page, pageSize: PAGE_SIZE, total, onPageChange: (next) => apply({ page: String(next) }) }}
+        pagination={{
+          page,
+          pageSize,
+          total,
+          onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
+        }}
         rowActions={rowActions}
         onRefresh={() => void list.refetch()}
       />
       {creating ? <TemplateFormModal onClose={() => setCreating(false)} /> : null}
-      {editing ? <TemplateFormModal key={editing.id} template={editing} onClose={() => setEditing(null)} /> : null}
-      {managingId !== null ? <ManageItemsModal templateId={managingId} onClose={closeManage} /> : null}
+      {editing ? (
+        <TemplateFormModal key={editing.id} template={editing} onClose={() => setEditing(null)} />
+      ) : null}
+      {managingId !== null ? (
+        <ManageItemsModal templateId={managingId} onClose={closeManage} />
+      ) : null}
     </>
   );
 }

@@ -570,6 +570,7 @@ export function CncPlanningPage() {
             >
               <Stack gap="md">
                 <DataTable
+                  columnsKey="cnc-planning-planned"
                   title="Planlanmış Görevler"
                   icon="fas fa-tasks"
                   data={machineId ? planned : EMPTY}
@@ -587,6 +588,7 @@ export function CncPlanningPage() {
                 />
                 {showUnplanned ? (
                   <DataTable
+                    columnsKey="cnc-planning-unplanned"
                     title="Planlanmamış Görevler"
                     icon="fas fa-exclamation-triangle"
                     data={machineId ? unplanned : EMPTY}

@@ -306,6 +306,7 @@ export function RegistryPage() {
         }
       />
       <DataTable
+        columnsKey="purchase-requests-registry"
         title="Tüm Satın Alma Talepleri"
         icon="fas fa-table"
         filters={

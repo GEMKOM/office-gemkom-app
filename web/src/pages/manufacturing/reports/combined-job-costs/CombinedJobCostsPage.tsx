@@ -118,6 +118,7 @@ export function CombinedJobCostsPage({ switcher }: { switcher?: ReactNode }) {
       />
 
       <DataTable
+        columnsKey="combined-job-costs"
         title="İş Maliyeti Raporu"
         filters={
           <FilterBar

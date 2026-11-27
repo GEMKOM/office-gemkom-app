@@ -420,6 +420,7 @@ export function ReceiptsTab() {
         }
       />
       <DataTable
+        columnsKey="finance-receipts"
         title="Beklenen Tahsilatlar"
         icon="fas fa-hand-holding-usd"
         filters={

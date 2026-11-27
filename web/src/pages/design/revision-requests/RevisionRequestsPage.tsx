@@ -185,6 +185,7 @@ export function RevisionRequestsPage() {
       />
 
       <DataTable
+        columnsKey="revision-requests"
         title="Bekleyen Revizyon Talepleri"
         data={rows}
         columns={revisionRequestColumns}

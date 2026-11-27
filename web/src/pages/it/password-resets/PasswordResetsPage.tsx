@@ -67,7 +67,8 @@ export function PasswordResetsPage() {
         <Stack align="center" gap="xs">
           <Title order={2}>Erişim yetkiniz yok</Title>
           <Text c="dimmed">
-            Bu sayfaya erişim yetkiniz bulunmamaktadır. Sadece yöneticiler admin paneline erişebilir.
+            Bu sayfaya erişim yetkiniz bulunmamaktadır. Sadece yöneticiler admin paneline
+            erişebilir.
           </Text>
         </Stack>
       </Center>
@@ -100,11 +101,16 @@ export function PasswordResetsPage() {
         icon="fas fa-key"
         backTo="/it/"
         stats={[
-          { id: 'password-reset-count', label: 'Bekleyen Talep', value: list.isPending ? '–' : rows.length },
+          {
+            id: 'password-reset-count',
+            label: 'Bekleyen Talep',
+            value: list.isPending ? '–' : rows.length,
+          },
         ]}
       />
 
       <DataTable
+        columnsKey="it-password-resets"
         title="Talepler"
         icon="fas fa-key"
         data={rows}
@@ -119,7 +125,11 @@ export function PasswordResetsPage() {
       />
 
       {resetting ? (
-        <PasswordResetModal key={resetting.id} user={resetting} onClose={() => setResetting(null)} />
+        <PasswordResetModal
+          key={resetting.id}
+          user={resetting}
+          onClose={() => setResetting(null)}
+        />
       ) : null}
     </>
   );

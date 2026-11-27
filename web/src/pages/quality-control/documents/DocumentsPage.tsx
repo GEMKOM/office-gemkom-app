@@ -36,6 +36,7 @@ const URL_DEFAULTS = {
   document_type: '',
   expiry_status: '',
   page: '1',
+  page_size: '20',
   ordering: '-created_at',
 };
 
@@ -132,12 +133,13 @@ export function DocumentsPage() {
     [values.search, values.document_type, values.expiry_status],
   );
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
   const sort = fromOrdering(values.ordering || '-created_at');
   const params: QualityDocumentsParams = {
     ...filters,
     ordering: toOrdering(sort.sortBy, sort.sortDir) ?? '-created_at',
     page,
-    page_size: PAGE_SIZE,
+    page_size: pageSize,
   };
   const list = useQuery({
     ...qualityDocumentsQueryOptions(params),
@@ -225,6 +227,7 @@ export function DocumentsPage() {
         <ExpiryBanner onPick={(status) => apply({ expiry_status: status, page: '1' })} />
 
         <DataTable
+          columnsKey="qc-documents"
           title="Kalite Evrakları"
           icon="fas fa-file-alt"
           filters={
@@ -248,9 +251,10 @@ export function DocumentsPage() {
           }}
           pagination={{
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             total: list.data?.count ?? 0,
             onPageChange: (next) => apply({ page: String(next) }),
+            onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
           }}
           rowActions={rowActions}
           emptyMessage="Kayıtlı kalite evrağı bulunamadı."

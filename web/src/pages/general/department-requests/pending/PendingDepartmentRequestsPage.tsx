@@ -27,7 +27,7 @@ import { RejectDepartmentRequestModal } from './RejectDepartmentRequestModal';
 import type { EmbeddableProps } from '@/pages/approvals/embedded';
 
 // `request` is the legacy deep link (daily summary e-mails: ?request=<id>).
-const URL_DEFAULTS = { request: '', approved_page: '1' };
+const URL_DEFAULTS = { request: '', approved_page: '1', approved_page_size: '20' };
 const PAGE_SIZE = 20;
 const EMPTY_ROWS: DepartmentRequest[] = [];
 
@@ -68,8 +68,13 @@ export function PendingDepartmentRequestsPage({
   const pendingRows = pending.data?.results ?? EMPTY_ROWS;
 
   const approvedPage = positiveInt(values.approved_page, 1);
+  const approvedPageSize = positiveInt(values.approved_page_size, PAGE_SIZE);
   const approved = useQuery({
-    ...approvedDepartmentRequestsQueryOptions({ page: approvedPage, page_size: PAGE_SIZE, kind }),
+    ...approvedDepartmentRequestsQueryOptions({
+      page: approvedPage,
+      page_size: approvedPageSize,
+      kind,
+    }),
     placeholderData: keepPreviousData,
   });
   const approvedRows = approved.data?.results ?? EMPTY_ROWS;
@@ -208,6 +213,7 @@ export function PendingDepartmentRequestsPage({
       )}
 
       <DataTable
+        columnsKey={`${kind === 'fason' ? 'fason' : 'department'}-requests-pending`}
         title={`Onay Bekleyen ${words.title}`}
         icon="fas fa-clock"
         data={pendingRows}
@@ -223,6 +229,7 @@ export function PendingDepartmentRequestsPage({
       <div style={{ height: 'var(--mantine-spacing-lg)' }} />
 
       <DataTable
+        columnsKey={`${kind === 'fason' ? 'fason' : 'department'}-requests-approved`}
         title={`Onaylanan ${words.title}`}
         icon="fas fa-check-circle"
         data={approvedRows}
@@ -231,9 +238,11 @@ export function PendingDepartmentRequestsPage({
         loading={approved.isFetching}
         pagination={{
           page: approvedPage,
-          pageSize: PAGE_SIZE,
+          pageSize: approvedPageSize,
           total: approved.data?.count ?? 0,
           onPageChange: (next) => apply({ approved_page: String(next) }),
+          onPageSizeChange: (size) =>
+            apply({ approved_page_size: String(size), approved_page: '1' }),
         }}
         rowActions={approvedActions}
         emptyMessage={`Onaylanan ${words.lower} bulunamadı.`}

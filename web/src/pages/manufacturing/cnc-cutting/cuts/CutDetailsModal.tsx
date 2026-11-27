@@ -153,6 +153,7 @@ export function CutDetailsModal({ cutKey, onClose }: { cutKey: string; onClose: 
               {
                 content: (
                   <DataTable
+                    columnsKey="cnc-cut-details-parts"
                     title="Parça Listesi"
                     icon="fas fa-puzzle-piece"
                     data={t.parts ?? []}

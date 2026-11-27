@@ -222,6 +222,7 @@ export function EquipmentPage() {
       />
 
       <DataTable
+        columnsKey="equipment"
         title="Ekipman Listesi"
         icon="fas fa-toolbox"
         filters={

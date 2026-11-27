@@ -155,6 +155,7 @@ function Details({
     <>
       {order.payment_schedules?.length ? (
         <DataTable
+          columnsKey="purchase-order-detail-schedules"
           title="Ödeme Planı"
           data={order.payment_schedules}
           columns={schedules}
@@ -165,6 +166,7 @@ function Details({
       ) : null}
       {order.lines?.length ? (
         <DataTable
+          columnsKey="purchase-order-detail-lines"
           title="Sipariş Kalemleri"
           data={order.lines}
           columns={lines}

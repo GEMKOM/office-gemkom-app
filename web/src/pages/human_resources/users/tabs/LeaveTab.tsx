@@ -135,6 +135,7 @@ export function LeaveTab({ userId }: { userId: number }) {
         </Button>
       </Group>
       <DataTable
+        columnsKey="hr-user-leave-requests"
         title="İzin Talepleri"
         icon="fas fa-calendar-check"
         data={requests.data ?? NO_REQUESTS}

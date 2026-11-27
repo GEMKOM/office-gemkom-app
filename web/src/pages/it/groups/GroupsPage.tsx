@@ -42,8 +42,18 @@ const columns: DataTableColumn<OrganizationGroup>[] = [
         </Text>
       ),
   },
-  { key: 'position_count', header: 'Pozisyon', accessor: (row) => Number(row.position_count || 0), align: 'right' },
-  { key: 'member_count', header: 'Üye', accessor: (row) => Number(row.member_count || 0), align: 'right' },
+  {
+    key: 'position_count',
+    header: 'Pozisyon',
+    accessor: (row) => Number(row.position_count || 0),
+    align: 'right',
+  },
+  {
+    key: 'member_count',
+    header: 'Üye',
+    accessor: (row) => Number(row.member_count || 0),
+    align: 'right',
+  },
   {
     key: 'is_active',
     header: 'Durum',
@@ -72,11 +82,15 @@ export function GroupsPage() {
     if (list.isError) notify.error(list.error, { fallback: 'Gruplar yüklenemedi.' });
   }, [list.isError, list.error]);
   useEffect(() => {
-    if (positions.isError) notify.error(positions.error, { fallback: 'Pozisyon listesi yüklenemedi.' });
+    if (positions.isError)
+      notify.error(positions.error, { fallback: 'Pozisyon listesi yüklenemedi.' });
   }, [positions.isError, positions.error]);
 
   // A group that left the list (deleted elsewhere) closes its detail, as legacy loadGroups did.
-  const detailId = selectedId !== null && list.data && !groups.some((g) => g.id === selectedId) ? null : selectedId;
+  const detailId =
+    selectedId !== null && list.data && !groups.some((g) => g.id === selectedId)
+      ? null
+      : selectedId;
 
   const stats = useMemo(
     () => ({
@@ -130,10 +144,34 @@ export function GroupsPage() {
   };
 
   const rowActions = (): RowAction<OrganizationGroup>[] => [
-    { key: 'detail', label: 'Detay', icon: 'fas fa-eye', color: 'info', onClick: (row) => setSelectedId(row.id) },
-    { key: 'edit', label: 'Düzenle', icon: 'fas fa-edit', color: 'primary', onClick: (row) => setEditing(row) },
-    { key: 'toggle', label: 'Durum', icon: 'fas fa-power-off', color: 'warning', onClick: (row) => void toggle(row) },
-    { key: 'delete', label: 'Sil', icon: 'fas fa-trash', color: 'danger', onClick: (row) => void deleteGroup(row) },
+    {
+      key: 'detail',
+      label: 'Detay',
+      icon: 'fas fa-eye',
+      color: 'info',
+      onClick: (row) => setSelectedId(row.id),
+    },
+    {
+      key: 'edit',
+      label: 'Düzenle',
+      icon: 'fas fa-edit',
+      color: 'primary',
+      onClick: (row) => setEditing(row),
+    },
+    {
+      key: 'toggle',
+      label: 'Durum',
+      icon: 'fas fa-power-off',
+      color: 'warning',
+      onClick: (row) => void toggle(row),
+    },
+    {
+      key: 'delete',
+      label: 'Sil',
+      icon: 'fas fa-trash',
+      color: 'danger',
+      onClick: (row) => void deleteGroup(row),
+    },
   ];
 
   const figure = (value: number) => (list.isPending ? '–' : value.toLocaleString('tr-TR'));
@@ -161,6 +199,7 @@ export function GroupsPage() {
 
       <div className={css.layout}>
         <DataTable
+          columnsKey="it-groups"
           title="Organizasyon Grupları"
           icon="fas fa-object-group"
           data={groups}

@@ -397,6 +397,7 @@ export function AnalyticsPage() {
         </DashCell>
         <DashCell>
           <DataTable
+            columnsKey="analytics-cost-table"
             title="Maliyet Tablosu"
             icon="fas fa-calculator"
             data={rows}

@@ -24,7 +24,9 @@ export function WeldTable({ joints }: { joints: WeldJoint[] }) {
     const hasSource = joints.some((j) => j?.source);
     return [
       { key: 'joint_id', header: 'No', width: 60 },
-      ...(hasSub ? [{ key: 'sub_id', header: 'Alt montaj', width: 80 } satisfies DataTableColumn<WeldJoint>] : []),
+      ...(hasSub
+        ? [{ key: 'sub_id', header: 'Alt montaj', width: 80 } satisfies DataTableColumn<WeldJoint>]
+        : []),
       { key: 'description', header: 'Birleşim', sortable: false },
       ...(hasSource
         ? [
@@ -36,10 +38,23 @@ export function WeldTable({ joints }: { joints: WeldJoint[] }) {
             } satisfies DataTableColumn<WeldJoint>,
           ]
         : []),
-      { key: 'joint_type', header: 'Tip', accessor: (j) => JOINT_TYPE_LABELS[j.joint_type ?? ''] ?? j.joint_type ?? '' },
-      { key: 'material', header: 'Malzeme', accessor: (j) => MATERIAL_LABELS[j.material ?? ''] ?? j.material ?? '' },
+      {
+        key: 'joint_type',
+        header: 'Tip',
+        accessor: (j) => JOINT_TYPE_LABELS[j.joint_type ?? ''] ?? j.joint_type ?? '',
+      },
+      {
+        key: 'material',
+        header: 'Malzeme',
+        accessor: (j) => MATERIAL_LABELS[j.material ?? ''] ?? j.material ?? '',
+      },
       { key: 'size', header: 'Ölçü', sortable: false },
-      { key: 'process', header: 'Proses', sortable: false, accessor: (j) => processLabel(j.process) },
+      {
+        key: 'process',
+        header: 'Proses',
+        sortable: false,
+        accessor: (j) => processLabel(j.process),
+      },
       { key: 'count_per_unit', header: 'Adet', align: 'right' },
       {
         key: 'length_m_each',
@@ -59,6 +74,7 @@ export function WeldTable({ joints }: { joints: WeldJoint[] }) {
 
   return (
     <DataTable
+      columnsKey="estimate-report-welds"
       data={joints}
       columns={columns}
       getRowId={(j, i) => `${j.joint_id ?? ''}-${i}`}

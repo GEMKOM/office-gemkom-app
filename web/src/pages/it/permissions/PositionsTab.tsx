@@ -45,7 +45,11 @@ const columns: DataTableColumn<PositionRow>[] = [
     header: 'Durum',
     width: 90,
     render: (row) =>
-      row.is_active ? <StatusBadge color="green">Aktif</StatusBadge> : <StatusBadge color="grey">Pasif</StatusBadge>,
+      row.is_active ? (
+        <StatusBadge color="green">Aktif</StatusBadge>
+      ) : (
+        <StatusBadge color="grey">Pasif</StatusBadge>
+      ),
     exportValue: (row) => (row.is_active ? 'Aktif' : 'Pasif'),
   },
 ];
@@ -62,7 +66,8 @@ export function PositionsTab({
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
   useEffect(() => {
-    if (positions.isError) notify.error(positions.error, { fallback: 'Pozisyon listesi yüklenirken hata oluştu' });
+    if (positions.isError)
+      notify.error(positions.error, { fallback: 'Pozisyon listesi yüklenirken hata oluştu' });
   }, [positions.isError, positions.error]);
 
   const rows = useMemo<PositionRow[]>(
@@ -78,7 +83,10 @@ export function PositionsTab({
           permission_count: Number(p.permission_count || 0),
           is_active: p.is_active !== false,
         }))
-        .sort((a, b) => Number(a.level || 0) - Number(b.level || 0) || a.title.localeCompare(b.title, 'tr')),
+        .sort(
+          (a, b) =>
+            Number(a.level || 0) - Number(b.level || 0) || a.title.localeCompare(b.title, 'tr'),
+        ),
     [positions.data],
   );
 
@@ -87,6 +95,7 @@ export function PositionsTab({
   return (
     <div className={css.layout}>
       <DataTable
+        columnsKey="it-permission-positions"
         title="Pozisyon Listesi"
         icon="fas fa-sitemap"
         data={positions.data ? rows : EMPTY_ROWS}
@@ -95,7 +104,9 @@ export function PositionsTab({
         loading={positions.isFetching}
         sortable
         onRowClick={(row) => setSelectedId(row.id)}
-        rowStyle={(row) => (row.id === selectedId ? { background: 'var(--gk-red-050)' } : undefined)}
+        rowStyle={(row) =>
+          row.id === selectedId ? { background: 'var(--gk-red-050)' } : undefined
+        }
         emptyMessage="Pozisyon bulunamadı."
         onRefresh={() => void positions.refetch()}
       />

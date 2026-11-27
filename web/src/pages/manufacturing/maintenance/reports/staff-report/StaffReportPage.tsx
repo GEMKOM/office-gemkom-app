@@ -208,6 +208,7 @@ export function StaffReportPage() {
       />
 
       <DataTable
+        columnsKey="maintenance-staff-report"
         title="Personel Özeti"
         filters={
           <MonthNavigator value={values.period} onChange={(next) => apply({ period: next })} />

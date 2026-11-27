@@ -18,7 +18,7 @@ import {
 // Boy Stoğu, which shows only our pieces.
 
 const PAGE_SIZE = 50;
-const URL_DEFAULTS = { search: '', kind: '', diff: '', page: '1' };
+const URL_DEFAULTS = { search: '', kind: '', diff: '', page: '1', page_size: '50' };
 const mono = { fontFamily: 'var(--gk-font-mono)' };
 const EMPTY: MikroComparisonRow[] = [];
 const BASIS_UNIT: Record<string, string> = { kg: 'kg', metre: 'm', adet: 'adet' };
@@ -112,12 +112,13 @@ const columns: DataTableColumn<MikroComparisonRow>[] = [
 export function MikroComparisonPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const kind = values.kind === 'plate' || values.kind === 'boy' ? values.kind : '';
   const onlyDiff = values.diff === '1';
   const rows = useQuery({
     ...mikroComparisonQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(values.search ? { search: values.search } : {}),
       ...(kind ? { kind } : {}),
       ...(onlyDiff ? { only_diff: 'true' as const } : {}),
@@ -135,6 +136,7 @@ export function MikroComparisonPage() {
         stats={[{ id: 'cards', label: 'Kart', value: rows.data?.count ?? '–' }]}
       />
       <DataTable
+        columnsKey="mikro-comparison"
         title="Mikro ile karşılaştırma"
         icon="fas fa-balance-scale"
         toolbar={
@@ -160,9 +162,10 @@ export function MikroComparisonPage() {
         loading={rows.isFetching}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total: rows.data?.count ?? 0,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         emptyMessage="Karşılaştırılacak kart yok (Mikro bakiyeleri yüklenmemiş olabilir)"
       />

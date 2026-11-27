@@ -46,7 +46,15 @@ import { deductRows, downloadMikroCsv, partDeductions } from './mikroCsv';
 // records that the deduction was made in Mikro.
 
 const PAGE_SIZE = 20;
-const URL_DEFAULTS = { view: 'pending', key: '', name: '', nesting_id: '', page: '1', kesim: '' };
+const URL_DEFAULTS = {
+  view: 'pending',
+  key: '',
+  name: '',
+  nesting_id: '',
+  page: '1',
+  page_size: '20',
+  kesim: '',
+};
 type FilterKeys = 'key' | 'name' | 'nesting_id';
 
 const FILTERS: FilterConfig<FilterKeys>[] = [
@@ -122,7 +130,11 @@ function useDeductions(task: CncTask | undefined) {
   const booked = Boolean(task && task.consumed_kg !== null && task.consumed_kg !== undefined);
   // Cuts finished before the stock was booked at finish have no kg yet: show
   // the estimate from their own size, as blue-app did (without its 10% guess).
-  const preview = useFinishPreview(task?.key ?? '', { consumed: [], remnants: [] }, Boolean(task) && !booked);
+  const preview = useFinishPreview(
+    task?.key ?? '',
+    { consumed: [], remnants: [] },
+    Boolean(task) && !booked,
+  );
   if (!task) return { parts: [], figures: null, estimated: false, loading: true };
   if (booked) {
     const fire = task.fire_kg === null || task.fire_kg === undefined ? null : Number(task.fire_kg);
@@ -221,7 +233,11 @@ function ReportModal({ cutKey, onClose }: { cutKey: string; onClose: () => void 
             />
 
             <Group justify="flex-end">
-              <Button variant="default" onClick={onClose} leftSection={<FaIcon icon="fas fa-times" />}>
+              <Button
+                variant="default"
+                onClick={onClose}
+                leftSection={<FaIcon icon="fas fa-times" />}
+              >
                 Kapat
               </Button>
               <Button
@@ -255,11 +271,12 @@ const EMPTY: CncTask[] = [];
 export function WeightReductionPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const done = values.view === 'done';
   const list = useQuery({
     ...cncTasksQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ordering: '-completion_date',
       completion_date__isnull: 'false',
       processed_by_warehouse: done ? 'true' : 'false',
@@ -301,6 +318,7 @@ export function WeightReductionPage() {
         ]}
       />
       <DataTable
+        columnsKey="weight-reduction"
         title={done ? "Mikro'ya işlenen kesimler" : "Mikro'ya işlenmeyi bekleyen kesimler"}
         filters={
           <FilterBar
@@ -318,15 +336,20 @@ export function WeightReductionPage() {
         onRowClick={(row) => apply({ kesim: row.key })}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total: list.data?.count ?? 0,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         rowActions={rowActions}
         emptyMessage={done ? "Mikro'ya işlenen kesim yok" : "Mikro'ya işlenmeyi bekleyen kesim yok"}
       />
       {values.kesim ? (
-        <ReportModal key={values.kesim} cutKey={values.kesim} onClose={() => apply({ kesim: '' })} />
+        <ReportModal
+          key={values.kesim}
+          cutKey={values.kesim}
+          onClose={() => apply({ kesim: '' })}
+        />
       ) : null}
     </>
   );

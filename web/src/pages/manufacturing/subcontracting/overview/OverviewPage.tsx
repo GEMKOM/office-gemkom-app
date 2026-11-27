@@ -444,6 +444,7 @@ export function OverviewPage() {
 
         <div className={classes.tree}>
           <DataTable
+            columnsKey="subcontracting-overview"
             key={`${grouping}:${tableKey}`}
             title={
               <>

@@ -274,6 +274,7 @@ export function PerformanceReportPage() {
       />
 
       <DataTable
+        columnsKey="machining-performance"
         title="Kullanıcı Performans Raporu"
         icon="fas fa-chart-bar"
         filters={

@@ -189,6 +189,7 @@ export function JobUsersModal({ jobNo, onClose }: { jobNo: string; onClose: () =
           : {
               content: (
                 <DataTable
+                  columnsKey="machining-cost-analysis-users"
                   title="Kullanıcı Detayları"
                   icon="fas fa-users"
                   data={rows}

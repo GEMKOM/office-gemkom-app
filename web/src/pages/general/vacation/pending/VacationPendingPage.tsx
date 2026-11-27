@@ -231,6 +231,7 @@ export function VacationPendingPage({ embedded = false }: EmbeddableProps = {}) 
       )}
 
       <DataTable
+        columnsKey="vacation-pending"
         title="Onayımı Bekleyen Talepler"
         icon="fas fa-clock"
         data={pendingRows}
@@ -244,6 +245,7 @@ export function VacationPendingPage({ embedded = false }: EmbeddableProps = {}) 
       />
 
       <DataTable
+        columnsKey="vacation-decided"
         title="Karar Verdiğim Talepler"
         icon="fas fa-history"
         data={decisionRows}

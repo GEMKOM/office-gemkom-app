@@ -368,6 +368,7 @@ export function LinearPlanningPage() {
             >
               <Stack gap="md">
                 <DataTable
+                  columnsKey="linear-planning-planned"
                   title="Planlanmış Görevler"
                   icon="fas fa-tasks"
                   data={selectedId ? planned : EMPTY}
@@ -382,6 +383,7 @@ export function LinearPlanningPage() {
                 />
                 {showUnplanned ? (
                   <DataTable
+                    columnsKey="linear-planning-unplanned"
                     title="Planlanmamış Görevler"
                     icon="fas fa-inbox"
                     data={selectedId ? unplanned : EMPTY}

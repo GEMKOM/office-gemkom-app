@@ -246,6 +246,7 @@ export function SuppliersReportPage() {
       />
 
       <DataTable
+        columnsKey="procurement-suppliers-report"
         title="Tedarikçi Raporu"
         filters={
           <FilterBar

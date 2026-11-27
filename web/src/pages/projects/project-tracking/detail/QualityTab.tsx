@@ -20,7 +20,13 @@ const SEVERITY: Record<string, [StatusFamily, string]> = {
   critical: ['red', 'Kritik'],
 };
 
-function MappedBadge({ map, value }: { map: Record<string, [StatusFamily, string]>; value?: string }) {
+function MappedBadge({
+  map,
+  value,
+}: {
+  map: Record<string, [StatusFamily, string]>;
+  value?: string;
+}) {
   const known = value ? map[value] : undefined;
   return known ? (
     <StatusBadge color={known[0]}>{known[1]}</StatusBadge>
@@ -51,7 +57,11 @@ export function QualityTab({ jobNo }: { jobNo: string }) {
         sortable: true,
         render: (r) => <MappedBadge map={SEVERITY} value={r.severity} />,
       },
-      { key: 'defect_type_display', header: 'Kusur Tipi', render: (r) => r.defect_type_display || '-' },
+      {
+        key: 'defect_type_display',
+        header: 'Kusur Tipi',
+        render: (r) => r.defect_type_display || '-',
+      },
       {
         key: 'affected_quantity',
         header: 'Etkilenen Miktar',
@@ -77,13 +87,12 @@ export function QualityTab({ jobNo }: { jobNo: string }) {
   if (query.isError) return <ErrorState>Uygunsuzluk raporları yüklenirken hata oluştu.</ErrorState>;
   const rows = query.data.results;
   if (rows.length === 0) {
-    return (
-      <p className={css.state}>Bu iş emri için henüz uygunsuzluk raporu bulunmamaktadır.</p>
-    );
+    return <p className={css.state}>Bu iş emri için henüz uygunsuzluk raporu bulunmamaktadır.</p>;
   }
 
   return (
     <DataTable
+      columnsKey="project-tracking-ncrs"
       title="Uygunsuzluk Raporları"
       icon="fas fa-exclamation-triangle"
       data={rows}

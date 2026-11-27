@@ -228,6 +228,7 @@ function ChildrenSection({ job }: { job: ChildJob }) {
         <p className={css.state}>Alt iş emri bulunamadı.</p>
       ) : (
         <DataTable
+          columnsKey="project-tracking-children"
           data={rows}
           columns={columns}
           getRowId={(row) => row.job_no}
@@ -256,7 +257,8 @@ function PhasesSection({ job }: { job: ChildJob }) {
   const invalidateJobOrders = useInvalidateJobOrders();
   const query = useQuery(jobOrderPhasesQueryOptions<unknown>(job.job_no));
   const phases = useMemo(
-    () => (Array.isArray(query.data) ? (query.data as ChildJob[]) : extractResults<ChildJob>(query.data)),
+    () =>
+      Array.isArray(query.data) ? (query.data as ChildJob[]) : extractResults<ChildJob>(query.data),
     [query.data],
   );
   const columns = useChildColumns(true);
@@ -342,6 +344,7 @@ function PhasesSection({ job }: { job: ChildJob }) {
             <p className={css.state}>Bu iş emri için henüz üretim fazı oluşturulmamış.</p>
           ) : (
             <DataTable
+              columnsKey="project-tracking-phases"
               data={phases}
               columns={columns}
               getRowId={(row) => row.job_no}

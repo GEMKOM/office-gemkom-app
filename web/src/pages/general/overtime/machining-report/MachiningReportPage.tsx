@@ -428,6 +428,7 @@ export function MachiningReportPage() {
         />
 
         <DataTable
+          columnsKey="overtime-machining-summary"
           title="Dönem Özeti"
           icon="fas fa-list-check"
           data={lines}
@@ -440,6 +441,7 @@ export function MachiningReportPage() {
         />
 
         <DataTable
+          columnsKey="overtime-machining-operators"
           title="Operatör Bazında"
           icon="fas fa-user-clock"
           data={operatorList}
@@ -453,6 +455,7 @@ export function MachiningReportPage() {
         />
 
         <DataTable
+          columnsKey="overtime-machining-report"
           title="Mesai / Operasyon Çalışma Raporu"
           icon="fas fa-cogs"
           data={rows}

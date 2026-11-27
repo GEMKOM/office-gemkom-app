@@ -272,6 +272,7 @@ export function CostTablePage() {
       />
 
       <DataTable
+        columnsKey="sales-cost-table"
         title="Maliyet Tablosu"
         icon="fas fa-calculator"
         data={rows}

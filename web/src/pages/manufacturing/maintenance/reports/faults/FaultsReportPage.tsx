@@ -181,6 +181,7 @@ export function FaultsReportPage() {
       />
 
       <DataTable
+        columnsKey="maintenance-faults-report"
         title="Arızalar Özeti"
         filters={
           <FilterBar

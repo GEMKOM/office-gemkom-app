@@ -213,6 +213,7 @@ export function PurchaseOrdersTab() {
         }
       />
       <DataTable
+        columnsKey="finance-purchase-orders"
         title="Satın Alma Siparişleri"
         icon="fas fa-shopping-cart"
         filters={

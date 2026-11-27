@@ -42,7 +42,12 @@ const URL_DEFAULTS = {
 };
 
 type FilterKeys = 'search' | 'is_active' | 'default_currency' | 'show_inactive';
-type FilterState = { search: string; is_active: string; default_currency: string; show_inactive: boolean };
+type FilterState = {
+  search: string;
+  is_active: string;
+  default_currency: string;
+  show_inactive: boolean;
+};
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
   {
@@ -74,7 +79,12 @@ const filterConfig: FilterConfig<FilterKeys>[] = [
   { type: 'checkbox', key: 'show_inactive', label: 'Pasifleri Göster' },
 ];
 
-const EMPTY_FILTERS: FilterState = { search: '', is_active: '', default_currency: '', show_inactive: false };
+const EMPTY_FILTERS: FilterState = {
+  search: '',
+  is_active: '',
+  default_currency: '',
+  show_inactive: false,
+};
 const EMPTY_ROWS: Customer[] = [];
 
 /** Filter params as legacy loadCustomers built them (unset ones are left out). */
@@ -186,7 +196,13 @@ export function CustomersPage() {
       color: 'primary',
       onClick: () => apply({ customer_id: String(row.id) }),
     },
-    { key: 'delete', label: 'Sil', icon: 'fas fa-trash', color: 'danger', onClick: (r) => void deleteCustomer(r) },
+    {
+      key: 'delete',
+      label: 'Sil',
+      icon: 'fas fa-trash',
+      color: 'danger',
+      onClick: (r) => void deleteCustomer(r),
+    },
   ];
 
   // ---- export ----
@@ -195,7 +211,11 @@ export function CustomersPage() {
     setExporting(true);
     try {
       // Legacy export: every page, current filters and sort, inactive ones included.
-      const count = await exportCustomers({ ...filterParams(filters), ordering, show_inactive: true });
+      const count = await exportCustomers({
+        ...filterParams(filters),
+        ordering,
+        show_inactive: true,
+      });
       if (count === 0) notify.warning('Dışa aktarılacak müşteri bulunamadı');
     } catch (error) {
       console.error('Export error:', error);
@@ -238,6 +258,7 @@ export function CustomersPage() {
       />
 
       <DataTable
+        columnsKey="customers"
         title="Müşteri Listesi"
         filters={
           <FilterBar

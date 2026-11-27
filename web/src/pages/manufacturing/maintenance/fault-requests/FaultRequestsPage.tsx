@@ -272,6 +272,7 @@ export function FaultRequestsPage() {
       />
 
       <DataTable
+        columnsKey="maintenance-fault-requests"
         title="Arıza Talepleri"
         filters={
           <FilterBar

@@ -231,6 +231,7 @@ export function DailyEfficiencyPage() {
       />
 
       <DataTable
+        columnsKey="machining-daily-efficiency"
         title="Günlük Verimlilik Raporu"
         icon="fas fa-tasks"
         filters={

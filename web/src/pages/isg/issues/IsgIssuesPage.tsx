@@ -353,6 +353,7 @@ export function IsgIssuesPage() {
       />
 
       <DataTable
+        columnsKey="isg-issues"
         title="İSG Bildirimleri"
         filters={
           <FilterBar

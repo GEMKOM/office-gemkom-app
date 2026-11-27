@@ -284,6 +284,7 @@ export function UsersPage() {
       ) : null}
 
       <DataTable
+        columnsKey="hr-users"
         title={issue ? issue.label : 'Çalışan Listesi'}
         filters={
           issue ? undefined : (

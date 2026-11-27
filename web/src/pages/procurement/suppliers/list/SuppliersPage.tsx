@@ -40,6 +40,7 @@ const URL_DEFAULTS = {
   created_at__gte: '',
   supplier_status: '',
   page: '1',
+  page_size: '20',
   ordering: '-id',
 };
 
@@ -177,11 +178,12 @@ export function SuppliersPage() {
     ],
   );
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
   const sort = fromOrdering(values.ordering || '-id');
   const ordering = toOrdering(sort.sortBy, sort.sortDir);
 
   // Unset filters are dropped by the request builder, as legacy skipped them.
-  const params: SuppliersParams = { ...filters, ordering, page, page_size: PAGE_SIZE };
+  const params: SuppliersParams = { ...filters, ordering, page, page_size: pageSize };
   const list = useQuery({ ...suppliersQueryOptions(params), placeholderData: keepPreviousData });
   const rows = list.data?.results ?? EMPTY_ROWS;
   const total = list.data?.count ?? 0;
@@ -329,9 +331,10 @@ export function SuppliersPage() {
         }}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         rowActions={rowActions}
         extraData={canWriteSuppliers}

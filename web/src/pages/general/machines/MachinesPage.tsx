@@ -324,6 +324,7 @@ export function MachinesPage() {
       />
 
       <DataTable
+        columnsKey="machines"
         title="Makine Listesi"
         filters={
           <FilterBar

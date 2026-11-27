@@ -232,6 +232,7 @@ export function CriticalItemsPage() {
       />
 
       <DataTable
+        columnsKey="critical-items"
         title={scopeTitle}
         icon="fas fa-circle-exclamation"
         filters={

@@ -192,6 +192,7 @@ export interface StockCountDetailProps {
 export function StockCountDetail({ countId }: StockCountDetailProps) {
   const count = useQuery(stockCountQueryOptions(countId));
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const [search, setSearch] = useState('');
   const [uncounted, setUncounted] = useState(false);
   const [prefilling, setPrefilling] = useState(false);
@@ -200,7 +201,7 @@ export function StockCountDetail({ countId }: StockCountDetailProps) {
   const lines = useQuery({
     ...stockCountLinesQueryOptions(countId, {
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(search.trim() ? { search: search.trim() } : {}),
       ...(uncounted ? { uncounted: 'true' as const } : {}),
     }),
@@ -454,6 +455,7 @@ export function StockCountDetail({ countId }: StockCountDetailProps) {
         ) : null}
 
         <DataTable
+          columnsKey="stock-count-lines"
           title="Sayım Satırları"
           icon="fas fa-list"
           filters={
@@ -484,9 +486,10 @@ export function StockCountDetail({ countId }: StockCountDetailProps) {
           loading={lines.isFetching}
           pagination={{
             page,
-            pageSize: PAGE_SIZE,
+            pageSize,
             total: lines.data?.count ?? 0,
             onPageChange: setPage,
+            onPageSizeChange: setPageSize,
           }}
           emptyMessage={
             editable

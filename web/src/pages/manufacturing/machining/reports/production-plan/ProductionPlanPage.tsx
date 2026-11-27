@@ -319,6 +319,7 @@ export function ProductionPlanPage() {
         }
       />
       <DataTable
+        columnsKey="machining-production-plan"
         title="Makine Üretim Planı"
         icon="fas fa-cogs"
         data={overview.isError ? EMPTY_ROWS : rows}

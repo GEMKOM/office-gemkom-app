@@ -53,7 +53,15 @@ import {
 import uiClasses from '@/ui/ui.module.css';
 
 const PAGE_SIZE = 20;
-const URL_DEFAULTS = { kind: '', status: '', job_no: '', search: '', fis: '', page: '1' };
+const URL_DEFAULTS = {
+  kind: '',
+  status: '',
+  job_no: '',
+  search: '',
+  fis: '',
+  page: '1',
+  page_size: '20',
+};
 type FilterKeys = 'search' | 'kind' | 'status' | 'job_no';
 
 const filterConfig: FilterConfig<FilterKeys>[] = [
@@ -162,7 +170,8 @@ const filledBars = (draft: LineDraft | undefined) =>
 function barsAmount(line: ReturnableLine, bars: BarDraft[]): string {
   if (bars.length === 0) return '';
   if (line.item_unit === 'metre') {
-    const metres = bars.reduce((t, b) => t + Number(metresToMm(b.length)) * Number(b.count), 0) / 1000;
+    const metres =
+      bars.reduce((t, b) => t + Number(metresToMm(b.length)) * Number(b.count), 0) / 1000;
     return `${qty(metres)} m`;
   }
   if (line.item_unit === 'adet') {
@@ -563,11 +572,12 @@ const EMPTY_LINES: ReturnableLine[] = [];
 export function ProductionSlipsPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const [creating, setCreating] = useState(false);
   const list = useQuery({
     ...productionSlipsQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(values.kind ? { kind: values.kind } : {}),
       ...(values.status ? { status: values.status } : {}),
       ...(values.job_no ? { job_no: values.job_no } : {}),
@@ -606,6 +616,7 @@ export function ProductionSlipsPage() {
         }
       />
       <DataTable
+        columnsKey="production-slips"
         title="Fişler"
         icon="fas fa-undo"
         filters={
@@ -629,9 +640,10 @@ export function ProductionSlipsPage() {
         onRowClick={(row) => apply({ fis: String(row.id) })}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total: list.data?.count ?? 0,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         emptyMessage="Henüz fiş yok"
       />

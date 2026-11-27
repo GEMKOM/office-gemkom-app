@@ -112,6 +112,7 @@ export function DbsTab() {
     <>
       <FinanceHeader tab="dbs" />
       <DataTable
+        columnsKey="finance-dbs"
         title="DBS Tedarikçileri"
         icon="fas fa-university"
         data={list.data ?? EMPTY}

@@ -221,6 +221,7 @@ export function PendingOverridesPage({ embedded = false }: EmbeddableProps = {})
       )}
 
       <DataTable
+        columnsKey="attendance-pending-overrides"
         title="Bekleyen Talepler"
         icon="fas fa-user-clock"
         data={rows}

@@ -178,6 +178,7 @@ export function AdjustmentsPage() {
 
         <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
           <DataTable
+            columnsKey="subcontracting-additions"
             title="Ek Ödemeler"
             icon="fas fa-plus-circle"
             data={additions}
@@ -191,6 +192,7 @@ export function AdjustmentsPage() {
             exportable={{ fileName: `taseron-ek-odemeler_${today()}.xlsx` }}
           />
           <DataTable
+            columnsKey="subcontracting-deductions"
             title="Kesintiler"
             icon="fas fa-minus-circle"
             data={deductions}

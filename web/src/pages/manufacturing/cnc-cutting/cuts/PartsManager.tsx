@@ -281,6 +281,7 @@ export function PartsManager({ taskKey, parts }: { taskKey: string; parts: reado
 
       <div style={{ marginTop: 12 }}>
         <DataTable
+          columnsKey="cnc-cut-parts"
           title="Parçalar"
           icon="fas fa-puzzle-piece"
           data={parts}

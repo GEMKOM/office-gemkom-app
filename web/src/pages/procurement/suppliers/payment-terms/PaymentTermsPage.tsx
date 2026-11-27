@@ -34,6 +34,7 @@ const URL_DEFAULTS = {
   active: '',
   created_at__gte: '',
   page: '1',
+  page_size: '20',
   ordering: '-id',
 };
 
@@ -106,10 +107,11 @@ export function PaymentTermsPage() {
     [values.name, values.code, values.is_custom, values.active, values.created_at__gte],
   );
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
   const sort = fromOrdering(values.ordering || '-id');
   const ordering = toOrdering(sort.sortBy, sort.sortDir);
 
-  const params: PaymentTermsParams = { ...filters, ordering, page, page_size: PAGE_SIZE };
+  const params: PaymentTermsParams = { ...filters, ordering, page, page_size: pageSize };
   const list = useQuery({ ...paymentTermsQueryOptions(params), placeholderData: keepPreviousData });
   const rows = list.data?.results ?? EMPTY_ROWS;
   const total = list.data?.count ?? 0;
@@ -200,6 +202,7 @@ export function PaymentTermsPage() {
       />
 
       <DataTable
+        columnsKey="payment-terms"
         title="Tüm Ödeme Koşulları"
         icon="fas fa-credit-card"
         filters={
@@ -223,9 +226,10 @@ export function PaymentTermsPage() {
         }}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         rowActions={rowActions}
         extraData={remove.isPending}

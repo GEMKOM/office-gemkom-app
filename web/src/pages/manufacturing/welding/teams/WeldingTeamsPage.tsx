@@ -224,6 +224,7 @@ export function WeldingTeamsPage() {
       />
 
       <DataTable
+        columnsKey="welding-teams"
         title="Ekip Listesi"
         filters={
           <FilterBar

@@ -32,7 +32,7 @@ import {
   type FilterConfig,
 } from '@/ui';
 
-const URL_DEFAULTS = { view: 'bekleyen', search: '', page: '1', request: '' };
+const URL_DEFAULTS = { view: 'bekleyen', search: '', page: '1', page_size: '20', request: '' };
 const PAGE_SIZE = 20;
 const EMPTY: PlanningRequest[] = [];
 
@@ -128,10 +128,11 @@ export function StockCheckPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const view = values.view === 'tumu' ? 'tumu' : 'bekleyen';
   const page = Math.max(1, Number.parseInt(values.page, 10) || 1);
+  const pageSize = Math.max(1, Number.parseInt(values.page_size, 10) || PAGE_SIZE);
   const list = useQuery({
     ...warehouseRequestsQueryOptions({
       page,
-      page_size: PAGE_SIZE,
+      page_size: pageSize,
       ...(view === 'bekleyen' ? { status: 'pending_inventory' } : {}),
       ...(values.search ? { search: values.search } : {}),
     }),
@@ -148,6 +149,7 @@ export function StockCheckPage() {
         backTo="/warehouse"
       />
       <DataTable
+        columnsKey="stock-check"
         title="Depo Kontrolü"
         icon="fas fa-clipboard-check"
         toolbar={
@@ -177,9 +179,10 @@ export function StockCheckPage() {
         onRowClick={(row) => apply({ request: String(row.id) })}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total: list.data?.count ?? 0,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         emptyMessage={view === 'bekleyen' ? 'Depo kontrolü bekleyen talep yok' : 'Talep yok'}
       />

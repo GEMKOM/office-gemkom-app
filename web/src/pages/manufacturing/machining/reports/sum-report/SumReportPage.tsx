@@ -289,6 +289,7 @@ export function SumReportPage() {
       />
 
       <DataTable
+        columnsKey="machining-sum-report"
         title="Toplam Raporu"
         icon="fas fa-table"
         filters={

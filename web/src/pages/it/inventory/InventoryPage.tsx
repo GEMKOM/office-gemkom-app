@@ -45,7 +45,9 @@ const EMPTY_FILTERS: FilterState = { name: '', code: '', machine_type: '', is_ac
 const EMPTY_ROWS: ItDevice[] = [];
 
 /** Legacy collectFilterValues + `used_in: 'it'`, in fetchMachines' param order. */
-function filterParams(values: FilterState): Omit<ItDevicesParams, 'page' | 'page_size' | 'ordering'> {
+function filterParams(
+  values: FilterState,
+): Omit<ItDevicesParams, 'page' | 'page_size' | 'ordering'> {
   return {
     name: values.name || undefined,
     code: values.code || undefined,
@@ -67,7 +69,12 @@ export function InventoryPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
 
   const filters = useMemo<FilterState>(
-    () => ({ name: values.name, code: values.code, machine_type: values.machine_type, is_active: values.is_active }),
+    () => ({
+      name: values.name,
+      code: values.code,
+      machine_type: values.machine_type,
+      is_active: values.is_active,
+    }),
     [values.name, values.code, values.machine_type, values.is_active],
   );
   const page = positiveInt(values.page, 1);
@@ -116,7 +123,8 @@ export function InventoryPage() {
     () => ({
       active: rows.filter((d) => d.is_active === true).length,
       laptops: rows.filter((d) => d.machine_type === 'Laptop').length,
-      desktops: rows.filter((d) => d.machine_type === 'Desktop' || d.machine_type === 'Bilgisayar').length,
+      desktops: rows.filter((d) => d.machine_type === 'Desktop' || d.machine_type === 'Bilgisayar')
+        .length,
     }),
     [rows],
   );
@@ -127,7 +135,13 @@ export function InventoryPage() {
   const columns = useMemo(() => inventoryColumns(setViewing), []);
 
   const rowActions = (row: ItDevice): RowAction<ItDevice>[] => [
-    { key: 'edit', label: 'Düzenle', icon: 'fas fa-edit', color: 'primary', onClick: () => setEditing(row) },
+    {
+      key: 'edit',
+      label: 'Düzenle',
+      icon: 'fas fa-edit',
+      color: 'primary',
+      onClick: () => setEditing(row),
+    },
   ];
 
   // ---- export ----
@@ -174,6 +188,7 @@ export function InventoryPage() {
       />
 
       <DataTable
+        columnsKey="it-inventory"
         title="IT Cihaz Listesi"
         filters={
           <FilterBar
@@ -191,7 +206,8 @@ export function InventoryPage() {
         sort={{
           sortBy: sort.sortBy,
           sortDir: sort.sortDir,
-          onSortChange: (sortBy, sortDir) => apply({ ordering: toOrdering(sortBy, sortDir) ?? '', page: '1' }),
+          onSortChange: (sortBy, sortDir) =>
+            apply({ ordering: toOrdering(sortBy, sortDir) ?? '', page: '1' }),
         }}
         pagination={{
           page,
@@ -216,10 +232,16 @@ export function InventoryPage() {
               </Button>
             </Menu.Target>
             <Menu.Dropdown>
-              <Menu.Item leftSection={<FaIcon icon="fas fa-file-csv" />} onClick={() => void runExport('csv')}>
+              <Menu.Item
+                leftSection={<FaIcon icon="fas fa-file-csv" />}
+                onClick={() => void runExport('csv')}
+              >
                 CSV
               </Menu.Item>
-              <Menu.Item leftSection={<FaIcon icon="fas fa-file-excel" />} onClick={() => void runExport('excel')}>
+              <Menu.Item
+                leftSection={<FaIcon icon="fas fa-file-excel" />}
+                onClick={() => void runExport('excel')}
+              >
                 Excel
               </Menu.Item>
             </Menu.Dropdown>
@@ -228,7 +250,9 @@ export function InventoryPage() {
       />
 
       {viewing ? <DevicePropertiesModal device={viewing} onClose={() => setViewing(null)} /> : null}
-      {editing ? <DeviceEditModal key={editing.id} device={editing} onClose={() => setEditing(null)} /> : null}
+      {editing ? (
+        <DeviceEditModal key={editing.id} device={editing} onClose={() => setEditing(null)} />
+      ) : null}
     </>
   );
 }

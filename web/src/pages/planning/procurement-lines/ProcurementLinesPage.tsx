@@ -299,6 +299,7 @@ export function ProcurementLinesPage() {
 
       <Stack gap="md">
         <DataTable
+          columnsKey="procurement-lines-pending"
           title="Satın Alma Bekleyen İş Emirleri"
           icon="fas fa-shopping-cart"
           filters={
@@ -333,6 +334,7 @@ export function ProcurementLinesPage() {
         />
 
         <DataTable
+          columnsKey="procurement-lines-entered"
           title="Malzeme Maliyeti Girilmiş İş Emirleri"
           icon="fas fa-check-double"
           filters={

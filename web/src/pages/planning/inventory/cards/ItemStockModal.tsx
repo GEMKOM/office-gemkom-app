@@ -89,9 +89,10 @@ export interface ItemStockModalProps {
 /** A card's balances per warehouse (İş Emri per job) and its movement history. */
 export function ItemStockModal({ item, onClose }: ItemStockModalProps) {
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
   const balances = useQuery(itemBalancesQueryOptions(item.id));
   const movements = useQuery({
-    ...itemMovementsQueryOptions(item.id, page, PAGE_SIZE),
+    ...itemMovementsQueryOptions(item.id, page, pageSize),
     placeholderData: keepPreviousData,
   });
 
@@ -123,15 +124,17 @@ export function ItemStockModal({ item, onClose }: ItemStockModalProps) {
           icon: 'fas fa-history',
           content: (
             <DataTable
+              columnsKey="inventory-card-movements"
               data={movements.data?.results ?? NO_MOVEMENTS}
               columns={movementColumns}
               getRowId={(row) => String(row.id)}
               loading={movements.isFetching}
               pagination={{
                 page,
-                pageSize: PAGE_SIZE,
+                pageSize,
                 total: movements.data?.count ?? 0,
                 onPageChange: setPage,
+                onPageSizeChange: setPageSize,
               }}
               emptyMessage={
                 movements.isError ? 'Hareketler yüklenemedi' : 'Bu kartın stok hareketi yok'

@@ -210,6 +210,7 @@ export function ShippingCostLinesPage() {
 
       <Stack gap="md">
         <DataTable
+          columnsKey="shipping-cost-pending"
           title="Sevkiyat Maliyeti Girilmemiş İş Emirleri"
           icon="fas fa-truck"
           filters={
@@ -244,6 +245,7 @@ export function ShippingCostLinesPage() {
         />
 
         <DataTable
+          columnsKey="shipping-cost-entered"
           title="Sevkiyat Maliyeti Girilmiş İş Emirleri"
           icon="fas fa-check-double"
           filters={

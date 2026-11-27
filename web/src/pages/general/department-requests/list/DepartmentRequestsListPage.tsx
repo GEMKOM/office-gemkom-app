@@ -292,6 +292,7 @@ export function DepartmentRequestsListPage() {
       />
 
       <DataTable
+        columnsKey="department-requests"
         title="Departman Talepleri"
         icon="fas fa-boxes"
         toolbar={

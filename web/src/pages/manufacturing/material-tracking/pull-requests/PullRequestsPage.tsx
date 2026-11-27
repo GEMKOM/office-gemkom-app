@@ -266,6 +266,7 @@ export function PullRequestsList() {
   return (
     <>
       <DataTable
+        columnsKey="material-pull-requests"
         title="Talepler"
         icon="fas fa-dolly"
         filters={

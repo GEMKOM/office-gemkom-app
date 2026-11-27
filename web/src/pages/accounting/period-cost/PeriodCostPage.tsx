@@ -255,6 +255,7 @@ export function PeriodCostPage() {
       />
 
       <DataTable
+        columnsKey="period-cost"
         title="İş Emirleri"
         icon="fas fa-table"
         filters={

@@ -213,6 +213,7 @@ export function PositionsPage() {
       <div className={classes.layout}>
         <div className={classes.main}>
           <DataTable
+            columnsKey="hr-positions"
             title="Pozisyon Listesi"
             filters={
               <FilterBar

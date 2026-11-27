@@ -447,6 +447,7 @@ export function CncCutsPage() {
       />
 
       <DataTable
+        columnsKey="cnc-cuts"
         title="Kesim Listesi"
         icon="fas fa-table"
         filters={

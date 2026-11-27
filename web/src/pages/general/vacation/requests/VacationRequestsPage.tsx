@@ -38,7 +38,7 @@ import { VacationRequestFormModal } from './VacationRequestFormModal';
 
 // page and the open request live in the URL; request_id is the link the
 // attendance calendar puts on a leave day.
-const URL_DEFAULTS = { page: '1', request_id: '' };
+const URL_DEFAULTS = { page: '1', page_size: '20', request_id: '' };
 const PAGE_SIZE = 20;
 const EMPTY_ROWS: VacationRequest[] = [];
 
@@ -188,10 +188,11 @@ function SummaryPanel() {
 export function VacationRequestsPage() {
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
 
   const params: VacationRequestsParams = {
     page,
-    page_size: PAGE_SIZE,
+    page_size: pageSize,
     ordering: '-created_at',
     mine: 'true',
   };
@@ -312,6 +313,7 @@ export function VacationRequestsPage() {
       <SummaryPanel />
 
       <DataTable
+        columnsKey="vacation-requests"
         title="İzin Talepleri"
         icon="fas fa-list"
         data={rows}
@@ -321,9 +323,10 @@ export function VacationRequestsPage() {
         sortable
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         rowActions={rowActions}
         emptyMessage="İzin talebi bulunamadı."

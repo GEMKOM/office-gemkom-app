@@ -117,6 +117,7 @@ export function UserWorkHoursPage() {
       />
 
       <DataTable
+        columnsKey="welding-user-work-hours"
         title="Çalışan Çalışma Saatleri"
         icon="fas fa-user-clock"
         filters={

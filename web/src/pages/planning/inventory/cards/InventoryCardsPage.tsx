@@ -46,20 +46,14 @@ const URL_DEFAULTS = {
   warehouse: '',
   job_no: '',
   page: '1',
+  page_size: '20',
   ordering: 'code',
 };
 
 const PAGE_SIZE = 20;
 
 type FilterKeys =
-  | 'code'
-  | 'code_lookup'
-  | 'name'
-  | 'item_type'
-  | 'is_active'
-  | 'category'
-  | 'warehouse'
-  | 'job_no';
+  'code' | 'code_lookup' | 'name' | 'item_type' | 'is_active' | 'category' | 'warehouse' | 'job_no';
 type FilterState = Record<FilterKeys, string>;
 
 const baseFilterConfig: FilterConfig<FilterKeys>[] = [
@@ -196,10 +190,11 @@ export function InventoryCardsPage() {
     [categories.data],
   );
   const page = positiveInt(values.page, 1);
+  const pageSize = positiveInt(values.page_size, PAGE_SIZE);
   const sort = fromOrdering(values.ordering || 'code');
   const ordering = toOrdering(sort.sortBy, sort.sortDir);
 
-  const params: ItemsParams = { page, page_size: PAGE_SIZE, ...filterParams(filters), ordering };
+  const params: ItemsParams = { page, page_size: pageSize, ...filterParams(filters), ordering };
   const list = useQuery({
     ...itemsQueryOptions(params),
     staleTime: DEFAULT_STALE_TIME,
@@ -327,6 +322,7 @@ export function InventoryCardsPage() {
       />
 
       <DataTable
+        columnsKey="inventory-cards"
         title="Stok Kartları"
         icon="fas fa-boxes"
         filters={
@@ -351,9 +347,10 @@ export function InventoryCardsPage() {
         }}
         pagination={{
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           total,
           onPageChange: (next) => apply({ page: String(next) }),
+          onPageSizeChange: (size) => apply({ page_size: String(size), page: '1' }),
         }}
         rowActions={rowActions}
         onRefresh={refresh}
