@@ -27,6 +27,12 @@ interface QueueSource {
   color: StatusFamily;
   /** The page that lists the queue; the queue is skipped when the user cannot open it. */
   route: string;
+  /**
+   * Where the home queue link and the band figure open. Defaults to `route`.
+   * Fason approvals live on the Onaylar tab, not on the department pending
+   * page (`route` still gates who can open the queue).
+   */
+  href?: string;
   path: string;
   params?: Record<string, string | number>;
   /** Extra condition on top of the route grant. */
@@ -133,6 +139,7 @@ export const QUEUES: QueueSource[] = [
     icon: 'fas fa-people-carry',
     color: 'yellow',
     route: '/general/department-requests/pending',
+    href: '/approvals?queue=fason',
     path: '/planning/department-requests/pending_approval/',
     params: { kind: 'fason' },
     toRecord: (row) => ({
@@ -334,7 +341,7 @@ export function useApprovals(ctx: ApprovalContext): Approvals {
       label: q.label,
       icon: q.icon,
       color: q.color,
-      link: q.route,
+      link: q.href ?? q.route,
       count: { data: count, isError: page.isError },
     };
   });
