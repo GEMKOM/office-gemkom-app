@@ -4,7 +4,10 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useLocation } from 'react-router';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { PendingDepartmentRequestsPage } from './PendingDepartmentRequestsPage';
+import {
+  PendingDepartmentRequestsPage,
+  PendingFasonRequestsPage,
+} from './PendingDepartmentRequestsPage';
 
 // Mantine modals with many fields are slow in jsdom when the whole suite runs in parallel.
 vi.setConfig({ testTimeout: 20_000 });
@@ -133,9 +136,14 @@ it('lists pending and approved requests with the legacy requests', async () => {
   expect(screen.getByText('Bilgi İşlem')).toBeInTheDocument();
 
   const pendingCall = calls().find((c) => c.url.pathname.endsWith('/pending_approval/'))!;
-  expect(pendingCall.url.search).toBe('');
+  // Material requests only: fason requests are approved on their own Onaylar tab.
+  expect(pendingCall.url.search).toBe('?kind=material');
   const approvedCall = calls().find((c) => c.url.pathname.endsWith('/approved_requests/'))!;
-  expect(Object.fromEntries(approvedCall.url.searchParams)).toEqual({ page: '1', page_size: '20' });
+  expect(Object.fromEntries(approvedCall.url.searchParams)).toEqual({
+    page: '1',
+    page_size: '20',
+    kind: 'material',
+  });
 
   // Approve / reject only on the pending table.
   const approvedRow = screen.getByText('mehmet').closest('tr')!;
@@ -214,4 +222,19 @@ it('?request=<id> opens the details with rejection comments and per-item files',
   expect(
     await screen.findByRole('dialog', { name: 'Departman Talebini Reddet' }),
   ).toBeInTheDocument();
+});
+
+it('is the Onaylar tab of fason requests: the fason kind only, in its own words', async () => {
+  renderWithProviders(
+    <ModalsProvider>
+      <PendingFasonRequestsPage embedded />
+    </ModalsProvider>,
+    { route: '/approvals?queue=fason' },
+  );
+  expect(await screen.findByText('ayse')).toBeInTheDocument();
+  expect(screen.getByText('Onay Bekleyen Fason Talepleri')).toBeInTheDocument();
+  const pendingCall = calls().find((c) => c.url.pathname.endsWith('/pending_approval/'))!;
+  expect(pendingCall.url.searchParams.get('kind')).toBe('fason');
+  const approvedCall = calls().find((c) => c.url.pathname.endsWith('/approved_requests/'))!;
+  expect(approvedCall.url.searchParams.get('kind')).toBe('fason');
 });

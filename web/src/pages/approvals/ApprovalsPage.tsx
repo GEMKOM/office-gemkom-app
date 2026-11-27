@@ -43,6 +43,11 @@ const PAGES: Record<string, ComponentType<EmbeddableProps>> = {
       (m) => ({ default: m.PendingDepartmentRequestsPage }),
     ),
   ),
+  fason: lazy(() =>
+    import('@/pages/general/department-requests/pending/PendingDepartmentRequestsPage').then(
+      (m) => ({ default: m.PendingFasonRequestsPage }),
+    ),
+  ),
   crane: lazy(() =>
     import('@/pages/general/crane-requests/pending/CraneRequestsPendingPage').then((m) => ({
       default: m.CraneRequestsPendingPage,
@@ -95,7 +100,12 @@ function InboxQueue({ type }: { type: string }) {
       moreLabel="Sayfasına git"
       noun={kind.label}
       empty="Onayınızı bekleyen kayıt kalmadı."
-      query={{ data: records, isPending: inbox.isPending, isError: inbox.isError, refetch: inbox.refetch }}
+      query={{
+        data: records,
+        isPending: inbox.isPending,
+        isError: inbox.isError,
+        refetch: inbox.refetch,
+      }}
     />
   );
 }

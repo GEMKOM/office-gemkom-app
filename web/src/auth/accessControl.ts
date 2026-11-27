@@ -62,6 +62,9 @@ const ROUTE_EXTRA_CODENAMES: Record<string, string[]> = {
     'access_planning',
     'access_procurement',
   ],
+  // Their own views of the fason jobs: the warehouse's and procurement's.
+  '/warehouse/fason': ['access_warehouse'],
+  '/procurement/fason': ['access_procurement'],
   // Özel gün önizlemesi: the backend honours a previewed date for manage_hr
   // (and staff/superusers), so the page opens for the same people.
   '/human_resources/special-days': ['manage_hr'],

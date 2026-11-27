@@ -647,6 +647,20 @@ export const appRoutes: RouteObject[] = [
     }),
   },
   {
+    // The warehouse's view of the fason jobs (Depo → Fason Sevkiyatı).
+    path: '/warehouse/fason',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/fason/FasonPage')).WarehouseFasonPage,
+    }),
+  },
+  {
+    // Procurement's view of the fason jobs (Satın Alma → Fason Takibi).
+    path: '/procurement/fason',
+    lazy: async () => ({
+      Component: (await import('@/pages/general/fason/FasonPage')).ProcurementFasonPage,
+    }),
+  },
+  {
     path: '/general/department-requests/list',
     lazy: async () => ({
       Component: (

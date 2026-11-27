@@ -15,10 +15,12 @@ export function cranePendingCountQueryOptions() {
   return listCountQueryOptions(['craneRequests', 'pendingApproval'], `${CRANES}pending_approval/`);
 }
 
-export function departmentRequestPendingCountQueryOptions() {
+/** Department (material) or fason requests at a stage where the user approves. */
+export function departmentRequestPendingCountQueryOptions(kind: 'material' | 'fason' = 'material') {
   return listCountQueryOptions(
     ['departmentRequests', 'pendingApproval'],
     `${DEPARTMENT_REQUESTS}pending_approval/`,
+    { kind },
   );
 }
 

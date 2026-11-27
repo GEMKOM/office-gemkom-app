@@ -45,7 +45,11 @@ export function userDepartment(user: {
   position?: { department_code?: unknown } | null;
   department_code?: string | null;
 }): string | null {
-  return (typeof user.position?.department_code === 'string' && user.position.department_code) || user.department_code || null;
+  return (
+    (typeof user.position?.department_code === 'string' && user.position.department_code) ||
+    user.department_code ||
+    null
+  );
 }
 
 const priority = (row: Row): HubRecord['status'] => {
@@ -111,12 +115,32 @@ export const QUEUES: QueueSource[] = [
     color: 'yellow',
     route: '/general/department-requests/pending',
     path: '/planning/department-requests/pending_approval/',
+    // Material requests only: fason requests have their own tab below.
+    params: { kind: 'material' },
     toRecord: (row) => ({
       code: str(row.request_number) || `#${row.id}`,
       title: str(row.title) || 'Departman talebi',
       subtitle: person(row, 'requestor_full_name', 'requestor_username'),
       status: priority(row),
       link: `/general/department-requests/pending?request=${row.id}`,
+      since: rowDate(row.submitted_at) ?? rowDate(row.created_at),
+    }),
+  },
+  {
+    // The same approval as a department request (same approvers), on its own tab.
+    id: 'fason',
+    label: 'Fason talepleri',
+    icon: 'fas fa-people-carry',
+    color: 'yellow',
+    route: '/general/department-requests/pending',
+    path: '/planning/department-requests/pending_approval/',
+    params: { kind: 'fason' },
+    toRecord: (row) => ({
+      code: str(row.request_number) || `#${row.id}`,
+      title: str(row.title) || 'Fason talebi',
+      subtitle: person(row, 'requestor_full_name', 'requestor_username'),
+      status: priority(row),
+      link: `/approvals?queue=fason&request=${row.id}`,
       since: rowDate(row.submitted_at) ?? rowDate(row.created_at),
     }),
   },
@@ -130,7 +154,9 @@ export const QUEUES: QueueSource[] = [
     toRecord: (row) => ({
       code: str(row.request_number) || `#${row.id}`,
       title: str(row.crane_type_name) || 'Vinç talebi',
-      subtitle: [str(row.job_no), person(row, 'requestor_full_name', 'requestor_username')].filter(Boolean).join(' · '),
+      subtitle: [str(row.job_no), person(row, 'requestor_full_name', 'requestor_username')]
+        .filter(Boolean)
+        .join(' · '),
       status: priority(row),
       link: `/general/crane-requests/pending?request=${row.id}`,
       since: rowDate(row.created_at),
@@ -149,7 +175,9 @@ export const QUEUES: QueueSource[] = [
     when: (ctx) => ctx.departmentCode === 'design',
     mine: (row) => row.can_approve === true,
     toRecord: (row) => ({
-      code: [str(row.job_order_no) || str(row.job_order), str(row.revision_code)].filter(Boolean).join(' '),
+      code: [str(row.job_order_no) || str(row.job_order), str(row.revision_code)]
+        .filter(Boolean)
+        .join(' '),
       title: str(row.job_order_title) || 'Çizim yayını',
       subtitle: person(row, 'released_by_name'),
       link: `/design/release-approvals?search=${encodeURIComponent(str(row.job_order_no) || str(row.job_order))}`,
@@ -179,7 +207,10 @@ interface InboxKind {
   icon: string;
   color: StatusFamily;
   route: string;
-  toRecord: (item: InboxItem, snap: Record<string, unknown>) => Omit<ApprovalRecord, 'key' | 'since'>;
+  toRecord: (
+    item: InboxItem,
+    snap: Record<string, unknown>,
+  ) => Omit<ApprovalRecord, 'key' | 'since'>;
 }
 
 // Approval types without a pending list of their own, by subject_type.
@@ -210,7 +241,9 @@ export const INBOX_KINDS: Record<string, InboxKind> = {
       code: str(snap.offer_no) || `#${item.subject_id}`,
       title: 'Satış teklifi',
       subtitle: str(item.stage_name) || undefined,
-      link: str(snap.offer_no) ? `/sales/offers/?offer_no=${encodeURIComponent(str(snap.offer_no))}` : '/sales/offers/',
+      link: str(snap.offer_no)
+        ? `/sales/offers/?offer_no=${encodeURIComponent(str(snap.offer_no))}`
+        : '/sales/offers/',
     }),
   },
   'quality_control.ncr': {
@@ -267,7 +300,12 @@ export interface Approvals {
   total: number | undefined;
   /** The only queue with something waiting, for the band figure's link. */
   onlyRoute: string | null;
-  records: { data: ApprovalRecord[] | undefined; isPending: boolean; isError: boolean; refetch: () => void };
+  records: {
+    data: ApprovalRecord[] | undefined;
+    isPending: boolean;
+    isError: boolean;
+    refetch: () => void;
+  };
 }
 
 /** Every queue at once, in parallel; nothing is fetched for a list the user cannot open. */
@@ -275,14 +313,22 @@ export function useApprovals(ctx: ApprovalContext): Approvals {
   const queues = QUEUES.filter((q) => hasRouteAccess(q.route) && (q.when?.(ctx) ?? true));
   const pages = useQueries({
     queries: queues.map((q) => ({
-      ...listPageQueryOptions<Row>(['home', 'approvals', q.id], q.path, { page_size: ROWS, ...q.params }),
+      ...listPageQueryOptions<Row>(['home', 'approvals', q.id], q.path, {
+        page_size: ROWS,
+        ...q.params,
+      }),
     })),
   });
   const inbox = useQuery(approvalsInboxQueryOptions());
 
   const items: AttentionItem[] = queues.map((q, i) => {
     const page = pages[i]!;
-    const count = page.data === undefined ? undefined : q.mine ? page.data.results.filter(q.mine).length : page.data.count;
+    const count =
+      page.data === undefined
+        ? undefined
+        : q.mine
+          ? page.data.results.filter(q.mine).length
+          : page.data.count;
     return {
       id: q.id,
       label: q.label,
@@ -294,13 +340,17 @@ export function useApprovals(ctx: ApprovalContext): Approvals {
   });
   const records: ApprovalRecord[] = queues.flatMap((q, i) => {
     const rows = pages[i]!.data?.results ?? [];
-    return (q.mine ? rows.filter(q.mine) : rows).map((row) => ({ key: `${q.id}-${row.id}`, ...q.toRecord(row) }));
+    return (q.mine ? rows.filter(q.mine) : rows).map((row) => ({
+      key: `${q.id}-${row.id}`,
+      ...q.toRecord(row),
+    }));
   });
 
   // Inbox kinds show only when something is waiting: most users never see them.
   const byKind = new Map<string, InboxItem[]>();
   for (const item of inbox.data ?? []) {
-    if (!INBOX_KINDS[item.subject_type] || !hasRouteAccess(INBOX_KINDS[item.subject_type]!.route)) continue;
+    if (!INBOX_KINDS[item.subject_type] || !hasRouteAccess(INBOX_KINDS[item.subject_type]!.route))
+      continue;
     byKind.set(item.subject_type, [...(byKind.get(item.subject_type) ?? []), item]);
   }
   for (const [type, list] of byKind) {
@@ -322,7 +372,8 @@ export function useApprovals(ctx: ApprovalContext): Approvals {
     }
   }
 
-  const settled = items.every((item) => item.count.data !== undefined || item.count.isError) && !inbox.isPending;
+  const settled =
+    items.every((item) => item.count.data !== undefined || item.count.isError) && !inbox.isPending;
   const waiting = items.filter((item) => item.count.data);
   return {
     none: queues.length === 0 && byKind.size === 0,

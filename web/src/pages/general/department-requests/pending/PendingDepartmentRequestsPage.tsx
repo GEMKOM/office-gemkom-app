@@ -8,6 +8,7 @@ import {
   useApproveDepartmentRequest,
   useRejectDepartmentRequest,
   type DepartmentRequest,
+  type DepartmentRequestKind,
 } from '@/api/general/departmentRequests';
 import { formatDate } from '@/lib/format';
 import {
@@ -35,16 +36,40 @@ function positiveInt(value: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+// The words of each kind: material requests (Departman Talepleri) and fason
+// requests (Fason Talepleri) are approved on their own Onaylar tabs.
+const WORDS: Record<
+  DepartmentRequestKind,
+  { title: string; one: string; lower: string; plural: string }
+> = {
+  material: {
+    title: 'Departman Talepleri',
+    one: 'Departman talebi',
+    lower: 'departman talebi',
+    plural: 'departman taleplerinin',
+  },
+  fason: {
+    title: 'Fason Talepleri',
+    one: 'Fason talebi',
+    lower: 'fason talebi',
+    plural: 'fason taleplerinin',
+  },
+};
+
 /** Port of general/department-requests/pending (pending.js + modals.js). */
-export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddableProps = {}) {
+export function PendingDepartmentRequestsPage({
+  embedded = false,
+  kind = 'material',
+}: EmbeddableProps & { kind?: DepartmentRequestKind } = {}) {
+  const words = WORDS[kind];
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
 
-  const pending = useQuery(pendingDepartmentRequestsQueryOptions());
+  const pending = useQuery(pendingDepartmentRequestsQueryOptions(kind));
   const pendingRows = pending.data?.results ?? EMPTY_ROWS;
 
   const approvedPage = positiveInt(values.approved_page, 1);
   const approved = useQuery({
-    ...approvedDepartmentRequestsQueryOptions({ page: approvedPage, page_size: PAGE_SIZE }),
+    ...approvedDepartmentRequestsQueryOptions({ page: approvedPage, page_size: PAGE_SIZE, kind }),
     placeholderData: keepPreviousData,
   });
   const approvedRows = approved.data?.results ?? EMPTY_ROWS;
@@ -69,9 +94,9 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
     // Legacy closes the details first, then asks.
     closeDetail();
     const ok = await confirm({
-      title: 'Departman Talebi Onayı',
+      title: `${words.one} onayı`,
       icon: 'fas fa-check-circle',
-      message: 'Bu departman talebini onaylamak istediğinizden emin misiniz?',
+      message: `Bu ${words.lower}ni onaylamak istediğinizden emin misiniz?`,
       details: (
         <Grid gap={6}>
           {[
@@ -96,9 +121,9 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
     if (!ok) return;
     try {
       await approve.mutateAsync(row.id);
-      notify.success('Departman talebi başarıyla onaylandı');
+      notify.success(`${words.one} başarıyla onaylandı`);
     } catch (error) {
-      notify.error(`Departman talebi onaylanırken hata oluştu: ${errorMessage(error)}`);
+      notify.error(`${words.one} onaylanırken hata oluştu: ${errorMessage(error)}`);
     }
   };
 
@@ -112,11 +137,11 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
     }
     try {
       await reject.mutateAsync({ id: rejectingId, comment });
-      notify.success('Departman talebi başarıyla reddedildi');
+      notify.success(`${words.one} başarıyla reddedildi`);
       setRejectingId(null);
       closeDetail();
     } catch (error) {
-      notify.error(`Departman talebi reddedilirken hata oluştu: ${errorMessage(error)}`);
+      notify.error(`${words.one} reddedilirken hata oluştu: ${errorMessage(error)}`);
     }
   };
 
@@ -163,8 +188,8 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
     <>
       {embedded ? null : (
         <PageHeader
-          title="Onay Bekleyen Departman Talepleri"
-          subtitle="Onayınızı bekleyen departman taleplerinin yönetimi"
+          title={`Onay Bekleyen ${words.title}`}
+          subtitle={`Onayınızı bekleyen ${words.plural} yönetimi`}
           icon="boxes"
           backTo="/general/department-requests/list"
           stats={[
@@ -183,7 +208,7 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
       )}
 
       <DataTable
-        title="Onay Bekleyen Departman Talepleri"
+        title={`Onay Bekleyen ${words.title}`}
         icon="fas fa-clock"
         data={pendingRows}
         columns={pendingColumns}
@@ -191,14 +216,14 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
         loading={pending.isFetching}
         pagination={{ pageSize: PAGE_SIZE }}
         rowActions={pendingActions}
-        emptyMessage="Onay bekleyen departman talebi bulunamadı."
+        emptyMessage={`Onay bekleyen ${words.lower} bulunamadı.`}
         onRefresh={() => void pending.refetch()}
       />
 
       <div style={{ height: 'var(--mantine-spacing-lg)' }} />
 
       <DataTable
-        title="Onayladığım Departman Talepleri"
+        title={`Onaylanan ${words.title}`}
         icon="fas fa-check-circle"
         data={approvedRows}
         columns={approvedColumns}
@@ -211,7 +236,7 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
           onPageChange: (next) => apply({ approved_page: String(next) }),
         }}
         rowActions={approvedActions}
-        emptyMessage="Onayladığınız departman talebi bulunamadı."
+        emptyMessage={`Onaylanan ${words.lower} bulunamadı.`}
         onRefresh={() => void approved.refetch()}
       />
 
@@ -234,4 +259,9 @@ export function PendingDepartmentRequestsPage({ embedded = false }: EmbeddablePr
       ) : null}
     </>
   );
+}
+
+/** Onaylar → Fason Talepleri: the fason requests waiting for the user's approval. */
+export function PendingFasonRequestsPage(props: EmbeddableProps = {}) {
+  return <PendingDepartmentRequestsPage {...props} kind="fason" />;
 }

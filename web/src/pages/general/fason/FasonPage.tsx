@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   Group,
   SegmentedControl,
@@ -40,16 +41,69 @@ import { TopicDiscussion } from '../../shared/topic-discussion/TopicDiscussion';
 import { FasonRequestFormModal } from './FasonRequestFormModal';
 
 // `new=1` opens Yeni Fason Talebi (Departman Talepleri's form links here).
-const URL_DEFAULTS = { tab: 'open', search: '', job: '', new: '' };
+// An empty tab is the view's first one.
+const URL_DEFAULTS = { tab: '', search: '', job: '', new: '' };
 const EMPTY: FasonJob[] = [];
 
-const TABS: { value: FasonTab; label: string }[] = [
-  { value: 'open', label: 'Açık' },
-  { value: 'warehouse', label: 'Depoda' },
-  { value: 'at_supplier', label: 'Fasonda' },
-  { value: 'done', label: 'Tamamlanan' },
-  { value: 'all', label: 'Tümü' },
-];
+/**
+ * Who reads the page: the requester (Talepler → Fason Talepleri), the
+ * warehouse (Depo → Fason Sevkiyatı) or procurement (Satın Alma → Fason
+ * Takibi). Same jobs and job window (discussion included); each its own tabs.
+ */
+export type FasonView = 'requester' | 'warehouse' | 'procurement';
+
+interface ViewConfig {
+  title: string;
+  subtitle: string;
+  icon: string;
+  tabs: { value: FasonTab; label: string }[];
+  /** Yeni Fason Talebi: the requester's page only. */
+  canCreate: boolean;
+}
+
+const VIEWS: Record<FasonView, ViewConfig> = {
+  requester: {
+    title: 'Fason Talepleri',
+    subtitle:
+      'Atölyenin fason işleri: departman onayından sonra malzeme depoya, depodan tedarikçiye gider, döner',
+    icon: 'people-carry',
+    tabs: [
+      { value: 'open', label: 'Açık' },
+      { value: 'warehouse', label: 'Depoda' },
+      { value: 'at_supplier', label: 'Fasonda' },
+      { value: 'done', label: 'Tamamlanan' },
+      { value: 'all', label: 'Tümü' },
+    ],
+    canCreate: true,
+  },
+  warehouse: {
+    title: 'Fason Sevkiyatı',
+    subtitle:
+      'Onaylı fason işlerinin malzemesi: imalattan teslim alın, sipariş verilince tedarikçiye gönderin; dönüş Mal Kabul ile',
+    icon: 'truck-loading',
+    tabs: [
+      { value: 'to_receive', label: 'Teslim Alınacak' },
+      { value: 'to_send', label: 'Gönderilecek' },
+      { value: 'at_supplier', label: 'Fasonda' },
+      { value: 'all', label: 'Tümü' },
+    ],
+    canCreate: false,
+  },
+  procurement: {
+    title: 'Fason Takibi',
+    subtitle:
+      'Fason işlerinin satınalma ve malzeme durumu; malzeme depoya gelince gönderimi depo ya da satınalma işaretler',
+    icon: 'people-carry',
+    tabs: [
+      { value: 'open', label: 'Açık' },
+      { value: 'to_send', label: 'Gönderilecek' },
+      { value: 'at_supplier', label: 'Fasonda' },
+      { value: 'done', label: 'Tamamlanan' },
+      { value: 'all', label: 'Tümü' },
+    ],
+    canCreate: false,
+  },
+};
 
 const PURCHASE_COLOR: Record<FasonPurchaseStep, StatusFamily> = {
   request: 'yellow',
@@ -65,7 +119,6 @@ const MATERIAL_COLOR: Record<FasonMaterialStep, StatusFamily> = {
   waiting: 'yellow',
   handed_over: 'orange',
   received: 'blue',
-  ready: 'orange',
   sent: 'purple',
   returned: 'green',
   pulled: 'grey',
@@ -129,12 +182,17 @@ const columns: DataTableColumn<FasonJob>[] = [
  * Fason Talepleri: the workshop's outsourced work (büküm, işleme, galvaniz…),
  * asked for here (Yeni Fason Talebi) rather than on Departman Talepleri, which
  * is for material. Each row is one department request; purchasing and the
- * material are followed side by side, and the warehouse sends the material
- * once both are ready.
+ * material are followed side by side. The material moves once the department
+ * approved; the warehouse takes it in (one step) and the warehouse or
+ * procurement marks it sent once there is an order. The warehouse and
+ * procurement read the same jobs on their own pages (`view`).
  */
-export function FasonPage() {
+export function FasonPage({ view = 'requester' }: { view?: FasonView } = {}) {
+  const config = VIEWS[view];
   const { values, apply } = useUrlFilters(URL_DEFAULTS);
-  const tab = (TABS.some((t) => t.value === values.tab) ? values.tab : 'open') as FasonTab;
+  const tab = (
+    config.tabs.some((t) => t.value === values.tab) ? values.tab : config.tabs[0]!.value
+  ) as FasonTab;
   const list = useQuery({
     ...fasonJobsQueryOptions({ tab, search: values.search || undefined }),
     placeholderData: keepPreviousData,
@@ -144,24 +202,26 @@ export function FasonPage() {
   return (
     <>
       <PageHeader
-        title="Fason Talepleri"
-        subtitle="Atölyenin fason işleri: satınalma ve malzeme yan yana; malzeme depodan tedarikçiye gider, döner"
-        icon="people-carry"
+        title={config.title}
+        subtitle={config.subtitle}
+        icon={config.icon}
         actions={
-          <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => apply({ new: '1' })}>
-            Yeni Fason Talebi
-          </Button>
+          config.canCreate ? (
+            <Button leftSection={<FaIcon icon="fas fa-plus" />} onClick={() => apply({ new: '1' })}>
+              Yeni Fason Talebi
+            </Button>
+          ) : undefined
         }
       />
       <DataTable
-        title="Fason Talepleri"
-        icon="fas fa-people-carry"
+        title={config.title}
+        icon={`fas fa-${config.icon}`}
         toolbar={
           <SegmentedControl
             size="xs"
             value={tab}
             onChange={(next) => apply({ tab: next })}
-            data={TABS}
+            data={config.tabs}
           />
         }
         filters={
@@ -178,9 +238,9 @@ export function FasonPage() {
         getRowId={(row) => String(row.id)}
         loading={list.isFetching}
         onRowClick={(row) => apply({ job: String(row.id) })}
-        emptyMessage="Bu sekmede fason talebi yok"
+        emptyMessage="Bu sekmede fason işi yok"
       />
-      {values.new ? (
+      {config.canCreate && values.new ? (
         <FasonRequestFormModal
           onClose={() => apply({ new: '' })}
           onCreated={(jobId) => apply({ new: '', ...(jobId ? { job: String(jobId) } : {}) })}
@@ -191,6 +251,16 @@ export function FasonPage() {
       ) : null}
     </>
   );
+}
+
+/** Depo → Fason Sevkiyatı. */
+export function WarehouseFasonPage() {
+  return <FasonPage view="warehouse" />;
+}
+
+/** Satın Alma → Fason Takibi. */
+export function ProcurementFasonPage() {
+  return <FasonPage view="procurement" />;
 }
 
 function Mark({
@@ -268,6 +338,20 @@ export function FasonJobModal({ jobId, onClose }: { jobId: number; onClose: () =
         sections={
           data
             ? [
+                ...(data.awaiting_approval
+                  ? [
+                      {
+                        title: 'Onay',
+                        icon: 'fas fa-hourglass-half',
+                        content: (
+                          <Alert color="yellow" variant="light">
+                            Departman onayı bekleniyor. Malzeme onaydan sonra depoya teslim edilir;
+                            planlama da talebi onaydan sonra görür.
+                          </Alert>
+                        ),
+                      },
+                    ]
+                  : []),
                 {
                   title: 'Durum',
                   icon: 'fas fa-stream',
@@ -355,7 +439,7 @@ function JobActions({
 }: {
   job: FasonJobDetail;
   busy: boolean;
-  run: (body: { action: 'receive' } | { action: 'ready' }, done: string) => Promise<boolean>;
+  run: (body: { action: 'receive' }, done: string) => Promise<boolean>;
   onHand: () => void;
   onSend: () => void;
 }) {
@@ -376,19 +460,9 @@ function JobActions({
           size="xs"
           disabled={busy}
           leftSection={<FaIcon icon="fas fa-inbox" />}
-          onClick={() => void run({ action: 'receive' }, 'Malzeme teslim alındı')}
+          onClick={() => void run({ action: 'receive' }, 'Malzeme teslim alındı; gönderime hazır')}
         >
           Teslim Al
-        </Button>
-      ) : null}
-      {job.can_mark_ready ? (
-        <Button
-          size="xs"
-          disabled={busy}
-          leftSection={<FaIcon icon="fas fa-box" />}
-          onClick={() => void run({ action: 'ready' }, 'Malzeme gönderime hazır')}
-        >
-          Hazırlandı
         </Button>
       ) : null}
       {job.can_send ? (
@@ -473,9 +547,14 @@ function Rows({ job }: { job: FasonJobDetail }) {
 function Steps({ job }: { job: FasonJobDetail }) {
   return (
     <Stack gap={6}>
+      <Mark
+        label="Departman onayladı"
+        at={null}
+        by={null}
+        done={!job.awaiting_approval && job.purchase_step !== 'cancelled'}
+      />
       <Mark label="İmalat malzemeyi depoya teslim etti" {...job.steps.handed_over} />
-      <Mark label="Depo teslim aldı" {...job.steps.received} />
-      <Mark label="Depo hazırladı" {...job.steps.ready} />
+      <Mark label="Depo teslim aldı (gönderime hazır)" {...job.steps.received} />
       {job.shipments.length ? (
         job.shipments.map((s) => (
           <Mark

@@ -12,7 +12,10 @@ import {
   requestablePlanningItemsQueryOptions,
 } from '@/api/procurement/hubs';
 import type { PoolRow } from '@/api/procurement/paymentLists';
-import type { ProcurementPlanningItem, PurchaseRequestRow } from '@/api/procurement/purchaseRequests';
+import type {
+  ProcurementPlanningItem,
+  PurchaseRequestRow,
+} from '@/api/procurement/purchaseRequests';
 import type { PlanningItem } from '@/api/planning/planningItems';
 import { formatCurrency, formatDate, formatNumber, toNumber } from '@/lib/format';
 import { AppLink } from '@/shell/AppLink';
@@ -87,7 +90,10 @@ function requestableRecord(
       : partly
         ? { label: 'Kısmen', color: 'yellow' }
         : undefined,
-    meta: quantity(item.quantity_remaining_for_purchase ?? item.quantity_to_purchase, item.item_unit),
+    meta: quantity(
+      item.quantity_remaining_for_purchase ?? item.quantity_to_purchase,
+      item.item_unit,
+    ),
   };
 }
 
@@ -213,6 +219,14 @@ export function ProcurementHubPage() {
       iconColor: 'success',
       link: PAYMENT_LISTS,
       features: [{ label: 'Ödeme Havuzu', icon: 'fas fa-coins', link: POOL }],
+    },
+    {
+      title: 'Fason Takibi',
+      description:
+        'Fason işlerinin satınalma ve malzeme durumu; depoya gelen malzemeyi tedarikçiye gönderildi işaretleyin.',
+      icon: 'fas fa-people-carry',
+      iconColor: 'warning',
+      link: '/procurement/fason',
     },
     {
       title: 'Tedarikçiler',
@@ -407,7 +421,12 @@ export function ProcurementHubPage() {
   }
   if (queues.length > 0) {
     side.push(
-      <AttentionPanel key="queues" title="Satın Almayı Bekleyenler" icon="fas fa-inbox" items={queues} />,
+      <AttentionPanel
+        key="queues"
+        title="Satın Almayı Bekleyenler"
+        icon="fas fa-inbox"
+        items={queues}
+      />,
     );
   }
 

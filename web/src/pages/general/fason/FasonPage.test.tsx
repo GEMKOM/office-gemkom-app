@@ -2,7 +2,7 @@ import { authedFetch } from '@/auth/authService';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { renderWithProviders } from '@/test/render';
 import { notify } from '@/ui';
-import { FasonPage } from './FasonPage';
+import { FasonPage, ProcurementFasonPage, WarehouseFasonPage } from './FasonPage';
 
 vi.mock('@/auth/authService', () => ({
   authedFetch: vi.fn(),
@@ -38,14 +38,14 @@ const JOB = {
   job_nos: ['304-02'],
   purchase_step: 'ordered',
   purchase_label: 'Sipariş verildi',
-  material_step: 'ready',
-  material_label: 'Gönderime hazır',
+  material_step: 'received',
+  material_label: 'Depoda, gönderime hazır',
   suppliers: ['Sezgin Metal'],
   material_note: 'P-26 × 2',
   discussion_topic_id: null,
+  awaiting_approval: false,
   can_hand_over: false,
   can_receive: false,
-  can_mark_ready: false,
   can_send: true,
   created_at: '2026-11-19T08:00:00Z',
 };
@@ -83,7 +83,6 @@ const DETAIL = {
   steps: {
     handed_over: { at: '2026-11-19T09:00:00Z', by: 'Ali Usta' },
     received: { at: '2026-11-19T10:00:00Z', by: 'Depo' },
-    ready: { at: '2026-11-19T11:00:00Z', by: 'Depo' },
   },
 };
 
@@ -147,7 +146,7 @@ it('lists the jobs with purchasing and material side by side, by tab', async () 
   renderWithProviders(<FasonPage />, { route: '/general/fason' });
   expect(await screen.findByText('DR-2026-0042')).toBeInTheDocument();
   expect(screen.getByText('Sipariş verildi')).toBeInTheDocument();
-  expect(screen.getByText('Gönderime hazır')).toBeInTheDocument();
+  expect(screen.getByText('Depoda, gönderime hazır')).toBeInTheDocument();
   expect(calls()[0]!.url.searchParams.get('tab')).toBe('open');
   fireEvent.click(screen.getByText('Fasonda'));
   await waitFor(() =>
@@ -159,7 +158,10 @@ it('opens a job and sends its material to the order’s supplier', async () => {
   renderWithProviders(<FasonPage />, { route: '/general/fason?job=5' });
   const dialog = await screen.findByRole('dialog', { name: /Fason · DR-2026-0042/ });
   expect(await within(dialog).findByText('P-26 × 2')).toBeInTheDocument();
-  expect(within(dialog).getByText('Depo hazırladı')).toBeInTheDocument();
+  // One warehouse step: taken in is ready to send (no separate "Hazırlandı").
+  expect(within(dialog).getByText('Depo teslim aldı (gönderime hazır)')).toBeInTheDocument();
+  expect(within(dialog).queryByText('Depo hazırladı')).not.toBeInTheDocument();
+  expect(within(dialog).queryByRole('button', { name: 'Hazırlandı' })).not.toBeInTheDocument();
   fireEvent.click(within(dialog).getByRole('button', { name: 'Tedarikçiye Gönder' }));
   const send = await screen.findByRole('dialog', { name: 'Tedarikçiye Gönder' });
   fireEvent.change(within(send).getByLabelText('İrsaliye No'), { target: { value: 'IRS-9' } });
@@ -171,6 +173,90 @@ it('opens a job and sends its material to the order’s supplier', async () => {
   expect(
     await within(dialog).findByText(/Gönderildi → Sezgin Metal \(İrsaliye IRS-9\)/),
   ).toBeInTheDocument();
+});
+
+it('is the warehouse’s Fason Sevkiyatı: its own tabs, one Teslim Al step, no new request', async () => {
+  fetchMock.mockImplementation(async (url, init) => {
+    const path = new URL(String(url)).pathname;
+    const waiting = {
+      ...DETAIL,
+      material_step: 'handed_over',
+      material_label: 'Depoya teslim edildi',
+      can_receive: true,
+      can_send: false,
+      steps: { handed_over: DETAIL.steps.handed_over, received: { at: null, by: null } },
+    };
+    if (init?.method === 'POST' && path === '/fason/jobs/5/receive/')
+      return json({ ...DETAIL, can_send: false, unsent_orders: [] });
+    if (path === '/fason/jobs/5/') return json(waiting);
+    if (path === '/fason/jobs/') return json({ count: 1, results: [waiting] });
+    return json({});
+  });
+  renderWithProviders(<WarehouseFasonPage />, { route: '/warehouse/fason?job=5' });
+  expect(screen.getByRole('heading', { level: 1, name: 'Fason Sevkiyatı' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Yeni Fason Talebi' })).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(
+      calls()
+        .find((c) => c.url.pathname === '/fason/jobs/')
+        ?.url.searchParams.get('tab'),
+    ).toBe('to_receive'),
+  );
+  expect(screen.getByText('Gönderilecek')).toBeInTheDocument();
+
+  const dialog = await screen.findByRole('dialog', { name: /Fason · DR-2026-0042/ });
+  fireEvent.click(await within(dialog).findByRole('button', { name: 'Teslim Al' }));
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith('Malzeme teslim alındı; gönderime hazır'),
+  );
+  const post = calls().find((c) => c.method === 'POST')!;
+  expect(post.url.pathname).toBe('/fason/jobs/5/receive/');
+});
+
+it('is procurement’s Fason Takibi, where procurement may mark the material sent', async () => {
+  renderWithProviders(<ProcurementFasonPage />, { route: '/procurement/fason?job=5' });
+  expect(screen.getByRole('heading', { level: 1, name: 'Fason Takibi' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Yeni Fason Talebi' })).not.toBeInTheDocument();
+  const dialog = await screen.findByRole('dialog', { name: /Fason · DR-2026-0042/ });
+  expect(
+    await within(dialog).findByRole('button', { name: 'Tedarikçiye Gönder' }),
+  ).toBeInTheDocument();
+  expect(
+    calls()
+      .find((c) => c.url.pathname === '/fason/jobs/')!
+      .url.searchParams.get('tab'),
+  ).toBe('open');
+});
+
+it('says a job waiting for department approval takes no material step yet', async () => {
+  fetchMock.mockImplementation(async (url) => {
+    const path = new URL(String(url)).pathname;
+    const waiting = {
+      ...DETAIL,
+      department_request: { ...DETAIL.department_request, status: 'submitted' },
+      purchase_step: 'request',
+      purchase_label: 'Departman onayı bekleniyor',
+      material_step: 'waiting',
+      material_label: 'Malzeme bekleniyor',
+      awaiting_approval: true,
+      can_hand_over: false,
+      can_send: false,
+      lines: [],
+      unsent_orders: [],
+      steps: { handed_over: { at: null, by: null }, received: { at: null, by: null } },
+    };
+    if (path === '/fason/jobs/5/') return json(waiting);
+    if (path === '/fason/jobs/') return json({ count: 1, results: [waiting] });
+    return json({});
+  });
+  renderWithProviders(<FasonPage />, { route: '/general/fason?job=5' });
+  const dialog = await screen.findByRole('dialog', { name: /Fason · DR-2026-0042/ });
+  expect(
+    await within(dialog).findByText(/Departman onayı bekleniyor\. Malzeme onaydan sonra/),
+  ).toBeInTheDocument();
+  expect(
+    within(dialog).queryByRole('button', { name: 'Depoya Teslim Et' }),
+  ).not.toBeInTheDocument();
 });
 
 it('is Fason Talepleri and opens a fason request: one operation, its parts, submitted for approval', async () => {
