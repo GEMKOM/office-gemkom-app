@@ -65,6 +65,7 @@ import {
   itemRow,
   lockReason,
   pieceKindOf,
+  startSizeMode,
   newAttachment,
   normalizePriority,
   originalData,
@@ -217,12 +218,13 @@ export function PlanningRequestFormModal({
       form.setFieldValue(`items.${index}.item_name`, picked.name);
       if (picked.unit) form.setFieldValue(`items.${index}.item_unit`, picked.unit.toLowerCase());
     }
-    // Plate / boy cards are asked for in sizes; a new card starts over on a
-    // standard size (the dropdown also offers "Özel ölçü…").
+    // Plate / boy cards are asked for in sizes; a new card starts over: a plate
+    // on a standard size (the dropdown also offers "Özel ölçü…"), a bar on a
+    // length typed in metres.
     const kind = pieceKindOf(picked?.material_class);
     form.setFieldValue(`items.${index}.kind`, kind);
     form.setFieldValue(`items.${index}.item_id`, picked?.id ?? null);
-    form.setFieldValue(`items.${index}.size_mode`, kind ? 'standard' : '');
+    form.setFieldValue(`items.${index}.size_mode`, startSizeMode(kind));
     form.setFieldValue(`items.${index}.piece_width`, '');
     form.setFieldValue(`items.${index}.piece_length`, '');
     form.setFieldValue(`items.${index}.piece_count`, '');
@@ -620,31 +622,32 @@ export function PlanningRequestFormModal({
                       // A plate / boy line: size × count on the line itself; its
                       // quantity in the card's unit follows and is never typed.
                       <>
-                      <RowSizeEditor
-                        row={row}
-                        itemId={row.item_id ?? cardFromSearch(row.item_code)?.id ?? null}
-                        index={index}
-                        disabled={locked}
-                        onChange={(patch) => {
-                          for (const [field, value] of Object.entries(patch)) {
-                            form.setFieldValue(`items.${index}.${field}`, value);
+                        <RowSizeEditor
+                          row={row}
+                          itemId={row.item_id ?? cardFromSearch(row.item_code)?.id ?? null}
+                          index={index}
+                          disabled={locked}
+                          onChange={(patch) => {
+                            for (const [field, value] of Object.entries(patch)) {
+                              form.setFieldValue(`items.${index}.${field}`, value);
+                            }
+                          }}
+                          onQuantity={(quantity) =>
+                            form.setFieldValue(`items.${index}.quantity`, quantity)
                           }
-                        }}
-                        onQuantity={(quantity) =>
-                          form.setFieldValue(`items.${index}.quantity`, quantity)
-                        }
-                      />
-                      {row.import_note && !(Number(row.piece_length) > 0 && Number(row.piece_count) >= 1) ? (
-                        <Text
-                          size="xs"
-                          c="orange.8"
-                          mt={2}
-                          data-testid={`import-note-${index + 1}`}
-                        >
-                          <FaIcon icon="fas fa-exclamation-triangle" /> {row.import_note}: boy (m) ve
-                          adet seçin
-                        </Text>
-                      ) : null}
+                        />
+                        {row.import_note &&
+                        !(Number(row.piece_length) > 0 && Number(row.piece_count) >= 1) ? (
+                          <Text
+                            size="xs"
+                            c="orange.8"
+                            mt={2}
+                            data-testid={`import-note-${index + 1}`}
+                          >
+                            <FaIcon icon="fas fa-exclamation-triangle" /> {row.import_note}: boy (m)
+                            ve adet seçin
+                          </Text>
+                        ) : null}
                       </>
                     ) : (
                       <Group gap={6} wrap="nowrap">
@@ -867,7 +870,7 @@ export function PlanningRequestFormModal({
                       ...base,
                       item_id: item.card!.id,
                       kind: 'boy',
-                      size_mode: 'standard',
+                      size_mode: 'custom',
                       piece_length: '',
                       piece_count: '',
                       quantity: '',

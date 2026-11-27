@@ -110,7 +110,7 @@ it('resolves the stock cards of department request rows, except "Kart yok" ones'
   const resolved = withResolvedCards(rows, cards);
   expect(resolved.map((r) => [r.item_id, r.kind, r.size_mode, r.item_unit])).toEqual([
     [12, 'plate', 'standard', 'kg'],
-    [13, 'boy', 'standard', 'metre'],
+    [13, 'boy', 'custom', 'metre'],
     [14, null, '', 'adet'],
     [undefined, undefined, undefined, 'adet'],
     [undefined, undefined, undefined, 'adet'],
@@ -466,10 +466,11 @@ describe('plate / boy sizes', () => {
         piece_count: 3,
       }),
     );
+    // An older "standard" bar line goes as a custom length (bars are typed).
     expect(bar).toEqual({
       ok: true,
       value: {
-        size_mode: 'standard',
+        size_mode: 'custom',
         piece_width_mm: null,
         piece_length_mm: '6000',
         piece_count: 3,
