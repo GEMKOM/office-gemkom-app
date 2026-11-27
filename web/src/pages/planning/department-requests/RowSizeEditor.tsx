@@ -3,13 +3,13 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { standardSizesQueryOptions } from '@/api/planning/planningRequests';
 import { missingWeightText, previewWeight } from '@/api/warehouse/pieces';
-import { barMetres, formatNumber } from '@/lib/format';
+import { formatNumber } from '@/lib/format';
 import { FaIcon } from '@/ui';
-import type { ItemRow } from './logic';
+import { startSizeMode, type ItemRow } from './logic';
 
 // A plate / boy planning line's quantity cell, on the line itself: the size
-// (a standard sheet size or bar length from the dropdown, or "Özel ölçü…" for
-// a custom W × L / length) times a count, then the one figure it comes to:
+// (a standard sheet size from the dropdown or "Özel ölçü…" for a custom W × L;
+// a bar's length always typed in metres) times a count, then the one figure it comes to:
 // total kg for a plate, total metres and kg for a bar. The line's quantity in
 // the card's unit follows from them (backend weight for kg, length for metre,
 // count for adet); the backend computes the same when it saves. Nothing is
@@ -91,7 +91,9 @@ export function RowSizeEditor({
 }) {
   const kind = row.kind === 'plate' ? 'plate' : 'boy';
   const sizes = useQuery(standardSizesQueryOptions());
-  const mode = row.size_mode ?? '';
+  // A bar has no standard lengths to pick from: an older "standard" bar line
+  // (6 m / 12 m) shows its length typed like any other.
+  const mode = kind === 'boy' && row.size_mode === 'standard' ? 'custom' : (row.size_mode ?? '');
   const width = Number(row.piece_width) || 0;
   const length = Number(row.piece_length) || 0;
   const unit = (row.item_unit || '').toLowerCase();
@@ -124,14 +126,18 @@ export function RowSizeEditor({
     return (
       <Group gap={6} wrap="nowrap" data-testid={`size-row-${index + 1}`}>
         <Text size="xs" fw={600} aria-label={`Miktar ${index + 1}`}>
-          {Number(row.quantity) > 0 ? `${formatNumber(Number(row.quantity), 2)} ${row.item_unit}` : '—'}
+          {Number(row.quantity) > 0
+            ? `${formatNumber(Number(row.quantity), 2)} ${row.item_unit}`
+            : '—'}
         </Text>
         {disabled ? null : (
           <Text
             size="xs"
             c="blue"
             style={{ cursor: 'pointer' }}
-            onClick={() => onChange({ size_mode: 'standard', piece_width: '', piece_length: '' })}
+            onClick={() =>
+              onChange({ size_mode: startSizeMode(kind), piece_width: '', piece_length: '' })
+            }
           >
             ölçü gir
           </Text>
@@ -140,25 +146,14 @@ export function RowSizeEditor({
     );
   }
 
-  const standardValue =
-    kind === 'plate'
-      ? width && length
-        ? `${width}x${length}`
-        : null
-      : length
-        ? String(length)
-        : null;
+  // Only plates reach the dropdown (a bar's mode is never 'standard' here).
+  const standardValue = width && length ? `${width}x${length}` : null;
   const standardData = [
-    ...(kind === 'plate'
-      ? (sizes.data?.plate ?? []).map((s) => ({
-          value: `${s.width_mm}x${s.length_mm}`,
-          // All sizes are mm: the plate label without it fits the cell.
-          label: s.label.replace(/\s*mm$/, ''),
-        }))
-      : (sizes.data?.bar ?? []).map((s) => ({
-          value: String(s.length_mm),
-          label: barMetres(Number(s.length_mm)),
-        }))),
+    ...(sizes.data?.plate ?? []).map((s) => ({
+      value: `${s.width_mm}x${s.length_mm}`,
+      // All sizes are mm: the plate label without it fits the cell.
+      label: s.label.replace(/\s*mm$/, ''),
+    })),
     { value: CUSTOM, label: 'Özel ölçü…' },
   ];
 
@@ -182,7 +177,7 @@ export function RowSizeEditor({
           size="xs"
           w={140}
           disabled={disabled}
-          placeholder={kind === 'plate' ? 'Sac ölçüsü' : 'Boy'}
+          placeholder="Sac ölçüsü"
           aria-label={`Ölçü ${index + 1}`}
           data={standardData}
           value={standardValue}
@@ -192,12 +187,8 @@ export function RowSizeEditor({
             if (value === CUSTOM) {
               return onChange({ size_mode: 'custom', piece_width: '', piece_length: '' });
             }
-            if (kind === 'plate') {
-              const [w, l] = value.split('x').map(Number);
-              onChange({ piece_width: w, piece_length: l });
-            } else {
-              onChange({ piece_length: Number(value) });
-            }
+            const [w, l] = value.split('x').map(Number);
+            onChange({ piece_width: w, piece_length: l });
           }}
         />
       ) : (
@@ -249,13 +240,15 @@ export function RowSizeEditor({
               }
             />
           )}
-          {disabled ? null : (
+          {disabled || kind === 'boy' ? null : (
             <Tooltip label="Standart ölçüye dön" withArrow>
               <ActionIcon
                 size="sm"
                 variant="subtle"
                 aria-label={`Standart ölçü ${index + 1}`}
-                onClick={() => onChange({ size_mode: 'standard', piece_width: '', piece_length: '' })}
+                onClick={() =>
+                  onChange({ size_mode: 'standard', piece_width: '', piece_length: '' })
+                }
               >
                 <FaIcon icon="fas fa-list" />
               </ActionIcon>
