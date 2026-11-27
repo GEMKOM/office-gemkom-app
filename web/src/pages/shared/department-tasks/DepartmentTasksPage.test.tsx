@@ -371,3 +371,61 @@ it('Gantt view asks for the visible month, ordered by start date', async () => {
   expect(screen.queryByRole('columnheader', { name: 'Görev Başlığı' })).not.toBeInTheDocument();
   expect(screen.getByText('Kullanıcılara Göre')).toBeInTheDocument();
 });
+
+it('a sibling consult shows its answer note, files and discussion comments', async () => {
+  const SIBLING = {
+    id: 5,
+    task_type: 'sales_consult',
+    department: 'design',
+    department_display: 'Dizayn',
+    status: 'completed',
+    status_display: 'Tamamlandı',
+    notes: 'Çizimler hazır',
+    completion_files: [],
+    discussion_topic: {
+      id: 80,
+      comments: [
+        {
+          id: 9,
+          content: 'Ölçüler müşteriyle teyit edildi',
+          created_by_name: 'Ayşe Yılmaz',
+          created_by_username: 'ayse',
+          created_at: '2026-11-20T09:00:00Z',
+        },
+      ],
+    },
+  };
+  detail = {
+    ...MAIN,
+    task_type: 'sales_consult',
+    department: 'logistics',
+    status: 'pending',
+    sibling_consult_tasks: [
+      {
+        id: 5,
+        department: 'design',
+        department_display: 'Dizayn',
+        status: 'completed',
+        status_display: 'Tamamlandı',
+      },
+    ],
+    discussion_topic: { id: 81, comments: [] },
+  };
+  const base = fetchMock.getMockImplementation()!;
+  fetchMock.mockImplementation((url, init) =>
+    new URL(String(url)).pathname === '/projects/department-tasks/5/'
+      ? json(SIBLING)
+      : base(url, init),
+  );
+  renderPage(PLANNING_TASKS, '/planning/projects/?task=1');
+  const modal = await screen.findByRole('dialog', { name: 'Görev İşlemleri' });
+  fireEvent.click(await within(modal).findByRole('button', { name: /Dizayn/ }));
+  const sibling = await screen.findByRole('dialog', { name: /Dizayn/ });
+  expect(await within(sibling).findByText('Çizimler hazır')).toBeInTheDocument();
+  expect(within(sibling).getByText('Tartışma Yorumları (1)')).toBeInTheDocument();
+  expect(within(sibling).getByText('Ölçüler müşteriyle teyit edildi')).toBeInTheDocument();
+  expect(within(sibling).getByText('Ayşe Yılmaz')).toBeInTheDocument();
+  // Read-only here: no edit pencil, no new-comment box.
+  expect(within(sibling).queryByRole('button', { name: 'Düzenle' })).not.toBeInTheDocument();
+  expect(within(sibling).queryByRole('button', { name: /Yorum Ekle/ })).not.toBeInTheDocument();
+});

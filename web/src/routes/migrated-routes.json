@@ -85,6 +85,8 @@
   "/general/department-requests/list",
   "/general/department-requests/pending",
   "/general/fason",
+  "/warehouse/fason",
+  "/procurement/fason",
   "/general/overtime/pending",
   "/general/overtime/registry",
   "/general/overtime/users",

@@ -7,6 +7,7 @@ import {
   NumberInput,
   SegmentedControl,
   Select,
+  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -41,6 +42,7 @@ import {
   searchPieceCards,
   searchSuppliers,
   areaLabel,
+  dimsLabel,
   shapeLabel,
   sizeLabel,
   ORIGIN_OPTIONS,
@@ -83,7 +85,8 @@ import {
   plateSizeInput,
   plateSizeChanged,
   plateSizeOf,
-  PlateSizeFields,
+  PlateShapeSelect,
+  PlateSizeInputs,
   type PlateSizeDraft,
 } from './PlateSizeFields';
 import { codedSheets, SheetCodesModal, type CodedSheet } from './SheetCodes';
@@ -259,12 +262,6 @@ export function Weight({
   );
 }
 
-function KindBadge({ kind }: { kind: PieceKind }) {
-  return (
-    <StatusBadge color={kind === 'plate' ? 'blue' : 'purple'}>{KIND_LABELS[kind]}</StatusBadge>
-  );
-}
-
 function CardCell({ code, name, active }: { code: string; name: string; active: boolean }) {
   return (
     <Stack gap={0}>
@@ -279,7 +276,31 @@ function CardCell({ code, name, active }: { code: string; name: string; active: 
   );
 }
 
-const pieceColumns: DataTableColumn<MaterialPiece>[] = [
+// One kind per page, so no Tür column. A plate row is one sheet: its weight in one
+// Ağırlık column, its shape in its own (Ölçü then leaves the shape's name out).
+// A bar lot holds several, so Boy Stoğu keeps Birim and Toplam.
+/** Kaynak: the source, and for a row split off a lot (a part moved, a sheet given its
+ * own code) a small "bölünmüş" note naming the lot it came from. */
+function OriginText({ piece }: { piece: MaterialPiece }) {
+  if (piece.origin !== 'split') return <>{piece.origin_label}</>;
+  return (
+    <Tooltip label={splitText(piece)} multiline w={260}>
+      <span>
+        {piece.origin_label}{' '}
+        <Text span size="xs" c="dimmed">
+          · bölünmüş
+        </Text>
+      </span>
+    </Tooltip>
+  );
+}
+
+const splitText = (piece: MaterialPiece) =>
+  piece.parent_code
+    ? `${piece.parent_code} kaydından ayrıldı`
+    : 'Bir lottan ayrıldı (parça taşındı veya sac kendi kodunu aldı)';
+
+const allPieceColumns: DataTableColumn<MaterialPiece>[] = [
   {
     key: 'code',
     header: <HeaderHelp label="Sac Kodu" help={SHEET_CODE_HELP} />,
@@ -302,12 +323,8 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
       <CardCell code={row.item_code} name={row.item_name} active={row.item_is_active} />
     ),
   },
-  {
-    key: 'kind',
-    header: 'Tür',
-    render: (row) => (row.kind ? <KindBadge kind={row.kind} /> : null),
-  },
-  { key: 'size', header: 'Ölçü', render: (row) => <span style={mono}>{sizeLabel(row)}</span> },
+  { key: 'shape', header: 'Şekil', render: (row) => shapeLabel(row.shape) },
+  { key: 'size', header: 'Ölçü', render: (row) => <span style={mono}>{dimsLabel(row)}</span> },
   {
     key: 'quantity',
     header: 'Adet',
@@ -342,6 +359,12 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
     align: 'right',
     render: (row) => <Weight value={row.total_kg} kind={row.kind} />,
   },
+  {
+    key: 'weight',
+    header: 'Ağırlık',
+    align: 'right',
+    render: (row) => <Weight value={row.total_kg} kind={row.kind} />,
+  },
   { key: 'place', header: 'Yer', render: (row) => placeLabel(row) },
   { key: 'heat', header: 'Döküm No', render: (row) => row.heat_number || '–' },
   {
@@ -351,7 +374,7 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
     render: (row) =>
       row.needs_review ? (
         <Group gap={4} wrap="nowrap">
-          {row.origin_label}
+          <OriginText piece={row} />
           <Tooltip label={row.review_note || 'Planlama kontrol etmeli'} multiline w={280}>
             <span>
               <StatusBadge color="orange">Kontrol</StatusBadge>
@@ -359,10 +382,19 @@ const pieceColumns: DataTableColumn<MaterialPiece>[] = [
           </Tooltip>
         </Group>
       ) : (
-        row.origin_label
+        <OriginText piece={row} />
       ),
   },
 ];
+
+// Sheet codes, shapes and per-sheet weights belong to plates; bars are lots by length.
+const PLATE_ONLY = new Set(['code', 'shape', 'weight']);
+const BAR_ONLY = new Set(['unit_kg', 'total_kg']);
+
+export const pieceColumns: Record<PieceKind, DataTableColumn<MaterialPiece>[]> = {
+  plate: allPieceColumns.filter((c) => !BAR_ONLY.has(String(c.key))),
+  boy: allPieceColumns.filter((c) => !PLATE_ONLY.has(String(c.key))),
+};
 
 // Sac Stoğu: the sheets of a card and size in one row, opened to each sheet
 // (its code, heat no and place). A size of one sheet is just that sheet. The
@@ -391,7 +423,7 @@ export function sizeGrouping(opened: boolean): DataTableGrouping<MaterialPiece> 
       const reserved = rows.reduce((n, r) => n + (r.reserved_quantity ?? 0), 0);
       const weighed = rows.every((r) => r.total_kg !== null);
       const total = weighed ? String(rows.reduce((n, r) => n + Number(r.total_kg), 0)) : null;
-      const unit = first.kind === 'plate' ? 'sac' : 'lot';
+      const unit = first.kind === 'plate' ? 'plaka' : 'lot';
       return {
         cells: {
           code: (
@@ -402,8 +434,8 @@ export function sizeGrouping(opened: boolean): DataTableGrouping<MaterialPiece> 
           card: (
             <CardCell code={first.item_code} name={first.item_name} active={first.item_is_active} />
           ),
-          kind: first.kind ? <KindBadge kind={first.kind} /> : null,
-          size: <span style={mono}>{sizeLabel(first)}</span>,
+          shape: shapeLabel(first.shape),
+          size: <span style={mono}>{dimsLabel(first)}</span>,
           quantity: reserved ? (
             <span>
               {quantity}{' '}
@@ -416,6 +448,7 @@ export function sizeGrouping(opened: boolean): DataTableGrouping<MaterialPiece> 
           ),
           unit_kg: first.unit_kg !== null ? kg(first.unit_kg) : '–',
           total_kg: <Weight value={total} kind={first.kind} />,
+          weight: <Weight value={total} kind={first.kind} />,
           place: sameOrCount(rows.map(placeLabel), 'yer'),
           heat: sameOrCount(
             rows.map((r) => r.heat_number),
@@ -436,11 +469,6 @@ const cardColumns: DataTableColumn<PieceCard>[] = [
     key: 'card',
     header: 'Stok Kartı',
     render: (row) => <CardCell code={row.code} name={row.name} active={row.is_active} />,
-  },
-  {
-    key: 'kind',
-    header: 'Tür',
-    render: (row) => <KindBadge kind={row.kind} />,
   },
   {
     key: 'size',
@@ -713,25 +741,34 @@ function NewPiecesModal({ onClose, kind }: { onClose: () => void; kind: PieceKin
           onChange={setCardId}
         />
         {card ? (
-          <Group grow align="flex-start">
-            {card.kind === 'plate' ? (
-              <PlateSizeFields value={plateSize} onChange={setPlateSize} />
-            ) : (
+          // Plates: Şekil and Adet on one row, the shape's sizes on the next (three for
+          // Şekilsiz), so every row is level. Bars: Boy and Adet.
+          <>
+            <SimpleGrid cols={2}>
+              {card.kind === 'plate' ? (
+                <PlateShapeSelect value={plateSize} onChange={setPlateSize} />
+              ) : (
+                <NumberInput
+                  label="Boy (m)"
+                  {...BAR_METRES_INPUT}
+                  value={length}
+                  onChange={setLength}
+                />
+              )}
               <NumberInput
-                label="Boy (m)"
-                {...BAR_METRES_INPUT}
-                value={length}
-                onChange={setLength}
+                label="Adet"
+                min={1}
+                allowDecimal={false}
+                value={quantity}
+                onChange={setQuantity}
               />
-            )}
-            <NumberInput
-              label="Adet"
-              min={1}
-              allowDecimal={false}
-              value={quantity}
-              onChange={setQuantity}
-            />
-          </Group>
+            </SimpleGrid>
+            {card.kind === 'plate' ? (
+              <SimpleGrid cols={plateSize.shape === 'irregular' ? 3 : 2}>
+                <PlateSizeInputs value={plateSize} onChange={setPlateSize} />
+              </SimpleGrid>
+            ) : null}
+          </>
         ) : null}
         {card && size !== null ? (
           <WeightPreviewLine card={card} size={size} quantity={Number(quantity)} />
@@ -930,23 +967,33 @@ function LotEditModal({ piece, onClose }: { piece: MaterialPiece; onClose: () =>
           Adet ve yer kendi işlemleriyle değişir (Adedi Düzelt, Taşı). Değişiklik lotun geçmişinde
           kim ve ne zaman ile görünür.
         </Text>
-        <Group grow align="flex-start">
-          {plate ? (
-            <PlateSizeFields
-              value={plateSize}
-              onChange={setPlateSize}
-              disabled={Boolean(sizeLock)}
-            />
-          ) : (
-            <NumberInput
-              label="Boy (m)"
-              {...BAR_METRES_INPUT}
-              disabled={Boolean(sizeLock)}
-              value={length}
-              onChange={setLength}
-            />
-          )}
-        </Group>
+        {plate ? (
+          // Şekil on its own row, the shape's sizes level on the next.
+          <>
+            <SimpleGrid cols={2}>
+              <PlateShapeSelect
+                value={plateSize}
+                onChange={setPlateSize}
+                disabled={Boolean(sizeLock)}
+              />
+            </SimpleGrid>
+            <SimpleGrid cols={plateSize.shape === 'irregular' ? 3 : 2}>
+              <PlateSizeInputs
+                value={plateSize}
+                onChange={setPlateSize}
+                disabled={Boolean(sizeLock)}
+              />
+            </SimpleGrid>
+          </>
+        ) : (
+          <NumberInput
+            label="Boy (m)"
+            {...BAR_METRES_INPUT}
+            disabled={Boolean(sizeLock)}
+            value={length}
+            onChange={setLength}
+          />
+        )}
         <Text size="xs" c={sizeLock ? 'orange.8' : 'dimmed'}>
           {sizeLock
             ? `Ölçü değiştirilemez: ${sizeLock}. Adedi düzeltip doğru ölçüde yeni lot ekleyin.`
@@ -1097,7 +1144,13 @@ function PieceDetail({ piece, onClose }: { piece: MaterialPiece; onClose: () => 
     { label: 'Yer', value: placeLabel(piece) },
     { label: 'Döküm no', value: piece.heat_number || '–' },
     { label: 'Sertifika no', value: piece.certificate_no || '–' },
-    { label: 'Kaynak', value: piece.origin_label },
+    {
+      label: 'Kaynak',
+      value:
+        piece.origin === 'split'
+          ? `${piece.origin_label} · ${splitText(piece)}`
+          : piece.origin_label,
+    },
     ...(piece.needs_review
       ? [{ label: 'Kontrol', value: <StatusBadge color="orange">Kontrol edilmeli</StatusBadge> }]
       : []),
@@ -1480,7 +1533,7 @@ export function PiecesPage({ kind, title, subtitle, backTo }: StockPageProps) {
           }
           filters={filters}
           data={rows}
-          columns={pieceColumns}
+          columns={pieceColumns[kind]}
           getRowId={(row) => String(row.id)}
           loading={pieceQuery.isFetching}
           onRowClick={(row) => apply({ piece: String(row.id) })}

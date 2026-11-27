@@ -1,6 +1,10 @@
 import { MenuCards, type MenuCard } from '@/ui';
 import { waitingBadge } from '../hubFigures';
-import { useCranePendingCount, useDepartmentRequestPendingCount } from './generalHubData';
+import {
+  useCranePendingCount,
+  useDepartmentRequestPendingCount,
+  useFasonRequestPendingCount,
+} from './generalHubData';
 
 /**
  * Talepler (was Genel, reorganised 2026-11-19): the requests that cross
@@ -8,10 +12,11 @@ import { useCranePendingCount, useDepartmentRequestPendingCount } from './genera
  * Kaynakları and İSG to its own section; leave and overtime (balance,
  * requests, approvals) live in the user menu. /general stays always allowed;
  * each card shows only to users who can open it, and its pill counts what
- * waits on the user behind it.
+ * waits on the user behind it and opens that Onaylar tab.
  */
 export function GeneralHubPage() {
   const department = useDepartmentRequestPendingCount();
+  const fason = useFasonRequestPendingCount();
   const crane = useCranePendingCount();
 
   const cards: MenuCard[] = [
@@ -21,7 +26,12 @@ export function GeneralHubPage() {
       icon: 'fas fa-boxes',
       iconColor: 'info',
       link: '/general/department-requests',
-      badge: waitingBadge(department.data, 'onayınızı bekliyor', 'yellow'),
+      badge: waitingBadge(
+        department.data,
+        'onayınızı bekliyor',
+        'yellow',
+        '/approvals?queue=department',
+      ),
     },
     {
       title: 'Vinç Talepleri',
@@ -29,7 +39,7 @@ export function GeneralHubPage() {
       icon: 'fas fa-truck-pickup',
       iconColor: 'secondary',
       link: '/general/crane-requests',
-      badge: waitingBadge(crane.data, 'onayınızı bekliyor', 'yellow'),
+      badge: waitingBadge(crane.data, 'onayınızı bekliyor', 'yellow', '/approvals?queue=crane'),
     },
     {
       title: 'Fason Talepleri',
@@ -38,6 +48,7 @@ export function GeneralHubPage() {
       icon: 'fas fa-people-carry',
       iconColor: 'warning',
       link: '/general/fason',
+      badge: waitingBadge(fason.data, 'onayınızı bekliyor', 'yellow', '/approvals?queue=fason'),
     },
   ];
 

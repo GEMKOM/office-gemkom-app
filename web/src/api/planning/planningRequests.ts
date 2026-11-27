@@ -27,6 +27,8 @@ export interface PurchaseRequestInfo {
 
 export interface PlanningRequestItem {
   id?: number;
+  /** The stock card's id as the API sends it (item_id is write-only there). */
+  item?: number | null;
   item_id?: number | null;
   item_code?: string | null;
   item_name?: string | null;

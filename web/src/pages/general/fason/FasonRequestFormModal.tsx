@@ -1,6 +1,8 @@
 import {
   ActionIcon,
+  Badge,
   Button,
+  FileButton,
   Grid,
   Group,
   NumberInput,
@@ -30,6 +32,8 @@ export interface FasonPartRow {
   part: string;
   quantity: number | string;
   job_no: string | null;
+  /** The part's own files (drawing, DXF…); they stay with the row when others are removed. */
+  files: File[];
 }
 
 export interface FasonRequestFormValues {
@@ -41,7 +45,33 @@ export interface FasonRequestFormValues {
 }
 
 let nextKey = 1;
-const emptyRow = (): FasonPartRow => ({ key: nextKey++, part: '', quantity: 1, job_no: null });
+const emptyRow = (): FasonPartRow => ({
+  key: nextKey++,
+  part: '',
+  quantity: 1,
+  job_no: null,
+  files: [],
+});
+
+/**
+ * The upload of a fason request: the general files first, then each part's
+ * own, and the department request's file_item_mapping ({file index: [row
+ * index]}) that ties a part's files to its row.
+ */
+export function fasonUpload(
+  general: readonly File[],
+  rows: readonly Pick<FasonPartRow, 'files'>[],
+): { files: File[]; file_item_mapping: Record<string, number[]> } {
+  const files = [...general];
+  const mapping: Record<string, number[]> = {};
+  rows.forEach((row, rowIndex) => {
+    for (const file of row.files) {
+      mapping[String(files.length)] = [rowIndex];
+      files.push(file);
+    }
+  });
+  return { files, file_item_mapping: mapping };
+}
 
 /**
  * The department request a fason request is: one row per part, each on the
@@ -121,6 +151,7 @@ export function FasonRequestFormModal({ onClose, onCreated }: FasonRequestFormMo
       return;
     }
     const { title, items } = buildFasonRequest(card, values);
+    const upload = fasonUpload(files, values.rows);
     try {
       const created = await create.mutateAsync({
         title,
@@ -128,7 +159,10 @@ export function FasonRequestFormModal({ onClose, onCreated }: FasonRequestFormMo
         priority: 'normal',
         needed_date: values.needed_date || null,
         items,
-        files,
+        files: upload.files,
+        ...(Object.keys(upload.file_item_mapping).length > 0
+          ? { file_item_mapping: upload.file_item_mapping }
+          : {}),
       });
       void queryClient.invalidateQueries({ queryKey: fasonKeys.all });
       notify.success('Fason talebi oluşturuldu; departman onayına gönderildi');
@@ -169,7 +203,7 @@ export function FasonRequestFormModal({ onClose, onCreated }: FasonRequestFormMo
           <Stack gap="xs">
             {rows.map((row, index) => (
               <Grid key={row.key} gap="xs" align="flex-end" data-testid="fason-part-row">
-                <Grid.Col span={{ base: 12, sm: 5 }}>
+                <Grid.Col span={{ base: 12, sm: 4 }}>
                   <TextInput
                     size="xs"
                     label={index === 0 ? 'Parça No / Açıklama' : undefined}
@@ -202,17 +236,74 @@ export function FasonRequestFormModal({ onClose, onCreated }: FasonRequestFormMo
                     {...form.getInputProps(`rows.${index}.job_no`)}
                   />
                 </Grid.Col>
-                <Grid.Col span={{ base: 2, sm: 1 }}>
-                  <ActionIcon
-                    variant="default"
-                    color="red"
-                    aria-label={`Parçayı kaldır ${index + 1}`}
-                    disabled={rows.length === 1}
-                    onClick={() => form.removeListItem('rows', index)}
-                  >
-                    <FaIcon icon="fas fa-trash" />
-                  </ActionIcon>
+                <Grid.Col span={{ base: 2, sm: 2 }}>
+                  <Group gap={4} wrap="nowrap">
+                    {/* The part's own files: picked here, listed under the row. */}
+                    <FileButton
+                      multiple
+                      onChange={(picked) => {
+                        if (picked.length)
+                          form.setFieldValue(`rows.${index}.files`, [...row.files, ...picked]);
+                      }}
+                    >
+                      {(props) => (
+                        <ActionIcon
+                          {...props}
+                          variant={row.files.length ? 'light' : 'default'}
+                          aria-label={`Dosya ekle ${index + 1}`}
+                          title="Bu parçaya dosya ekle"
+                        >
+                          <FaIcon icon="fas fa-paperclip" />
+                        </ActionIcon>
+                      )}
+                    </FileButton>
+                    {row.files.length ? (
+                      <Badge size="sm" variant="light" aria-label={`Dosya sayısı ${index + 1}`}>
+                        {row.files.length}
+                      </Badge>
+                    ) : null}
+                    <ActionIcon
+                      variant="default"
+                      color="red"
+                      aria-label={`Parçayı kaldır ${index + 1}`}
+                      disabled={rows.length === 1}
+                      onClick={() => form.removeListItem('rows', index)}
+                    >
+                      <FaIcon icon="fas fa-trash" />
+                    </ActionIcon>
+                  </Group>
                 </Grid.Col>
+                {row.files.length ? (
+                  <Grid.Col span={12} data-testid={`fason-part-files-${index + 1}`}>
+                    <Group gap={6}>
+                      {row.files.map((file, fileIndex) => (
+                        <Badge
+                          key={`${file.name}-${fileIndex}`}
+                          variant="outline"
+                          size="sm"
+                          leftSection={<FaIcon icon="fas fa-paperclip" />}
+                          rightSection={
+                            <ActionIcon
+                              size="xs"
+                              variant="transparent"
+                              aria-label={`${file.name} dosyasını kaldır`}
+                              onClick={() =>
+                                form.setFieldValue(
+                                  `rows.${index}.files`,
+                                  row.files.filter((_, i) => i !== fileIndex),
+                                )
+                              }
+                            >
+                              <FaIcon icon="fas fa-times" />
+                            </ActionIcon>
+                          }
+                        >
+                          {file.name}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </Grid.Col>
+                ) : null}
               </Grid>
             ))}
             <Group>
@@ -239,8 +330,8 @@ export function FasonRequestFormModal({ onClose, onCreated }: FasonRequestFormMo
           <Grid.Col span={{ base: 12, sm: 6 }}>
             <FileDropInput
               multiple
-              label="Dosyalar"
-              description="Teknik resim, açıklama (opsiyonel)"
+              label="Genel Dosyalar"
+              description="Tüm talep için (opsiyonel); parçaya ait dosyaları satırındaki ataşla ekleyin"
               leftSection={<FaIcon icon="fas fa-paperclip" />}
               value={files}
               onChange={(picked) => setFiles(picked ?? [])}

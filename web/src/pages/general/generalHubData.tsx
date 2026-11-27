@@ -35,7 +35,15 @@ export function useCranePendingCount() {
 
 export function useDepartmentRequestPendingCount() {
   return useQuery({
-    ...departmentRequestPendingCountQueryOptions(),
+    ...departmentRequestPendingCountQueryOptions('material'),
+    enabled: hasRouteAccess(PENDING.departmentRequests),
+  });
+}
+
+/** Fason requests waiting for the user's approval (same approvers as department requests). */
+export function useFasonRequestPendingCount() {
+  return useQuery({
+    ...departmentRequestPendingCountQueryOptions('fason'),
     enabled: hasRouteAccess(PENDING.departmentRequests),
   });
 }

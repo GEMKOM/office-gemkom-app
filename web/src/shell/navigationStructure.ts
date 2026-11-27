@@ -575,6 +575,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
             icon: 'fas fa-undo',
             children: {},
           },
+          // Fason material: taken in from manufacturing, sent to the supplier.
+          '/warehouse/fason': {
+            label: 'Fason Sevkiyatı',
+            icon: 'fas fa-people-carry',
+            children: {},
+          },
           '/warehouse/transfers': {
             label: 'Depo Transferi',
             icon: 'fas fa-exchange-alt',
@@ -686,6 +692,12 @@ export const NAVIGATION_STRUCTURE: NavTree = {
       '/procurement/payment-lists': {
         label: 'Ödeme Listeleri',
         icon: 'fas fa-money-check-dollar',
+        children: {},
+      },
+      // Where each fason job's purchasing and material stand; procurement may send.
+      '/procurement/fason': {
+        label: 'Fason Takibi',
+        icon: 'fas fa-people-carry',
         children: {},
       },
       '/procurement/reports': {

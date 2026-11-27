@@ -89,11 +89,19 @@ describe('Genel', () => {
     );
     // Nothing waiting for a crane approval: no pill at all.
     expect(card('Vinç Talepleri')).not.toHaveTextContent('bekliyor');
+    // The pill opens the Onaylar tab where the approval is.
+    expect(
+      within(card('Departman Talepleri')).getByRole('link', { name: '2 onayınızı bekliyor' }),
+    ).toHaveAttribute('href', '/approvals?queue=department');
     const pending = calls().filter((url) => url.pathname.endsWith('/pending_approval/'));
-    // Only the queues behind its own cards: department and crane requests.
-    expect(pending.map((url) => url.pathname).sort()).toEqual([
+    // Only the queues behind its own cards: department (material) and fason
+    // requests, each counted apart, and crane requests.
+    expect(
+      pending.map((url) => `${url.pathname} ${url.searchParams.get('kind') ?? ''}`.trim()).sort(),
+    ).toEqual([
       '/cranes/requests/pending_approval/',
-      '/planning/department-requests/pending_approval/',
+      '/planning/department-requests/pending_approval/ fason',
+      '/planning/department-requests/pending_approval/ material',
     ]);
   });
 

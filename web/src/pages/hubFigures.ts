@@ -1,6 +1,9 @@
 import { hasRouteAccess } from '@/auth/accessControl';
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { pendingApprovalCountQueryOptions, type PendingApprovalKind } from '@/api/general/approvals';
+import {
+  pendingApprovalCountQueryOptions,
+  type PendingApprovalKind,
+} from '@/api/general/approvals';
 import { isgSummaryQueryOptions } from '@/api/isg/issues';
 import { formatNumber } from '@/lib/format';
 import type { MenuCard } from '@/ui';
@@ -12,8 +15,15 @@ export function countValue(query: Pick<UseQueryResult<number | undefined>, 'data
 }
 
 /** A pill on a parent hub's card, only when something is waiting. */
-export function waitingBadge(count: number | undefined, label: string, color: NonNullable<MenuCard['badge']>['color']) {
-  return count ? { label: `${formatNumber(count)} ${label}`, color } : undefined;
+export function waitingBadge(
+  count: number | undefined,
+  label: string,
+  color: NonNullable<MenuCard['badge']>['color'],
+  link?: string,
+) {
+  return count
+    ? { label: `${formatNumber(count)} ${label}`, color, ...(link ? { link } : {}) }
+    : undefined;
 }
 
 /**

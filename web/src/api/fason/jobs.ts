@@ -4,9 +4,11 @@ import { apiFetch, cleanParams } from '../client';
 /**
  * Fason jobs (backend fason app): a workshop department request with
  * workshop-route F cards (büküm, işleme, galvaniz…). Purchasing goes the usual
- * way (department approval → planning → purchase request → PO); the material
- * goes manufacturing → warehouse → supplier → back in Mal Kabul → pulled.
- * Manufacturing, warehouse, planning and procurement all see the page.
+ * way (department approval → planning → purchase request → PO); once the
+ * request is approved the material goes manufacturing → warehouse (one step:
+ * taken in, ready to send) → supplier (sent by the warehouse or procurement)
+ * → back in Mal Kabul → pulled. The requester follows it on Fason Talepleri,
+ * the warehouse on Fason Sevkiyatı, procurement on Fason Takibi.
  */
 
 export type FasonPurchaseStep =
@@ -19,9 +21,10 @@ export type FasonPurchaseStep =
   | 'cancelled';
 
 export type FasonMaterialStep =
-  'waiting' | 'handed_over' | 'received' | 'ready' | 'sent' | 'returned' | 'pulled';
+  'waiting' | 'handed_over' | 'received' | 'sent' | 'returned' | 'pulled';
 
-export type FasonTab = 'open' | 'warehouse' | 'at_supplier' | 'done' | 'all';
+export type FasonTab =
+  'open' | 'warehouse' | 'to_receive' | 'to_send' | 'at_supplier' | 'done' | 'all';
 
 export interface FasonJob {
   id: number;
@@ -46,11 +49,24 @@ export interface FasonJob {
   suppliers: string[];
   material_note: string;
   discussion_topic_id: number | null;
+  /** Waiting for department approval: no material step yet. */
+  awaiting_approval: boolean;
   can_hand_over: boolean;
+  /** The warehouse's one step (taken in = ready to send). */
   can_receive: boolean;
-  can_mark_ready: boolean;
+  /** The warehouse or procurement marks it sent. */
   can_send: boolean;
   created_at: string | null;
+}
+
+/** A file of the request (planning FileAttachmentSerializer). */
+export interface FasonFile {
+  id: number;
+  asset_id: number;
+  file_url: string;
+  file_name: string;
+  uploaded_at: string | null;
+  uploaded_by_username?: string | null;
 }
 
 export interface FasonStepMark {
@@ -66,7 +82,11 @@ export interface FasonJobDetail extends FasonJob {
     unit: string;
     job_no: string;
     description: string;
+    /** The part's own files. */
+    files?: FasonFile[];
   }[];
+  /** The request's general files (not tied to a part). */
+  files?: FasonFile[];
   lines: {
     id: number;
     planning_request: string;
@@ -91,7 +111,7 @@ export interface FasonJobDetail extends FasonJob {
     sent_at: string | null;
     sent_by: string | null;
   }[];
-  steps: { handed_over: FasonStepMark; received: FasonStepMark; ready: FasonStepMark };
+  steps: { handed_over: FasonStepMark; received: FasonStepMark };
 }
 
 export const fasonKeys = {
@@ -122,7 +142,6 @@ export function fasonJobQueryOptions(id: number) {
 export type FasonAction =
   | { action: 'hand_over'; note?: string }
   | { action: 'receive' }
-  | { action: 'ready' }
   | { action: 'send'; purchase_order: number; irsaliye_no?: string; note?: string };
 
 /** One material step of a job; the job comes back with its new state. */

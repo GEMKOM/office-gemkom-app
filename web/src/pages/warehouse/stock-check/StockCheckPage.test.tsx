@@ -61,7 +61,8 @@ const REQUEST = {
     },
     {
       id: 4,
-      item_id: 9,
+      // As the API sends it: the card is `item` (item_id is write-only).
+      item: 9,
       item_code: 'PIPE',
       item_name: '114,3*15 BORU',
       item_unit: 'metre',
@@ -85,6 +86,9 @@ const BAR_LOT = {
   warehouse_code: 'HAMMADDE',
 };
 
+// What Hammadde holds for the bar card; "Depoda buldum" adds to it.
+let hammaddeLots: object[] = [BAR_LOT];
+
 const calls = () =>
   fetchMock.mock.calls.map(([url, init]) => ({
     url: new URL(String(url)),
@@ -93,9 +97,23 @@ const calls = () =>
   }));
 
 beforeEach(() => {
+  hammaddeLots = [BAR_LOT];
   fetchMock.mockReset();
   fetchMock.mockImplementation(async (url, init) => {
     const u = new URL(String(url));
+    if (init?.method === 'POST' && u.pathname === '/warehouse/pieces/') {
+      const body = JSON.parse(String(init.body));
+      const lot = {
+        ...BAR_LOT,
+        id: 60,
+        length_mm: `${body.length_mm}.0`,
+        quantity: body.quantity,
+        available_quantity: body.quantity,
+        needs_review: body.needs_review,
+      };
+      hammaddeLots = [lot];
+      return json(lot);
+    }
     if (
       init?.method === 'POST' &&
       u.pathname === '/planning/requests/41/update_inventory_quantities/'
@@ -105,7 +123,12 @@ beforeEach(() => {
       return json({ count: 1, next: null, previous: null, results: [REQUEST] });
     if (u.pathname === '/planning/requests/41/') return json(REQUEST);
     if (u.pathname === '/warehouse/pieces/')
-      return json({ count: 1, next: null, previous: null, results: [BAR_LOT] });
+      return json({
+        count: hammaddeLots.length,
+        next: null,
+        previous: null,
+        results: hammaddeLots,
+      });
     if (u.pathname === '/procurement/items/')
       return json({
         count: 2,
@@ -176,7 +199,9 @@ it('shows Hammadde per line, fills what is in stock and finishes the check', asy
       'Stok kontrolü tamamlandı: stokta olmayanlar satınalmaya gidiyor',
     ),
   );
-  const post = calls().find((c) => c.method === 'POST')!;
+  const post = calls().find(
+    (c) => c.url.pathname === '/planning/requests/41/update_inventory_quantities/',
+  )!;
   expect(post.body).toEqual({
     items: [
       { planning_request_item_id: 1, quantity_found: '12.00' },
@@ -188,6 +213,53 @@ it('shows Hammadde per line, fills what is in stock and finishes the check', asy
         pieces: [{ piece: 50, quantity: 2 }],
       },
     ],
+  });
+});
+
+it('books bars found on the rack into Hammadde (Kontrol) and picks what the line needs', async () => {
+  hammaddeLots = [];
+  renderPage('/warehouse/stock-check?request=41');
+  const dialog = await screen.findByRole('dialog', { name: /Stok Kontrolü · GS-10380/ });
+  const bars = await within(dialog).findByTestId('bars-4');
+  expect(bars).toHaveTextContent('Hammadde’de bu karttan boy yok');
+  fireEvent.click(within(bars).getByRole('button', { name: 'Depoda buldum' }));
+  const found = await screen.findByRole('dialog', { name: /Depoda buldum/ });
+  fireEvent.change(within(found).getByLabelText('Boy (m)'), { target: { value: '6' } });
+  fireEvent.change(within(found).getByLabelText('Adet (boy)'), { target: { value: '4' } });
+  fireEvent.click(within(found).getByRole('button', { name: 'Hammadde’ye ekle' }));
+
+  await waitFor(() =>
+    expect(notify.success).toHaveBeenCalledWith('PIPE: 4 boy Hammadde’ye eklendi (Kontrol)'),
+  );
+  const created = calls().find(
+    (c) => c.method === 'POST' && c.url.pathname === '/warehouse/pieces/',
+  )!;
+  expect(created.body).toEqual({
+    item: 9,
+    quantity: 4,
+    length_mm: '6000',
+    warehouse_code: 'HAMMADDE',
+    needs_review: true,
+    review_note: 'Stok kontrolünde depoda bulundu (GS-10380)',
+  });
+  // The 10 m line takes 2 of the 4 bars; the other 2 stay in Hammadde.
+  expect(await within(dialog).findByLabelText('Boy 4 6 m')).toHaveValue('2');
+  expect(within(dialog).getByTestId('bars-4')).toHaveTextContent('(4 boy)');
+
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Kontrolü Tamamla' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Tamamla' }));
+  await waitFor(() =>
+    expect(
+      calls().some((c) => c.url.pathname === '/planning/requests/41/update_inventory_quantities/'),
+    ).toBe(true),
+  );
+  const post = calls().find(
+    (c) => c.url.pathname === '/planning/requests/41/update_inventory_quantities/',
+  )!;
+  expect(post.body.items[3]).toEqual({
+    planning_request_item_id: 4,
+    quantity_found: '0.00',
+    pieces: [{ piece: 60, quantity: 2 }],
   });
 });
 

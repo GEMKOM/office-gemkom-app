@@ -171,6 +171,15 @@ export function pieceKindOf(materialClass: unknown): 'plate' | 'boy' | null {
   return materialClass === 'plate' || materialClass === 'boy' ? materialClass : null;
 }
 
+/**
+ * The size mode a new plate / boy line starts on: a plate on a standard sheet
+ * size (the dropdown also offers a custom one), a bar on a length typed in
+ * metres (bars have no standard lengths to pick from).
+ */
+export function startSizeMode(kind: 'plate' | 'boy' | null | undefined): SizeMode {
+  return kind === 'boy' ? 'custom' : kind ? 'standard' : '';
+}
+
 let nextKey = 1;
 export function itemRow(fill: Partial<ItemRow> = {}): ItemRow {
   return {
@@ -218,7 +227,7 @@ const cardPending = (row: ItemRow) =>
 
 /**
  * Department request rows with their found stock cards: the card's id, unit
- * and plate / boy kind (sized lines start on a standard size), as pickCard
+ * and plate / boy kind (sized lines start on startSizeMode), as pickCard
  * sets them. "Kart yok" rows, codes without a card and rows already picked
  * again stay as they are.
  */
@@ -234,7 +243,7 @@ export function withResolvedCards(
       ...row,
       item_id: card.id,
       kind,
-      size_mode: kind ? 'standard' : '',
+      size_mode: startSizeMode(kind),
       ...(card.unit ? { item_unit: card.unit.toLowerCase() } : {}),
     };
   });
@@ -472,7 +481,9 @@ export function sizeOf(row: ItemRow): Built<Partial<PlanningRequestItemInput>> {
   return {
     ok: true,
     value: {
-      size_mode: mode,
+      // A bar's length is always typed, so it goes as a custom one (an older
+      // "standard" 6 m line that is edited to 5,5 m must not be refused).
+      size_mode: row.kind === 'boy' ? 'custom' : mode,
       piece_width_mm: row.kind === 'plate' ? String(width) : null,
       piece_length_mm: String(length),
       piece_count: count,

@@ -112,14 +112,15 @@ function ZipButton({ files, name }: { files: TaskFile[]; name: string }) {
   );
 }
 
-function Comment({
+/** One discussion comment; `mine` adds the edit pencil (read-only without it). */
+export function Comment({
   comment,
-  mine,
+  mine = false,
   onSaved,
 }: {
   comment: TaskComment;
-  mine: boolean;
-  onSaved: () => Promise<void>;
+  mine?: boolean;
+  onSaved?: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(comment.content || '');
@@ -131,7 +132,7 @@ function Comment({
       await updateComment(comment.id, { content: text.trim() });
       notify.success('Yorum güncellendi');
       setEditing(false);
-      await onSaved();
+      await onSaved?.();
     } catch {
       notify.error('Yorum güncellenirken hata oluştu');
     } finally {

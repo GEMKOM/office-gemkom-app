@@ -37,12 +37,13 @@ beforeEach(() => {
   );
 });
 
-it('shows the four cards, the band tiles and the band buttons', async () => {
+it('shows the five cards, the band tiles and the band buttons', async () => {
   renderWithProviders(<ProcurementHubPage />, { route: '/procurement/' });
 
   expect(screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent)).toEqual([
     'Satın Alma Talepleri',
     'Ödeme Listeleri',
+    'Fason Takibi',
     'Tedarikçiler',
     'Projeler',
   ]);
