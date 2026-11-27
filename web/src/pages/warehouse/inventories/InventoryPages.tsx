@@ -63,7 +63,7 @@ import { canWriteKind, Weight } from '../pieces/PiecesPage';
 // Depo transferi slip, lots with the slip number in their history.
 
 const PAGE_SIZE = 50;
-const IS_EMRI_ROUTE = '/warehouse/is-emri';
+const IS_EMRI_ROUTE = '/warehouse/job-stock';
 /** The İş Emri page's job value for the unassigned bucket. */
 const UNASSIGNED = '__unassigned__';
 
@@ -751,13 +751,23 @@ const jobColumns: DataTableColumn<JobHolding>[] = [
   { key: 'kg', header: 'Ağırlık', align: 'right', render: kgText },
 ];
 
-const JOB_DEFAULTS = { ...PLACE_DEFAULTS, job: '', job_search: '' };
+// show_closed: the list hides finished jobs (completed or cancelled, job_closed)
+// unless it is ticked.
+const JOB_DEFAULTS = { ...PLACE_DEFAULTS, job: '', job_search: '', show_closed: false };
+
+type JobFilterKeys = 'job_search' | 'show_closed';
+const JOB_FILTERS: FilterConfig<JobFilterKeys>[] = [
+  { type: 'text', key: 'job_search', label: 'İş', placeholder: 'İş no veya iş adı' },
+  { type: 'checkbox', key: 'show_closed', label: 'Bitmiş işleri de göster' },
+];
 
 export function IsEmriPage() {
   const { values, apply } = useUrlFilters(JOB_DEFAULTS);
   const jobSearch = values.job_search.trim();
+  // An opened job is looked up among every job: a link to a finished one still
+  // shows its title and the "still holds stock" warning.
   const jobs = useQuery({
-    ...jobHoldingsQueryOptions(jobSearch),
+    ...jobHoldingsQueryOptions(jobSearch, values.job || values.show_closed ? undefined : false),
     placeholderData: keepPreviousData,
   });
   useEffect(() => {
@@ -828,11 +838,16 @@ export function IsEmriPage() {
             label: 'Atanmamış kart',
             value: jobs.isSuccess ? (all.find((j) => !j.job_no)?.cards ?? 0) : '–',
           },
-          {
-            id: 'closed',
-            label: 'Kapanmış işte stok',
-            value: jobs.isSuccess ? closed.length : '–',
-          },
+          // Finished jobs are listed (and counted) only when asked for.
+          ...(values.show_closed
+            ? [
+                {
+                  id: 'closed',
+                  label: 'Kapanmış işte stok',
+                  value: jobs.isSuccess ? closed.length : '–',
+                },
+              ]
+            : []),
         ]}
       />
       <DataTable
@@ -841,12 +856,10 @@ export function IsEmriPage() {
         filters={
           <FilterBar
             inline
-            filters={[
-              { type: 'text', key: 'job_search', label: 'İş', placeholder: 'İş no veya iş adı' },
-            ]}
-            values={{ job_search: values.job_search }}
+            filters={JOB_FILTERS}
+            values={{ job_search: values.job_search, show_closed: values.show_closed }}
             onApply={(next) => apply(next)}
-            onClear={() => apply({ job_search: '' })}
+            onClear={() => apply({ job_search: '', show_closed: false })}
           />
         }
         data={all}
@@ -858,7 +871,13 @@ export function IsEmriPage() {
           apply({ job: row.job_no || UNASSIGNED, card_page: '1', lot_page: '1' })
         }
         pagination
-        emptyMessage={jobSearch ? 'Bu aramayla iş yok' : 'İş Emri deposunda stok yok'}
+        emptyMessage={
+          jobSearch
+            ? 'Bu aramayla iş yok'
+            : values.show_closed
+              ? 'İş Emri deposunda stok yok'
+              : 'Açık işlerde stok yok'
+        }
       />
     </>
   );

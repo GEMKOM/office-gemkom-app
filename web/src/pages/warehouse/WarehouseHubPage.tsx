@@ -6,8 +6,8 @@ import { BAR_STOCK_ROUTE, PLATE_STOCK_ROUTE } from '@/routes/movedRoutes';
 import { MenuCards, visibleMenuCards, type MenuCard } from '@/ui';
 import { countValue } from '../hubCount';
 
-const HAMMADDE = '/warehouse/hammadde';
-const IS_EMRI = '/warehouse/is-emri';
+const HAMMADDE = '/warehouse/raw-materials';
+const IS_EMRI = '/warehouse/job-stock';
 const STOCK = '/warehouse/stock';
 const EQUIPMENT = '/warehouse/equipment';
 const MIKRO_COMPARISON = '/warehouse/mikro-comparison';

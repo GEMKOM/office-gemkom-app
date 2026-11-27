@@ -31,6 +31,9 @@ export const MOVED_ROUTES: Record<string, string> = {
   '/general/overtime/welding-report': '/human_resources/overtime/welding-report',
   '/general/overtime/cost-report': '/human_resources/overtime/cost-report',
   '/general/overtime/machining-report': '/human_resources/overtime/machining-report',
+  // Depo's URLs are English (2026-11-24); the page names stay Turkish.
+  '/warehouse/hammadde': '/warehouse/raw-materials',
+  '/warehouse/is-emri': '/warehouse/job-stock',
 };
 
 // Retired pages, old route -> the page that does their work now. Forward

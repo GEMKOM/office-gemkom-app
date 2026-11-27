@@ -88,8 +88,8 @@ const ROUTE_ACCESS_INHERITS: Record<string, string[]> = {
   '/warehouse/counts': ['/warehouse'],
   '/warehouse/production-slips': ['/warehouse'],
   '/warehouse/transfers': ['/warehouse'],
-  '/warehouse/hammadde': ['/warehouse'],
-  '/warehouse/is-emri': ['/warehouse'],
+  '/warehouse/raw-materials': ['/warehouse'],
+  '/warehouse/job-stock': ['/warehouse'],
   '/warehouse/goods-receipts': ['/warehouse'],
   // Ana Stok and Ekipman moved here from Planlama › Stok: their old grants
   // still open them (movedRoutes.ts), and the warehouse grant opens them too.
